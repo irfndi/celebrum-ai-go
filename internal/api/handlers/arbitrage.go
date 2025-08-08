@@ -206,9 +206,9 @@ func (h *ArbitrageHandler) findArbitrageOpportunities(ctx context.Context, minPr
 
 		// Find best buy and sell prices
 		var bestBuy, bestSell struct {
-			exchange string
-			price    float64
-			volume   float64
+			exchange  string
+			price     float64
+			volume    float64
 			timestamp time.Time
 		}
 

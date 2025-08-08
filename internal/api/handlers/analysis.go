@@ -19,24 +19,24 @@ type AnalysisHandler struct {
 }
 
 type TechnicalIndicator struct {
-	Symbol    string                 `json:"symbol"`
-	Exchange  string                 `json:"exchange"`
-	Timeframe string                 `json:"timeframe"`
-	Timestamp time.Time              `json:"timestamp"`
-	Price     float64                `json:"current_price"`
+	Symbol     string                 `json:"symbol"`
+	Exchange   string                 `json:"exchange"`
+	Timeframe  string                 `json:"timeframe"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Price      float64                `json:"current_price"`
 	Indicators map[string]interface{} `json:"indicators"`
 }
 
 type TradingSignal struct {
-	Symbol      string    `json:"symbol"`
-	Exchange    string    `json:"exchange"`
-	SignalType  string    `json:"signal_type"` // "BUY", "SELL", "HOLD"
-	Strength    string    `json:"strength"`    // "WEAK", "MODERATE", "STRONG"
-	Price       float64   `json:"price"`
-	Reason      string    `json:"reason"`
-	Confidence  float64   `json:"confidence"`
-	Timestamp   time.Time `json:"timestamp"`
-	Indicators  []string  `json:"indicators_used"`
+	Symbol     string    `json:"symbol"`
+	Exchange   string    `json:"exchange"`
+	SignalType string    `json:"signal_type"` // "BUY", "SELL", "HOLD"
+	Strength   string    `json:"strength"`    // "WEAK", "MODERATE", "STRONG"
+	Price      float64   `json:"price"`
+	Reason     string    `json:"reason"`
+	Confidence float64   `json:"confidence"`
+	Timestamp  time.Time `json:"timestamp"`
+	Indicators []string  `json:"indicators_used"`
 }
 
 type IndicatorsResponse struct {
@@ -512,15 +512,15 @@ func (h *AnalysisHandler) generateTradingSignal(ctx context.Context, symbol, exc
 	}
 
 	signal := &TradingSignal{
-		Symbol:      symbol,
-		Exchange:    exchange,
-		SignalType:  signalType,
-		Strength:    strength,
-		Price:       currentPrice,
-		Reason:      reason,
-		Confidence:  confidence,
-		Timestamp:   time.Now(),
-		Indicators:  usedIndicators,
+		Symbol:     symbol,
+		Exchange:   exchange,
+		SignalType: signalType,
+		Strength:   strength,
+		Price:      currentPrice,
+		Reason:     reason,
+		Confidence: confidence,
+		Timestamp:  time.Now(),
+		Indicators: usedIndicators,
 	}
 
 	return signal, nil

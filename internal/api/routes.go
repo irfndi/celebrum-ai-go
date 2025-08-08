@@ -122,10 +122,6 @@ func healthCheck(db *database.PostgresDB, redis *database.RedisClient) gin.Handl
 // Arbitrage handlers are now implemented in handlers/arbitrage.go
 // Technical analysis handlers are now implemented in handlers/analysis.go
 
-
-
-
-
 func getUserAlerts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Get user alerts endpoint - to be implemented"})
 }

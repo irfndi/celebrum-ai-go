@@ -149,8 +149,8 @@ func TestTelegramHandler_ProcessUpdate(t *testing.T) {
 
 	t.Run("Handle nil message", func(t *testing.T) {
 		update := &models.Update{
-			ID: 123,
-			Message:  nil,
+			ID:      123,
+			Message: nil,
 		}
 
 		// Test that nil message is handled gracefully

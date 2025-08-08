@@ -1,8 +1,9 @@
 package models
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // MarketData represents real-time market data from exchanges
