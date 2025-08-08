@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/api/handlers"
+	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
@@ -23,13 +24,17 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, telegramConfig *config.TelegramConfig) {
 	// Health check endpoint - support both GET and HEAD for Docker health checks
 	router.GET("/health", healthCheck(db, redis))
 	router.HEAD("/health", healthCheck(db, redis))
 
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
+	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig)
+	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService)
+	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
+	userHandler := handlers.NewUserHandler(db)
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -46,29 +51,29 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		// Arbitrage routes
 		arbitrage := v1.Group("/arbitrage")
 		{
-			arbitrage.GET("/opportunities", getArbitrageOpportunities)
-			arbitrage.GET("/history", getArbitrageHistory)
+			arbitrage.GET("/opportunities", arbitrageHandler.GetArbitrageOpportunities)
+			arbitrage.GET("/history", arbitrageHandler.GetArbitrageHistory)
 		}
 
 		// Technical analysis routes
 		analysis := v1.Group("/analysis")
 		{
-			analysis.GET("/indicators", getTechnicalIndicators)
-			analysis.GET("/signals", getTradingSignals)
+			analysis.GET("/indicators", analysisHandler.GetTechnicalIndicators)
+			analysis.GET("/signals", analysisHandler.GetTradingSignals)
 		}
 
 		// Telegram webhook
 		telegram := v1.Group("/telegram")
 		{
-			telegram.POST("/webhook", handleTelegramWebhook)
+			telegram.POST("/webhook", telegramHandler.HandleWebhook)
 		}
 
-		// User management (future)
+		// User management
 		users := v1.Group("/users")
 		{
-			users.POST("/register", registerUser)
-			users.POST("/login", loginUser)
-			users.GET("/profile", getUserProfile)
+			users.POST("/register", userHandler.RegisterUser)
+			users.POST("/login", userHandler.LoginUser)
+			users.GET("/profile", userHandler.GetUserProfile)
 		}
 
 		// Alerts management
@@ -114,37 +119,12 @@ func healthCheck(db *database.PostgresDB, redis *database.RedisClient) gin.Handl
 
 // Placeholder handlers - to be implemented
 
-func getArbitrageOpportunities(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Arbitrage opportunities endpoint - to be implemented"})
-}
+// Arbitrage handlers are now implemented in handlers/arbitrage.go
+// Technical analysis handlers are now implemented in handlers/analysis.go
 
-func getArbitrageHistory(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Arbitrage history endpoint - to be implemented"})
-}
 
-func getTechnicalIndicators(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Technical indicators endpoint - to be implemented"})
-}
 
-func getTradingSignals(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Trading signals endpoint - to be implemented"})
-}
 
-func handleTelegramWebhook(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Telegram webhook endpoint - to be implemented"})
-}
-
-func registerUser(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "User registration endpoint - to be implemented"})
-}
-
-func loginUser(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "User login endpoint - to be implemented"})
-}
-
-func getUserProfile(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "User profile endpoint - to be implemented"})
-}
 
 func getUserAlerts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Get user alerts endpoint - to be implemented"})

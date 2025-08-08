@@ -52,7 +52,7 @@ func main() {
 	router := gin.Default()
 
 	// Setup routes (temporarily without collector service)
-	api.SetupRoutes(router, db, redis, ccxtService, nil)
+	api.SetupRoutes(router, db, redis, ccxtService, nil, &cfg.Telegram)
 
 	// Create HTTP server
 	srv := &http.Server{
