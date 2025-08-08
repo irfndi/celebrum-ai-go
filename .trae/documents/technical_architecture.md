@@ -618,7 +618,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17
     environment:
       - POSTGRES_DB=celebrum
       - POSTGRES_USER=${DB_USER}

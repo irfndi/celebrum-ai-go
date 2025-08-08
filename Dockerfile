@@ -37,6 +37,7 @@ COPY --from=builder /app/main .
 
 # Copy configuration files
 COPY --from=builder /app/configs ./configs
+COPY --from=builder /app/config.yaml ./config.yaml
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /root

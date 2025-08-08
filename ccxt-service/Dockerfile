@@ -1,5 +1,5 @@
 # Use Bun runtime image
-FROM oven/bun:1 as base
+FROM oven/bun:1 AS base
 WORKDIR /usr/src/app
 
 # Install dependencies into temp directory

@@ -59,7 +59,7 @@ redis:
 # CCXT Service configuration
 ccxt:
   service_url: http://localhost:3001
-  timeout: 30s
+  timeout: 30
   retry_attempts: 3
   retry_delay: 1s
   rate_limit:

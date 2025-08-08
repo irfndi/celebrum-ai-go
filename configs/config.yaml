@@ -22,16 +22,16 @@ server:
     - "https://www.celebrum-ai.com"
     - "https://api.celebrum-ai.com"
 
-# Database configuration (Digital Ocean Managed Database)
+# Database configuration
 database:
-  # Use DATABASE_URL environment variable for connection
-  # This should be set in your Digital Ocean App Platform environment
-  database_url: "${DATABASE_URL}"
+  host: "${DATABASE_HOST:localhost}"
+  port: 5432
+  user: "${DATABASE_USER:postgres}"
+  password: "${DATABASE_PASSWORD:postgres}"
+  dbname: "${DATABASE_DBNAME:celebrum_ai}"
+  sslmode: "${DATABASE_SSLMODE:disable}"
   
-  # SSL is required for Digital Ocean managed databases
-  sslmode: require
-  
-  # Connection pool settings optimized for cloud deployment
+  # Connection pool settings
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime: 600s
@@ -57,7 +57,7 @@ redis:
 # CCXT Service configuration
 ccxt:
   service_url: "${CCXT_SERVICE_URL:http://localhost:3001}"
-  timeout: 30s
+  timeout: 30
   retry_attempts: 5
   retry_delay: 2s
   rate_limit:
