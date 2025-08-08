@@ -234,19 +234,19 @@ jobs:
           cd /opt/celebrum-ai-go
           
           # Stop existing services
-          docker-compose -f docker-compose.single-droplet.yml down || true
+          docker compose -f docker-compose.single-droplet.yml down || true
           
           # Pull latest images
-          docker-compose -f docker-compose.single-droplet.yml pull
+          docker compose -f docker-compose.single-droplet.yml pull
           
           # Update and restart services with increased timeout
-          COMPOSE_HTTP_TIMEOUT=300 docker-compose -f docker-compose.single-droplet.yml up -d --remove-orphans
+          COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.single-droplet.yml up -d --remove-orphans
           
           # Wait for services to be healthy
           echo "Waiting for services to be healthy..."
-          timeout 300 bash -c 'until docker-compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 5; done' || {
-            echo "Services failed to become healthy, checking logs..."
-            docker-compose -f docker-compose.single-droplet.yml logs
+          timeout 300 bash -c 'until docker compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 5; done' || {
+            echo "Services failed to become healthy"
+            docker compose -f docker-compose.single-droplet.yml logs
             exit 1
           }
           
@@ -254,7 +254,7 @@ jobs:
           docker system prune -f
           
           # Verify deployment
-          docker-compose -f docker-compose.single-droplet.yml ps
+          docker compose -f docker-compose.single-droplet.yml ps
         EOF
     
     - name: Cleanup SSH key

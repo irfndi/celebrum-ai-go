@@ -57,9 +57,9 @@ BACKUP_NAME="backup-$(date +'%Y%m%d-%H%M%S')"
 mkdir -p "$BACKUP_DIR/$BACKUP_NAME"
 
 # Backup database if running
-if docker-compose -f "$COMPOSE_FILE" ps postgres | grep -q "Up"; then
+if docker compose -f "$COMPOSE_FILE" ps postgres | grep -q "Up"; then
     log "Backing up database..."
-    docker-compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres celebrum_ai > "$BACKUP_DIR/$BACKUP_NAME/database.sql" || warn "Database backup failed"
+    docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres celebrum_ai > "$BACKUP_DIR/$BACKUP_NAME/database.sql" || warn "Database backup failed"
 fi
 
 # Backup environment file
@@ -79,15 +79,15 @@ fi
 
 # Stop current services
 log "Stopping current services..."
-docker-compose -f "$COMPOSE_FILE" down || warn "Failed to stop some services"
+docker compose -f "$COMPOSE_FILE" down || warn "Failed to stop some services"
 
 # Pull latest images
 log "Pulling latest Docker images..."
-docker-compose -f "$COMPOSE_FILE" pull || warn "Failed to pull some images"
+docker compose -f "$COMPOSE_FILE" pull || warn "Failed to pull some images"
 
 # Build and start services
 log "Building and starting services..."
-docker-compose -f "$COMPOSE_FILE" up -d --build
+docker compose -f "$COMPOSE_FILE" up -d --build
 
 # Wait for services to be ready
 log "Waiting for services to be ready..."
@@ -95,8 +95,8 @@ sleep 30
 
 # Run database migrations
 log "Running database migrations..."
-if docker-compose -f "$COMPOSE_FILE" ps app | grep -q "Up"; then
-    docker-compose -f "$COMPOSE_FILE" exec -T app ./celebrum-ai migrate || warn "Database migration failed"
+if docker compose -f "$COMPOSE_FILE" ps app | grep -q "Up"; then
+    docker compose -f "$COMPOSE_FILE" exec -T app ./celebrum-ai migrate || warn "Database migration failed"
 else
     warn "App service not running, skipping migrations"
 fi
@@ -115,16 +115,16 @@ for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
         
         # Rollback
         log "Rolling back deployment..."
-        docker-compose -f "$COMPOSE_FILE" down
+        docker compose -f "$COMPOSE_FILE" down
         
         # Restore database if backup exists
         if [[ -f "$BACKUP_DIR/$BACKUP_NAME/database.sql" ]]; then
             log "Restoring database backup..."
-            docker-compose -f "$COMPOSE_FILE" up -d postgres
+            docker compose -f "$COMPOSE_FILE" up -d postgres
             sleep 10
-            docker-compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS celebrum_ai;"
-            docker-compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres -c "CREATE DATABASE celebrum_ai;"
-            docker-compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres celebrum_ai < "$BACKUP_DIR/$BACKUP_NAME/database.sql"
+            docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS celebrum_ai;"
+        docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres -c "CREATE DATABASE celebrum_ai;"
+        docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U postgres celebrum_ai < "$BACKUP_DIR/$BACKUP_NAME/database.sql"
         fi
         
         exit 1
@@ -146,7 +146,7 @@ ls -t | tail -n +6 | xargs -r rm -rf
 # Show service status
 log "Deployment completed successfully!"
 log "Service status:"
-docker-compose -f "$COMPOSE_FILE" ps
+docker compose -f "$COMPOSE_FILE" ps
 
 log "Deployment logs saved to: $LOG_FILE"
 log "Backup created at: $BACKUP_DIR/$BACKUP_NAME"

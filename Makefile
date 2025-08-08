@@ -72,12 +72,12 @@ dev: ## Run with hot reload (requires air)
 ## Environment Setup
 dev-setup: ## Setup development environment
 	@echo "$(GREEN)Setting up development environment...$(NC)"
-	docker-compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
+	docker compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
 	@echo "$(GREEN)Development environment ready!$(NC)"
 
 dev-down: ## Stop development environment
 	@echo "$(YELLOW)Stopping development environment...$(NC)"
-	docker-compose -f $(DOCKER_COMPOSE_FILE) down
+	docker compose -f $(DOCKER_COMPOSE_FILE) down
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
@@ -98,11 +98,11 @@ docker-build: ## Build Docker image
 
 docker-run: docker-build ## Run with Docker
 	@echo "$(GREEN)Running with Docker...$(NC)"
-	docker-compose -f $(DOCKER_COMPOSE_FILE) up --build
+	docker compose -f $(DOCKER_COMPOSE_FILE) up --build
 
 docker-prod: ## Run production Docker setup
 	@echo "$(GREEN)Running production Docker setup...$(NC)"
-	docker-compose -f $(DOCKER_COMPOSE_PROD_FILE) up -d --build
+	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) up -d --build
 
 ## Database
 db-migrate: ## Run database migrations
@@ -178,14 +178,14 @@ health: ## Check application health
 
 status: ## Show service status
 	@echo "$(GREEN)Service Status:$(NC)"
-	docker-compose -f $(DOCKER_COMPOSE_FILE) ps
+	docker compose -f $(DOCKER_COMPOSE_FILE) ps
 
 ## Logs
 logs: ## Show application logs
-	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f app
+	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f app
 
 logs-ccxt: ## Show CCXT service logs
-	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f ccxt-service
+	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f ccxt-service
 
 logs-all: ## Show all service logs
-	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f
+	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f

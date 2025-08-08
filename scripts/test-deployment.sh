@@ -10,7 +10,7 @@ echo "🧪 Testing Celebrum AI deployment..."
 # Function to cleanup on exit
 cleanup() {
     echo "🧹 Cleaning up..."
-    docker-compose -f docker-compose.ci.yml down -v || true
+    docker compose -f docker-compose.ci.yml down -v || true
     docker system prune -f || true
 }
 
@@ -19,8 +19,8 @@ trap cleanup EXIT
 
 # Build and start services
 echo "🏗️  Building and starting services..."
-docker-compose -f docker-compose.ci.yml build --no-cache
-docker-compose -f docker-compose.ci.yml up -d
+docker compose -f docker-compose.ci.yml build --no-cache
+docker compose -f docker-compose.ci.yml up -d
 
 # Wait for services to be healthy
 echo "⏳ Waiting for services to be healthy..."
@@ -28,8 +28,8 @@ max_attempts=60
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do
-    if docker-compose -f docker-compose.ci.yml ps | grep -q "(healthy)"; then
-        healthy_count=$(docker-compose -f docker-compose.ci.yml ps | grep -c "(healthy)" || echo "0")
+    if docker compose -f docker-compose.ci.yml ps | grep -q "(healthy)"; then
+        healthy_count=$(docker compose -f docker-compose.ci.yml ps | grep -c "(healthy)" || echo "0")
         total_services=4  # postgres, redis, ccxt-service, app
         
         if [ "$healthy_count" -eq "$total_services" ]; then
@@ -49,9 +49,9 @@ done
 if [ $attempt -eq $max_attempts ]; then
     echo "❌ Services failed to become healthy within timeout"
     echo "📋 Service status:"
-    docker-compose -f docker-compose.ci.yml ps
+    docker compose -f docker-compose.ci.yml ps
     echo "📋 Service logs:"
-    docker-compose -f docker-compose.ci.yml logs
+    docker compose -f docker-compose.ci.yml logs
     exit 1
 fi
 
@@ -61,7 +61,7 @@ if docker exec celebrum-app-ci wget -q --spider http://localhost:8080/health; th
     echo "✅ Health endpoint is responding"
 else
     echo "❌ Health endpoint is not responding"
-    docker-compose -f docker-compose.ci.yml logs app
+    docker compose -f docker-compose.ci.yml logs app
     exit 1
 fi
 
@@ -71,7 +71,7 @@ if docker exec celebrum-postgres-ci pg_isready -U postgres; then
     echo "✅ Database is ready"
 else
     echo "❌ Database is not ready"
-    docker-compose -f docker-compose.ci.yml logs postgres
+    docker compose -f docker-compose.ci.yml logs postgres
     exit 1
 fi
 
@@ -81,7 +81,7 @@ if docker exec celebrum-redis-ci redis-cli ping | grep -q "PONG"; then
     echo "✅ Redis is responding"
 else
     echo "❌ Redis is not responding"
-    docker-compose -f docker-compose.ci.yml logs redis
+    docker compose -f docker-compose.ci.yml logs redis
     exit 1
 fi
 
