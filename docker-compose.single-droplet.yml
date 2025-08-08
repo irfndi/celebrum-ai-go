@@ -10,13 +10,13 @@ services:
       POSTGRES_DB: celebrum_ai
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      interval: 15s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
     networks:
       - celebrum-network
 
