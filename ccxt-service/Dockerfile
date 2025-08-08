@@ -1,35 +1,35 @@
-FROM oven/bun:1-alpine
-
-# Set working directory
-WORKDIR /app
-
-# Install dependencies for native modules (still needed for some CCXT dependencies)
-RUN apk add --no-cache python3 make g++
-
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
-
-# Install dependencies
-RUN bun install --frozen-lockfile
-
-# Copy application code
-COPY . .
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S ccxt -u 1001
-
-# Change ownership
-RUN chown -R ccxt:nodejs /app
-USER ccxt
-
-# Expose port
-EXPOSE 3001
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3001/health || exit 1
-
-# Start the application
-CMD ["bun", "run", "index.ts"]
+{
+  "name": "celebrum-ccxt-service",
+  "version": "1.0.0",
+  "description": "CCXT microservice for Celebrum AI crypto arbitrage platform",
+  "main": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun --watch index.ts",
+    "build": "bun build index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.9.0",
+    "ccxt": "^4.4.99",
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.0",
+    "typescript": "^5.9.2",
+    "bun-types": "latest"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": [
+    "ccxt",
+    "cryptocurrency",
+    "arbitrage",
+    "trading",
+    "market-data"
+  ],
+  "author": "Celebrum AI",
+  "license": "MIT"
+}

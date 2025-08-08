@@ -1,221 +1,225 @@
 package ccxt
 
 import (
+	"context"
+	"fmt"
+	"sync"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 )
 
-// HealthResponse represents the health check response
-type HealthResponse struct {
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Uptime    string    `json:"uptime,omitempty"`
-	Version   string    `json:"version,omitempty"`
+// Service provides high-level CCXT operations
+type Service struct {
+	client          *Client
+	supportedExchanges map[string]ExchangeInfo
+	mu              sync.RWMutex
+	lastUpdate      time.Time
 }
 
-// ErrorResponse represents an error response from the CCXT service
-type ErrorResponse struct {
-	Error     string    `json:"error"`
-	Timestamp time.Time `json:"timestamp"`
+// NewService creates a new CCXT service instance
+func NewService(cfg *config.CCXTConfig) *Service {
+	return &Service{
+		client:             NewClient(cfg),
+		supportedExchanges: make(map[string]ExchangeInfo),
+	}
 }
 
-// ExchangeInfo represents information about a supported exchange
-type ExchangeInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Countries   string `json:"countries,omitempty"`
-	RateLimit   int    `json:"rateLimit"`
-	HasCORS     bool   `json:"hasCORS"`
-	HasSpot     bool   `json:"hasSpot"`
-	HasFutures  bool   `json:"hasFutures"`
-	HasMargin   bool   `json:"hasMargin"`
-	HasOption   bool   `json:"hasOption"`
-	Sandbox     bool   `json:"sandbox"`
-	Status      string `json:"status"`
+// Initialize initializes the service by fetching supported exchanges
+func (s *Service) Initialize(ctx context.Context) error {
+	exchangesResp, err := s.client.GetExchanges(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch supported exchanges: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, exchange := range exchangesResp.Exchanges {
+		s.supportedExchanges[exchange.ID] = exchange
+	}
+	s.lastUpdate = time.Now()
+
+	return nil
 }
 
-// ExchangesResponse represents the response from /api/exchanges
-type ExchangesResponse struct {
-	Exchanges []ExchangeInfo `json:"exchanges"`
-	Count     int            `json:"count"`
-	Timestamp time.Time      `json:"timestamp"`
+// IsHealthy checks if the CCXT service is healthy
+func (s *Service) IsHealthy(ctx context.Context) bool {
+	_, err := s.client.HealthCheck(ctx)
+	return err == nil
 }
 
-// Ticker represents ticker data from an exchange
-type Ticker struct {
-	Symbol    string          `json:"symbol"`
-	Bid       decimal.Decimal `json:"bid"`
-	BidVolume decimal.Decimal `json:"bidVolume"`
-	Ask       decimal.Decimal `json:"ask"`
-	AskVolume decimal.Decimal `json:"askVolume"`
-	Last      decimal.Decimal `json:"last"`
-	High      decimal.Decimal `json:"high"`
-	Low       decimal.Decimal `json:"low"`
-	Open      decimal.Decimal `json:"open"`
-	Close     decimal.Decimal `json:"close"`
-	Volume    decimal.Decimal `json:"volume"`
-	QuoteVolume decimal.Decimal `json:"quoteVolume"`
-	VWAP      decimal.Decimal `json:"vwap"`
-	Change    decimal.Decimal `json:"change"`
-	Percentage decimal.Decimal `json:"percentage"`
-	Timestamp time.Time       `json:"timestamp"`
-	Datetime  string          `json:"datetime"`
+// GetSupportedExchanges returns a list of supported exchange IDs
+func (s *Service) GetSupportedExchanges() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	exchanges := make([]string, 0, len(s.supportedExchanges))
+	for id := range s.supportedExchanges {
+		exchanges = append(exchanges, id)
+	}
+	return exchanges
 }
 
-// TickerResponse represents the response from /api/ticker/{exchange}/{symbol}
-type TickerResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Ticker    Ticker    `json:"ticker"`
-	Timestamp time.Time `json:"timestamp"`
+// GetExchangeInfo returns information about a specific exchange
+func (s *Service) GetExchangeInfo(exchangeID string) (ExchangeInfo, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	info, exists := s.supportedExchanges[exchangeID]
+	return info, exists
 }
 
-// TickersRequest represents the request body for /api/tickers
-type TickersRequest struct {
-	Symbols   []string `json:"symbols"`
-	Exchanges []string `json:"exchanges"`
+// FetchMarketData fetches market data for multiple exchanges and symbols
+func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
+	if len(exchanges) == 0 || len(symbols) == 0 {
+		return nil, fmt.Errorf("exchanges and symbols cannot be empty")
+	}
+
+	// Use the bulk tickers endpoint for efficiency
+	req := &TickersRequest{
+		Symbols:   symbols,
+		Exchanges: exchanges,
+	}
+
+	resp, err := s.client.GetTickers(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tickers: %w", err)
+	}
+
+	marketData := make([]models.MarketPrice, 0, len(resp.Tickers))
+	for _, tickerData := range resp.Tickers {
+		md := models.MarketPrice{
+			ExchangeName: tickerData.Exchange,
+			Symbol:       tickerData.Ticker.Symbol,
+			Price:        tickerData.Ticker.Last,
+			Volume:       tickerData.Ticker.Volume,
+			Timestamp:    tickerData.Ticker.Timestamp,
+		}
+		marketData = append(marketData, md)
+	}
+
+	return marketData, nil
 }
 
-// TickersResponse represents the response from /api/tickers
-type TickersResponse struct {
-	Tickers   []TickerData `json:"tickers"`
-	Count     int          `json:"count"`
-	Timestamp time.Time    `json:"timestamp"`
+// FetchSingleTicker fetches ticker data for a single exchange and symbol
+func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
+	resp, err := s.client.GetTicker(ctx, exchange, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ticker for %s:%s: %w", exchange, symbol, err)
+	}
+
+	return &models.MarketPrice{
+		ExchangeName: resp.Exchange,
+		Symbol:       resp.Ticker.Symbol,
+		Price:        resp.Ticker.Last,
+		Volume:       resp.Ticker.Volume,
+		Timestamp:    resp.Ticker.Timestamp,
+	}, nil
 }
 
-// TickerData represents ticker data with exchange information
-type TickerData struct {
-	Exchange string `json:"exchange"`
-	Ticker   Ticker `json:"ticker"`
+// FetchOrderBook fetches order book data for a specific exchange and symbol
+func (s *Service) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
+	return s.client.GetOrderBook(ctx, exchange, symbol, limit)
 }
 
-// OrderBookEntry represents a single order book entry (bid or ask)
-type OrderBookEntry struct {
-	Price  decimal.Decimal `json:"price"`
-	Amount decimal.Decimal `json:"amount"`
+// FetchOHLCV fetches OHLCV data for technical analysis
+func (s *Service) FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
+	return s.client.GetOHLCV(ctx, exchange, symbol, timeframe, limit)
 }
 
-// OrderBook represents order book data
-type OrderBook struct {
-	Symbol    string            `json:"symbol"`
-	Bids      []OrderBookEntry  `json:"bids"`
-	Asks      []OrderBookEntry  `json:"asks"`
-	Timestamp time.Time         `json:"timestamp"`
-	Datetime  string            `json:"datetime"`
-	Nonce     int64             `json:"nonce,omitempty"`
+// FetchTrades fetches recent trades for a specific exchange and symbol
+func (s *Service) FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
+	return s.client.GetTrades(ctx, exchange, symbol, limit)
 }
 
-// OrderBookResponse represents the response from /api/orderbook/{exchange}/{symbol}
-type OrderBookResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	OrderBook OrderBook `json:"orderbook"`
-	Timestamp time.Time `json:"timestamp"`
+// FetchMarkets fetches all available trading pairs for an exchange
+func (s *Service) FetchMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
+	return s.client.GetMarkets(ctx, exchange)
 }
 
-// Trade represents a single trade
-type Trade struct {
-	ID        string          `json:"id"`
-	Order     string          `json:"order,omitempty"`
-	Symbol    string          `json:"symbol"`
-	Side      string          `json:"side"` // 'buy' or 'sell'
-	Amount    decimal.Decimal `json:"amount"`
-	Price     decimal.Decimal `json:"price"`
-	Cost      decimal.Decimal `json:"cost"`
-	Fee       *TradeFee       `json:"fee,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Datetime  string          `json:"datetime"`
+// CalculateArbitrageOpportunities identifies arbitrage opportunities from market data
+// This function takes ticker data with bid/ask prices to find arbitrage opportunities
+func (s *Service) CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]models.ArbitrageOpportunityResponse, error) {
+	if len(exchanges) == 0 || len(symbols) == 0 {
+		return nil, fmt.Errorf("exchanges and symbols cannot be empty")
+	}
+
+	// Fetch detailed ticker data with bid/ask prices
+	req := &TickersRequest{
+		Symbols:   symbols,
+		Exchanges: exchanges,
+	}
+
+	resp, err := s.client.GetTickers(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tickers for arbitrage calculation: %w", err)
+	}
+
+	// Group ticker data by symbol
+	symbolData := make(map[string][]TickerData)
+	for _, tickerData := range resp.Tickers {
+		symbol := tickerData.Ticker.Symbol
+		symbolData[symbol] = append(symbolData[symbol], tickerData)
+	}
+
+	var opportunities []models.ArbitrageOpportunityResponse
+
+	// Find arbitrage opportunities for each symbol
+	for symbol, data := range symbolData {
+		if len(data) < 2 {
+			continue // Need at least 2 exchanges for arbitrage
+		}
+
+		// Find the lowest ask and highest bid
+		var lowestAsk, highestBid TickerData
+		lowestAskPrice := decimal.NewFromFloat(1e10) // Large initial value
+		highestBidPrice := decimal.Zero
+
+		for _, td := range data {
+			if td.Ticker.Ask.GreaterThan(decimal.Zero) && td.Ticker.Ask.LessThan(lowestAskPrice) {
+				lowestAsk = td
+				lowestAskPrice = td.Ticker.Ask
+			}
+			if td.Ticker.Bid.GreaterThan(highestBidPrice) {
+				highestBid = td
+				highestBidPrice = td.Ticker.Bid
+			}
+		}
+
+		// Skip if we don't have valid bid/ask data or same exchange
+		if lowestAsk.Exchange == "" || highestBid.Exchange == "" ||
+			lowestAsk.Exchange == highestBid.Exchange {
+			continue
+		}
+
+		// Calculate profit percentage
+		if lowestAskPrice.GreaterThan(decimal.Zero) && highestBidPrice.GreaterThan(lowestAskPrice) {
+			profitAmount := highestBidPrice.Sub(lowestAskPrice)
+			profitPercent := profitAmount.Div(lowestAskPrice).Mul(decimal.NewFromInt(100))
+
+			if profitPercent.GreaterThanOrEqual(minProfitPercent) {
+				opportunity := models.ArbitrageOpportunityResponse{
+					Symbol:           symbol,
+					BuyExchange:      lowestAsk.Exchange,
+					SellExchange:     highestBid.Exchange,
+					BuyPrice:         lowestAskPrice,
+					SellPrice:        highestBidPrice,
+					ProfitPercentage: profitPercent,
+					DetectedAt:       time.Now(),
+					ExpiresAt:        time.Now().Add(5 * time.Minute), // 5-minute window
+				}
+				opportunities = append(opportunities, opportunity)
+			}
+		}
+	}
+
+	return opportunities, nil
 }
 
-// TradeFee represents trading fee information
-type TradeFee struct {
-	Currency string          `json:"currency"`
-	Cost     decimal.Decimal `json:"cost"`
-	Rate     decimal.Decimal `json:"rate,omitempty"`
-}
-
-// TradesResponse represents the response from /api/trades/{exchange}/{symbol}
-type TradesResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Trades    []Trade   `json:"trades"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// OHLCV represents OHLCV (candlestick) data
-type OHLCV struct {
-	Timestamp time.Time       `json:"timestamp"`
-	Open      decimal.Decimal `json:"open"`
-	High      decimal.Decimal `json:"high"`
-	Low       decimal.Decimal `json:"low"`
-	Close     decimal.Decimal `json:"close"`
-	Volume    decimal.Decimal `json:"volume"`
-}
-
-// OHLCVResponse represents the response from /api/ohlcv/{exchange}/{symbol}
-type OHLCVResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Timeframe string    `json:"timeframe"`
-	OHLCV     []OHLCV   `json:"ohlcv"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// Market represents a trading pair/market
-type Market struct {
-	ID       string          `json:"id"`
-	Symbol   string          `json:"symbol"`
-	Base     string          `json:"base"`
-	Quote    string          `json:"quote"`
-	Settle   string          `json:"settle,omitempty"`
-	Type     string          `json:"type"` // 'spot', 'future', 'option', etc.
-	Spot     bool            `json:"spot"`
-	Margin   bool            `json:"margin"`
-	Future   bool            `json:"future"`
-	Option   bool            `json:"option"`
-	Active   bool            `json:"active"`
-	Contract bool            `json:"contract"`
-	Linear   bool            `json:"linear,omitempty"`
-	Inverse  bool            `json:"inverse,omitempty"`
-	Taker    decimal.Decimal `json:"taker,omitempty"`
-	Maker    decimal.Decimal `json:"maker,omitempty"`
-	ContractSize decimal.Decimal `json:"contractSize,omitempty"`
-	Expiry   time.Time       `json:"expiry,omitempty"`
-	ExpiryDatetime string    `json:"expiryDatetime,omitempty"`
-	Strike   decimal.Decimal `json:"strike,omitempty"`
-	OptionType string        `json:"optionType,omitempty"`
-	Precision *MarketPrecision `json:"precision,omitempty"`
-	Limits   *MarketLimits   `json:"limits,omitempty"`
-	Info     interface{}     `json:"info,omitempty"`
-}
-
-// MarketPrecision represents precision information for a market
-type MarketPrecision struct {
-	Amount int `json:"amount"`
-	Price  int `json:"price"`
-}
-
-// MarketLimits represents trading limits for a market
-type MarketLimits struct {
-	Amount *LimitRange `json:"amount,omitempty"`
-	Price  *LimitRange `json:"price,omitempty"`
-	Cost   *LimitRange `json:"cost,omitempty"`
-}
-
-// LimitRange represents min/max limits
-type LimitRange struct {
-	Min decimal.Decimal `json:"min,omitempty"`
-	Max decimal.Decimal `json:"max,omitempty"`
-}
-
-// MarketsResponse represents the response from /api/markets/{exchange}
-type MarketsResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbols   []string  `json:"symbols"`
-	Markets   []Market  `json:"markets,omitempty"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
+// Close closes the CCXT service
+func (s *Service) Close() error {
+	return s.client.Close()
 }

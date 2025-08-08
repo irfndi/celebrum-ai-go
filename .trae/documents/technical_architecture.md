@@ -1,551 +1,1173 @@
-# Technical Architecture - Celebrum AI Platform
+# Deployment Strategy for Celebrum AI Crypto Arbitrage Platform
 
-## 1. Architecture Design
+## 1. Deployment Options Overview
+
+This document outlines deployment strategies for the Celebrum AI platform on Digital Ocean, optimized for different stages:
+
+1. **Ultra-Low-Cost Single Droplet** (Recommended for MVP/Early Stage)
+2. **Digital Ocean Apps Platform** (Platform-as-a-Service)
+3. **Digital Ocean Droplets** (Virtual Private Servers)
+4. **Hybrid Approach** (Recommended for Scale)
+
+## 2. Ultra-Low-Cost Single Droplet Deployment (MVP/Early Stage)
+
+### 2.1 Overview
+This approach consolidates all services into a single $6/month droplet, perfect for early stage deployment with minimal costs. Can handle up to 1000 DAU/MAU before requiring scaling.
+
+### 2.2 Advantages
+- **Minimal Cost**: Total infrastructure cost under $20/month
+- **Simple Management**: Single server to maintain
+- **Quick Setup**: Fast deployment and iteration
+- **Full Control**: Complete configuration flexibility
+- **Easy Monitoring**: All services in one place
+
+### 2.3 Disadvantages
+- **Single Point of Failure**: No redundancy
+- **Resource Constraints**: Limited by single server resources
+- **Manual Scaling**: Requires migration when scaling
+- **Performance Limits**: Shared resources between services
+
+### 2.4 Droplet Specifications
+
+#### Recommended Droplet Sizes
+| Stage | Droplet Size | RAM | CPU | Storage | Monthly Cost | Max DAU |
+|-------|-------------|-----|-----|---------|-------------|----------|
+| MVP | Basic | 1GB | 1 vCPU | 25GB SSD | $6 | 100-300 |
+| Growth | Regular | 2GB | 1 vCPU | 50GB SSD | $12 | 300-1000 |
+| Scale Ready | Professional | 4GB | 2 vCPU | 80GB SSD | $24 | 1000+ |
+
+### 2.5 Single Droplet Architecture
 
 ```mermaid
 graph TD
-    A[Telegram Bot] --> B[Telegram Bot API]
-    B --> C[Go Backend API]
-    D[Web Dashboard] --> C
-    C --> E[User Authentication Service]
-    C --> F[Market Data Collector]
-    C --> G[Arbitrage Engine]
-    C --> H[Alert Processor]
-    E --> I[PostgreSQL Database]
-    F --> I
-    G --> I
-    H --> I
-    C --> J[Redis Cache]
-    F --> K[CCXT Service]
-    K --> L[Exchange APIs]
-    H --> A
+    A[Users] --> B[Nginx Reverse Proxy]
+    B --> C[Go API Server :8080]
+    B --> D[CCXT Node.js Service :3000]
+    B --> E[React Frontend :80]
+    C --> F[SQLite Database]
+    C --> G[Redis Cache :6379]
+    D --> H[Exchange APIs]
     
-    subgraph "Primary Interface"
-        A
+    subgraph "Single $6 Droplet"
         B
-    end
-    
-    subgraph "Optional Interface"
-        D
-    end
-    
-    subgraph "Backend Services"
         C
+        D
         E
         F
         G
-        H
     end
+```
+
+### 2.6 Docker Compose Configuration
+
+```yaml
+# docker-compose.single-droplet.yml
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./frontend/dist:/usr/share/nginx/html
+      - certbot-etc:/etc/letsencrypt
+    depends_on:
+      - api-server
+      - ccxt-service
+    restart: unless-stopped
+    mem_limit: 128m
+
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=sqlite:///data/celebrum.db
+      - REDIS_URL=redis://redis:6379
+      - CCXT_SERVICE_URL=http://ccxt-service:3000
+      - JWT_SECRET=${JWT_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - LOG_LEVEL=info
+    volumes:
+      - sqlite_data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+    mem_limit: 256m
+
+  ccxt-service:
+    build:
+      context: ./ccxt-service
+      dockerfile: Dockerfile.minimal
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MEMORY_LIMIT=128
+    restart: unless-stopped
+    mem_limit: 128m
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    mem_limit: 64m
+
+  # Optional: Lightweight monitoring
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600 --cleanup
+    restart: unless-stopped
+    mem_limit: 32m
+
+volumes:
+  sqlite_data:
+  redis_data:
+  certbot-etc:
+```
+
+### 2.7 Optimized Nginx Configuration
+
+```nginx
+# nginx/nginx.conf - Optimized for single droplet
+events {
+    worker_connections 512;
+    use epoll;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
     
-    subgraph "Data Layer"
-        I
-        J
-    end
+    # Optimize for low memory
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 30;
+    client_max_body_size 1m;
     
-    subgraph "Market Data Integration"
-        K
-    end
+    # Compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript;
     
-    subgraph "External Services"
-        L
-    end
+    # Rate limiting - Conservative for single server
+    limit_req_zone $binary_remote_addr zone=api:1m rate=5r/s;
+    limit_req_zone $binary_remote_addr zone=ccxt:1m rate=2r/s;
+    
+    # Upstream definitions
+    upstream api_backend {
+        server api-server:8080 max_fails=3 fail_timeout=30s;
+    }
+    
+    upstream ccxt_backend {
+        server ccxt-service:3000 max_fails=3 fail_timeout=30s;
+    }
+    
+    server {
+        listen 80;
+        server_name _;
+        
+        # Serve static frontend
+        location / {
+            root /usr/share/nginx/html;
+            try_files $uri $uri/ /index.html;
+            expires 1h;
+        }
+        
+        # API endpoints
+        location /api/ {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://api_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 10s;
+            proxy_read_timeout 10s;
+        }
+        
+        # CCXT service
+        location /ccxt/ {
+            limit_req zone=ccxt burst=5 nodelay;
+            proxy_pass http://ccxt_backend/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_connect_timeout 10s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
+        
+        # Health check
+        location /health {
+            proxy_pass http://api_backend/health;
+        }
+        
+        # Basic monitoring endpoint
+        location /status {
+            stub_status on;
+            access_log off;
+            allow 127.0.0.1;
+            deny all;
+        }
+    }
+}
 ```
 
-## 2. Technology Description
+### 2.8 Database Strategy: SQLite for MVP
 
-- **Backend**: Go 1.21+ with Gin framework, goroutines for concurrent data collection
-- **Market Data**: CCXT library integration via Go bindings or REST API for unified exchange access
-- **Database**: PostgreSQL 15+ for persistent storage, Redis 7+ for caching and real-time data
-- **Frontend**: React 18 + TypeScript + Tailwind CSS + Vite
-- **Telegram**: Telegram Bot API with webhook integration
-- **Deployment**: Docker containers on Digital Ocean droplets with nginx reverse proxy
-- **Testing**: Go testing framework, testify for assertions, minimum 60% coverage
-- **Monitoring**: Prometheus metrics, structured logging with logrus
+#### Why SQLite for Early Stage?
+- **Zero Configuration**: No separate database server needed
+- **Minimal Resources**: Very low memory footprint
+- **High Performance**: Excellent for read-heavy workloads
+- **Easy Backups**: Single file backup
+- **Migration Path**: Easy to migrate to PostgreSQL later
 
-### 2.1 CCXT Integration Details
+#### SQLite Configuration
+```go
+// internal/database/sqlite.go
+package database
 
-**CCXT Library Configuration:**
-- **Implementation**: Node.js CCXT service with REST API interface for Go backend
-- **Supported Exchanges**: Binance, Bybit, OKX, Coinbase Pro, Kraken, and 100+ others
-- **Data Types**: Real-time tickers, order books, OHLCV candles, trades, futures data
-- **Rate Limiting**: Built-in exchange-specific rate limiting and retry mechanisms
-- **Error Handling**: Unified error handling across different exchange APIs
-- **WebSocket Support**: Real-time data streaming for supported exchanges
+import (
+    "database/sql"
+    "fmt"
+    "time"
+    
+    _ "github.com/mattn/go-sqlite3"
+)
 
-**CCXT Service Architecture:**
+type SQLiteConfig struct {
+    Path            string
+    MaxOpenConns    int
+    MaxIdleConns    int
+    ConnMaxLifetime time.Duration
+}
+
+func NewSQLiteConnection(config SQLiteConfig) (*sql.DB, error) {
+    // Optimized SQLite connection string
+    dsn := fmt.Sprintf("%s?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=1000&_temp_store=memory", config.Path)
+    
+    db, err := sql.Open("sqlite3", dsn)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Connection pool settings for single droplet
+    db.SetMaxOpenConns(config.MaxOpenConns)
+    db.SetMaxIdleConns(config.MaxIdleConns)
+    db.SetConnMaxLifetime(config.ConnMaxLifetime)
+    
+    return db, nil
+}
 ```
-Go Backend → HTTP/REST → CCXT Service (Node.js) → Exchange APIs
+
+### 2.9 Cost Breakdown (Ultra-Low-Cost)
+
+| Component | Monthly Cost | Notes |
+|-----------|-------------|--------|
+| Basic Droplet (1GB RAM) | $6 | All services containerized |
+| Domain Name | $1 | .com domain |
+| SSL Certificate | $0 | Let's Encrypt |
+| Backup Storage (5GB) | $1 | Digital Ocean Spaces |
+| **Total** | **$8/month** | **Under $100/year** |
+
+### 2.10 Performance Optimization
+
+#### Resource Allocation
+```yaml
+# Memory allocation for 1GB droplet
+services:
+  nginx: 128MB      # 12.8%
+  api-server: 256MB # 25.6%
+  ccxt-service: 128MB # 12.8%
+  redis: 64MB       # 6.4%
+  system: 424MB     # 42.4% (OS + buffers)
 ```
 
-**Key Features:**
-- Unified API interface across all supported exchanges
-- Automatic symbol normalization and market type detection
-- Built-in authentication and API key management
-- Concurrent data fetching with configurable timeouts
-- Automatic failover and exchange health monitoring
-
-## 3. Interface Definitions
-
-### 3.1 Telegram Bot Commands
-
-| Command | Purpose |
-|---------|----------|
-| /start | User registration and onboarding, welcome message with feature overview |
-| /opportunities | View current arbitrage opportunities with profit calculations |
-| /settings | Configure alert preferences, subscription management |
-| /upgrade | Upgrade to premium subscription, payment integration |
-| /help | Display available commands and feature explanations |
-| /link | Connect Telegram account to website for advanced features |
-| /status | Check subscription status and account information |
-
-### 3.2 Web Dashboard Routes (Optional - for linked accounts)
-
-| Route | Purpose |
-|-------|----------|
-| / | Landing page with Telegram bot connection option |
-| /dashboard | Advanced market overview and detailed arbitrage analysis |
-| /charts | Interactive technical analysis charts and indicators |
-| /portfolio | Comprehensive portfolio tracking and performance metrics |
-| /settings | Advanced preferences and API configurations |
-| /auth/telegram | Telegram account linking and authentication |
-
-## 4. API Definitions
-
-### 4.1 Core API
-
-**Market Data Endpoints**
+#### Application Optimizations
+```go
+// Optimized Go server configuration
+func NewOptimizedServer() *gin.Engine {
+    gin.SetMode(gin.ReleaseMode)
+    
+    r := gin.New()
+    r.Use(gin.Recovery())
+    
+    // Minimal logging for production
+    r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+        SkipPaths: []string{"/health", "/metrics"},
+    }))
+    
+    // Connection pooling
+    r.Use(func(c *gin.Context) {
+        c.Header("Connection", "keep-alive")
+        c.Next()
+    })
+    
+    return r
+}
 ```
-GET /api/v1/market/prices
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| symbols | []string | false | List of trading pairs (default: all) |
-| exchange | string | false | Specific exchange filter |
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| data | []MarketPrice | Array of current market prices |
-| timestamp | int64 | Unix timestamp of data |
+### 2.11 Monitoring for Single Droplet
 
-**Arbitrage Opportunities**
-```
-GET /api/v1/arbitrage/opportunities
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| min_profit | float64 | false | Minimum profit percentage |
-| symbol | string | false | Trading pair filter |
+#### Simple Health Monitoring Script
+```bash
+#!/bin/bash
+# monitor.sh - Simple monitoring for single droplet
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| opportunities | []ArbitrageOpportunity | List of current opportunities |
-| count | int | Total number of opportunities |
+LOG_FILE="/var/log/celebrum-monitor.log"
+ALERT_EMAIL="admin@celebrum.ai"
 
-**Technical Analysis**
-```
-GET /api/v1/analysis/indicators
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| symbol | string | true | Trading pair |
-| timeframe | string | true | Chart timeframe (1m, 5m, 1h, 1d) |
-| indicators | []string | true | List of indicators (RSI, MACD, SMA) |
+check_service() {
+    local service=$1
+    local url=$2
+    
+    if ! curl -f -s $url > /dev/null; then
+        echo "$(date): $service is down" >> $LOG_FILE
+        # Restart service
+        docker-compose restart $service
+        
+        # Send alert (optional)
+        echo "$service is down and restarted" | mail -s "Celebrum Alert" $ALERT_EMAIL
+    fi
+}
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| data | IndicatorData | Calculated indicator values |
-| signals | []Signal | Generated trading signals |
+# Check services
+check_service "api-server" "http://localhost/health"
+check_service "ccxt-service" "http://localhost/ccxt/health"
 
-**Telegram Authentication & User Management**
-```
-POST /api/v1/telegram/webhook
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| update | TelegramUpdate | true | Telegram update object |
+# Check disk space
+DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+if [ $DISK_USAGE -gt 80 ]; then
+    echo "$(date): Disk usage is $DISK_USAGE%" >> $LOG_FILE
+fi
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| status | string | Processing status |
-
+# Check memory usage
+MEM_USAGE=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100.0}')
+if [ $MEM_USAGE -gt 90 ]; then
+    echo "$(date): Memory usage is $MEM_USAGE%" >> $LOG_FILE
+fi
 ```
-POST /api/v1/auth/telegram/register
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| telegram_id | string | true | Telegram user ID |
-| telegram_username | string | false | Telegram username |
-| telegram_chat_id | string | true | Telegram chat ID |
-| first_name | string | false | User's first name from Telegram |
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| user_id | uuid | Generated user ID |
-| subscription_tier | string | Current subscription level |
-| is_new_user | boolean | Whether this is a new registration |
-
+#### Crontab Setup
+```bash
+# Add to crontab
+*/5 * * * * /opt/celebrum/monitor.sh
+0 2 * * * /opt/celebrum/backup.sh
+0 3 * * 0 /opt/celebrum/cleanup.sh
 ```
-POST /api/v1/auth/telegram/link-website
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| telegram_id | string | true | Telegram user ID |
-| email | string | true | Email for website access |
-| password | string | true | Password for website access |
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| success | boolean | Whether linking was successful |
-| access_token | string | JWT token for website access |
+### 2.12 Scaling Triggers and Migration Path
 
-```
-GET /api/v1/users/telegram/{telegram_id}
-```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| telegram_id | string | true | Telegram user ID |
+#### When to Scale (Performance Indicators)
+- **CPU Usage**: Consistently above 80%
+- **Memory Usage**: Above 90% for extended periods
+- **Response Time**: API responses > 2 seconds
+- **Error Rate**: > 1% of requests failing
+- **Daily Active Users**: Approaching 1000 DAU
+- **Database Size**: SQLite file > 1GB
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| user | UserProfile | User profile information |
-| subscription_tier | string | Current subscription level |
-| website_linked | boolean | Whether website access is enabled |
+#### Migration Path from Single Droplet
 
-**CCXT Service Endpoints**
-```
-GET /ccxt/v1/exchanges
-```
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| exchanges | []ExchangeInfo | List of supported exchanges with status |
+**Phase 1: Vertical Scaling (Easy)**
+```bash
+# Resize droplet to 2GB RAM ($12/month)
+doctl compute droplet-action resize DROPLET_ID --size s-1vcpu-2gb --resize-disk
 
+# Update docker-compose memory limits
+sed -i 's/mem_limit: 256m/mem_limit: 512m/' docker-compose.yml
+docker-compose up -d
 ```
-GET /ccxt/v1/ticker/{exchange}/{symbol}
+
+**Phase 2: Database Migration (Medium)**
+```bash
+# Migrate SQLite to managed PostgreSQL
+# 1. Export SQLite data
+sqlite3 celebrum.db .dump > backup.sql
+
+# 2. Create managed PostgreSQL database
+doctl databases create celebrum-db --engine pg --size db-s-1vcpu-1gb
+
+# 3. Import data and update configuration
+psql $DATABASE_URL < backup.sql
 ```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| exchange | string | true | Exchange identifier (binance, bybit, etc.) |
-| symbol | string | true | Trading pair symbol (BTC/USDT) |
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| ticker | TickerData | Real-time ticker information |
-| timestamp | int64 | Data timestamp |
+**Phase 3: Horizontal Scaling (Complex)**
+- Move to multiple droplets with load balancer
+- Separate CCXT service to dedicated droplet
+- Implement Redis cluster for caching
 
+### 2.13 Backup Strategy for Single Droplet
+
+```bash
+#!/bin/bash
+# backup.sh - Comprehensive backup for single droplet
+
+BACKUP_DIR="/tmp/backup-$(date +%Y%m%d-%H%M%S)"
+S3_BUCKET="celebrum-backups"
+
+mkdir -p $BACKUP_DIR
+
+# Backup SQLite database
+cp /var/lib/docker/volumes/celebrum_sqlite_data/_data/celebrum.db $BACKUP_DIR/
+
+# Backup Redis data
+cp /var/lib/docker/volumes/celebrum_redis_data/_data/dump.rdb $BACKUP_DIR/
+
+# Backup configuration files
+cp -r /opt/celebrum/configs $BACKUP_DIR/
+cp /opt/celebrum/docker-compose.yml $BACKUP_DIR/
+
+# Create archive
+tar -czf $BACKUP_DIR.tar.gz -C /tmp $(basename $BACKUP_DIR)
+
+# Upload to Digital Ocean Spaces
+s3cmd put $BACKUP_DIR.tar.gz s3://$S3_BUCKET/
+
+# Cleanup local backup
+rm -rf $BACKUP_DIR $BACKUP_DIR.tar.gz
+
+# Keep only last 7 days of backups
+s3cmd ls s3://$S3_BUCKET/ | head -n -7 | awk '{print $4}' | xargs -I {} s3cmd del {}
 ```
-GET /ccxt/v1/orderbook/{exchange}/{symbol}
+
+## 3. Digital Ocean Apps Platform Deployment
+
+### 2.1 Advantages
+- **Managed Infrastructure**: No server management required
+- **Auto-scaling**: Automatic horizontal scaling based on traffic
+- **Built-in CI/CD**: GitHub integration for automatic deployments
+- **SSL Certificates**: Automatic SSL/TLS certificate management
+- **Zero Downtime Deployments**: Rolling updates with health checks
+- **Monitoring**: Built-in application metrics and logging
+
+### 2.2 Disadvantages
+- **Limited Control**: Less flexibility in server configuration
+- **Cost at Scale**: Can become expensive with high resource usage
+- **Platform Limitations**: Restricted to supported runtimes and configurations
+- **Vendor Lock-in**: Tied to Digital Ocean's platform specifics
+
+### 2.3 Apps Platform Configuration
+
+#### App Spec Configuration (app.yaml)
+```yaml
+name: celebrum-ai-platform
+services:
+- name: api-server
+  source_dir: /
+  github:
+    repo: irfndi/celebrum-ai-go
+    branch: main
+    deploy_on_push: true
+  run_command: ./celebrum-ai
+  environment_slug: go
+  instance_count: 2
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  health_check:
+    http_path: /health
+  envs:
+  - key: APP_ENV
+    value: production
+  - key: DATABASE_URL
+    value: ${db.DATABASE_URL}
+  - key: REDIS_URL
+    value: ${redis.DATABASE_URL}
+  - key: CCXT_SERVICE_URL
+    value: http://ccxt-service:3000
+  - key: JWT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: TELEGRAM_BOT_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+
+- name: ccxt-service
+  source_dir: /ccxt-service
+  github:
+    repo: irfndi/celebrum-ai-go
+    branch: main
+    deploy_on_push: true
+  run_command: npm start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 3000
+  internal_ports:
+  - 3000
+  health_check:
+    http_path: /health
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "3000"
+
+databases:
+- name: celebrum-db
+  engine: PG
+  version: "14"
+  size: db-s-1vcpu-1gb
+  num_nodes: 1
+
+- name: celebrum-redis
+  engine: REDIS
+  version: "7"
+  size: db-s-1vcpu-1gb
+  num_nodes: 1
+
+static_sites:
+- name: frontend
+  source_dir: /frontend
+  github:
+    repo: irfndi/celebrum-ai-go
+    branch: main
+    deploy_on_push: true
+  build_command: npm run build
+  output_dir: /dist
+  environment_slug: node-js
+  envs:
+  - key: REACT_APP_API_URL
+    value: ${api-server.PUBLIC_URL}
 ```
-Request:
-| Param Name | Param Type | isRequired | Description |
-|------------|------------|------------|-------------|
-| exchange | string | true | Exchange identifier |
-| symbol | string | true | Trading pair symbol |
-| limit | int | false | Order book depth (default: 20) |
 
-Response:
-| Param Name | Param Type | Description |
-|------------|------------|-------------|
-| orderbook | OrderBookData | Order book with bids and asks |
-| timestamp | int64 | Data timestamp |
+#### Environment Variables Setup
+```bash
+# Production environment variables for Apps Platform
+APP_ENV=production
+DATABASE_URL=${db.DATABASE_URL}
+REDIS_URL=${redis.DATABASE_URL}
+CCXT_SERVICE_URL=http://ccxt-service:3000
+JWT_SECRET=your-jwt-secret-here
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+LOG_LEVEL=info
+GIN_MODE=release
+```
 
-## 5. Server Architecture Diagram
+## 3. Digital Ocean Droplets Deployment
+
+### 3.1 Advantages
+- **Full Control**: Complete server configuration flexibility
+- **Cost Effective**: Lower costs at scale
+- **Custom Configurations**: Ability to optimize for specific requirements
+- **Multiple Services**: Can run multiple applications on same server
+- **No Platform Limitations**: Use any software stack
+
+### 3.2 Disadvantages
+- **Manual Management**: Requires server administration skills
+- **Security Responsibility**: Must handle security updates and configurations
+- **Scaling Complexity**: Manual scaling and load balancing setup
+- **Monitoring Setup**: Need to implement monitoring and alerting
+
+### 3.3 Droplets Configuration
+
+#### Docker Compose Setup
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+    depends_on:
+      - api-server
+      - ccxt-service
+    restart: unless-stopped
+
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgres://user:pass@postgres:5432/celebrum
+      - REDIS_URL=redis://redis:6379
+      - CCXT_SERVICE_URL=http://ccxt-service:3000
+      - JWT_SECRET=${JWT_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  ccxt-service:
+    build:
+      context: ./ccxt-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_DB=celebrum
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - ./nginx/ssl:/var/www/html
+    depends_on:
+      - nginx
+    command: certonly --webroot --webroot-path=/var/www/html --email admin@celebrum.ai --agree-tos --no-eff-email --staging -d celebrum.ai -d api.celebrum.ai
+
+volumes:
+  postgres_data:
+  redis_data:
+  certbot-etc:
+  certbot-var:
+```
+
+#### Nginx Configuration
+```nginx
+# nginx/nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream api_backend {
+        server api-server:8080;
+    }
+
+    upstream ccxt_backend {
+        server ccxt-service:3000;
+    }
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=ccxt:10m rate=5r/s;
+
+    server {
+        listen 80;
+        server_name celebrum.ai api.celebrum.ai;
+        
+        location /.well-known/acme-challenge/ {
+            root /var/www/html;
+        }
+        
+        location / {
+            return 301 https://$server_name$request_uri;
+        }
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name api.celebrum.ai;
+
+        ssl_certificate /etc/letsencrypt/live/celebrum.ai/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/celebrum.ai/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512;
+        ssl_prefer_server_ciphers off;
+        ssl_session_cache shared:SSL:10m;
+
+        # API endpoints
+        location /api/ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://api_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # CCXT service endpoints
+        location /ccxt/ {
+            limit_req zone=ccxt burst=10 nodelay;
+            proxy_pass http://ccxt_backend/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Health checks
+        location /health {
+            proxy_pass http://api_backend/health;
+        }
+    }
+}
+```
+
+#### Deployment Script
+```bash
+#!/bin/bash
+# deploy.sh
+
+set -e
+
+echo "Starting deployment..."
+
+# Pull latest code
+git pull origin main
+
+# Build and deploy
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml build --no-cache
+docker-compose -f docker-compose.prod.yml up -d
+
+# Run migrations
+docker-compose -f docker-compose.prod.yml exec api-server ./celebrum-ai migrate
+
+# Health check
+sleep 10
+if curl -f http://localhost/health; then
+    echo "Deployment successful!"
+else
+    echo "Deployment failed - rolling back"
+    docker-compose -f docker-compose.prod.yml down
+    exit 1
+fi
+```
+
+## 4. Hybrid Approach (Recommended)
+
+### 4.1 Architecture
+- **Apps Platform**: Main Go backend API
+- **Droplets**: CCXT Node.js service (for better control and cost)
+- **Managed Databases**: PostgreSQL and Redis clusters
+
+### 4.2 Benefits
+- **Best of Both Worlds**: Managed infrastructure for main app, control for specialized services
+- **Cost Optimization**: Use droplets for resource-intensive CCXT operations
+- **Simplified Management**: Reduce complexity while maintaining flexibility
+- **Scalability**: Independent scaling of different components
+
+### 4.3 Implementation
+
+#### Apps Platform for Main API
+```yaml
+# app.yaml (simplified for hybrid)
+name: celebrum-api
+services:
+- name: api-server
+  source_dir: /
+  github:
+    repo: irfndi/celebrum-ai-go
+    branch: main
+  run_command: ./celebrum-ai
+  environment_slug: go
+  instance_count: 2
+  instance_size_slug: basic-xs
+  envs:
+  - key: CCXT_SERVICE_URL
+    value: https://ccxt.celebrum.ai
+  - key: DATABASE_URL
+    value: ${db.DATABASE_URL}
+```
+
+#### Droplet for CCXT Service
+```yaml
+# docker-compose.ccxt.yml
+version: '3.8'
+services:
+  ccxt-service:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+  
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - ccxt-service
+```
+
+## 5. Cost Analysis
+
+### 5.1 Ultra-Low-Cost Single Droplet (Recommended for MVP)
+| Component | Size | Monthly Cost |
+|-----------|------|-------------|
+| Basic Droplet | 1GB RAM, 1 vCPU, 25GB SSD | $6/month |
+| Domain Name | .com domain | $1/month |
+| SSL Certificate | Let's Encrypt | $0/month |
+| Backup Storage | 5GB Digital Ocean Spaces | $1/month |
+| **Total** | | **$8/month** |
+
+**Annual Cost: $96** - Perfect for MVP and early stage development
+
+### 5.2 Growth Phase Single Droplet
+| Component | Size | Monthly Cost |
+|-----------|------|-------------|
+| Regular Droplet | 2GB RAM, 1 vCPU, 50GB SSD | $12/month |
+| Domain Name | .com domain | $1/month |
+| Backup Storage | 10GB Digital Ocean Spaces | $2/month |
+| **Total** | | **$15/month** |
+
+**Annual Cost: $180** - Handles 300-1000 DAU
+
+### 5.3 Apps Platform Pricing
+| Component | Size | Monthly Cost |
+|-----------|------|-------------|
+| API Server (2x basic-xxs) | 0.5GB RAM, 1 vCPU | $12/month |
+| CCXT Service (1x basic-xxs) | 0.5GB RAM, 1 vCPU | $6/month |
+| PostgreSQL (db-s-1vcpu-1gb) | 1GB RAM, 1 vCPU | $15/month |
+| Redis (db-s-1vcpu-1gb) | 1GB RAM, 1 vCPU | $15/month |
+| **Total** | | **$48/month** |
+
+### 5.4 Multi-Droplet Pricing
+| Component | Size | Monthly Cost |
+|-----------|------|-------------|
+| Main Droplet | 2GB RAM, 1 vCPU | $12/month |
+| Database Droplet | 2GB RAM, 1 vCPU | $12/month |
+| Load Balancer | | $12/month |
+| **Total** | | **$36/month** |
+
+### 5.5 Hybrid Approach Pricing
+| Component | Size | Monthly Cost |
+|-----------|------|-------------|
+| Apps Platform (API only) | 1GB RAM, 1 vCPU | $12/month |
+| CCXT Droplet | 1GB RAM, 1 vCPU | $6/month |
+| Managed PostgreSQL | 1GB RAM, 1 vCPU | $15/month |
+| Managed Redis | 1GB RAM, 1 vCPU | $15/month |
+| **Total** | | **$48/month** |
+
+### 5.6 Cost Comparison by Stage
+
+| Stage | Users (DAU) | Recommended Approach | Monthly Cost | Annual Cost |
+|-------|-------------|---------------------|-------------|-------------|
+| MVP | 0-100 | Ultra-Low-Cost Single Droplet | $8 | $96 |
+| Early Growth | 100-300 | Single Droplet (1GB) | $8 | $96 |
+| Growth | 300-1000 | Single Droplet (2GB) | $15 | $180 |
+| Scale | 1000+ | Hybrid or Multi-Droplet | $36-48 | $432-576 |
+
+### 5.7 Scaling Considerations
+- **Single Droplet**: Extremely cost-effective for early stage, easy vertical scaling
+- **Apps Platform**: Automatic scaling, costs increase linearly
+- **Multi-Droplets**: Manual scaling, more cost-effective at scale
+- **Hybrid**: Best cost optimization for different components at scale
+
+## 6. Security Considerations
+
+### 6.1 SSL/TLS Configuration
+- **Apps Platform**: Automatic SSL certificate management
+- **Droplets**: Let's Encrypt with automatic renewal
+- **Hybrid**: Managed SSL for Apps, Let's Encrypt for droplets
+
+### 6.2 Environment Variables Management
+```bash
+# Secure environment variables
+JWT_SECRET=$(openssl rand -base64 32)
+TELEGRAM_BOT_TOKEN=your-secure-token
+DATABASE_URL=postgres://user:$(openssl rand -base64 16)@host:5432/db
+REDIS_URL=redis://:$(openssl rand -base64 16)@host:6379
+```
+
+### 6.3 Database Security
+- Enable SSL connections
+- Use connection pooling with authentication
+- Regular security updates
+- Backup encryption
+
+### 6.4 API Rate Limiting
+```go
+// Rate limiting configuration
+type RateLimitConfig struct {
+    RequestsPerMinute int
+    BurstSize        int
+    CleanupInterval  time.Duration
+}
+
+var rateLimits = map[string]RateLimitConfig{
+    "/api/market-data": {60, 10, time.Minute},
+    "/api/arbitrage":   {30, 5, time.Minute},
+    "/api/alerts":      {20, 3, time.Minute},
+}
+```
+
+## 7. Monitoring and Logging
+
+### 7.1 Apps Platform
+- Built-in application metrics
+- Log aggregation
+- Health check monitoring
+- Alert notifications
+
+### 7.2 Droplets
+```yaml
+# monitoring/docker-compose.yml
+version: '3.8'
+services:
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+```
+
+## 8. Backup and Disaster Recovery
+
+### 8.1 Database Backups
+```bash
+#!/bin/bash
+# backup.sh
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backups"
+
+# PostgreSQL backup
+pg_dump $DATABASE_URL > $BACKUP_DIR/celebrum_$DATE.sql
+
+# Redis backup
+redis-cli --rdb $BACKUP_DIR/redis_$DATE.rdb
+
+# Upload to Digital Ocean Spaces
+s3cmd put $BACKUP_DIR/celebrum_$DATE.sql s3://celebrum-backups/
+s3cmd put $BACKUP_DIR/redis_$DATE.rdb s3://celebrum-backups/
+```
+
+### 8.2 Automated Backup Schedule
+```bash
+# crontab entry
+0 2 * * * /opt/celebrum/backup.sh
+0 14 * * 0 /opt/celebrum/cleanup-old-backups.sh
+```
+
+## 9. Recommendations by Stage
+
+### 9.1 For MVP/Early Stage (0-300 DAU)
+**Use Ultra-Low-Cost Single Droplet** ⭐ **RECOMMENDED**
+- **Cost**: Only $8/month ($96/year)
+- **Setup Time**: 1-2 hours
+- **Management**: Minimal - single server
+- **Scaling**: Easy vertical scaling when needed
+- **Perfect for**: Validating product-market fit with minimal investment
+
+### 9.2 For Growth Stage (300-1000 DAU)
+**Continue with Single Droplet (2GB)**
+- **Cost**: $15/month ($180/year)
+- **Performance**: Handles 1000 DAU comfortably
+- **Migration**: Simple droplet resize
+- **Monitoring**: Add basic monitoring and alerting
+
+### 9.3 For Scale Stage (1000+ DAU)
+**Migrate to Hybrid Approach**
+- **Cost**: $36-48/month
+- **Reliability**: High availability and redundancy
+- **Performance**: Dedicated resources for each service
+- **Management**: Managed databases reduce operational overhead
+
+### 9.4 For Enterprise/High Volume (10,000+ DAU)
+**Use Multi-Droplet with Kubernetes**
+- **Cost**: $100+/month
+- **Scalability**: Horizontal scaling capabilities
+- **Control**: Full customization and optimization
+- **Reliability**: Multi-region deployment options
+
+### 9.5 Quick Decision Matrix
+
+| Your Situation | Recommended Approach | Monthly Cost | Setup Complexity |
+|----------------|---------------------|-------------|------------------|
+| Just starting, need to validate idea | Ultra-Low-Cost Single Droplet | $8 | Low |
+| Have some users, growing slowly | Single Droplet (2GB) | $15 | Low |
+| Proven product, scaling fast | Hybrid Approach | $36-48 | Medium |
+| Enterprise with high traffic | Multi-Droplet/K8s | $100+ | High |
+
+### 9.6 Migration Timeline
+
+**Month 1-6: MVP Phase**
+- Start with $6 droplet + SQLite
+- Focus on product development
+- Monitor performance metrics
+
+**Month 6-12: Growth Phase**
+- Upgrade to $12 droplet if needed
+- Add monitoring and alerting
+- Prepare for database migration
+
+**Month 12+: Scale Phase**
+- Migrate to PostgreSQL
+- Consider hybrid approach
+- Implement proper CI/CD
+
+**Key Insight**: Start small and scale incrementally. The ultra-low-cost approach allows you to validate your product with minimal financial risk while maintaining a clear path to scale.
+
+## 10. Migration Path
+
+### 10.1 Recommended Migration Strategy
+
+**Phase 1: Ultra-Low-Cost MVP (Month 1-6)**
+- Start with $6 single droplet + SQLite
+- Deploy all services containerized
+- Focus on product development and user acquisition
+- Monitor: CPU, memory, disk usage, response times
+
+**Phase 2: Growth Optimization (Month 6-12)**
+- Upgrade to $12 droplet (2GB RAM) when needed
+- Add comprehensive monitoring and alerting
+- Implement automated backups
+- Prepare database migration scripts
+
+**Phase 3: Database Migration (Month 12-18)**
+- Migrate from SQLite to managed PostgreSQL
+- Implement Redis clustering if needed
+- Add load balancing preparation
+- Cost: ~$30-40/month
+
+**Phase 4: Horizontal Scaling (Month 18+)**
+- Split services across multiple droplets
+- Implement proper CI/CD pipeline
+- Add monitoring and observability stack
+- Consider Kubernetes for enterprise needs
+
+### 10.2 Migration Triggers
+
+| Metric | Phase 1 → Phase 2 | Phase 2 → Phase 3 | Phase 3 → Phase 4 |
+|--------|-------------------|-------------------|-------------------|
+| **DAU** | 100-300 | 300-1000 | 1000+ |
+| **CPU Usage** | >80% sustained | >80% sustained | >80% sustained |
+| **Memory Usage** | >90% | >90% | >90% |
+| **Response Time** | >2 seconds | >1 second | >500ms |
+| **Database Size** | >500MB | >1GB | >10GB |
+| **Monthly Cost** | $8 | $15 | $40+ |
+
+### 10.3 Step-by-Step Migration Commands
+
+#### Phase 1 → Phase 2: Vertical Scaling
+```bash
+# 1. Resize droplet
+doctl compute droplet-action resize DROPLET_ID --size s-1vcpu-2gb --resize-disk
+
+# 2. Update memory limits
+sed -i 's/mem_limit: 256m/mem_limit: 512m/g' docker-compose.single-droplet.yml
+sed -i 's/mem_limit: 128m/mem_limit: 256m/g' docker-compose.single-droplet.yml
+
+# 3. Restart services
+docker-compose -f docker-compose.single-droplet.yml up -d
+
+# 4. Verify scaling
+curl http://localhost/health
+docker stats --no-stream
+```
+
+#### Phase 2 → Phase 3: Database Migration
+```bash
+# 1. Create managed PostgreSQL
+doctl databases create celebrum-db --engine pg --size db-s-1vcpu-1gb --region nyc1
+
+# 2. Export SQLite data
+sqlite3 /var/lib/docker/volumes/celebrum_sqlite_data/_data/celebrum.db .dump > backup.sql
+
+# 3. Import to PostgreSQL
+psql $DATABASE_URL < backup.sql
+
+# 4. Update configuration
+sed -i 's/DATABASE_URL=sqlite/DATABASE_URL=postgres/' .env
+
+# 5. Deploy with new database
+docker-compose -f docker-compose.single-droplet.yml up -d
+
+# 6. Verify migration
+curl http://localhost/api/health/db
+```
+
+#### Phase 3 → Phase 4: Horizontal Scaling
+```bash
+# 1. Create load balancer
+doctl compute load-balancer create --name celebrum-lb --forwarding-rules entry_protocol:http,entry_port:80,target_protocol:http,target_port:80
+
+# 2. Deploy to multiple droplets
+for i in {1..3}; do
+  doctl compute droplet create celebrum-api-$i --size s-1vcpu-2gb --image docker-20-04 --region nyc1
+done
+
+# 3. Configure load balancer
+doctl compute load-balancer add-droplets celebrum-lb --droplet-ids $(doctl compute droplet list --format ID --no-header | tr '\n' ',')
+```
+
+### 10.4 Rollback Strategy
+
+Each migration phase should have a rollback plan:
+
+**Phase 2 Rollback (Downgrade Droplet)**
+```bash
+# 1. Create snapshot before migration
+doctl compute droplet-action snapshot DROPLET_ID --snapshot-name "pre-upgrade-$(date +%Y%m%d)"
+
+# 2. If issues occur, restore from snapshot
+doctl compute droplet create celebrum-rollback --size s-1vcpu-1gb --image SNAPSHOT_ID
+```
+
+**Phase 3 Rollback (Back to SQLite)**
+```bash
+# 1. Export PostgreSQL data
+pg_dump $DATABASE_URL > postgres_backup.sql
+
+# 2. Convert back to SQLite format
+python3 postgres_to_sqlite.py postgres_backup.sql celebrum_rollback.db
+
+# 3. Update configuration
+sed -i 's/DATABASE_URL=postgres/DATABASE_URL=sqlite/' .env
+```
+
+### 10.5 Cost Evolution Timeline
 
 ```mermaid
-graph TD
-    A[HTTP Router] --> B[Middleware Layer]
-    B --> C[Controller Layer]
-    C --> D[Service Layer]
-    D --> E[Repository Layer]
-    E --> F[(PostgreSQL)]
-    D --> G[(Redis Cache)]
-    D --> H[CCXT Service]
-    H --> I[Exchange APIs]
+graph LR
+    A["Phase 1<br/>$8/month<br/>SQLite + 1GB"] --> B["Phase 2<br/>$15/month<br/>SQLite + 2GB"]
+    B --> C["Phase 3<br/>$35/month<br/>PostgreSQL + 2GB"]
+    C --> D["Phase 4<br/>$80+/month<br/>Multi-droplet"]
     
-    subgraph "Application Server"
-        A
-        B
-        C
-        D
-        E
-    end
-    
-    subgraph "Background Workers"
-        J[Market Data Collector]
-        K[Arbitrage Scanner]
-        L[Alert Processor]
-    end
-    
-    subgraph "Market Data Layer"
-        H
-    end
-    
-    J --> H
-    J --> F
-    K --> F
-    L --> G
+    A -.-> |"Skip if growth is fast"| C
+    B -.-> |"Skip if ready for scale"| D
 ```
 
-## 6. Data Model
+### 10.6 Success Metrics by Phase
 
-### 6.1 Data Model Definition
+| Phase | Success Criteria | Key Metrics |
+|-------|-----------------|-------------|
+| **Phase 1** | Product-market fit validation | User retention, feature usage |
+| **Phase 2** | Sustainable growth | DAU growth, performance stability |
+| **Phase 3** | Scalable infrastructure | Database performance, uptime |
+| **Phase 4** | Enterprise readiness | Multi-region, high availability |
 
-```mermaid
-erDiagram
-    USERS ||--o{ USER_ALERTS : has
-    USERS ||--o{ PORTFOLIOS : owns
-    EXCHANGES ||--o{ MARKET_DATA : provides
-    EXCHANGES ||--o{ ARBITRAGE_OPPORTUNITIES : involves
-    TRADING_PAIRS ||--o{ MARKET_DATA : tracks
-    TRADING_PAIRS ||--o{ TECHNICAL_INDICATORS : analyzes
-    ARBITRAGE_OPPORTUNITIES }o--|| TRADING_PAIRS : for
-    
-    USERS {
-        uuid id PK
-        string telegram_id UK
-        string telegram_username
-        string email
-        string password_hash
-        string telegram_chat_id
-        string subscription_tier
-        boolean email_verified
-        boolean website_linked
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    EXCHANGES {
-        int id PK
-        string name UK
-        string api_url
-        boolean is_active
-        timestamp last_ping
-    }
-    
-    TRADING_PAIRS {
-        int id PK
-        string symbol UK
-        string base_currency
-        string quote_currency
-        boolean is_futures
-    }
-    
-    MARKET_DATA {
-        uuid id PK
-        int exchange_id FK
-        int trading_pair_id FK
-        decimal price
-        decimal volume
-        timestamp timestamp
-    }
-    
-    ARBITRAGE_OPPORTUNITIES {
-        uuid id PK
-        int trading_pair_id FK
-        int buy_exchange_id FK
-        int sell_exchange_id FK
-        decimal buy_price
-        decimal sell_price
-        decimal profit_percentage
-        timestamp detected_at
-        timestamp expires_at
-    }
-    
-    TECHNICAL_INDICATORS {
-        uuid id PK
-        int trading_pair_id FK
-        string indicator_type
-        string timeframe
-        json values
-        timestamp calculated_at
-    }
-    
-    USER_ALERTS {
-        uuid id PK
-        uuid user_id FK
-        string alert_type
-        json conditions
-        boolean is_active
-        timestamp created_at
-    }
-    
-    PORTFOLIOS {
-        uuid id PK
-        uuid user_id FK
-        string symbol
-        decimal quantity
-        decimal avg_price
-        timestamp updated_at
-    }
-```
-
-### 6.2 Data Definition Language
-
-**Users Table (Telegram-First Authentication)**
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    telegram_id VARCHAR(50) UNIQUE NOT NULL,
-    telegram_username VARCHAR(100),
-    telegram_chat_id VARCHAR(50) NOT NULL,
-    email VARCHAR(255),
-    password_hash VARCHAR(255),
-    subscription_tier VARCHAR(20) DEFAULT 'free' CHECK (subscription_tier IN ('free', 'premium', 'enterprise')),
-    email_verified BOOLEAN DEFAULT false,
-    website_linked BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Indexes for efficient lookups
-CREATE INDEX idx_users_telegram_id ON users(telegram_id);
-CREATE INDEX idx_users_telegram_chat_id ON users(telegram_chat_id);
-CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
-CREATE INDEX idx_users_subscription_tier ON users(subscription_tier);
-
--- Constraints
-ALTER TABLE users ADD CONSTRAINT check_website_linking 
-    CHECK ((website_linked = false) OR (website_linked = true AND email IS NOT NULL AND password_hash IS NOT NULL));
-```
-
-**Exchanges Table**
-```sql
-CREATE TABLE exchanges (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    api_url VARCHAR(255) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    last_ping TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-INSERT INTO exchanges (name, api_url) VALUES 
-('Binance', 'https://api.binance.com'),
-('Bybit', 'https://api.bybit.com'),
-('OKX', 'https://www.okx.com/api'),
-('Coinbase', 'https://api.exchange.coinbase.com'),
-('Kraken', 'https://api.kraken.com');
-
--- CCXT Configuration Table
-CREATE TABLE ccxt_exchanges (
-    id SERIAL PRIMARY KEY,
-    exchange_id INTEGER REFERENCES exchanges(id),
-    ccxt_id VARCHAR(50) NOT NULL,
-    is_testnet BOOLEAN DEFAULT false,
-    api_key_required BOOLEAN DEFAULT false,
-    rate_limit INTEGER DEFAULT 1000,
-    has_futures BOOLEAN DEFAULT false,
-    websocket_enabled BOOLEAN DEFAULT false,
-    last_health_check TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(20) DEFAULT 'active'
-);
-
-INSERT INTO ccxt_exchanges (exchange_id, ccxt_id, rate_limit, has_futures, websocket_enabled) VALUES 
-(1, 'binance', 1200, true, true),
-(2, 'bybit', 600, true, true),
-(3, 'okx', 600, true, true),
-(4, 'coinbasepro', 300, false, true),
-(5, 'kraken', 300, true, false);
-```
-
-**Trading Pairs Table**
-```sql
-CREATE TABLE trading_pairs (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) UNIQUE NOT NULL,
-    base_currency VARCHAR(10) NOT NULL,
-    quote_currency VARCHAR(10) NOT NULL,
-    is_futures BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_trading_pairs_symbol ON trading_pairs(symbol);
-CREATE INDEX idx_trading_pairs_is_futures ON trading_pairs(is_futures);
-
-INSERT INTO trading_pairs (symbol, base_currency, quote_currency, is_futures) VALUES 
-('BTCUSDT', 'BTC', 'USDT', false),
-('ETHUSDT', 'ETH', 'USDT', false),
-('BTCUSDT-PERP', 'BTC', 'USDT', true);
-```
-
-**Market Data Table**
-```sql
-CREATE TABLE market_data (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    exchange_id INTEGER REFERENCES exchanges(id),
-    trading_pair_id INTEGER REFERENCES trading_pairs(id),
-    price DECIMAL(20,8) NOT NULL,
-    volume DECIMAL(20,8) NOT NULL,
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_market_data_timestamp ON market_data(timestamp DESC);
-CREATE INDEX idx_market_data_exchange_pair ON market_data(exchange_id, trading_pair_id);
-CREATE INDEX idx_market_data_symbol_time ON market_data(trading_pair_id, timestamp DESC);
-```
-
-**Arbitrage Opportunities Table**
-```sql
-CREATE TABLE arbitrage_opportunities (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trading_pair_id INTEGER REFERENCES trading_pairs(id),
-    buy_exchange_id INTEGER REFERENCES exchanges(id),
-    sell_exchange_id INTEGER REFERENCES exchanges(id),
-    buy_price DECIMAL(20,8) NOT NULL,
-    sell_price DECIMAL(20,8) NOT NULL,
-    profit_percentage DECIMAL(8,4) NOT NULL,
-    detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
-CREATE INDEX idx_arbitrage_profit ON arbitrage_opportunities(profit_percentage DESC);
-CREATE INDEX idx_arbitrage_detected_at ON arbitrage_opportunities(detected_at DESC);
-CREATE INDEX idx_arbitrage_expires_at ON arbitrage_opportunities(expires_at);
-```
-
-**Technical Indicators Table**
-```sql
-CREATE TABLE technical_indicators (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trading_pair_id INTEGER REFERENCES trading_pairs(id),
-    indicator_type VARCHAR(20) NOT NULL,
-    timeframe VARCHAR(10) NOT NULL,
-    values JSONB NOT NULL,
-    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_technical_indicators_pair_type ON technical_indicators(trading_pair_id, indicator_type);
-CREATE INDEX idx_technical_indicators_calculated_at ON technical_indicators(calculated_at DESC);
-```
-
-**User Alerts Table**
-```sql
-CREATE TABLE user_alerts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    alert_type VARCHAR(50) NOT NULL,
-    conditions JSONB NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_user_alerts_user_id ON user_alerts(user_id);
-CREATE INDEX idx_user_alerts_active ON user_alerts(is_active);
-```
+This migration strategy provides a clear, cost-effective path from MVP to enterprise scale while maintaining operational simplicity at each stage.

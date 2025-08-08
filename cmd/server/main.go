@@ -1,117 +1,153 @@
-package main
+# Celebrum AI Configuration Template
+# Copy this file to config.local.yaml and modify as needed
 
-import (
-	"context"
-	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+# Application environment (development, staging, production)
+environment: development
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/api"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/sirupsen/logrus"
-)
+# Logging configuration
+logging:
+  level: info  # debug, info, warn, error
+  format: json  # json, text
+  output: stdout  # stdout, file
+  file_path: logs/app.log
 
-func main() {
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %v", err)
-	}
+# Server configuration
+server:
+  port: 8080
+  host: 0.0.0.0
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 60s
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "https://celebrum-ai.com"
 
-	// Setup logger
-	setupLogger(cfg.LogLevel)
+# Database configuration
+database:
+  # For local development
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: celebrum_ai
+  sslmode: disable
+  
+  # For Digital Ocean managed database (use DATABASE_URL environment variable)
+  # database_url: "postgres://username:password@host:port/dbname?sslmode=require"
+  
+  # Connection pool settings (optimized for cloud deployment)
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300s
+  conn_max_idle_time: 60s
 
-	// Initialize database
-	db, err := database.NewPostgresConnection(&cfg.Database)
-	if err != nil {
-		logrus.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
+# Redis configuration
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  idle_timeout: 300s
 
-	// Initialize Redis
-	redisClient, err := database.NewRedisConnection(cfg.Redis)
-	if err != nil {
-		logrus.Fatalf("Failed to connect to Redis: %v", err)
-	}
-	defer redisClient.Close()
+# CCXT Service configuration
+ccxt:
+  service_url: http://localhost:3001
+  timeout: 30s
+  retry_attempts: 3
+  retry_delay: 1s
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
 
-	// Setup Gin router
-	router := setupRouter(cfg)
+# Telegram Bot configuration
+telegram:
+  bot_token: ""
+  webhook_url: ""
+  webhook_secret: ""
+  timeout: 30s
 
-	// Initialize API routes
-	api.SetupRoutes(router, db, redisClient)
+# Market Data configuration
+market_data:
+  collection_interval: 30s
+  batch_size: 100
+  max_retries: 3
+  timeout: 15s
+  exchanges:
+    - binance
+    - coinbase
+    - kraken
+    - bitfinex
+    - huobi
 
-	// Create HTTP server
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: router,
-	}
+# Arbitrage configuration
+arbitrage:
+  min_profit_threshold: 0.5  # Minimum profit percentage
+  max_trade_amount: 1000.0   # Maximum trade amount in USD
+  check_interval: 10s
+  enabled_pairs:
+    - BTC/USDT
+    - ETH/USDT
+    - BNB/USDT
+    - ADA/USDT
 
-	// Start server in a goroutine
-	go func() {
-		logrus.Infof("Starting server on port %d", cfg.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logrus.Fatalf("Failed to start server: %v", err)
-		}
-	}()
+# Technical Analysis configuration
+technical_analysis:
+  indicators:
+    - RSI
+    - MACD
+    - SMA
+    - EMA
+    - BOLLINGER_BANDS
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+    - 4h
+    - 1d
+  calculation_interval: 60s
 
-	// Wait for interrupt signal to gracefully shutdown the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logrus.Info("Shutting down server...")
+# Security configuration
+security:
+  jwt_secret: "your-jwt-secret-key-change-this"
+  jwt_expiry: 24h
+  bcrypt_cost: 12
+  rate_limit:
+    requests_per_minute: 100
+    burst: 200
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+# Monitoring configuration
+monitoring:
+  metrics_enabled: true
+  metrics_port: 9090
+  health_check_interval: 30s
+  prometheus:
+    enabled: true
+    path: /metrics
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logrus.Fatalf("Server forced to shutdown: %v", err)
-	}
+# Feature flags
+features:
+  telegram_bot: true
+  web_interface: true
+  api_v1: true
+  real_trading: false  # Set to true only in production with proper safeguards
+  paper_trading: true
 
-	logrus.Info("Server exited")
-}
-
-func setupRouter(cfg *config.Config) *gin.Engine {
-	if cfg.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-
-	// Middleware
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
-
-	// CORS configuration
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = cfg.Server.AllowedOrigins
-	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
-	router.Use(cors.New(corsConfig))
-
-	return router
-}
-
-func setupLogger(level string) {
-	logrus.SetFormatter(&logrus.JSONFormatter{})
-
-	switch level {
-	case "debug":
-		logrus.SetLevel(logrus.DebugLevel)
-	case "info":
-		logrus.SetLevel(logrus.InfoLevel)
-	case "warn":
-		logrus.SetLevel(logrus.WarnLevel)
-	case "error":
-		logrus.SetLevel(logrus.ErrorLevel)
-	default:
-		logrus.SetLevel(logrus.InfoLevel)
-	}
-}
+# External APIs
+external_apis:
+  coingecko:
+    base_url: https://api.coingecko.com/api/v3
+    timeout: 10s
+    rate_limit: 50  # requests per minute
+  coinmarketcap:
+    base_url: https://pro-api.coinmarketcap.com/v1
+    api_key: ""
+    timeout: 10s
+    rate_limit: 333  # requests per day for free tier

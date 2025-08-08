@@ -1,435 +1,175 @@
-package ccxt
+-- Celebrum AI Database Initialization Script
+-- This script creates the initial database schema
 
-import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    telegram_user_id BIGINT UNIQUE,
+    telegram_username VARCHAR(255),
+    is_active BOOLEAN DEFAULT true,
+    is_premium BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-func TestNewService(t *testing.T) {
-	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
-		Timeout:    30,
-	}
+-- Create exchanges table
+CREATE TABLE IF NOT EXISTS exchanges (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) UNIQUE NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    api_url VARCHAR(255),
+    websocket_url VARCHAR(255),
+    rate_limit INTEGER DEFAULT 1000,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-	service := NewService(cfg)
-	assert.NotNil(t, service)
-	assert.NotNil(t, service.client)
-}
+-- Create trading_pairs table
+CREATE TABLE IF NOT EXISTS trading_pairs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    symbol VARCHAR(20) NOT NULL,
+    base_currency VARCHAR(10) NOT NULL,
+    quote_currency VARCHAR(10) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, base_currency, quote_currency)
+);
 
-func TestService_Initialize(t *testing.T) {
-	tests := []struct {
-		name           string
-		responseStatus int
-		responseBody   interface{}
-		expectError    bool
-	}{
-		{
-			name:           "successful initialization",
-			responseStatus: http.StatusOK,
-			responseBody: HealthResponse{
-				Status:    "ok",
-				Timestamp: time.Now(),
-				Version:   "1.0.0",
-			},
-			expectError: false,
-		},
-		{
-			name:           "service unavailable",
-			responseStatus: http.StatusServiceUnavailable,
-			responseBody:   ErrorResponse{Error: "Service unavailable"},
-			expectError:    true,
-		},
-	}
+-- Create market_data table
+CREATE TABLE IF NOT EXISTS market_data (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exchange_id UUID NOT NULL REFERENCES exchanges(id),
+    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
+    price DECIMAL(20, 8) NOT NULL,
+    volume DECIMAL(20, 8) NOT NULL,
+    bid DECIMAL(20, 8),
+    ask DECIMAL(20, 8),
+    high_24h DECIMAL(20, 8),
+    low_24h DECIMAL(20, 8),
+    change_24h DECIMAL(10, 4),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tt.responseStatus)
-				json.NewEncoder(w).Encode(tt.responseBody)
-			}))
-			defer server.Close()
+-- Create arbitrage_opportunities table
+CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
+    buy_exchange_id UUID NOT NULL REFERENCES exchanges(id),
+    sell_exchange_id UUID NOT NULL REFERENCES exchanges(id),
+    buy_price DECIMAL(20, 8) NOT NULL,
+    sell_price DECIMAL(20, 8) NOT NULL,
+    profit_percentage DECIMAL(10, 4) NOT NULL,
+    profit_amount DECIMAL(20, 8) NOT NULL,
+    volume DECIMAL(20, 8) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    detected_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-			cfg := &config.CCXTConfig{
-				ServiceURL: server.URL,
-				Timeout:    30,
-			}
-			service := NewService(cfg)
+-- Create technical_indicators table
+CREATE TABLE IF NOT EXISTS technical_indicators (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
+    exchange_id UUID NOT NULL REFERENCES exchanges(id),
+    indicator_type VARCHAR(50) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    value JSONB NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-			ctx := context.Background()
-			err := service.Initialize(ctx)
+-- Create user_alerts table
+CREATE TABLE IF NOT EXISTS user_alerts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    alert_type VARCHAR(50) NOT NULL,
+    trading_pair_id UUID REFERENCES trading_pairs(id),
+    exchange_id UUID REFERENCES exchanges(id),
+    condition_type VARCHAR(50) NOT NULL,
+    condition_value DECIMAL(20, 8),
+    is_active BOOLEAN DEFAULT true,
+    is_triggered BOOLEAN DEFAULT false,
+    triggered_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
+-- Create ccxt_exchanges table
+CREATE TABLE IF NOT EXISTS ccxt_exchanges (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ccxt_id VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    countries TEXT[],
+    urls JSONB,
+    has_features JSONB,
+    rate_limit INTEGER,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
-func TestService_GetSupportedExchanges(t *testing.T) {
-	expectedExchanges := []ExchangeInfo{
-		{ID: "binance", Name: "Binance", Status: "ok"},
-		{ID: "coinbase", Name: "Coinbase Pro", Status: "ok"},
-		{ID: "kraken", Name: "Kraken", Status: "ok"},
-	}
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_market_data_exchange_pair ON market_data(exchange_id, trading_pair_id);
+CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_pair ON arbitrage_opportunities(trading_pair_id);
+CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_detected_at ON arbitrage_opportunities(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_technical_indicators_pair_type ON technical_indicators(trading_pair_id, indicator_type);
+CREATE INDEX IF NOT EXISTS idx_technical_indicators_timestamp ON technical_indicators(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_user_alerts_user_active ON user_alerts(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
-			return
-		}
+-- Insert some initial data
+INSERT INTO exchanges (name, display_name, api_url, rate_limit) VALUES
+    ('binance', 'Binance', 'https://api.binance.com', 1200),
+    ('coinbase', 'Coinbase Pro', 'https://api.pro.coinbase.com', 10),
+    ('kraken', 'Kraken', 'https://api.kraken.com', 1),
+    ('bitfinex', 'Bitfinex', 'https://api-pub.bitfinex.com', 90),
+    ('huobi', 'Huobi', 'https://api.huobi.pro', 100)
+ON CONFLICT (name) DO NOTHING;
 
-		if r.URL.Path == "/api/exchanges" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(ExchangesResponse{
-				Exchanges: expectedExchanges,
-				Count:     len(expectedExchanges),
-				Timestamp: time.Now(),
-			})
-			return
-		}
-	}))
-	defer server.Close()
+INSERT INTO trading_pairs (symbol, base_currency, quote_currency) VALUES
+    ('BTC/USDT', 'BTC', 'USDT'),
+    ('ETH/USDT', 'ETH', 'USDT'),
+    ('BNB/USDT', 'BNB', 'USDT'),
+    ('ADA/USDT', 'ADA', 'USDT'),
+    ('SOL/USDT', 'SOL', 'USDT'),
+    ('DOT/USDT', 'DOT', 'USDT'),
+    ('MATIC/USDT', 'MATIC', 'USDT'),
+    ('AVAX/USDT', 'AVAX', 'USDT')
+ON CONFLICT (symbol, base_currency, quote_currency) DO NOTHING;
 
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	service := NewService(cfg)
+-- Create a function to update the updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
 
-	// Initialize service first
-	ctx := context.Background()
-	err := service.Initialize(ctx)
-	require.NoError(t, err)
+-- Create triggers to automatically update updated_at
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-	exchanges := service.GetSupportedExchanges()
-	require.NotEmpty(t, exchanges)
+CREATE TRIGGER update_exchanges_updated_at BEFORE UPDATE ON exchanges
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-	assert.Len(t, exchanges, 3)
-	assert.Contains(t, exchanges, "binance")
-	assert.Contains(t, exchanges, "coinbase")
-	assert.Contains(t, exchanges, "kraken")
+CREATE TRIGGER update_trading_pairs_updated_at BEFORE UPDATE ON trading_pairs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-}
+CREATE TRIGGER update_user_alerts_updated_at BEFORE UPDATE ON user_alerts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-func TestService_FetchSingleTicker(t *testing.T) {
-	expectedTicker := Ticker{
-		Symbol:    "BTC/USDT",
-		Timestamp: time.Now(),
-		Datetime:  time.Now().Format(time.RFC3339),
-		Bid:       decimal.NewFromFloat(44500.0),
-		Ask:       decimal.NewFromFloat(44550.0),
-		Last:      decimal.NewFromFloat(44525.0),
-		Volume:    decimal.NewFromFloat(1234.56),
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Timestamp: time.Now()})
-			return
-		}
-
-		if r.URL.Path == "/api/exchanges" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(ExchangesResponse{
-				Exchanges: []ExchangeInfo{{ID: "binance", Name: "Binance", Status: "ok"}},
-				Count:     1,
-				Timestamp: time.Now(),
-			})
-			return
-		}
-
-		if r.URL.Path == "/api/ticker/binance/BTC/USDT" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(TickerResponse{
-				Exchange:  "binance",
-				Symbol:    "BTC/USDT",
-				Ticker:    expectedTicker,
-				Timestamp: time.Now(),
-			})
-			return
-		}
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	service := NewService(cfg)
-
-	// Initialize service first
-	ctx := context.Background()
-	err := service.Initialize(ctx)
-	require.NoError(t, err)
-
-	marketPrice, err := service.FetchSingleTicker(ctx, "binance", "BTC/USDT")
-	require.NoError(t, err)
-	require.NotNil(t, marketPrice)
-
-	assert.Equal(t, "BTC/USDT", marketPrice.Symbol)
-	assert.True(t, marketPrice.Price.Equal(decimal.NewFromFloat(44525.0)))
-	assert.True(t, marketPrice.Volume.Equal(decimal.NewFromFloat(1234.56)))
-}
-
-func TestService_FetchMarketData(t *testing.T) {
-	expectedTickers := []TickerData{
-		{
-			Exchange: "binance",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44500.0),
-				Ask:    decimal.NewFromFloat(44550.0),
-				Last:   decimal.NewFromFloat(44525.0),
-				Timestamp: time.Now(),
-			},
-		},
-		{
-			Exchange: "binance",
-			Ticker: Ticker{
-				Symbol: "ETH/USDT",
-				Bid:    decimal.NewFromFloat(2800.0),
-				Ask:    decimal.NewFromFloat(2805.0),
-				Last:   decimal.NewFromFloat(2802.5),
-				Timestamp: time.Now(),
-			},
-		},
-		{
-			Exchange: "coinbase",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44480.0),
-				Ask:    decimal.NewFromFloat(44530.0),
-				Last:   decimal.NewFromFloat(44505.0),
-				Timestamp: time.Now(),
-			},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Timestamp: time.Now()})
-			return
-		}
-
-		if r.URL.Path == "/api/exchanges" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(ExchangesResponse{
-				Exchanges: []ExchangeInfo{
-					{ID: "binance", Name: "Binance", Status: "ok"},
-					{ID: "coinbase", Name: "Coinbase", Status: "ok"},
-				},
-				Count:     2,
-				Timestamp: time.Now(),
-			})
-			return
-		}
-
-		if r.URL.Path == "/api/tickers" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(TickersResponse{
-				Tickers:   expectedTickers,
-				Count:     len(expectedTickers),
-				Timestamp: time.Now(),
-			})
-			return
-		}
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	service := NewService(cfg)
-
-	// Initialize service first
-	ctx := context.Background()
-	err := service.Initialize(ctx)
-	require.NoError(t, err)
-
-	marketPrices, err := service.FetchMarketData(ctx, []string{"binance", "coinbase"}, []string{"BTC/USDT", "ETH/USDT"})
-	require.NoError(t, err)
-	require.NotEmpty(t, marketPrices)
-
-	// Should have 3 market prices: binance BTC/USDT, binance ETH/USDT, coinbase BTC/USDT
-	assert.Len(t, marketPrices, 3)
-
-	// Check that we have the expected symbols and exchanges
-	symbolExchangePairs := make(map[string]bool)
-	for _, mp := range marketPrices {
-		key := mp.Symbol + "@" + mp.ExchangeName
-		symbolExchangePairs[key] = true
-	}
-
-	assert.True(t, symbolExchangePairs["BTC/USDT@binance"])
-	assert.True(t, symbolExchangePairs["ETH/USDT@binance"])
-	assert.True(t, symbolExchangePairs["BTC/USDT@coinbase"])
-}
-
-func TestService_CalculateArbitrageOpportunities(t *testing.T) {
-	// Mock tickers with arbitrage opportunity
-	expectedTickers := []TickerData{
-		{
-			Exchange: "binance",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44500.0), // Higher bid on binance
-				Ask:    decimal.NewFromFloat(44550.0),
-				Last:   decimal.NewFromFloat(44525.0),
-				Timestamp: time.Now(),
-			},
-		},
-		{
-			Exchange: "coinbase",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44300.0),
-				Ask:    decimal.NewFromFloat(44350.0), // Lower ask on coinbase
-				Last:   decimal.NewFromFloat(44325.0),
-				Timestamp: time.Now(),
-			},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Timestamp: time.Now()})
-			return
-		}
-
-		if r.URL.Path == "/api/exchanges" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(ExchangesResponse{
-				Exchanges: []ExchangeInfo{
-					{ID: "binance", Name: "Binance", Status: "ok"},
-					{ID: "coinbase", Name: "Coinbase", Status: "ok"},
-				},
-				Count:     2,
-				Timestamp: time.Now(),
-			})
-			return
-		}
-
-		if r.URL.Path == "/api/tickers" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(TickersResponse{
-				Tickers:   expectedTickers,
-				Count:     len(expectedTickers),
-				Timestamp: time.Now(),
-			})
-			return
-		}
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	service := NewService(cfg)
-
-	// Initialize service first
-	ctx := context.Background()
-	err := service.Initialize(ctx)
-	require.NoError(t, err)
-
-	minProfitPercent := decimal.NewFromFloat(0.1) // 0.1%
-	opportunities, err := service.CalculateArbitrageOpportunities(ctx, []string{"binance", "coinbase"}, []string{"BTC/USDT"}, minProfitPercent)
-	require.NoError(t, err)
-	require.NotEmpty(t, opportunities)
-
-	// Should find arbitrage opportunity: buy on coinbase (44350), sell on binance (44500)
-	assert.Len(t, opportunities, 1)
-	opp := opportunities[0]
-	assert.Equal(t, "BTC/USDT", opp.Symbol)
-	assert.Equal(t, "coinbase", opp.BuyExchange)
-	assert.Equal(t, "binance", opp.SellExchange)
-	assert.True(t, opp.BuyPrice.Equal(decimal.NewFromFloat(44350.0)))
-	assert.True(t, opp.SellPrice.Equal(decimal.NewFromFloat(44500.0)))
-
-	// Calculate expected profit percentage: (44500 - 44350) / 44350 * 100 ≈ 0.338%
-	expectedProfit := opp.SellPrice.Sub(opp.BuyPrice).Div(opp.BuyPrice).Mul(decimal.NewFromInt(100))
-	assert.True(t, opp.ProfitPercentage.Equal(expectedProfit))
-	assert.True(t, opp.ProfitPercentage.GreaterThan(minProfitPercent))
-}
-
-func TestService_IsHealthy(t *testing.T) {
-	tests := []struct {
-		name           string
-		responseStatus int
-		responseBody   interface{}
-		expected       bool
-	}{
-		{
-			name:           "healthy service",
-			responseStatus: http.StatusOK,
-			responseBody:   HealthResponse{Status: "ok"},
-			expected:       true,
-		},
-		{
-			name:           "unhealthy service",
-			responseStatus: http.StatusServiceUnavailable,
-			responseBody:   ErrorResponse{Error: "Service unavailable"},
-			expected:       false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tt.responseStatus)
-				json.NewEncoder(w).Encode(tt.responseBody)
-			}))
-			defer server.Close()
-
-			cfg := &config.CCXTConfig{
-				ServiceURL: server.URL,
-				Timeout:    30,
-			}
-			service := NewService(cfg)
-
-			ctx := context.Background()
-			result := service.IsHealthy(ctx)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestService_Close(t *testing.T) {
-	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
-		Timeout:    30,
-	}
-	service := NewService(cfg)
-
-	err := service.Close()
-	assert.NoError(t, err)
-}
+CREATE TRIGGER update_ccxt_exchanges_updated_at BEFORE UPDATE ON ccxt_exchanges
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

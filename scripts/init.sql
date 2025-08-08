@@ -1,175 +1,234 @@
--- Celebrum AI Database Initialization Script
--- This script creates the initial database schema
+# Celebrum AI - Crypto Arbitrage & Technical Analysis Platform
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+A comprehensive cryptocurrency arbitrage detection and technical analysis platform built with Go, featuring real-time market data collection, arbitrage opportunity identification, and technical indicator calculations.
 
--- Create users table
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    telegram_user_id BIGINT UNIQUE,
-    telegram_username VARCHAR(255),
-    is_active BOOLEAN DEFAULT true,
-    is_premium BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+## Features
 
--- Create exchanges table
-CREATE TABLE IF NOT EXISTS exchanges (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) UNIQUE NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    api_url VARCHAR(255),
-    websocket_url VARCHAR(255),
-    rate_limit INTEGER DEFAULT 1000,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+- **Real-time Market Data**: Integration with 100+ cryptocurrency exchanges via CCXT
+- **Arbitrage Detection**: Automated identification of profitable arbitrage opportunities
+- **Technical Analysis**: Advanced technical indicators (RSI, MACD, SMA, EMA, Bollinger Bands)
+- **Multi-Interface Support**: REST API, Telegram Bot, and Web Interface
+- **High Performance**: Built with Go for optimal performance and concurrency
+- **Scalable Architecture**: Microservices design with Redis caching and PostgreSQL storage
 
--- Create trading_pairs table
-CREATE TABLE IF NOT EXISTS trading_pairs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    symbol VARCHAR(20) NOT NULL,
-    base_currency VARCHAR(10) NOT NULL,
-    quote_currency VARCHAR(10) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(symbol, base_currency, quote_currency)
-);
+## Tech Stack
 
--- Create market_data table
-CREATE TABLE IF NOT EXISTS market_data (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    exchange_id UUID NOT NULL REFERENCES exchanges(id),
-    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
-    price DECIMAL(20, 8) NOT NULL,
-    volume DECIMAL(20, 8) NOT NULL,
-    bid DECIMAL(20, 8),
-    ask DECIMAL(20, 8),
-    high_24h DECIMAL(20, 8),
-    low_24h DECIMAL(20, 8),
-    change_24h DECIMAL(10, 4),
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+- **Backend**: Go 1.21+ with Gin web framework
+- **Database**: PostgreSQL 15+ with Redis for caching
+- **Market Data**: CCXT (Node.js service) for exchange integration
+- **Deployment**: Docker containers on Digital Ocean
+- **Monitoring**: Prometheus metrics and health checks
 
--- Create arbitrage_opportunities table
-CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
-    buy_exchange_id UUID NOT NULL REFERENCES exchanges(id),
-    sell_exchange_id UUID NOT NULL REFERENCES exchanges(id),
-    buy_price DECIMAL(20, 8) NOT NULL,
-    sell_price DECIMAL(20, 8) NOT NULL,
-    profit_percentage DECIMAL(10, 4) NOT NULL,
-    profit_amount DECIMAL(20, 8) NOT NULL,
-    volume DECIMAL(20, 8) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    detected_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+## Quick Start
 
--- Create technical_indicators table
-CREATE TABLE IF NOT EXISTS technical_indicators (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    trading_pair_id UUID NOT NULL REFERENCES trading_pairs(id),
-    exchange_id UUID NOT NULL REFERENCES exchanges(id),
-    indicator_type VARCHAR(50) NOT NULL,
-    timeframe VARCHAR(10) NOT NULL,
-    value JSONB NOT NULL,
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+### Prerequisites
 
--- Create user_alerts table
-CREATE TABLE IF NOT EXISTS user_alerts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    alert_type VARCHAR(50) NOT NULL,
-    trading_pair_id UUID REFERENCES trading_pairs(id),
-    exchange_id UUID REFERENCES exchanges(id),
-    condition_type VARCHAR(50) NOT NULL,
-    condition_value DECIMAL(20, 8),
-    is_active BOOLEAN DEFAULT true,
-    is_triggered BOOLEAN DEFAULT false,
-    triggered_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+- Go 1.21 or higher
+- Docker and Docker Compose
+- PostgreSQL 15+
+- Redis 7+
+- Node.js 18+ (for CCXT service)
 
--- Create ccxt_exchanges table
-CREATE TABLE IF NOT EXISTS ccxt_exchanges (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    ccxt_id VARCHAR(100) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    countries TEXT[],
-    urls JSONB,
-    has_features JSONB,
-    rate_limit INTEGER,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+### Installation
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_market_data_exchange_pair ON market_data(exchange_id, trading_pair_id);
-CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_pair ON arbitrage_opportunities(trading_pair_id);
-CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_detected_at ON arbitrage_opportunities(detected_at DESC);
-CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_technical_indicators_pair_type ON technical_indicators(trading_pair_id, indicator_type);
-CREATE INDEX IF NOT EXISTS idx_technical_indicators_timestamp ON technical_indicators(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_user_alerts_user_active ON user_alerts(user_id, is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/irfndi/celebrum-ai-go.git
+   cd celebrum-ai-go
+   ```
 
--- Insert some initial data
-INSERT INTO exchanges (name, display_name, api_url, rate_limit) VALUES
-    ('binance', 'Binance', 'https://api.binance.com', 1200),
-    ('coinbase', 'Coinbase Pro', 'https://api.pro.coinbase.com', 10),
-    ('kraken', 'Kraken', 'https://api.kraken.com', 1),
-    ('bitfinex', 'Bitfinex', 'https://api-pub.bitfinex.com', 90),
-    ('huobi', 'Huobi', 'https://api.huobi.pro', 100)
-ON CONFLICT (name) DO NOTHING;
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-INSERT INTO trading_pairs (symbol, base_currency, quote_currency) VALUES
-    ('BTC/USDT', 'BTC', 'USDT'),
-    ('ETH/USDT', 'ETH', 'USDT'),
-    ('BNB/USDT', 'BNB', 'USDT'),
-    ('ADA/USDT', 'ADA', 'USDT'),
-    ('SOL/USDT', 'SOL', 'USDT'),
-    ('DOT/USDT', 'DOT', 'USDT'),
-    ('MATIC/USDT', 'MATIC', 'USDT'),
-    ('AVAX/USDT', 'AVAX', 'USDT')
-ON CONFLICT (symbol, base_currency, quote_currency) DO NOTHING;
+3. **Start development environment**
+   ```bash
+   make dev-setup
+   ```
 
--- Create a function to update the updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+4. **Install dependencies**
+   ```bash
+   go mod download
+   ```
 
--- Create triggers to automatically update updated_at
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+5. **Run the application**
+   ```bash
+   make run
+   ```
 
-CREATE TRIGGER update_exchanges_updated_at BEFORE UPDATE ON exchanges
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+## Development
 
-CREATE TRIGGER update_trading_pairs_updated_at BEFORE UPDATE ON trading_pairs
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+### Available Make Commands
 
-CREATE TRIGGER update_user_alerts_updated_at BEFORE UPDATE ON user_alerts
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```bash
+make help              # Show all available commands
+make build             # Build the application
+make test              # Run tests
+make test-coverage     # Run tests with coverage report
+make lint              # Run linter
+make fmt               # Format code
+make run               # Run the application
+make dev               # Run with hot reload
+make dev-setup         # Setup development environment
+make dev-down          # Stop development environment
+make install-tools     # Install development tools
+make security          # Run security scan
+```
 
-CREATE TRIGGER update_ccxt_exchanges_updated_at BEFORE UPDATE ON ccxt_exchanges
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+### Project Structure
+
+```
+.
+├── cmd/
+│   ├── server/          # Main application entry point
+│   └── worker/          # Background workers
+├── internal/
+│   ├── api/             # HTTP handlers and routes
+│   ├── config/          # Configuration management
+│   ├── database/        # Database connections and operations
+│   ├── models/          # Data models
+│   └── services/        # Business logic
+├── pkg/
+│   ├── ccxt/            # CCXT service client
+│   └── utils/           # Utility functions
+├── api/                 # API documentation
+├── configs/             # Configuration files
+├── scripts/             # Build and deployment scripts
+├── docs/                # Documentation
+└── tests/               # Test files
+```
+
+### API Endpoints
+
+#### Health Check
+- `GET /health` - Application health status
+
+#### Market Data
+- `GET /api/v1/market-data/ticker/:exchange/:symbol` - Get ticker data
+- `GET /api/v1/market-data/orderbook/:exchange/:symbol` - Get order book
+- `GET /api/v1/market-data/exchanges` - List supported exchanges
+
+#### Arbitrage
+- `GET /api/v1/arbitrage/opportunities` - Get current arbitrage opportunities
+- `GET /api/v1/arbitrage/opportunities/:pair` - Get opportunities for specific pair
+
+#### Technical Analysis
+- `GET /api/v1/technical-analysis/indicators/:exchange/:symbol` - Get technical indicators
+- `POST /api/v1/technical-analysis/calculate` - Calculate custom indicators
+
+#### User Management
+- `POST /api/v1/users/register` - Register new user
+- `POST /api/v1/users/login` - User login
+- `GET /api/v1/users/profile` - Get user profile
+
+#### Alerts
+- `GET /api/v1/alerts` - Get user alerts
+- `POST /api/v1/alerts` - Create new alert
+- `DELETE /api/v1/alerts/:id` - Delete alert
+
+#### Telegram Bot
+- `POST /api/v1/telegram/webhook` - Telegram webhook endpoint
+
+## Configuration
+
+The application uses a hierarchical configuration system:
+
+1. Default values in `configs/config.yaml`
+2. Environment-specific overrides
+3. Environment variables (highest priority)
+
+Key configuration sections:
+
+- **Server**: Port, timeouts, CORS settings
+- **Database**: PostgreSQL connection settings
+- **Redis**: Cache configuration
+- **CCXT**: Market data service settings
+- **Telegram**: Bot configuration
+- **Security**: JWT and rate limiting
+- **Features**: Feature flags for different components
+
+## Testing
+
+The project maintains a minimum of 60% test coverage:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run specific test package
+go test -v ./internal/services/...
+```
+
+## Deployment
+
+### Docker
+
+```bash
+# Build Docker image
+make docker-build
+
+# Run with Docker
+make docker-run
+```
+
+### Production Deployment
+
+1. **Build for production**
+   ```bash
+   CGO_ENABLED=0 GOOS=linux go build -o celebrum-ai cmd/server/main.go
+   ```
+
+2. **Deploy to Digital Ocean**
+   ```bash
+   # Use the provided deployment scripts
+   ./scripts/deploy.sh production
+   ```
+
+## Monitoring
+
+- **Health Checks**: `/health` endpoint for service monitoring
+- **Metrics**: Prometheus metrics available at `/metrics`
+- **Logging**: Structured JSON logging with configurable levels
+
+## Security
+
+- JWT-based authentication
+- Rate limiting on all endpoints
+- Input validation and sanitization
+- CORS protection
+- Security headers
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support and questions:
+
+- Create an issue on GitHub
+- Contact the development team
+- Check the documentation in the `docs/` directory
+
+## Roadmap
+
+- [ ] Advanced arbitrage strategies
+- [ ] Machine learning price predictions
+- [ ] Mobile application
+- [ ] Advanced portfolio management
+- [ ] Social trading features
+- [ ] Advanced risk management tools
