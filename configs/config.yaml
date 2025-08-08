@@ -25,12 +25,18 @@ server:
 
 # Database configuration
 database:
+  # For local development
   host: localhost
   port: 5432
   user: postgres
   password: postgres
   dbname: celebrum_ai
   sslmode: disable
+  
+  # For Digital Ocean managed database (use DATABASE_URL environment variable)
+  # database_url: "postgres://username:password@host:port/dbname?sslmode=require"
+  
+  # Connection pool settings (optimized for cloud deployment)
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 300s

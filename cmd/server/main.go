@@ -28,7 +28,7 @@ func main() {
 	setupLogger(cfg.LogLevel)
 
 	// Initialize database
-	db, err := database.NewPostgresConnection(cfg.Database)
+	db, err := database.NewPostgresConnection(&cfg.Database)
 	if err != nil {
 		logrus.Fatalf("Failed to connect to database: %v", err)
 	}
