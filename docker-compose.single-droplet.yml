@@ -1,0 +1,98 @@
+services:
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: celebrum-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - celebrum-network
+
+  # CCXT Service (Node.js)
+  ccxt-service:
+    build:
+      context: ./ccxt-service
+      dockerfile: Dockerfile
+    container_name: celebrum-ccxt
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - celebrum-network
+
+  # Main Go Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celebrum-app
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/celebrum.db}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
+      - API_PORT=8080
+    volumes:
+      - app_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      ccxt-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - celebrum-network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: celebrum-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - celebrum-network
+
+volumes:
+  redis_data:
+    driver: local
+  app_data:
+    driver: local
+
+networks:
+  celebrum-network:
+    driver: bridge
