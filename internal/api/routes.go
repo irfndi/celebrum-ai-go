@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/irfndi/celebrum-ai-go/internal/api/handlers"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 )
 
 type HealthResponse struct {
@@ -20,9 +23,12 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService) {
 	// Health check endpoint
 	router.GET("/health", healthCheck(db, redis))
+
+	// Initialize handlers
+	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -30,9 +36,10 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		// Market data routes
 		market := v1.Group("/market")
 		{
-			market.GET("/prices", getMarketPrices)
-			market.GET("/ticker/:exchange/:symbol", getTicker)
-			market.GET("/orderbook/:exchange/:symbol", getOrderBook)
+			market.GET("/prices", marketHandler.GetMarketPrices)
+			market.GET("/ticker/:exchange/:symbol", marketHandler.GetTicker)
+			market.GET("/orderbook/:exchange/:symbol", marketHandler.GetOrderBook)
+			market.GET("/workers/status", marketHandler.GetWorkerStatus)
 		}
 
 		// Arbitrage routes
@@ -108,17 +115,6 @@ func healthCheck(db *database.PostgresDB, redis *database.RedisClient) gin.Handl
 }
 
 // Placeholder handlers - to be implemented
-func getMarketPrices(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Market prices endpoint - to be implemented"})
-}
-
-func getTicker(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Ticker endpoint - to be implemented"})
-}
-
-func getOrderBook(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Order book endpoint - to be implemented"})
-}
 
 func getArbitrageOpportunities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Arbitrage opportunities endpoint - to be implemented"})

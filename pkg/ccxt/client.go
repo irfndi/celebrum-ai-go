@@ -1,296 +1,178 @@
 package ccxt
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
-	"testing"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestNewClient(t *testing.T) {
-	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
-		Timeout:    30,
-	}
-
-	client := NewClient(cfg)
-	assert.NotNil(t, client)
-	assert.Equal(t, cfg.ServiceURL, client.baseURL)
-	assert.Equal(t, time.Duration(cfg.Timeout)*time.Second, client.httpClient.Timeout)
+// Client represents the CCXT HTTP client
+type Client struct {
+	HTTPClient *http.Client
+	BaseURL    string
+	timeout    time.Duration
 }
 
-func TestClient_HealthCheck(t *testing.T) {
-	tests := []struct {
-		name           string
-		responseStatus int
-		responseBody   interface{}
-		expectError    bool
-	}{
-		{
-			name:           "successful health check",
-			responseStatus: http.StatusOK,
-			responseBody: HealthResponse{
-				Status:    "ok",
-				Timestamp: time.Now(),
-				Version:   "1.0.0",
-			},
-			expectError: false,
-		},
-		{
-			name:           "server error",
-			responseStatus: http.StatusInternalServerError,
-			responseBody:   ErrorResponse{Error: "Internal server error"},
-			expectError:    true,
-		},
+// NewClient creates a new CCXT client instance
+func NewClient(cfg *config.CCXTConfig) *Client {
+	timeout := time.Duration(cfg.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = 30 * time.Second
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "/health", r.URL.Path)
-				assert.Equal(t, "GET", r.Method)
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tt.responseStatus)
-				json.NewEncoder(w).Encode(tt.responseBody)
-			}))
-			defer server.Close()
-
-			cfg := &config.CCXTConfig{
-				ServiceURL: server.URL,
-				Timeout:    30,
-			}
-			client := NewClient(cfg)
-
-			ctx := context.Background()
-			resp, err := client.HealthCheck(ctx)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				assert.Nil(t, resp)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, resp)
-				assert.Equal(t, "ok", resp.Status)
-			}
-		})
+	return &Client{
+		HTTPClient: &http.Client{
+			Timeout: timeout,
+		},
+		BaseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
+		timeout: timeout,
 	}
 }
 
-func TestClient_GetExchanges(t *testing.T) {
-	expectedExchanges := []ExchangeInfo{
-		{
-			ID:        "binance",
-			Name:      "Binance",
-			Countries: "MT",
-			RateLimit: 1200,
-			HasSpot:   true,
-			Status:    "ok",
-		},
-		{
-			ID:        "coinbase",
-			Name:      "Coinbase Pro",
-			Countries: "US",
-			RateLimit: 1000,
-			HasSpot:   true,
-			Status:    "ok",
-		},
+// HealthCheck checks if the CCXT service is healthy
+func (c *Client) HealthCheck(ctx context.Context) (*HealthResponse, error) {
+	var response HealthResponse
+	err := c.makeRequest(ctx, "GET", "/health", nil, &response)
+	if err != nil {
+		return nil, err
 	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/exchanges", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ExchangesResponse{
-			Exchanges: expectedExchanges,
-		})
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	client := NewClient(cfg)
-
-	ctx := context.Background()
-	resp, err := client.GetExchanges(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	assert.Len(t, resp.Exchanges, 2)
-	assert.Equal(t, "binance", resp.Exchanges[0].ID)
-	assert.Equal(t, "coinbase", resp.Exchanges[1].ID)
+	return &response, nil
 }
 
-func TestClient_GetTicker(t *testing.T) {
-	expectedTicker := Ticker{
-		Symbol:    "BTC/USDT",
-		Timestamp: time.Now(),
-		Datetime:  time.Now().Format(time.RFC3339),
-		High:      decimal.NewFromFloat(45000.0),
-		Low:       decimal.NewFromFloat(43000.0),
-		Bid:       decimal.NewFromFloat(44500.0),
-		Ask:       decimal.NewFromFloat(44550.0),
-		Last:      decimal.NewFromFloat(44525.0),
-		Close:     decimal.NewFromFloat(44525.0),
-		Volume:    decimal.NewFromFloat(1234.56),
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/ticker/binance/BTC/USDT", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(TickerResponse{
-			Ticker: expectedTicker,
-		})
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	client := NewClient(cfg)
-
-	ctx := context.Background()
-	resp, err := client.GetTicker(ctx, "binance", "BTC/USDT")
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	assert.Equal(t, "BTC/USDT", resp.Ticker.Symbol)
-	assert.True(t, resp.Ticker.Bid.Equal(decimal.NewFromFloat(44500.0)))
-	assert.True(t, resp.Ticker.Ask.Equal(decimal.NewFromFloat(44550.0)))
+// GetExchanges retrieves all supported exchanges
+func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
+	var response ExchangesResponse
+	err := c.makeRequest(ctx, "GET", "/api/exchanges", nil, &response)
+	return &response, err
 }
 
-func TestClient_GetTickers(t *testing.T) {
-	request := &TickersRequest{
-		Exchanges: []string{"binance", "coinbase"},
-		Symbols:   []string{"BTC/USDT", "ETH/USDT"},
-	}
-
-	expectedTickers := []TickerData{
-		{
-			Exchange: "binance",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44500.0),
-				Ask:    decimal.NewFromFloat(44550.0),
-				Last:   decimal.NewFromFloat(44525.0),
-				Timestamp: time.Now(),
-			},
-		},
-		{
-			Exchange: "coinbase",
-			Ticker: Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44480.0),
-				Ask:    decimal.NewFromFloat(44530.0),
-				Last:   decimal.NewFromFloat(44505.0),
-				Timestamp: time.Now(),
-			},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/tickers", r.URL.Path)
-		assert.Equal(t, "POST", r.Method)
-
-		// Verify request body
-		var reqBody TickersRequest
-		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		require.NoError(t, err)
-		assert.Equal(t, request.Exchanges, reqBody.Exchanges)
-		assert.Equal(t, request.Symbols, reqBody.Symbols)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(TickersResponse{
-			Tickers:   expectedTickers,
-			Count:     len(expectedTickers),
-			Timestamp: time.Now(),
-		})
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	client := NewClient(cfg)
-
-	ctx := context.Background()
-	resp, err := client.GetTickers(ctx, request)
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	assert.Len(t, resp.Tickers, 2)
-	assert.Equal(t, "binance", resp.Tickers[0].Exchange)
-	assert.Equal(t, "coinbase", resp.Tickers[1].Exchange)
+// GetTicker retrieves ticker data for a specific exchange and symbol
+func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
+	path := fmt.Sprintf("/api/ticker/%s/%s", exchange, symbol)
+	var response TickerResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
 }
 
-func TestClient_GetOrderBook(t *testing.T) {
-	expectedOrderBook := OrderBook{
-		Symbol:    "BTC/USDT",
-		Timestamp: time.Now(),
-		Datetime:  time.Now().Format(time.RFC3339),
-		Bids: []OrderBookEntry{
-			{Price: decimal.NewFromFloat(44500.0), Amount: decimal.NewFromFloat(1.5)},
-			{Price: decimal.NewFromFloat(44499.0), Amount: decimal.NewFromFloat(2.0)},
-		},
-		Asks: []OrderBookEntry{
-			{Price: decimal.NewFromFloat(44550.0), Amount: decimal.NewFromFloat(1.2)},
-			{Price: decimal.NewFromFloat(44551.0), Amount: decimal.NewFromFloat(1.8)},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/orderbook/binance/BTC/USDT", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "10", r.URL.Query().Get("limit"))
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(OrderBookResponse{
-			OrderBook: expectedOrderBook,
-		})
-	}))
-	defer server.Close()
-
-	cfg := &config.CCXTConfig{
-		ServiceURL: server.URL,
-		Timeout:    30,
-	}
-	client := NewClient(cfg)
-
-	ctx := context.Background()
-	resp, err := client.GetOrderBook(ctx, "binance", "BTC/USDT", 10)
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	assert.Equal(t, "BTC/USDT", resp.OrderBook.Symbol)
-	assert.Len(t, resp.OrderBook.Bids, 2)
-	assert.Len(t, resp.OrderBook.Asks, 2)
+// GetTickers retrieves multiple tickers in a single request
+func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
+	var response TickersResponse
+	err := c.makeRequest(ctx, "POST", "/api/tickers", req, &response)
+	return &response, err
 }
 
-func TestClient_Close(t *testing.T) {
-	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
-		Timeout:    30,
+// GetOrderBook retrieves order book data for a specific exchange and symbol
+func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
+	path := fmt.Sprintf("/api/orderbook/%s/%s", exchange, symbol)
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
 	}
-	client := NewClient(cfg)
+	var response OrderBookResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
+}
 
-	err := client.Close()
-	assert.NoError(t, err)
+// GetTrades retrieves recent trades for a specific exchange and symbol
+func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
+	path := fmt.Sprintf("/api/trades/%s/%s", exchange, symbol)
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
+	}
+	var response TradesResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
+}
+
+// GetOHLCV retrieves OHLCV data for a specific exchange and symbol
+func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
+	path := fmt.Sprintf("/api/ohlcv/%s/%s", exchange, symbol)
+	params := url.Values{}
+	if timeframe != "" {
+		params.Set("timeframe", timeframe)
+	}
+	if limit > 0 {
+		params.Set("limit", strconv.Itoa(limit))
+	}
+	if len(params) > 0 {
+		path += "?" + params.Encode()
+	}
+	var response OHLCVResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
+}
+
+// GetMarkets retrieves all trading pairs for a specific exchange
+func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
+	path := fmt.Sprintf("/api/markets/%s", exchange)
+	var response MarketsResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
+}
+
+// makeRequest is a helper method to make HTTP requests to the CCXT service
+func (c *Client) makeRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
+	url := c.BaseURL + path
+
+	var reqBody io.Reader
+	if body != nil {
+		jsonData, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		reqBody = bytes.NewBuffer(jsonData)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Celebrum-AI-Go/1.0")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(respBody, &errorResp); err == nil {
+			return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, errorResp.Error)
+		}
+		return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	if result != nil {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Close closes the HTTP client (if needed for cleanup)
+func (c *Client) Close() error {
+	// HTTP client doesn't need explicit closing, but this method
+	// is provided for interface compatibility
+	return nil
 }

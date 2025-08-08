@@ -1,221 +1,178 @@
-package ccxt
+# Celebrum AI - Crypto Arbitrage & Technical Analysis Platform
 
-import (
-	"time"
+A comprehensive cryptocurrency arbitrage detection and technical analysis platform built with Go, featuring real-time market data collection, arbitrage opportunity identification, and technical indicator calculations.
 
-	"github.com/shopspring/decimal"
-)
+## Features
 
-// HealthResponse represents the health check response
-type HealthResponse struct {
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Uptime    string    `json:"uptime,omitempty"`
-	Version   string    `json:"version,omitempty"`
-}
+- **Real-time Market Data**: Integration with 100+ cryptocurrency exchanges via CCXT
+- **Arbitrage Detection**: Automated identification of profitable arbitrage opportunities
+- **Technical Analysis**: Advanced technical indicators (RSI, MACD, SMA, EMA, Bollinger Bands)
+- **Multi-Interface Support**: REST API, Telegram Bot, and Web Interface
+- **High Performance**: Built with Go for optimal performance and concurrency
+- **Scalable Architecture**: Microservices design with Redis caching and PostgreSQL storage
 
-// ErrorResponse represents an error response from the CCXT service
-type ErrorResponse struct {
-	Error     string    `json:"error"`
-	Timestamp time.Time `json:"timestamp"`
-}
+## Tech Stack
 
-// ExchangeInfo represents information about a supported exchange
-type ExchangeInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Countries   string `json:"countries,omitempty"`
-	RateLimit   int    `json:"rateLimit"`
-	HasCORS     bool   `json:"hasCORS"`
-	HasSpot     bool   `json:"hasSpot"`
-	HasFutures  bool   `json:"hasFutures"`
-	HasMargin   bool   `json:"hasMargin"`
-	HasOption   bool   `json:"hasOption"`
-	Sandbox     bool   `json:"sandbox"`
-	Status      string `json:"status"`
-}
+- **Backend**: Go 1.21+ with Gin web framework
+- **Database**: PostgreSQL 15+ with Redis for caching
+- **Market Data**: CCXT (Node.js service) for exchange integration
+- **Deployment**: Docker containers on Digital Ocean
+- **Monitoring**: Prometheus metrics and health checks
 
-// ExchangesResponse represents the response from /api/exchanges
-type ExchangesResponse struct {
-	Exchanges []ExchangeInfo `json:"exchanges"`
-	Count     int            `json:"count"`
-	Timestamp time.Time      `json:"timestamp"`
-}
+## Quick Start
 
-// Ticker represents ticker data from an exchange
-type Ticker struct {
-	Symbol    string          `json:"symbol"`
-	Bid       decimal.Decimal `json:"bid"`
-	BidVolume decimal.Decimal `json:"bidVolume"`
-	Ask       decimal.Decimal `json:"ask"`
-	AskVolume decimal.Decimal `json:"askVolume"`
-	Last      decimal.Decimal `json:"last"`
-	High      decimal.Decimal `json:"high"`
-	Low       decimal.Decimal `json:"low"`
-	Open      decimal.Decimal `json:"open"`
-	Close     decimal.Decimal `json:"close"`
-	Volume    decimal.Decimal `json:"volume"`
-	QuoteVolume decimal.Decimal `json:"quoteVolume"`
-	VWAP      decimal.Decimal `json:"vwap"`
-	Change    decimal.Decimal `json:"change"`
-	Percentage decimal.Decimal `json:"percentage"`
-	Timestamp time.Time       `json:"timestamp"`
-	Datetime  string          `json:"datetime"`
-}
+### Prerequisites
 
-// TickerResponse represents the response from /api/ticker/{exchange}/{symbol}
-type TickerResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Ticker    Ticker    `json:"ticker"`
-	Timestamp time.Time `json:"timestamp"`
-}
+- Go 1.21 or higher
+- Docker and Docker Compose
+- PostgreSQL 15+
+- Redis 7+
+- Node.js 18+ (for CCXT service)
 
-// TickersRequest represents the request body for /api/tickers
-type TickersRequest struct {
-	Symbols   []string `json:"symbols"`
-	Exchanges []string `json:"exchanges"`
-}
+### Installation
 
-// TickersResponse represents the response from /api/tickers
-type TickersResponse struct {
-	Tickers   []TickerData `json:"tickers"`
-	Count     int          `json:"count"`
-	Timestamp time.Time    `json:"timestamp"`
-}
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/irfndi/celebrum-ai-go.git
+   cd celebrum-ai-go
+   ```
 
-// TickerData represents ticker data with exchange information
-type TickerData struct {
-	Exchange string `json:"exchange"`
-	Ticker   Ticker `json:"ticker"`
-}
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-// OrderBookEntry represents a single order book entry (bid or ask)
-type OrderBookEntry struct {
-	Price  decimal.Decimal `json:"price"`
-	Amount decimal.Decimal `json:"amount"`
-}
+3. **Start development environment**
+   ```bash
+   make dev-setup
+   ```
 
-// OrderBook represents order book data
-type OrderBook struct {
-	Symbol    string            `json:"symbol"`
-	Bids      []OrderBookEntry  `json:"bids"`
-	Asks      []OrderBookEntry  `json:"asks"`
-	Timestamp time.Time         `json:"timestamp"`
-	Datetime  string            `json:"datetime"`
-	Nonce     int64             `json:"nonce,omitempty"`
-}
+4. **Install dependencies**
+   ```bash
+   go mod download
+   ```
 
-// OrderBookResponse represents the response from /api/orderbook/{exchange}/{symbol}
-type OrderBookResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	OrderBook OrderBook `json:"orderbook"`
-	Timestamp time.Time `json:"timestamp"`
-}
+5. **Run the application**
+   ```bash
+   make run
+   ```
 
-// Trade represents a single trade
-type Trade struct {
-	ID        string          `json:"id"`
-	Order     string          `json:"order,omitempty"`
-	Symbol    string          `json:"symbol"`
-	Side      string          `json:"side"` // 'buy' or 'sell'
-	Amount    decimal.Decimal `json:"amount"`
-	Price     decimal.Decimal `json:"price"`
-	Cost      decimal.Decimal `json:"cost"`
-	Fee       *TradeFee       `json:"fee,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Datetime  string          `json:"datetime"`
-}
+## Development
 
-// TradeFee represents trading fee information
-type TradeFee struct {
-	Currency string          `json:"currency"`
-	Cost     decimal.Decimal `json:"cost"`
-	Rate     decimal.Decimal `json:"rate,omitempty"`
-}
+### Available Make Commands
 
-// TradesResponse represents the response from /api/trades/{exchange}/{symbol}
-type TradesResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Trades    []Trade   `json:"trades"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
-}
+```bash
+make help              # Show all available commands
+make build             # Build the application
+make test              # Run tests
+make test-coverage     # Run tests with coverage report
+make lint              # Run linter
+make fmt               # Format code
+make run               # Run the application
+make dev               # Run with hot reload
+make dev-setup         # Setup development environment
+make dev-down          # Stop development environment
+make install-tools     # Install development tools
+make security          # Run security scan
+```
 
-// OHLCV represents OHLCV (candlestick) data
-type OHLCV struct {
-	Timestamp time.Time       `json:"timestamp"`
-	Open      decimal.Decimal `json:"open"`
-	High      decimal.Decimal `json:"high"`
-	Low       decimal.Decimal `json:"low"`
-	Close     decimal.Decimal `json:"close"`
-	Volume    decimal.Decimal `json:"volume"`
-}
+### Project Structure
 
-// OHLCVResponse represents the response from /api/ohlcv/{exchange}/{symbol}
-type OHLCVResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	Timeframe string    `json:"timeframe"`
-	OHLCV     []OHLCV   `json:"ohlcv"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
-}
+```
+.
+├── cmd/
+│   ├── server/          # Main application entry point
+│   └── worker/          # Background workers
+├── internal/
+│   ├── api/             # HTTP handlers and routes
+│   ├── config/          # Configuration management
+│   ├── database/        # Database connections and operations
+│   ├── models/          # Data models
+│   └── services/        # Business logic
+├── pkg/
+│   ├── ccxt/            # CCXT service client
+│   └── utils/           # Utility functions
+├── api/                 # API documentation
+├── configs/             # Configuration files
+├── scripts/             # Build and deployment scripts
+├── docs/                # Documentation
+└── tests/               # Test files
+```
 
-// Market represents a trading pair/market
-type Market struct {
-	ID       string          `json:"id"`
-	Symbol   string          `json:"symbol"`
-	Base     string          `json:"base"`
-	Quote    string          `json:"quote"`
-	Settle   string          `json:"settle,omitempty"`
-	Type     string          `json:"type"` // 'spot', 'future', 'option', etc.
-	Spot     bool            `json:"spot"`
-	Margin   bool            `json:"margin"`
-	Future   bool            `json:"future"`
-	Option   bool            `json:"option"`
-	Active   bool            `json:"active"`
-	Contract bool            `json:"contract"`
-	Linear   bool            `json:"linear,omitempty"`
-	Inverse  bool            `json:"inverse,omitempty"`
-	Taker    decimal.Decimal `json:"taker,omitempty"`
-	Maker    decimal.Decimal `json:"maker,omitempty"`
-	ContractSize decimal.Decimal `json:"contractSize,omitempty"`
-	Expiry   time.Time       `json:"expiry,omitempty"`
-	ExpiryDatetime string    `json:"expiryDatetime,omitempty"`
-	Strike   decimal.Decimal `json:"strike,omitempty"`
-	OptionType string        `json:"optionType,omitempty"`
-	Precision *MarketPrecision `json:"precision,omitempty"`
-	Limits   *MarketLimits   `json:"limits,omitempty"`
-	Info     interface{}     `json:"info,omitempty"`
-}
+## Deployment
 
-// MarketPrecision represents precision information for a market
-type MarketPrecision struct {
-	Amount int `json:"amount"`
-	Price  int `json:"price"`
-}
+### SSH Connection and Deployment
 
-// MarketLimits represents trading limits for a market
-type MarketLimits struct {
-	Amount *LimitRange `json:"amount,omitempty"`
-	Price  *LimitRange `json:"price,omitempty"`
-	Cost   *LimitRange `json:"cost,omitempty"`
-}
+After pushing your changes to GitHub, connect to your server and deploy:
 
-// LimitRange represents min/max limits
-type LimitRange struct {
-	Min decimal.Decimal `json:"min,omitempty"`
-	Max decimal.Decimal `json:"max,omitempty"`
-}
+```bash
+# Connect to your Digital Ocean droplet
+ssh root@your-server-ip
 
-// MarketsResponse represents the response from /api/markets/{exchange}
-type MarketsResponse struct {
-	Exchange  string    `json:"exchange"`
-	Symbols   []string  `json:"symbols"`
-	Markets   []Market  `json:"markets,omitempty"`
-	Count     int       `json:"count"`
-	Timestamp time.Time `json:"timestamp"`
-}
+# Navigate to your project directory
+cd /path/to/celebrum-ai-go
+
+# Pull latest changes
+git pull origin main
+
+# Run the deployment script
+./scripts/deploy.sh production
+```
+
+### Docker Deployment
+
+```bash
+# Build Docker image
+make docker-build
+
+# Run with Docker
+make docker-run
+```
+
+### Production Deployment Script
+
+The deployment script (`scripts/deploy.sh`) handles:
+- Pulling latest code from GitHub
+- Building Docker containers
+- Running database migrations
+- Health checks
+- Rollback on failure
+
+## Configuration
+
+The application uses a hierarchical configuration system:
+
+1. Default values in `configs/config.yaml`
+2. Environment-specific overrides
+3. Environment variables (highest priority)
+
+## Testing
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run specific test package
+go test -v ./internal/services/...
+```
+
+## Monitoring
+
+- **Health Checks**: `/health` endpoint for service monitoring
+- **Metrics**: Prometheus metrics available at `/metrics`
+- **Logging**: Structured JSON logging with configurable levels
+
+## Security
+
+- JWT-based authentication
+- Rate limiting on API endpoints
+- SSL/TLS encryption
+- Environment variable management
+
+## License
+
+MIT License - see LICENSE file for details
