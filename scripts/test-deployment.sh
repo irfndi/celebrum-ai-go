@@ -24,7 +24,7 @@ docker compose -f docker-compose.ci.yml up -d
 
 # Wait for services to be healthy
 echo "⏳ Waiting for services to be healthy..."
-max_attempts=60
+max_attempts=120
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do

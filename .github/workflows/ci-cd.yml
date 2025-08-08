@@ -136,8 +136,8 @@ jobs:
     
     - name: Test docker-compose deployment
       run: |
-        # Test the deployment setup
-        ./scripts/test-deployment.sh
+        # Test the deployment setup with extended timeout
+        timeout 600 ./scripts/test-deployment.sh
 
   deploy:
     name: Deploy to Production

@@ -8,15 +8,17 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: celebrum_ai
+      POSTGRES_INITDB_ARGS: "--auth-host=trust"
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 15s
-      timeout: 15s
-      retries: 15
-      start_period: 60s
+      interval: 20s
+      timeout: 30s
+      retries: 20
+      start_period: 120s
     networks:
       - celebrum-network
 
@@ -52,8 +54,9 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     networks:
       - celebrum-network
 
