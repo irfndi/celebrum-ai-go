@@ -1,151 +1,86 @@
-# CCXT Service
+import type { Exchange, Ticker, OrderBook, OHLCV } from 'ccxt';
 
-A high-performance TypeScript microservice that provides cryptocurrency exchange data using the CCXT library. This service acts as a bridge between the main Go application and various cryptocurrency exchanges.
-
-## Features
-
-- **Multi-Exchange Support**: Supports major exchanges like Binance, Bybit, OKX, Coinbase, and Kraken
-- **Real-time Market Data**: Fetch tickers, order books, OHLCV data, and trading pairs
-- **Type Safety**: Full TypeScript implementation with comprehensive type definitions
-- **High Performance**: Built with Hono framework for maximum speed
-- **Health Monitoring**: Health check endpoint for service monitoring
-- **Error Handling**: Comprehensive error handling and logging
-- **Docker Support**: Containerized for easy deployment
-- **Validation**: Request/response validation with proper error messages
-
-## Technology Stack
-
-- **Runtime**: Bun (faster than Node.js)
-- **Framework**: Hono (faster than Express.js)
-- **Language**: TypeScript
-- **Exchange Library**: CCXT
-- **Security**: Secure headers, CORS
-- **Monitoring**: Built-in logging
-- **Compression**: gzip compression
-
-## API Endpoints
-
-### Health Check
-```
-GET /health
-```
-
-### Exchange Information
-```
-GET /api/exchanges
-```
-
-### Market Data
-```
-GET /api/ticker/:exchange/:symbol
-GET /api/orderbook/:exchange/:symbol?limit=20
-GET /api/ohlcv/:exchange/:symbol?timeframe=1h&limit=100
-GET /api/markets/:exchange
-```
-
-### Bulk Operations
-```
-POST /api/tickers
-Body: {
-  "symbols": ["BTC/USDT", "ETH/USDT"],
-  "exchanges": ["binance", "bybit"]
+// API Response Types
+export interface HealthResponse {
+  status: 'healthy' | 'unhealthy';
+  timestamp: string;
+  service: string;
+  version: string;
 }
-```
 
-## Supported Exchanges
-
-- **binance**: Binance
-- **bybit**: Bybit
-- **okx**: OKX
-- **coinbase**: Coinbase Pro
-- **kraken**: Kraken
-
-## Environment Variables
-
-```bash
-PORT=3001
-NODE_ENV=production
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=1000
-LOG_LEVEL=info
-CORS_ORIGIN=*
-REQUEST_TIMEOUT=30000
-```
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Start production server
-npm start
-
-# Run tests
-npm test
-```
-
-## Docker
-
-```bash
-# Build image
-docker build -t ccxt-service .
-
-# Run container
-docker run -p 3001:3001 ccxt-service
-```
-
-## Usage Examples
-
-### Get Bitcoin ticker from Binance
-```bash
-curl http://localhost:3001/api/ticker/binance/BTC/USDT
-```
-
-### Get order book
-```bash
-curl http://localhost:3001/api/orderbook/binance/BTC/USDT?limit=10
-```
-
-### Get multiple tickers for arbitrage
-```bash
-curl -X POST http://localhost:3001/api/tickers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbols": ["BTC/USDT", "ETH/USDT"],
-    "exchanges": ["binance", "bybit"]
-  }'
-```
-
-## Error Handling
-
-The service returns structured error responses:
-
-```json
-{
-  "error": "Exchange not supported",
-  "timestamp": "2024-01-15T10:30:00.000Z"
+export interface ExchangeInfo {
+  id: string;
+  name: string;
+  countries: string[];
+  urls: Record<string, any>;
 }
-```
 
-## Rate Limiting
-
-- Default: 1000 requests per 15 minutes per IP
-- Configurable via environment variables
-- Returns 429 status code when exceeded
-
-## Health Monitoring
-
-The `/health` endpoint provides service status:
-
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "service": "ccxt-service",
-  "version": "1.0.0"
+export interface ExchangesResponse {
+  exchanges: ExchangeInfo[];
 }
-```
+
+export interface TickerResponse {
+  exchange: string;
+  symbol: string;
+  ticker: Ticker;
+  timestamp: string;
+}
+
+export interface OrderBookResponse {
+  exchange: string;
+  symbol: string;
+  orderbook: OrderBook;
+  timestamp: string;
+}
+
+export interface OHLCVResponse {
+  exchange: string;
+  symbol: string;
+  timeframe: string;
+  ohlcv: OHLCV[];
+  timestamp: string;
+}
+
+export interface MarketsResponse {
+  exchange: string;
+  symbols: string[];
+  count: number;
+  timestamp: string;
+}
+
+export interface MultiTickerRequest {
+  symbols: string[];
+  exchanges?: string[];
+}
+
+export interface MultiTickerResponse {
+  results: Record<string, Record<string, Ticker | { error: string }>>;
+  timestamp: string;
+}
+
+export interface ErrorResponse {
+  error: string;
+  message?: string;
+  timestamp: string;
+}
+
+// Exchange Management
+export interface ExchangeManager {
+  [key: string]: Exchange;
+}
+
+// Query Parameters
+export interface OHLCVQuery {
+  timeframe?: string;
+  limit?: string;
+}
+
+export interface OrderBookQuery {
+  limit?: string;
+}
+
+// Environment Variables
+export interface EnvConfig {
+  PORT: string;
+  NODE_ENV: string;
+}

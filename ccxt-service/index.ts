@@ -58,9 +58,9 @@ app.get('/api/exchanges', (c) => {
   try {
     const exchangeList = Object.keys(exchanges).map(id => ({
       id,
-      name: exchanges[id].name,
-      countries: exchanges[id].countries,
-      urls: exchanges[id].urls
+      name: exchanges[id].name || id,
+      countries: (exchanges[id].countries || []).filter((country): country is string => country !== undefined),
+      urls: exchanges[id].urls || {}
     }));
     
     const response: ExchangesResponse = { exchanges: exchangeList };
