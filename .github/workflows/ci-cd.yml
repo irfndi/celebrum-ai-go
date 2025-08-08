@@ -65,6 +65,9 @@ jobs:
         version: latest
         args: --timeout=5m
     
+    - name: Check formatting
+      run: make fmt-check
+    
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out ./...
       env:
@@ -138,26 +141,48 @@ jobs:
       with:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     
+    - name: Setup SSH key
+      run: |
+        # Create SSH directory
+        mkdir -p ~/.ssh
+        
+        # Setup SSH key with proper formatting
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        
+        # Add server to known hosts
+        ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+        
+        # Test SSH connection
+        ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
+    
     - name: Update deployment
       run: |
         # Get the latest image tag
         IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
         
-        # Update the docker-compose file or deployment configuration
-        # This assumes you have a deployment script or use docker-compose
-        
-        # Example: SSH into your server and update the deployment
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" > deploy_key
-        chmod 600 deploy_key
-        
-        ssh -i deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+        # Deploy to server
+        ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          set -e
           cd /opt/celebrum-ai-go
-          docker-compose pull
-          docker-compose up -d --remove-orphans
+          
+          # Pull latest images
+          docker-compose -f docker-compose.single-droplet.yml pull
+          
+          # Update and restart services
+          docker-compose -f docker-compose.single-droplet.yml up -d --remove-orphans
+          
+          # Clean up unused images
           docker system prune -f
+          
+          # Verify deployment
+          docker-compose -f docker-compose.single-droplet.yml ps
         EOF
-        
-        rm deploy_key
+    
+    - name: Cleanup SSH key
+      if: always()
+      run: |
+        rm -f ~/.ssh/deploy_key
 
   notify:
     name: Notify Deployment Status

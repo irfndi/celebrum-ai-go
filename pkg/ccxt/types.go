@@ -13,10 +13,10 @@ import (
 
 // Service provides high-level CCXT operations
 type Service struct {
-	client          *Client
+	client             *Client
 	supportedExchanges map[string]ExchangeInfo
-	mu              sync.RWMutex
-	lastUpdate      time.Time
+	mu                 sync.RWMutex
+	lastUpdate         time.Time
 }
 
 // NewService creates a new CCXT service instance

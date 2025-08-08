@@ -29,18 +29,18 @@ type ExchangesResponse struct {
 
 // Ticker represents ticker data from an exchange
 type Ticker struct {
-	Symbol    string          `json:"symbol"`
-	Last      decimal.Decimal `json:"last"`
-	Bid       decimal.Decimal `json:"bid"`
-	Ask       decimal.Decimal `json:"ask"`
-	Volume    decimal.Decimal `json:"volume"`
-	High      decimal.Decimal `json:"high"`
-	Low       decimal.Decimal `json:"low"`
-	Open      decimal.Decimal `json:"open"`
-	Close     decimal.Decimal `json:"close"`
-	Change    decimal.Decimal `json:"change"`
+	Symbol     string          `json:"symbol"`
+	Last       decimal.Decimal `json:"last"`
+	Bid        decimal.Decimal `json:"bid"`
+	Ask        decimal.Decimal `json:"ask"`
+	Volume     decimal.Decimal `json:"volume"`
+	High       decimal.Decimal `json:"high"`
+	Low        decimal.Decimal `json:"low"`
+	Open       decimal.Decimal `json:"open"`
+	Close      decimal.Decimal `json:"close"`
+	Change     decimal.Decimal `json:"change"`
 	Percentage decimal.Decimal `json:"percentage"`
-	Timestamp time.Time       `json:"timestamp"`
+	Timestamp  time.Time       `json:"timestamp"`
 }
 
 // TickerResponse represents the response from the ticker endpoint
@@ -77,11 +77,11 @@ type OrderBookEntry struct {
 
 // OrderBook represents order book data
 type OrderBook struct {
-	Symbol    string            `json:"symbol"`
-	Bids      []OrderBookEntry  `json:"bids"`
-	Asks      []OrderBookEntry  `json:"asks"`
-	Timestamp time.Time         `json:"timestamp"`
-	Nonce     int64             `json:"nonce"`
+	Symbol    string           `json:"symbol"`
+	Bids      []OrderBookEntry `json:"bids"`
+	Asks      []OrderBookEntry `json:"asks"`
+	Timestamp time.Time        `json:"timestamp"`
+	Nonce     int64            `json:"nonce"`
 }
 
 // OrderBookResponse represents the response from the order book endpoint
@@ -104,11 +104,11 @@ type OHLCV struct {
 
 // OHLCVResponse represents the response from the OHLCV endpoint
 type OHLCVResponse struct {
-	Exchange  string   `json:"exchange"`
-	Symbol    string   `json:"symbol"`
-	Timeframe string   `json:"timeframe"`
-	OHLCV     []OHLCV  `json:"ohlcv"`
-	Timestamp string   `json:"timestamp"`
+	Exchange  string  `json:"exchange"`
+	Symbol    string  `json:"symbol"`
+	Timeframe string  `json:"timeframe"`
+	OHLCV     []OHLCV `json:"ohlcv"`
+	Timestamp string  `json:"timestamp"`
 }
 
 // Trade represents a single trade

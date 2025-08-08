@@ -186,20 +186,20 @@ func TestClient_GetTickers(t *testing.T) {
 		{
 			Exchange: "binance",
 			Ticker: ccxt.Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44500.0),
-				Ask:    decimal.NewFromFloat(44550.0),
-				Last:   decimal.NewFromFloat(44525.0),
+				Symbol:    "BTC/USDT",
+				Bid:       decimal.NewFromFloat(44500.0),
+				Ask:       decimal.NewFromFloat(44550.0),
+				Last:      decimal.NewFromFloat(44525.0),
 				Timestamp: time.Now(),
 			},
 		},
 		{
 			Exchange: "coinbase",
 			Ticker: ccxt.Ticker{
-				Symbol: "BTC/USDT",
-				Bid:    decimal.NewFromFloat(44480.0),
-				Ask:    decimal.NewFromFloat(44530.0),
-				Last:   decimal.NewFromFloat(44505.0),
+				Symbol:    "BTC/USDT",
+				Bid:       decimal.NewFromFloat(44480.0),
+				Ask:       decimal.NewFromFloat(44530.0),
+				Last:      decimal.NewFromFloat(44505.0),
 				Timestamp: time.Now(),
 			},
 		},

@@ -95,8 +95,6 @@ func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, e
 	return args.Get(0).([]models.ArbitrageOpportunityResponse), args.Error(1)
 }
 
-
-
 func TestMarketHandler_GetTicker(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)

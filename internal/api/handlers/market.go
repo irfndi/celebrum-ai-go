@@ -14,15 +14,15 @@ import (
 )
 
 type MarketHandler struct {
-	db              *database.PostgresDB
-	ccxtService     ccxt.CCXTService
+	db               *database.PostgresDB
+	ccxtService      ccxt.CCXTService
 	collectorService *services.CollectorService
 }
 
 func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, collectorService *services.CollectorService) *MarketHandler {
 	return &MarketHandler{
-		db:              db,
-		ccxtService:     ccxtService,
+		db:               db,
+		ccxtService:      ccxtService,
 		collectorService: collectorService,
 	}
 }
@@ -266,12 +266,12 @@ func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 func (h *MarketHandler) GetWorkerStatus(c *gin.Context) {
 	if h.collectorService == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Collector service is not available",
+			"error":     "Collector service is not available",
 			"timestamp": time.Now(),
 		})
 		return
 	}
-	
+
 	status := h.collectorService.GetWorkerStatus()
 	c.JSON(http.StatusOK, gin.H{
 		"workers":   status,

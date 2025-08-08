@@ -21,26 +21,26 @@ type CollectorConfig struct {
 
 // CollectorService handles market data collection from exchanges
 type CollectorService struct {
-	db             *gorm.DB
-	ccxtService    ccxt.CCXTService
-	config         *config.Config
+	db              *gorm.DB
+	ccxtService     ccxt.CCXTService
+	config          *config.Config
 	collectorConfig CollectorConfig
-	workers        map[string]*Worker
-	mu             sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
+	workers         map[string]*Worker
+	mu              sync.RWMutex
+	ctx             context.Context
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
 }
 
 // Worker represents a background worker for collecting data from a specific exchange
 type Worker struct {
-	Exchange    string
-	Symbols     []string
-	Interval    time.Duration
-	LastUpdate  time.Time
-	IsRunning   bool
-	ErrorCount  int
-	MaxErrors   int
+	Exchange   string
+	Symbols    []string
+	Interval   time.Duration
+	LastUpdate time.Time
+	IsRunning  bool
+	ErrorCount int
+	MaxErrors  int
 }
 
 // NewCollectorService creates a new market data collector service
@@ -117,11 +117,11 @@ func (c *CollectorService) createWorker(exchangeID string) error {
 
 	// Create worker
 	worker := &Worker{
-		Exchange:   exchangeID,
-		Symbols:    symbols,
-		Interval:   time.Duration(c.collectorConfig.IntervalSeconds) * time.Second,
-		MaxErrors:  c.collectorConfig.MaxErrors,
-		IsRunning:  true,
+		Exchange:  exchangeID,
+		Symbols:   symbols,
+		Interval:  time.Duration(c.collectorConfig.IntervalSeconds) * time.Second,
+		MaxErrors: c.collectorConfig.MaxErrors,
+		IsRunning: true,
 	}
 
 	c.workers[exchangeID] = worker

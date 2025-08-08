@@ -2,7 +2,7 @@
 
 # Variables
 APP_NAME=celebrum-ai
-GO_VERSION=1.21
+GO_VERSION=1.24
 DOCKER_IMAGE=$(APP_NAME):latest
 DOCKER_COMPOSE_FILE=docker-compose.yml
 DOCKER_COMPOSE_PROD_FILE=docker-compose.single-droplet.yml
@@ -50,6 +50,16 @@ fmt: ## Format code
 	@echo "$(GREEN)Formatting code...$(NC)"
 	go fmt ./...
 	goimports -w .
+
+fmt-check: ## Check code formatting
+	@echo "$(GREEN)Checking code formatting...$(NC)"
+	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
+		echo "$(RED)The following files are not formatted:$(NC)"; \
+		gofmt -s -l .; \
+		exit 1; \
+	else \
+		echo "$(GREEN)All files are properly formatted$(NC)"; \
+	fi
 
 run: build ## Run the application
 	@echo "$(GREEN)Starting $(APP_NAME)...$(NC)"

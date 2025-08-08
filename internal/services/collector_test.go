@@ -95,9 +95,9 @@ func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, e
 func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	
+
 	collector := NewCollectorService(nil, mockCCXT, config)
-	
+
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.workers)
 	assert.Equal(t, 60, collector.collectorConfig.IntervalSeconds)
@@ -107,29 +107,29 @@ func TestNewCollectorService(t *testing.T) {
 func TestCollectorService_Start(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	
+
 	// Mock the Initialize and GetSupportedExchanges calls
 	mockCCXT.On("Initialize", mock.Anything).Return(nil)
 	mockCCXT.On("GetSupportedExchanges").Return([]string{}) // Return empty slice to avoid database operations
-	
+
 	collector := NewCollectorService(nil, mockCCXT, config)
-	
+
 	// Test that the service can start without errors
 	err := collector.Start()
 	assert.NoError(t, err)
-	
+
 	mockCCXT.AssertExpectations(t)
 }
 
 func TestCollectorService_Stop(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	
+
 	collector := NewCollectorService(nil, mockCCXT, config)
-	
+
 	// Test that the service can be stopped without errors
 	collector.Stop()
-	
+
 	// Verify that the context is cancelled
 	select {
 	case <-collector.ctx.Done():
@@ -142,9 +142,9 @@ func TestCollectorService_Stop(t *testing.T) {
 func TestCollectorService_GetWorkerStatus(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	
+
 	collector := NewCollectorService(nil, mockCCXT, config)
-	
+
 	// Get worker status (should be empty initially)
 	status := collector.GetWorkerStatus()
 	assert.NotNil(t, status)
