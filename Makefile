@@ -112,6 +112,26 @@ deploy-staging: ## Deploy to staging
 	@echo "$(GREEN)Deploying to staging...$(NC)"
 	./scripts/deploy.sh staging
 
+## CI/CD
+ci-test: ## Run CI tests with proper environment
+	@echo "$(GREEN)Running CI tests...$(NC)"
+	go test -v -race -coverprofile=coverage.out ./...
+
+ci-lint: ## Run linter for CI
+	@echo "$(GREEN)Running CI linter...$(NC)"
+	golangci-lint run --timeout=5m
+
+ci-build: ## Build for CI
+	@echo "$(GREEN)Building for CI...$(NC)"
+	CGO_ENABLED=0 go build -v -ldflags "-X main.version=$(shell git describe --tags --always --dirty) -X main.buildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S')" -o bin/$(APP_NAME) cmd/server/main.go
+
+ci-check: ci-lint ci-test ci-build ## Run all CI checks
+	@echo "$(GREEN)All CI checks completed!$(NC)"
+
+docker-push: ## Push Docker image to registry
+	@echo "$(GREEN)Pushing Docker image...$(NC)"
+	docker push $(DOCKER_IMAGE)
+
 ## Utilities
 clean: ## Clean build artifacts
 	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"

@@ -75,6 +75,45 @@ make dev-setup         # Setup development environment
 make dev-down          # Stop development environment
 make install-tools     # Install development tools
 make security          # Run security scan
+make ci-check          # Run all CI checks locally
+make ci-lint           # Run CI linter
+make ci-test           # Run CI tests
+make ci-build          # Build for CI
+```
+
+### Development Workflow
+
+#### Pre-commit Hooks (Recommended)
+
+Install pre-commit hooks to catch issues before committing:
+
+```bash
+# Install pre-commit (requires Python)
+pip install pre-commit
+
+# Install the git hook scripts
+pre-commit install
+
+# Run against all files (optional)
+pre-commit run --all-files
+```
+
+The pre-commit hooks will automatically:
+- Format Go code
+- Run linting
+- Run tests
+- Check for secrets
+- Validate YAML/JSON files
+- Check Dockerfile syntax
+
+#### Code Quality
+
+```bash
+# Before committing, run:
+make fmt               # Format code
+make lint              # Check for issues
+make test              # Run tests
+make ci-check          # Run full CI suite
 ```
 
 ### Project Structure
@@ -102,9 +141,40 @@ make security          # Run security scan
 
 ## Deployment
 
-### SSH Connection and Deployment
+### Automated CI/CD Pipeline
 
-After pushing your changes to GitHub, connect to your server and deploy:
+The project includes a complete CI/CD pipeline using GitHub Actions that automatically:
+
+- **Runs tests and linting** on every push and pull request
+- **Builds and pushes Docker images** to GitHub Container Registry
+- **Deploys to production** when code is pushed to the main branch
+- **Performs health checks** and automatic rollback on failure
+
+#### Setup CI/CD
+
+1. **Configure GitHub Secrets** (see [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md)):
+   - `DIGITALOCEAN_ACCESS_TOKEN`
+   - `DEPLOY_SSH_KEY`
+   - `DEPLOY_USER`
+   - `DEPLOY_HOST`
+
+2. **Push to main branch** - deployment happens automatically!
+
+#### Local CI Checks
+
+```bash
+# Run the same checks as CI
+make ci-check
+
+# Individual CI commands
+make ci-lint      # Run linter
+make ci-test      # Run tests with race detection
+make ci-build     # Build with version info
+```
+
+### Manual Deployment
+
+#### SSH Connection and Deployment
 
 ```bash
 # Connect to your Digital Ocean droplet
@@ -120,7 +190,7 @@ git pull origin main
 ./scripts/deploy.sh production
 ```
 
-### Docker Deployment
+#### Docker Deployment
 
 ```bash
 # Build Docker image
@@ -128,6 +198,9 @@ make docker-build
 
 # Run with Docker
 make docker-run
+
+# Push to registry
+make docker-push
 ```
 
 ### Production Deployment Script
@@ -137,7 +210,8 @@ The deployment script (`scripts/deploy.sh`) handles:
 - Building Docker containers
 - Running database migrations
 - Health checks
-- Rollback on failure
+- Automatic rollback on failure
+- Backup creation before deployment
 
 ## Configuration
 

@@ -60,7 +60,9 @@ func TestClient_HealthCheck(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.responseStatus)
-				json.NewEncoder(w).Encode(tt.responseBody)
+				if err := json.NewEncoder(w).Encode(tt.responseBody); err != nil {
+					t.Errorf("Failed to encode response: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -107,9 +109,11 @@ func TestClient_GetExchanges(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ccxt.ExchangesResponse{
+		if err := json.NewEncoder(w).Encode(ccxt.ExchangesResponse{
 			Exchanges: expectedExchanges,
-		})
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -148,9 +152,11 @@ func TestClient_GetTicker(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ccxt.TickerResponse{
+		if err := json.NewEncoder(w).Encode(ccxt.TickerResponse{
 			Ticker: expectedTicker,
-		})
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -212,10 +218,12 @@ func TestClient_GetTickers(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ccxt.TickersResponse{
+		if err := json.NewEncoder(w).Encode(ccxt.TickersResponse{
 			Tickers:   expectedTickers,
 			Timestamp: time.Now().Format(time.RFC3339),
-		})
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -257,9 +265,11 @@ func TestClient_GetOrderBook(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ccxt.OrderBookResponse{
+		if err := json.NewEncoder(w).Encode(ccxt.OrderBookResponse{
 			OrderBook: expectedOrderBook,
-		})
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 

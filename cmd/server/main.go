@@ -40,7 +40,6 @@ func main() {
 
 	// Initialize CCXT service
 	ccxtService := ccxt.NewService(&cfg.CCXT)
-	ctx := context.Background()
 
 	// Initialize collector service (Note: This will need GORM DB, but we'll handle that later)
 	// collectorService := services.NewCollectorService(db, ccxtService, cfg)

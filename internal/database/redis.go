@@ -36,7 +36,10 @@ func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 
 func (r *RedisClient) Close() {
 	if r.Client != nil {
-		r.Client.Close()
+		if err := r.Client.Close(); err != nil {
+			// Log error but don't return it since this is a cleanup function
+			logrus.Errorf("Error closing Redis client: %v", err)
+		}
 		logrus.Info("Redis connection closed")
 	}
 }
