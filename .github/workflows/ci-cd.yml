@@ -199,6 +199,23 @@ jobs:
         # Deploy to server with proper SSH options
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
           set -e
+          
+          # Create application directory if it doesn't exist
+          sudo mkdir -p /opt/celebrum-ai-go
+          sudo chown $USER:$USER /opt/celebrum-ai-go
+          
+          # Clone or update repository
+          if [ ! -d "/opt/celebrum-ai-go/.git" ]; then
+            echo "Cloning repository..."
+            git clone https://github.com/${{ github.repository }}.git /opt/celebrum-ai-go
+          else
+            echo "Updating repository..."
+            cd /opt/celebrum-ai-go
+            git fetch origin
+            git reset --hard origin/main
+          fi
+          
+          # Change to application directory
           cd /opt/celebrum-ai-go
           
           # Pull latest images
