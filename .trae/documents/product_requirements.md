@@ -13,51 +13,66 @@ Celebrum AI is a comprehensive crypto trading platform that identifies arbitrage
 
 | Role | Registration Method | Core Permissions |
 |------|---------------------|------------------|
-| Free User | Email registration | View basic market data, limited technical analysis |
-| Premium User | Subscription upgrade | Full arbitrage alerts, advanced technical analysis, telegram notifications |
-| Enterprise User | Custom onboarding | API access, custom alerts, priority support |
+| Free User | Telegram ID + username (instant) | View basic market data, limited arbitrage alerts via Telegram |
+| Premium User | Subscription upgrade via Telegram | Full arbitrage alerts, advanced technical analysis, priority notifications |
+| Enterprise User | Custom onboarding | API access, custom alerts, priority support, website dashboard access |
+
+**Registration Flow:**
+- **Primary**: Users start with `/start` command in Telegram bot using only Telegram ID and username
+- **Optional**: Users can later connect email/password for website access
+- **Seamless**: No initial barriers - immediate access to core features through Telegram
 
 ### 2.2 Feature Module
 
-Our crypto arbitrage platform consists of the following main components:
+Our crypto arbitrage platform consists of the following main components (Telegram-first approach):
 
-1. **Market Data Dashboard**: Real-time market data display, price feeds from multiple exchanges, futures contract monitoring.
-2. **Arbitrage Opportunities**: Opportunity detection engine, profit calculations, risk assessment, alert system.
-3. **Technical Analysis**: Chart analysis tools, indicator calculations, pattern recognition, signal generation.
-4. **Alert Management**: Notification preferences, telegram integration, email alerts, webhook configurations.
-5. **Portfolio Tracking**: Position monitoring, P&L tracking, performance analytics.
+1. **Telegram Bot Interface**: Primary user interface, instant arbitrage alerts, command-based navigation, user onboarding via `/start`.
+2. **Arbitrage Opportunities**: Real-time opportunity detection, profit calculations, Telegram notifications, risk assessment.
+3. **Market Data Collection**: Background data feeds from multiple exchanges, futures contract monitoring, price aggregation.
+4. **User Management**: Telegram-based authentication, optional website linking, subscription management.
+5. **Web Dashboard** (Optional): Advanced charts, detailed analysis, portfolio tracking for users who connect via website.
 
-### 2.3 Page Details
+### 2.3 Interface Details
 
-| Page Name | Module Name | Feature description |
-|-----------|-------------|---------------------|
-| Market Data Dashboard | Real-time Data Feed | Display live prices from multiple exchanges, futures contract data, volume analysis |
-| Market Data Dashboard | Exchange Monitoring | Track connection status, latency metrics, data quality indicators |
-| Arbitrage Opportunities | Opportunity Scanner | Detect price differences across exchanges, calculate potential profits, filter by risk level |
-| Arbitrage Opportunities | Alert System | Send notifications via telegram/email, customizable thresholds, opportunity ranking |
-| Technical Analysis | Chart Interface | Interactive price charts, multiple timeframes, drawing tools, indicator overlays |
-| Technical Analysis | Signal Generator | Generate buy/sell signals, pattern recognition, trend analysis, backtesting |
-| Alert Management | Notification Center | Configure alert preferences, manage telegram bot, webhook settings |
-| Portfolio Tracking | Position Monitor | Track open positions, calculate unrealized P&L, risk metrics |
+| Interface Type | Module Name | Feature description |
+|----------------|-------------|---------------------|
+| Telegram Bot | User Onboarding | `/start` command registration, welcome message, feature introduction, subscription options |
+| Telegram Bot | Arbitrage Alerts | Real-time opportunity notifications, profit calculations, exchange pair details, quick action buttons |
+| Telegram Bot | Command Interface | `/opportunities` - view current arbitrage, `/settings` - configure alerts, `/help` - command list |
+| Telegram Bot | Subscription Management | `/upgrade` for premium features, payment integration, feature unlocking |
+| Web Dashboard (Optional) | Market Data View | Advanced charts, multiple timeframes, technical indicators for connected users |
+| Web Dashboard (Optional) | Portfolio Tracking | Detailed P&L analysis, position monitoring, performance metrics |
+| Web Dashboard (Optional) | Account Linking | Connect Telegram account, email/password setup, sync preferences |
+| Background Services | Data Collection | Continuous market data fetching, opportunity detection, alert generation |
 
 ## 3. Core Process
 
-**Data Collection Flow:**
-Users access the platform → System continuously collects market data from multiple exchanges → Data is processed and stored → Arbitrage opportunities are detected → Alerts are sent via telegram/web → Users can view detailed analysis and execute trades.
+**Telegram Bot User Journey:**
+User discovers bot → `/start` command → Instant registration with Telegram ID → Welcome message with feature overview → User receives arbitrage alerts → Optional upgrade to premium → Optional website connection for advanced features.
 
-**Technical Analysis Flow:**
-Users select trading pairs → System displays charts with technical indicators → Users configure analysis parameters → System generates signals and patterns → Results are displayed with actionable insights.
+**Arbitrage Detection Flow:**
+System continuously monitors exchanges → Price differences detected → Profit calculations performed → Alerts sent to Telegram users → Users receive formatted notifications with actionable data → Optional detailed analysis via website.
+
+**Account Linking Flow (Optional):**
+Telegram user → Website visit → "Connect Telegram" option → Authentication via Telegram → Account linking → Access to advanced web features while maintaining Telegram as primary interface.
 
 ```mermaid
 graph TD
-    A[Market Data Collection] --> B[Data Processing & Storage]
-    B --> C[Opportunity Detection]
-    C --> D[Alert Generation]
-    D --> E[Web Dashboard]
-    D --> F[Telegram Bot]
-    E --> G[User Analysis]
-    F --> G
-    G --> H[Trading Decision]
+    A[User Discovers Bot] --> B[/start Command]
+    B --> C[Instant Registration via Telegram ID]
+    C --> D[Welcome & Feature Overview]
+    D --> E[Background: Market Data Collection]
+    E --> F[Opportunity Detection]
+    F --> G[Telegram Alert Sent]
+    G --> H[User Receives Notification]
+    H --> I{User Action}
+    I --> J[View More Details]
+    I --> K[Upgrade to Premium]
+    I --> L[Connect to Website]
+    L --> M[Advanced Web Features]
+    J --> N[Trading Decision]
+    K --> N
+    M --> N
 ```
 
 ## 4. User Interface Design

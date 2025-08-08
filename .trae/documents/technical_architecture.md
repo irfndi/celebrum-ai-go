@@ -4,41 +4,50 @@
 
 ```mermaid
 graph TD
-    A[Web Dashboard] --> B[Go Backend API]
-    C[Telegram Bot] --> B
-    B --> D[Market Data Collector]
-    B --> E[Arbitrage Engine]
-    B --> F[Technical Analysis Engine]
-    D --> G[PostgreSQL Database]
-    E --> G
-    F --> G
-    B --> H[Redis Cache]
-    D --> I[CCXT Library]
-    I --> J[Exchange APIs]
+    A[Telegram Bot] --> B[Telegram Bot API]
+    B --> C[Go Backend API]
+    D[Web Dashboard] --> C
+    C --> E[User Authentication Service]
+    C --> F[Market Data Collector]
+    C --> G[Arbitrage Engine]
+    C --> H[Alert Processor]
+    E --> I[PostgreSQL Database]
+    F --> I
+    G --> I
+    H --> I
+    C --> J[Redis Cache]
+    F --> K[CCXT Service]
+    K --> L[Exchange APIs]
+    H --> A
     
-    subgraph "Frontend Layer"
+    subgraph "Primary Interface"
         A
-        C
+        B
+    end
+    
+    subgraph "Optional Interface"
+        D
     end
     
     subgraph "Backend Services"
-        B
-        D
+        C
         E
         F
-    end
-    
-    subgraph "Data Layer"
         G
         H
     end
     
-    subgraph "Market Data Integration"
+    subgraph "Data Layer"
         I
+        J
+    end
+    
+    subgraph "Market Data Integration"
+        K
     end
     
     subgraph "External Services"
-        J
+        L
     end
 ```
 
@@ -75,16 +84,30 @@ Go Backend → HTTP/REST → CCXT Service (Node.js) → Exchange APIs
 - Concurrent data fetching with configurable timeouts
 - Automatic failover and exchange health monitoring
 
-## 3. Route Definitions
+## 3. Interface Definitions
+
+### 3.1 Telegram Bot Commands
+
+| Command | Purpose |
+|---------|----------|
+| /start | User registration and onboarding, welcome message with feature overview |
+| /opportunities | View current arbitrage opportunities with profit calculations |
+| /settings | Configure alert preferences, subscription management |
+| /upgrade | Upgrade to premium subscription, payment integration |
+| /help | Display available commands and feature explanations |
+| /link | Connect Telegram account to website for advanced features |
+| /status | Check subscription status and account information |
+
+### 3.2 Web Dashboard Routes (Optional - for linked accounts)
 
 | Route | Purpose |
 |-------|----------|
-| / | Main dashboard displaying market overview and arbitrage opportunities |
-| /arbitrage | Detailed arbitrage opportunities with filtering and sorting |
-| /analysis | Technical analysis charts and indicators |
-| /alerts | Alert management and notification settings |
-| /portfolio | Portfolio tracking and performance metrics |
-| /settings | User preferences and API configurations |
+| / | Landing page with Telegram bot connection option |
+| /dashboard | Advanced market overview and detailed arbitrage analysis |
+| /charts | Interactive technical analysis charts and indicators |
+| /portfolio | Comprehensive portfolio tracking and performance metrics |
+| /settings | Advanced preferences and API configurations |
+| /auth/telegram | Telegram account linking and authentication |
 
 ## 4. API Definitions
 
@@ -139,7 +162,7 @@ Response:
 | data | IndicatorData | Calculated indicator values |
 | signals | []Signal | Generated trading signals |
 
-**Telegram Webhook**
+**Telegram Authentication & User Management**
 ```
 POST /api/v1/telegram/webhook
 ```
@@ -152,6 +175,55 @@ Response:
 | Param Name | Param Type | Description |
 |------------|------------|-------------|
 | status | string | Processing status |
+
+```
+POST /api/v1/auth/telegram/register
+```
+Request:
+| Param Name | Param Type | isRequired | Description |
+|------------|------------|------------|-------------|
+| telegram_id | string | true | Telegram user ID |
+| telegram_username | string | false | Telegram username |
+| telegram_chat_id | string | true | Telegram chat ID |
+| first_name | string | false | User's first name from Telegram |
+
+Response:
+| Param Name | Param Type | Description |
+|------------|------------|-------------|
+| user_id | uuid | Generated user ID |
+| subscription_tier | string | Current subscription level |
+| is_new_user | boolean | Whether this is a new registration |
+
+```
+POST /api/v1/auth/telegram/link-website
+```
+Request:
+| Param Name | Param Type | isRequired | Description |
+|------------|------------|------------|-------------|
+| telegram_id | string | true | Telegram user ID |
+| email | string | true | Email for website access |
+| password | string | true | Password for website access |
+
+Response:
+| Param Name | Param Type | Description |
+|------------|------------|-------------|
+| success | boolean | Whether linking was successful |
+| access_token | string | JWT token for website access |
+
+```
+GET /api/v1/users/telegram/{telegram_id}
+```
+Request:
+| Param Name | Param Type | isRequired | Description |
+|------------|------------|------------|-------------|
+| telegram_id | string | true | Telegram user ID |
+
+Response:
+| Param Name | Param Type | Description |
+|------------|------------|-------------|
+| user | UserProfile | User profile information |
+| subscription_tier | string | Current subscription level |
+| website_linked | boolean | Whether website access is enabled |
 
 **CCXT Service Endpoints**
 ```
@@ -246,10 +318,14 @@ erDiagram
     
     USERS {
         uuid id PK
-        string email UK
+        string telegram_id UK
+        string telegram_username
+        string email
         string password_hash
         string telegram_chat_id
         string subscription_tier
+        boolean email_verified
+        boolean website_linked
         timestamp created_at
         timestamp updated_at
     }
@@ -321,20 +397,31 @@ erDiagram
 
 ### 6.2 Data Definition Language
 
-**Users Table**
+**Users Table (Telegram-First Authentication)**
 ```sql
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    telegram_chat_id VARCHAR(50),
+    telegram_id VARCHAR(50) UNIQUE NOT NULL,
+    telegram_username VARCHAR(100),
+    telegram_chat_id VARCHAR(50) NOT NULL,
+    email VARCHAR(255),
+    password_hash VARCHAR(255),
     subscription_tier VARCHAR(20) DEFAULT 'free' CHECK (subscription_tier IN ('free', 'premium', 'enterprise')),
+    email_verified BOOLEAN DEFAULT false,
+    website_linked BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_email ON users(email);
+-- Indexes for efficient lookups
+CREATE INDEX idx_users_telegram_id ON users(telegram_id);
 CREATE INDEX idx_users_telegram_chat_id ON users(telegram_chat_id);
+CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE INDEX idx_users_subscription_tier ON users(subscription_tier);
+
+-- Constraints
+ALTER TABLE users ADD CONSTRAINT check_website_linking 
+    CHECK ((website_linked = false) OR (website_linked = true AND email IS NOT NULL AND password_hash IS NOT NULL));
 ```
 
 **Exchanges Table**

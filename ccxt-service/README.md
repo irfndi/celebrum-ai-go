@@ -1,15 +1,27 @@
 # CCXT Service
 
-A Node.js microservice that provides cryptocurrency market data using the CCXT library. This service acts as a bridge between the main Go application and various cryptocurrency exchanges.
+A high-performance TypeScript microservice that provides cryptocurrency exchange data using the CCXT library. This service acts as a bridge between the main Go application and various cryptocurrency exchanges.
 
 ## Features
 
-- **Multi-Exchange Support**: Binance, Bybit, OKX, Coinbase Pro, Kraken
-- **Market Data**: Tickers, order books, OHLCV data
-- **Rate Limiting**: Built-in protection against API abuse
-- **Health Checks**: Monitoring and status endpoints
-- **Error Handling**: Comprehensive error responses
-- **Security**: Helmet, CORS, and input validation
+- **Multi-Exchange Support**: Supports major exchanges like Binance, Bybit, OKX, Coinbase, and Kraken
+- **Real-time Market Data**: Fetch tickers, order books, OHLCV data, and trading pairs
+- **Type Safety**: Full TypeScript implementation with comprehensive type definitions
+- **High Performance**: Built with Hono framework for maximum speed
+- **Health Monitoring**: Health check endpoint for service monitoring
+- **Error Handling**: Comprehensive error handling and logging
+- **Docker Support**: Containerized for easy deployment
+- **Validation**: Request/response validation with proper error messages
+
+## Technology Stack
+
+- **Runtime**: Bun (faster than Node.js)
+- **Framework**: Hono (faster than Express.js)
+- **Language**: TypeScript
+- **Exchange Library**: CCXT
+- **Security**: Secure headers, CORS
+- **Monitoring**: Built-in logging
+- **Compression**: gzip compression
 
 ## API Endpoints
 

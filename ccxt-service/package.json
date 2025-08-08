@@ -2,28 +2,26 @@
   "name": "celebrum-ccxt-service",
   "version": "1.0.0",
   "description": "CCXT microservice for Celebrum AI crypto arbitrage platform",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "jest"
+    "start": "bun run index.ts",
+    "dev": "bun --watch index.ts",
+    "build": "bun build index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "ccxt": "^4.2.25",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
-    "morgan": "^1.10.0",
-    "dotenv": "^16.3.1",
-    "express-rate-limit": "^7.1.5",
-    "compression": "^1.7.4"
+    "hono": "^4.9.0",
+    "ccxt": "^4.4.99",
+    "dotenv": "^17.2.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0"
+    "@types/node": "^24.2.0",
+    "typescript": "^5.9.2",
+    "bun-types": "latest"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "keywords": [
     "ccxt",
