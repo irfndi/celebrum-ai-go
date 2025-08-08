@@ -19,37 +19,61 @@ The CI/CD pipeline requires the following secrets to be configured in your GitHu
 - **Example format**:
   ```
   -----BEGIN OPENSSH PRIVATE KEY-----
-  [key content]
+  [key content lines]
   -----END OPENSSH PRIVATE KEY-----
   ```
-- **How to generate**:
-  ```bash
-  # Generate new SSH key pair
-  ssh-keygen -t ed25519 -C "github-actions@celebrum-ai" -f deploy_key
-  
-  # Copy private key content (this goes to GitHub secret)
-  # IMPORTANT: Copy the ENTIRE content including headers and footers
-  cat deploy_key
-  ```
 
-**Important Notes for GitHub Secrets:**
-- Copy the **entire** private key including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`
-- Do NOT modify the key content or add extra spaces/newlines
-- The key should be pasted exactly as shown by `cat deploy_key`
+## Setting up SSH Key for Deployment
 
-**Setting up the public key on server:**
+### 1. Generate SSH Key Pair
+
 ```bash
-# On your server, create SSH directory if it doesn't exist
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
+# Generate a new SSH key pair specifically for deployment
+ssh-keygen -t ed25519 -C "github-actions@celebrum-ai" -f ~/.ssh/deploy_key
 
-# Add the public key to authorized_keys
+# This creates two files:
+# ~/.ssh/deploy_key (private key - for GitHub secrets)
+# ~/.ssh/deploy_key.pub (public key - for server)
+```
+
+### 2. Add Public Key to Server
+
+Copy the public key to your server:
+
+```bash
+# Copy public key content
+cat ~/.ssh/deploy_key.pub
+
+# On your server, add it to authorized_keys
 echo "your-public-key-content" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
-
-# To get the public key content:
-cat deploy_key.pub
+chmod 700 ~/.ssh
 ```
+
+**Important**: Make sure you're adding the **public key** (`.pub` file) to the server, not the private key.
+
+### 3. Add Private Key to GitHub Secrets
+
+1. Copy the **entire private key** including headers and footers:
+   ```bash
+   cat ~/.ssh/deploy_key
+   ```
+
+2. In GitHub repository settings → Secrets and variables → Actions
+3. Add new secret named `DEPLOY_SSH_KEY`
+4. Paste the complete private key content exactly as shown:
+   ```
+   -----BEGIN OPENSSH PRIVATE KEY-----
+   [key content lines]
+   -----END OPENSSH PRIVATE KEY-----
+   ```
+
+**Critical Requirements**:
+- Copy the **entire private key** including the header and footer lines
+- Do NOT modify or remove any characters
+- Do NOT add extra spaces or line breaks
+- The key must start with `-----BEGIN OPENSSH PRIVATE KEY-----`
+- The key must end with `-----END OPENSSH PRIVATE KEY-----`
 
 ### 3. DEPLOY_USER
 - **Description**: SSH username for server access
@@ -77,10 +101,63 @@ Ensure your deployment server has:
 
 ## Troubleshooting
 
-### SSH Key Issues
-- Ensure the private key includes proper headers and footers
-- Check that the public key is added to `~/.ssh/authorized_keys` on the server
-- Verify the SSH user has proper permissions
+### SSH Connection Issues
+
+1. **"SSH key does not start with proper header" Error**:
+   - This means the private key in GitHub secrets is malformed
+   - **Solution**: Re-copy the private key ensuring you include the complete content:
+     ```bash
+     cat ~/.ssh/deploy_key
+     ```
+   - The key MUST start with `-----BEGIN OPENSSH PRIVATE KEY-----`
+   - The key MUST end with `-----END OPENSSH PRIVATE KEY-----`
+   - Do NOT copy only the middle content without headers/footers
+
+2. **Permission denied (publickey)**:
+   - Verify the **public key** (not private) is in `~/.ssh/authorized_keys` on the server
+   - Check file permissions: `chmod 600 ~/.ssh/authorized_keys` and `chmod 700 ~/.ssh`
+   - Ensure the private key in GitHub secrets is complete and unmodified
+   - Test locally: `ssh -i ~/.ssh/deploy_key user@server`
+
+3. **"SSH key validation failed" Error**:
+   - The private key format is corrupted or incomplete
+   - **Solution**: Generate a new key pair and update both server and GitHub secrets
+   - Verify key integrity: `ssh-keygen -l -f ~/.ssh/deploy_key`
+
+4. **Host key verification failed**:
+   - The CI/CD pipeline automatically handles host key verification
+   - If issues persist, check if the server's SSH configuration allows key-based authentication
+
+5. **Connection timeout**:
+   - Verify the server is accessible and SSH service is running
+   - Check if the `DEPLOY_HOST` secret contains the correct server IP/hostname
+   - Test connectivity: `ping your-server-ip`
+
+### Key Format Verification
+
+To verify your SSH key is properly formatted:
+
+```bash
+# Check private key format
+head -1 ~/.ssh/deploy_key  # Should show: -----BEGIN OPENSSH PRIVATE KEY-----
+tail -1 ~/.ssh/deploy_key  # Should show: -----END OPENSSH PRIVATE KEY-----
+
+# Validate key can be loaded
+ssh-keygen -l -f ~/.ssh/deploy_key
+
+# Test connection
+ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 user@server "echo 'Connection successful'"
+```
+
+### Docker Issues
+
+1. **Docker not found**:
+   - Ensure Docker and Docker Compose are installed on the server
+   - The deployment script includes automatic Docker installation
+
+2. **Permission denied for Docker**:
+   - Add the deploy user to the docker group: `sudo usermod -aG docker $USER`
+   - Restart the SSH session after adding to the group
 
 ### Permission Issues
 - Ensure the deploy user has Docker permissions: `sudo usermod -aG docker $USER`

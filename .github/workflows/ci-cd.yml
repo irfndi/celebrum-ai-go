@@ -148,12 +148,29 @@ jobs:
         chmod 700 ~/.ssh
         
         # Setup SSH key with proper formatting
-        # Remove any carriage returns and ensure proper line endings
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key_raw
+        
+        # Clean up the key format
+        cat ~/.ssh/deploy_key_raw | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+        
+        # Ensure proper line endings
+        sed -i 's/$//' ~/.ssh/deploy_key
+        
+        # Verify key format
+        echo "Checking SSH key format..."
+        head -1 ~/.ssh/deploy_key
+        tail -1 ~/.ssh/deploy_key
         
         # Ensure the key starts and ends properly
         if ! head -1 ~/.ssh/deploy_key | grep -q "BEGIN.*PRIVATE KEY"; then
           echo "Error: SSH key does not start with proper header"
+          echo "First line: $(head -1 ~/.ssh/deploy_key)"
+          exit 1
+        fi
+        
+        if ! tail -1 ~/.ssh/deploy_key | grep -q "END.*PRIVATE KEY"; then
+          echo "Error: SSH key does not end with proper footer"
+          echo "Last line: $(tail -1 ~/.ssh/deploy_key)"
           exit 1
         fi
         
@@ -163,8 +180,13 @@ jobs:
         # Add server to known hosts
         ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
         
-        # Verify key format
-        ssh-keygen -l -f ~/.ssh/deploy_key
+        # Verify key can be loaded
+        ssh-keygen -l -f ~/.ssh/deploy_key || {
+          echo "Error: SSH key validation failed"
+          echo "Key content (first 3 lines):"
+          head -3 ~/.ssh/deploy_key
+          exit 1
+        }
         
         # Test SSH connection
         ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
@@ -174,8 +196,8 @@ jobs:
         # Get the latest image tag
         IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
         
-        # Deploy to server
-        ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+        # Deploy to server with proper SSH options
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
           set -e
           cd /opt/celebrum-ai-go
           
@@ -195,7 +217,7 @@ jobs:
     - name: Cleanup SSH key
       if: always()
       run: |
-        rm -f ~/.ssh/deploy_key
+        rm -f ~/.ssh/deploy_key ~/.ssh/deploy_key_raw
 
   notify:
     name: Notify Deployment Status
