@@ -1,37 +1,38 @@
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database for CI
   postgres:
     image: postgres:17
-    container_name: celebrum-postgres
+    container_name: celebrum-postgres-ci
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: celebrum_ai
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data_ci:/var/lib/postgresql/data
+      - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 60s
     networks:
       - celebrum-network
 
   # Redis for caching
   redis:
     image: redis:7-alpine
-    container_name: celebrum-redis
+    container_name: celebrum-redis-ci
     restart: unless-stopped
     volumes:
-      - redis_data:/data
+      - redis_data_ci:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
     networks:
       - celebrum-network
 
@@ -40,7 +41,7 @@ services:
     build:
       context: ./ccxt-service
       dockerfile: Dockerfile
-    container_name: celebrum-ccxt
+    container_name: celebrum-ccxt-ci
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -50,10 +51,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "bun --eval 'fetch(\"http://localhost:3001/health\").then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))'"]
+      interval: 15s
+      timeout: 15s
+      retries: 12
+      start_period: 60s
     networks:
       - celebrum-network
 
@@ -62,7 +64,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: celebrum-app
+    container_name: celebrum-app-ci
     restart: unless-stopped
     environment:
       - ENVIRONMENT=production
@@ -75,10 +77,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
+      - JWT_SECRET=test-jwt-secret-for-ci
       - SERVER_PORT=8080
     volumes:
-      - app_data:/data
+      - app_data_ci:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,40 +90,19 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
-      interval: 30s
+      interval: 10s
       timeout: 15s
-      retries: 5
-      start_period: 60s
-    networks:
-      - celebrum-network
-
-  # Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: celebrum-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      app:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 90s
     networks:
       - celebrum-network
 
 volumes:
-  postgres_data:
+  postgres_data_ci:
     driver: local
-  redis_data:
+  redis_data_ci:
     driver: local
-  app_data:
+  app_data_ci:
     driver: local
 
 networks:

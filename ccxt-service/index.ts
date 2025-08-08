@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { compress } from 'hono/compress';
+// import { compress } from 'hono/compress'; // Removed due to CompressionStream not available in Bun
 import { secureHeaders } from 'hono/secure-headers';
 import { validator } from 'hono/validator';
 import ccxt from 'ccxt';
@@ -27,7 +27,7 @@ const app = new Hono();
 // Middleware
 app.use('*', secureHeaders());
 app.use('*', cors());
-app.use('*', compress());
+// app.use('*', compress()); // Removed due to CompressionStream not available in Bun
 app.use('*', logger());
 
 // Simple rate limiting can be implemented later if needed

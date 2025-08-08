@@ -124,10 +124,25 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
 
+  test-deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Test docker-compose deployment
+      run: |
+        # Test the deployment setup
+        ./scripts/test-deployment.sh
+
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, test-deployment]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     environment: production
@@ -218,11 +233,22 @@ jobs:
           # Change to application directory
           cd /opt/celebrum-ai-go
           
+          # Stop existing services
+          docker-compose -f docker-compose.single-droplet.yml down || true
+          
           # Pull latest images
           docker-compose -f docker-compose.single-droplet.yml pull
           
-          # Update and restart services
-          docker-compose -f docker-compose.single-droplet.yml up -d --remove-orphans
+          # Update and restart services with increased timeout
+          COMPOSE_HTTP_TIMEOUT=300 docker-compose -f docker-compose.single-droplet.yml up -d --remove-orphans
+          
+          # Wait for services to be healthy
+          echo "Waiting for services to be healthy..."
+          timeout 300 bash -c 'until docker-compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 5; done' || {
+            echo "Services failed to become healthy, checking logs..."
+            docker-compose -f docker-compose.single-droplet.yml logs
+            exit 1
+          }
           
           # Clean up unused images
           docker system prune -f
@@ -239,7 +265,7 @@ jobs:
   notify:
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [test, build-and-push, deploy]
+    needs: [test, build-and-push, test-deployment, deploy]
     if: always()
     
     steps:

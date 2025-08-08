@@ -24,8 +24,9 @@ type Services struct {
 }
 
 func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService) {
-	// Health check endpoint
+	// Health check endpoint - support both GET and HEAD for Docker health checks
 	router.GET("/health", healthCheck(db, redis))
+	router.HEAD("/health", healthCheck(db, redis))
 
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
