@@ -28,11 +28,28 @@ The CI/CD pipeline requires the following secrets to be configured in your GitHu
   ssh-keygen -t ed25519 -C "github-actions@celebrum-ai" -f deploy_key
   
   # Copy private key content (this goes to GitHub secret)
+  # IMPORTANT: Copy the ENTIRE content including headers and footers
   cat deploy_key
-  
-  # Copy public key to server (add to ~/.ssh/authorized_keys)
-  cat deploy_key.pub
   ```
+
+**Important Notes for GitHub Secrets:**
+- Copy the **entire** private key including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`
+- Do NOT modify the key content or add extra spaces/newlines
+- The key should be pasted exactly as shown by `cat deploy_key`
+
+**Setting up the public key on server:**
+```bash
+# On your server, create SSH directory if it doesn't exist
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# Add the public key to authorized_keys
+echo "your-public-key-content" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+
+# To get the public key content:
+cat deploy_key.pub
+```
 
 ### 3. DEPLOY_USER
 - **Description**: SSH username for server access

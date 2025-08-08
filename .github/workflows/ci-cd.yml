@@ -145,16 +145,29 @@ jobs:
       run: |
         # Create SSH directory
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
         
         # Setup SSH key with proper formatting
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+        # Remove any carriage returns and ensure proper line endings
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+        
+        # Ensure the key starts and ends properly
+        if ! head -1 ~/.ssh/deploy_key | grep -q "BEGIN.*PRIVATE KEY"; then
+          echo "Error: SSH key does not start with proper header"
+          exit 1
+        fi
+        
+        # Set proper permissions
         chmod 600 ~/.ssh/deploy_key
         
         # Add server to known hosts
         ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
         
+        # Verify key format
+        ssh-keygen -l -f ~/.ssh/deploy_key
+        
         # Test SSH connection
-        ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
+        ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
     
     - name: Update deployment
       run: |
