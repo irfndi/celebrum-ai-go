@@ -51,21 +51,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: ccxt-service/package-lock.json
+          bun-version: 1.2.19
           
       - name: Install dependencies
-        run: npm ci
+        run: bun install
         
       - name: Run tests
-        run: npm test
+        run: bun test
         
       - name: Build CCXT service
-        run: npm run build
+        run: bun run build
 
   build-docker:
     runs-on: ubuntu-latest
