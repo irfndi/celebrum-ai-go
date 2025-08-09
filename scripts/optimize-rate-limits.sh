@@ -1,72 +1,140 @@
-#!/bin/bash
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17
+    container_name: celebrum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: celebrum_ai
+      POSTGRES_INITDB_ARGS: "--auth-host=trust"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 20s
+      timeout: 30s
+      retries: 20
+      start_period: 120s
+    networks:
+      - celebrum-network
 
-# Script to optimize rate limits for high-frequency data collection
-# This script updates configurations to maximize data collection rates
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: celebrum-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+      - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - celebrum-network
 
-set -e
+  # CCXT Service (Node.js)
+  ccxt-service:
+    build:
+      context: ./ccxt-service
+      dockerfile: Dockerfile
+    container_name: celebrum-ccxt
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    networks:
+      - celebrum-network
 
-echo "🚀 Optimizing rate limits for high-frequency data collection..."
+  # Main Go Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celebrum-app
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_DBNAME=celebrum_ai
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
+      - SERVER_PORT=8080
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - FEATURE_TELEGRAM_BOT=${FEATURE_TELEGRAM_BOT:-true}
+    volumes:
+      - app_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ccxt-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    networks:
+      - celebrum-network
 
-# Backup existing nginx configuration
-echo "📋 Backing up existing nginx configuration..."
-sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup.$(date +%Y%m%d_%H%M%S)
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: celebrum-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
+      - /etc/ssl/certs/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
+      - /etc/ssl/private/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - celebrum-network
 
-# Update nginx configuration with new rate limits
-echo "⚙️  Updating nginx rate limits..."
-sudo cp configs/nginx.single-droplet.conf /etc/nginx/sites-available/default
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_data:
+    driver: local
 
-# Test nginx configuration
-echo "🔍 Testing nginx configuration..."
-sudo nginx -t
-
-# Restart nginx to apply changes
-echo "🔄 Restarting nginx..."
-sudo systemctl restart nginx
-
-echo "✅ Nginx rate limits optimized!"
-
-# Update CCXT service configuration
-echo "📊 Updating CCXT service rate limits..."
-
-# Create environment variables for CCXT service
-cat > .env.ccxt-optimized << EOF
-# CCXT Service High-Frequency Configuration
-CCXT_RATE_LIMIT_BINANCE=50
-CCXT_RATE_LIMIT_BYBIT=8
-CCXT_RATE_LIMIT_OKX=3
-CCXT_RATE_LIMIT_KRAKEN=1000
-CCXT_RATE_LIMIT_COINBASE=100
-
-# Collection intervals
-COLLECTION_INTERVAL_MARKET_DATA=30s
-COLLECTION_INTERVAL_FUNDING_RATES=60s
-COLLECTION_INTERVAL_ORDERBOOK=15s
-COLLECTION_INTERVAL_TICKER=10s
-COLLECTION_INTERVAL_OHLCV=60s
-
-# Concurrent settings
-MAX_CONCURRENT_REQUESTS=50
-BATCH_SIZE=100
-WORKERS_PER_EXCHANGE=5
-EOF
-
-echo "✅ CCXT service configuration updated!"
-
-# Restart services to apply new configurations
-echo "🔄 Restarting services..."
-docker-compose restart ccxt-service
-sleep 5
-
-# Verify services are running
-echo "🔍 Verifying services..."
-docker-compose ps
-
-echo "🎉 Rate limit optimization complete!"
-echo ""
-echo "📈 New rate limits:"
-echo "- API endpoints: 100 req/sec (was 10 req/sec)"
-echo "- Burst capacity: 100 requests (was 20)"
-echo "- Collection intervals reduced by 10x"
-echo ""
-echo "💾 Expected storage increase: 10-20x current volume"
-echo "🔄 Run 'docker-compose logs -f ccxt-service' to monitor collection rates"
+networks:
+  celebrum-network:
+    driver: bridge

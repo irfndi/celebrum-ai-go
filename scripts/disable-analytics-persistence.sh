@@ -1,86 +1,72 @@
 #!/bin/bash
 
-# Disable Analytics Persistence Script
-# This script reverts the system to standard cleanup configuration
+# Script to optimize rate limits for high-frequency data collection
+# This script updates configurations to maximize data collection rates
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+echo "🚀 Optimizing rate limits for high-frequency data collection..."
 
-echo -e "${GREEN}🔄 Disabling Analytics Persistence...${NC}"
+# Backup existing nginx configuration
+echo "📋 Backing up existing nginx configuration..."
+sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup.$(date +%Y%m%d_%H%M%S)
 
-# Function to restore original configuration
-restore_original_config() {
-    echo -e "${YELLOW}📝 Restoring original cleanup configuration...${NC}"
-    
-    # Check for backup files
-    backup_file=$(ls -t config.yaml.backup.* 2>/dev/null | head -1)
-    
-    if [ -n "$backup_file" ]; then
-        cp "$backup_file" config.yaml
-        echo -e "${GREEN}✅ Restored from backup: $backup_file${NC}"
-    else
-        # Create standard configuration
-        cat > config.yaml << 'EOF'
-# Standard Configuration - Original cleanup settings
-cleanup:
-  market_data_retention_hours: 24
-  funding_rate_retention_hours: 24
-  arbitrage_retention_hours: 72
-  funding_arbitrage_retention_hours: 72
-  cleanup_interval_minutes: 60
+# Update nginx configuration with new rate limits
+echo "⚙️  Updating nginx rate limits..."
+sudo cp configs/nginx.single-droplet.conf /etc/nginx/sites-available/default
+
+# Test nginx configuration
+echo "🔍 Testing nginx configuration..."
+sudo nginx -t
+
+# Restart nginx to apply changes
+echo "🔄 Restarting nginx..."
+sudo systemctl restart nginx
+
+echo "✅ Nginx rate limits optimized!"
+
+# Update CCXT service configuration
+echo "📊 Updating CCXT service rate limits..."
+
+# Create environment variables for CCXT service
+cat > .env.ccxt-optimized << EOF
+# CCXT Service High-Frequency Configuration
+CCXT_RATE_LIMIT_BINANCE=50
+CCXT_RATE_LIMIT_BYBIT=8
+CCXT_RATE_LIMIT_OKX=3
+CCXT_RATE_LIMIT_KRAKEN=1000
+CCXT_RATE_LIMIT_COINBASE=100
+
+# Collection intervals
+COLLECTION_INTERVAL_MARKET_DATA=30s
+COLLECTION_INTERVAL_FUNDING_RATES=60s
+COLLECTION_INTERVAL_ORDERBOOK=15s
+COLLECTION_INTERVAL_TICKER=10s
+COLLECTION_INTERVAL_OHLCV=60s
+
+# Concurrent settings
+MAX_CONCURRENT_REQUESTS=50
+BATCH_SIZE=100
+WORKERS_PER_EXCHANGE=5
 EOF
-        echo -e "${GREEN}✅ Created standard configuration${NC}"
-    fi
-    
-    # Remove analytics environment variables
-    if [ -f .env ]; then
-        sed -i '/^# Analytics Persistence Settings/,/^ENABLE_HISTORICAL_ANALYSIS=true/d' .env
-        echo -e "${GREEN}✅ Removed analytics environment variables${NC}"
-    fi
-}
 
-# Function to restart services
-restart_services() {
-    echo -e "${YELLOW}🔄 Restarting services with standard configuration...${NC}"
-    
-    if command -v docker-compose &> /dev/null; then
-        docker-compose down
-        docker-compose up -d
-        
-        sleep 10
-        
-        if docker-compose ps | grep -q "Up (healthy)"; then
-            echo -e "${GREEN}✅ Services restarted with standard configuration${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Services starting, please check with 'docker-compose ps'${NC}"
-        fi
-    else
-        echo -e "${YELLOW}⚠️  Docker-compose not available, manual restart required${NC}"
-    fi
-}
+echo "✅ CCXT service configuration updated!"
 
-# Function to verify standard configuration
-verify_standard_config() {
-    echo -e "${YELLOW}🔍 Verifying standard cleanup configuration...${NC}"
-    
-    echo -e "${GREEN}✅ Standard configuration restored:${NC}"
-    echo "  - Market Data: 24 hours retention"
-    echo "  - Funding Rates: 24 hours retention"
-    echo "  - Arbitrage Opportunities: 72 hours retention"
-    echo "  - Funding Arbitrage: 72 hours retention"
-    echo "  - Cleanup Interval: 60 minutes"
-}
+# Restart services to apply new configurations
+echo "🔄 Restarting services..."
+docker-compose restart ccxt-service
+sleep 5
 
-# Main execution
-echo -e "${GREEN}🎯 Reverting to Standard Cleanup Configuration${NC}"
+# Verify services are running
+echo "🔍 Verifying services..."
+docker-compose ps
 
-restore_original_config
-restart_services
-verify_standard_config
-
-echo -e "${GREEN}🎉 Analytics persistence disabled - standard cleanup restored${NC}"
+echo "🎉 Rate limit optimization complete!"
+echo ""
+echo "📈 New rate limits:"
+echo "- API endpoints: 100 req/sec (was 10 req/sec)"
+echo "- Burst capacity: 100 requests (was 20)"
+echo "- Collection intervals reduced by 10x"
+echo ""
+echo "💾 Expected storage increase: 10-20x current volume"
+echo "🔄 Run 'docker-compose logs -f ccxt-service' to monitor collection rates"
