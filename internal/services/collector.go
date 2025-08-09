@@ -232,9 +232,9 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 		}
 
 		// Add rate limiting delay between requests (aggressive mode: 30ms)
-			if i < len(worker.Symbols)-1 {
-				time.Sleep(30 * time.Millisecond)
-			}
+		if i < len(worker.Symbols)-1 {
+			time.Sleep(30 * time.Millisecond)
+		}
 	}
 
 	return nil
