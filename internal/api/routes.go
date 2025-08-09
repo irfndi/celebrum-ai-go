@@ -24,17 +24,21 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, telegramConfig *config.TelegramConfig) {
 	// Health check endpoint - support both GET and HEAD for Docker health checks
 	router.GET("/health", healthCheck(db, redis))
 	router.HEAD("/health", healthCheck(db, redis))
 
+	// Initialize notification service
+	notificationService := services.NewNotificationService(db, telegramConfig.BotToken)
+
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
-	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig)
-	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService)
+	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService)
+	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db)
+	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -53,6 +57,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			arbitrage.GET("/opportunities", arbitrageHandler.GetArbitrageOpportunities)
 			arbitrage.GET("/history", arbitrageHandler.GetArbitrageHistory)
+			// Funding rate arbitrage
+			arbitrage.GET("/funding", arbitrageHandler.GetFundingRateArbitrage)
+			arbitrage.GET("/funding-rates/:exchange", arbitrageHandler.GetFundingRates)
 		}
 
 		// Technical analysis routes
@@ -83,6 +90,13 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			alerts.POST("/", createAlert)
 			alerts.PUT("/:id", updateAlert)
 			alerts.DELETE("/:id", deleteAlert)
+		}
+
+		// Data management
+		data := v1.Group("/data")
+		{
+			data.GET("/stats", cleanupHandler.GetDataStats)
+			data.POST("/cleanup", cleanupHandler.TriggerCleanup)
 		}
 	}
 }

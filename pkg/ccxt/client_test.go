@@ -136,7 +136,7 @@ func TestClient_GetExchanges(t *testing.T) {
 func TestClient_GetTicker(t *testing.T) {
 	expectedTicker := ccxt.Ticker{
 		Symbol:    "BTC/USDT",
-		Timestamp: time.Now(),
+		Timestamp: ccxt.UnixTimestamp(time.Now()),
 		High:      decimal.NewFromFloat(45000.0),
 		Low:       decimal.NewFromFloat(43000.0),
 		Bid:       decimal.NewFromFloat(44500.0),
@@ -147,7 +147,7 @@ func TestClient_GetTicker(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/ticker/binance/BTC/USDT", r.URL.Path)
+		assert.Equal(t, "/api/ticker/binance/BTCUSDT", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -190,7 +190,7 @@ func TestClient_GetTickers(t *testing.T) {
 				Bid:       decimal.NewFromFloat(44500.0),
 				Ask:       decimal.NewFromFloat(44550.0),
 				Last:      decimal.NewFromFloat(44525.0),
-				Timestamp: time.Now(),
+				Timestamp: ccxt.UnixTimestamp(time.Now()),
 			},
 		},
 		{
@@ -200,7 +200,7 @@ func TestClient_GetTickers(t *testing.T) {
 				Bid:       decimal.NewFromFloat(44480.0),
 				Ask:       decimal.NewFromFloat(44530.0),
 				Last:      decimal.NewFromFloat(44505.0),
-				Timestamp: time.Now(),
+				Timestamp: ccxt.UnixTimestamp(time.Now()),
 			},
 		},
 	}
@@ -259,7 +259,7 @@ func TestClient_GetOrderBook(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/orderbook/binance/BTC/USDT", r.URL.Path)
+		assert.Equal(t, "/api/orderbook/binance/BTCUSDT", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 		assert.Equal(t, "10", r.URL.Query().Get("limit"))
 

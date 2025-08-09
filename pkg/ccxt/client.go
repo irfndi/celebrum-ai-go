@@ -58,7 +58,9 @@ func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
 
 // GetTicker retrieves ticker data for a specific exchange and symbol
 func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
-	path := fmt.Sprintf("/api/ticker/%s/%s", exchange, symbol)
+	// Convert symbol format based on exchange requirements
+	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
+	path := fmt.Sprintf("/api/ticker/%s/%s", exchange, ccxtSymbol)
 	var response TickerResponse
 	err := c.makeRequest(ctx, "GET", path, nil, &response)
 	return &response, err
@@ -73,7 +75,9 @@ func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersR
 
 // GetOrderBook retrieves order book data for a specific exchange and symbol
 func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
-	path := fmt.Sprintf("/api/orderbook/%s/%s", exchange, symbol)
+	// Convert symbol format based on exchange requirements
+	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
+	path := fmt.Sprintf("/api/orderbook/%s/%s", exchange, ccxtSymbol)
 	if limit > 0 {
 		path += "?limit=" + strconv.Itoa(limit)
 	}
@@ -84,7 +88,9 @@ func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limi
 
 // GetTrades retrieves recent trades for a specific exchange and symbol
 func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
-	path := fmt.Sprintf("/api/trades/%s/%s", exchange, symbol)
+	// Convert symbol format based on exchange requirements
+	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
+	path := fmt.Sprintf("/api/trades/%s/%s", exchange, ccxtSymbol)
 	if limit > 0 {
 		path += "?limit=" + strconv.Itoa(limit)
 	}
@@ -95,7 +101,9 @@ func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit i
 
 // GetOHLCV retrieves OHLCV data for a specific exchange and symbol
 func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
-	path := fmt.Sprintf("/api/ohlcv/%s/%s", exchange, symbol)
+	// Convert symbol format based on exchange requirements
+	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
+	path := fmt.Sprintf("/api/ohlcv/%s/%s", exchange, ccxtSymbol)
 	params := url.Values{}
 	if timeframe != "" {
 		params.Set("timeframe", timeframe)
@@ -117,6 +125,65 @@ func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsRespo
 	var response MarketsResponse
 	err := c.makeRequest(ctx, "GET", path, nil, &response)
 	return &response, err
+}
+
+// GetFundingRate retrieves funding rate for a specific symbol on an exchange
+func (c *Client) GetFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
+	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
+	path := fmt.Sprintf("/api/funding-rate/%s/%s", exchange, ccxtSymbol)
+	var response FundingRate
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	return &response, err
+}
+
+// GetFundingRates retrieves funding rates for multiple symbols on an exchange
+func (c *Client) GetFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
+	if len(symbols) == 0 {
+		return []FundingRate{}, nil
+	}
+
+	// Format symbols
+	formattedSymbols := make([]string, len(symbols))
+	for i, symbol := range symbols {
+		formattedSymbols[i] = c.formatSymbolForExchange(exchange, symbol)
+	}
+
+	// Join symbols with comma
+	symbolsParam := strings.Join(formattedSymbols, ",")
+	path := fmt.Sprintf("/api/funding-rates/%s?symbols=%s", exchange, url.QueryEscape(symbolsParam))
+
+	var response FundingRateResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+	return response.FundingRates, nil
+}
+
+// GetAllFundingRates retrieves all available funding rates for an exchange
+func (c *Client) GetAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error) {
+	path := fmt.Sprintf("/api/funding-rates/%s", exchange)
+	var response FundingRateResponse
+	err := c.makeRequest(ctx, "GET", path, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+	return response.FundingRates, nil
+}
+
+// formatSymbolForExchange formats the symbol based on exchange requirements
+func (c *Client) formatSymbolForExchange(exchange, symbol string) string {
+	switch strings.ToLower(exchange) {
+	case "kraken", "okx":
+		// Kraken and OKX use URL-encoded slash format
+		return url.QueryEscape(symbol)
+	case "coinbase":
+		// Coinbase uses dash format (BTC-USDT)
+		return strings.ReplaceAll(symbol, "/", "-")
+	default:
+		// Most exchanges (like Binance) use concatenated format
+		return strings.ReplaceAll(symbol, "/", "")
+	}
 }
 
 // makeRequest is a helper method to make HTTP requests to the CCXT service

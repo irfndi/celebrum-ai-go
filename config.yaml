@@ -75,7 +75,7 @@ telegram:
 
 # Market Data configuration
 market_data:
-  collection_interval: 30s
+  collection_interval: 5m  # Collect data every 5 minutes
   batch_size: 100
   max_retries: 3
   timeout: 15s
@@ -90,7 +90,7 @@ market_data:
 arbitrage:
   min_profit_threshold: 0.5  # Minimum profit percentage
   max_trade_amount: 1000.0   # Maximum trade amount in USD
-  check_interval: 10s
+  check_interval: 2m  # Check for opportunities every 2 minutes
   enabled_pairs:
     - BTC/USDT
     - ETH/USDT

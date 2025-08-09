@@ -64,6 +64,28 @@ export interface ErrorResponse {
   timestamp: string;
 }
 
+// Funding Rate Types
+export interface FundingRate {
+  symbol: string;
+  fundingRate: number;
+  fundingTimestamp: number;
+  nextFundingTime: number;
+  markPrice: number;
+  indexPrice: number;
+  timestamp: number;
+}
+
+export interface FundingRateResponse {
+  exchange: string;
+  fundingRates: FundingRate[];
+  count: number;
+  timestamp: string;
+}
+
+export interface FundingRateQuery {
+  symbols?: string[];
+}
+
 // Exchange Management
 export interface ExchangeManager {
   [key: string]: Exchange;

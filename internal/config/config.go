@@ -7,13 +7,16 @@ import (
 )
 
 type Config struct {
-	Environment string         `mapstructure:"environment"`
-	LogLevel    string         `mapstructure:"log_level"`
-	Server      ServerConfig   `mapstructure:"server"`
-	Database    DatabaseConfig `mapstructure:"database"`
-	Redis       RedisConfig    `mapstructure:"redis"`
-	CCXT        CCXTConfig     `mapstructure:"ccxt"`
-	Telegram    TelegramConfig `mapstructure:"telegram"`
+	Environment string           `mapstructure:"environment"`
+	LogLevel    string           `mapstructure:"log_level"`
+	Server      ServerConfig     `mapstructure:"server"`
+	Database    DatabaseConfig   `mapstructure:"database"`
+	Redis       RedisConfig      `mapstructure:"redis"`
+	CCXT        CCXTConfig       `mapstructure:"ccxt"`
+	Telegram    TelegramConfig   `mapstructure:"telegram"`
+	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
+	MarketData  MarketDataConfig `mapstructure:"market_data"`
+	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
 }
 
 type ServerConfig struct {
@@ -50,6 +53,28 @@ type CCXTConfig struct {
 type TelegramConfig struct {
 	BotToken   string `mapstructure:"bot_token"`
 	WebhookURL string `mapstructure:"webhook_url"`
+}
+
+type CleanupConfig struct {
+	MarketDataRetentionHours  int `mapstructure:"market_data_retention_hours"`
+	FundingRateRetentionHours int `mapstructure:"funding_rate_retention_hours"`
+	ArbitrageRetentionHours   int `mapstructure:"arbitrage_retention_hours"`
+	CleanupIntervalMinutes    int `mapstructure:"cleanup_interval_minutes"`
+}
+
+type MarketDataConfig struct {
+	CollectionInterval string   `mapstructure:"collection_interval"`
+	BatchSize          int      `mapstructure:"batch_size"`
+	MaxRetries         int      `mapstructure:"max_retries"`
+	Timeout            string   `mapstructure:"timeout"`
+	Exchanges          []string `mapstructure:"exchanges"`
+}
+
+type ArbitrageConfig struct {
+	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
+	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
+	CheckInterval      string   `mapstructure:"check_interval"`
+	EnabledPairs       []string `mapstructure:"enabled_pairs"`
 }
 
 func Load() (*Config, error) {
@@ -116,4 +141,23 @@ func setDefaults() {
 	// Telegram
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
+
+	// Cleanup
+	viper.SetDefault("cleanup.market_data_retention_hours", 24)
+	viper.SetDefault("cleanup.funding_rate_retention_hours", 24)
+	viper.SetDefault("cleanup.arbitrage_retention_hours", 72)
+	viper.SetDefault("cleanup.cleanup_interval_minutes", 60)
+
+	// Market Data
+	viper.SetDefault("market_data.collection_interval", "5m")
+	viper.SetDefault("market_data.batch_size", 100)
+	viper.SetDefault("market_data.max_retries", 3)
+	viper.SetDefault("market_data.timeout", "15s")
+	viper.SetDefault("market_data.exchanges", []string{"binance", "coinbase", "kraken", "bitfinex", "huobi"})
+
+	// Arbitrage
+	viper.SetDefault("arbitrage.min_profit_threshold", 0.5)
+	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
+	viper.SetDefault("arbitrage.check_interval", "2m")
+	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
 }

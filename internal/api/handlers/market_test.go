@@ -1,11 +1,11 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
@@ -14,86 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-// MockCCXTService for testing
-type MockCCXTService struct {
-	mock.Mock
-}
-
-func (m *MockCCXTService) Initialize(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockCCXTService) IsHealthy(ctx context.Context) bool {
-	args := m.Called(ctx)
-	return args.Bool(0)
-}
-
-func (m *MockCCXTService) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockCCXTService) GetSupportedExchanges() []string {
-	args := m.Called()
-	return args.Get(0).([]string)
-}
-
-func (m *MockCCXTService) GetExchangeInfo(exchangeID string) (ccxt.ExchangeInfo, bool) {
-	args := m.Called(exchangeID)
-	return args.Get(0).(ccxt.ExchangeInfo), args.Bool(1)
-}
-
-func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
-	args := m.Called(ctx, exchanges, symbols)
-	return args.Get(0).([]models.MarketPrice), args.Error(1)
-}
-
-func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
-	args := m.Called(ctx, exchange, symbol)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.MarketPrice), args.Error(1)
-}
-
-func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {
-	args := m.Called(ctx, exchange, symbol, limit)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ccxt.OrderBookResponse), args.Error(1)
-}
-
-func (m *MockCCXTService) FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*ccxt.OHLCVResponse, error) {
-	args := m.Called(ctx, exchange, symbol, timeframe, limit)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ccxt.OHLCVResponse), args.Error(1)
-}
-
-func (m *MockCCXTService) FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*ccxt.TradesResponse, error) {
-	args := m.Called(ctx, exchange, symbol, limit)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ccxt.TradesResponse), args.Error(1)
-}
-
-func (m *MockCCXTService) FetchMarkets(ctx context.Context, exchange string) (*ccxt.MarketsResponse, error) {
-	args := m.Called(ctx, exchange)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ccxt.MarketsResponse), args.Error(1)
-}
-
-func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]models.ArbitrageOpportunityResponse, error) {
-	args := m.Called(ctx, exchanges, symbols, minProfitPercent)
-	return args.Get(0).([]models.ArbitrageOpportunityResponse), args.Error(1)
-}
 
 func TestMarketHandler_GetTicker(t *testing.T) {
 	// Setup
@@ -170,4 +90,265 @@ func TestMarketHandler_GetWorkerStatus(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Contains(t, response, "error")
+}
+
+func TestMarketHandler_GetTicker_MissingParams(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Create mocks
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	// Setup route
+	router.GET("/ticker/:exchange/:symbol", handler.GetTicker)
+
+	// Test missing exchange
+	req, _ := http.NewRequest("GET", "/ticker//:symbol", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should return 400 for missing exchange
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMarketHandler_GetOrderBook_FetchError(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Create mocks
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	// Setup route
+	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
+
+	// Mock CCXT service as healthy but FetchOrderBook returns error
+	mockCCXT.On("IsHealthy", mock.Anything).Return(true)
+	mockCCXT.On("FetchOrderBook", mock.Anything, "binance", "BTCUSDT", 20).Return(nil, assert.AnError)
+
+	// Create request
+	req, _ := http.NewRequest("GET", "/orderbook/binance/BTCUSDT", nil)
+	w := httptest.NewRecorder()
+
+	// Execute request
+	router.ServeHTTP(w, req)
+
+	// Should return 500 for internal server error
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Verify mock expectations
+	mockCCXT.AssertExpectations(t)
+}
+
+func TestMarketHandler_GetOrderBook(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Create mocks
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	// Setup route
+	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
+
+	// Mock expectations
+	expectedOrderBook := &ccxt.OrderBookResponse{
+		Exchange: "binance",
+		Symbol:   "BTCUSDT",
+		OrderBook: ccxt.OrderBook{
+			Symbol:    "BTCUSDT",
+			Bids:      []ccxt.OrderBookEntry{{Price: decimal.NewFromFloat(49999), Amount: decimal.NewFromFloat(1.0)}},
+			Asks:      []ccxt.OrderBookEntry{{Price: decimal.NewFromFloat(50001), Amount: decimal.NewFromFloat(1.0)}},
+			Timestamp: time.Now(),
+		},
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	mockCCXT.On("IsHealthy", mock.Anything).Return(true)
+	mockCCXT.On("FetchOrderBook", mock.Anything, "binance", "BTCUSDT", 20).Return(expectedOrderBook, nil)
+
+	// Create request
+	req, _ := http.NewRequest("GET", "/orderbook/binance/BTCUSDT", nil)
+	w := httptest.NewRecorder()
+
+	// Execute request
+	router.ServeHTTP(w, req)
+
+	// Assertions
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response ccxt.OrderBookResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "binance", response.Exchange)
+	assert.Equal(t, "BTCUSDT", response.Symbol)
+
+	// Verify mock expectations
+	mockCCXT.AssertExpectations(t)
+}
+
+func TestMarketHandler_GetOrderBook_MissingParams(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Create mocks
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	// Setup route
+	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
+
+	// Test missing exchange
+	req, _ := http.NewRequest("GET", "/orderbook//:symbol", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should return 400 for missing exchange
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMarketHandler_GetOrderBook_ServiceUnavailable(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Create mocks
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	// Setup route
+	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
+
+	// Mock CCXT service as unhealthy
+	mockCCXT.On("IsHealthy", mock.Anything).Return(false)
+
+	// Create request
+	req, _ := http.NewRequest("GET", "/orderbook/binance/BTCUSDT", nil)
+	w := httptest.NewRecorder()
+
+	// Execute request
+	router.ServeHTTP(w, req)
+
+	// Should return 503 for service unavailable
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	// Verify mock expectations
+	mockCCXT.AssertExpectations(t)
+}
+
+// Test struct validation
+func TestMarketPricesResponse_Struct(t *testing.T) {
+	response := MarketPricesResponse{
+		Data:      []MarketPriceData{},
+		Total:     100,
+		Page:      1,
+		Limit:     50,
+		Timestamp: time.Now(),
+	}
+
+	assert.NotNil(t, response)
+	assert.Equal(t, 100, response.Total)
+	assert.Equal(t, 1, response.Page)
+	assert.Equal(t, 50, response.Limit)
+}
+
+func TestMarketPriceData_Struct(t *testing.T) {
+	data := MarketPriceData{
+		Exchange:    "binance",
+		Symbol:      "BTCUSDT",
+		Price:       decimal.NewFromFloat(50000.0),
+		Volume:      decimal.NewFromFloat(1000.0),
+		Timestamp:   time.Now(),
+		LastUpdated: time.Now(),
+	}
+
+	assert.NotNil(t, data)
+	assert.Equal(t, "binance", data.Exchange)
+	assert.Equal(t, "BTCUSDT", data.Symbol)
+	assert.True(t, data.Price.Equal(decimal.NewFromFloat(50000.0)))
+}
+
+func TestTickerResponse_Struct(t *testing.T) {
+	response := TickerResponse{
+		Exchange:  "binance",
+		Symbol:    "BTCUSDT",
+		Price:     decimal.NewFromFloat(50000.0),
+		Volume:    decimal.NewFromFloat(1000.0),
+		Timestamp: time.Now(),
+	}
+
+	assert.NotNil(t, response)
+	assert.Equal(t, "binance", response.Exchange)
+	assert.Equal(t, "BTCUSDT", response.Symbol)
+	assert.True(t, response.Price.Equal(decimal.NewFromFloat(50000.0)))
+}
+
+func TestNewMarketHandler(t *testing.T) {
+	mockCCXT := new(MockCCXTService)
+	handler := NewMarketHandler(nil, mockCCXT, nil)
+
+	assert.NotNil(t, handler)
+	assert.Equal(t, mockCCXT, handler.ccxtService)
+	assert.Nil(t, handler.db)
+	assert.Nil(t, handler.collectorService)
+}
+
+func TestGetTicker(t *testing.T) {
+	t.Run("successful ticker fetch", func(t *testing.T) {
+		mockCCXT := &MockCCXTService{}
+		expectedPrice := &models.MarketPrice{
+			Symbol:       "BTCUSDT",
+			ExchangeName: "binance",
+			Price:        decimal.NewFromFloat(50000.0),
+			Volume:       decimal.NewFromFloat(1000.0),
+			Timestamp:    time.Now(),
+		}
+		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
+		mockCCXT.On("FetchSingleTicker", mock.Anything, "binance", "BTCUSDT").Return(expectedPrice, nil)
+
+		handler := NewMarketHandler(nil, mockCCXT, nil)
+
+		// Setup router with URL parameters
+		router := gin.New()
+		router.GET("/ticker/:exchange/:symbol", handler.GetTicker)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/ticker/binance/BTCUSDT", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockCCXT.AssertExpectations(t)
+
+		// Verify response body
+		var response TickerResponse
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, "binance", response.Exchange)
+		assert.Equal(t, "BTCUSDT", response.Symbol)
+		assert.True(t, response.Price.Equal(decimal.NewFromFloat(50000.0)))
+	})
+
+	t.Run("service error", func(t *testing.T) {
+		mockCCXT := &MockCCXTService{}
+		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
+		mockCCXT.On("FetchSingleTicker", mock.Anything, "binance", "BTCUSDT").Return(nil, assert.AnError)
+
+		handler := NewMarketHandler(nil, mockCCXT, nil)
+
+		// Setup router with URL parameters
+		router := gin.New()
+		router.GET("/ticker/:exchange/:symbol", handler.GetTicker)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/ticker/binance/BTCUSDT", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		mockCCXT.AssertExpectations(t)
+	})
 }

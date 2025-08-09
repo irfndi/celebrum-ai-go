@@ -32,9 +32,13 @@ func NewPostgresConnection(cfg *config.DatabaseConfig) (*PostgresDB, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
-	// Configure connection pool settings
-	poolConfig.MaxConns = int32(cfg.MaxOpenConns)
-	poolConfig.MinConns = int32(cfg.MaxIdleConns)
+	// Configure connection pool settings with bounds checking
+	if cfg.MaxOpenConns > 0 && cfg.MaxOpenConns <= 2147483647 {
+		poolConfig.MaxConns = int32(cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns > 0 && cfg.MaxIdleConns <= 2147483647 {
+		poolConfig.MinConns = int32(cfg.MaxIdleConns)
+	}
 
 	// Parse duration strings
 	if cfg.ConnMaxLifetime != "" {

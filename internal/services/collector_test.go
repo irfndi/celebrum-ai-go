@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
@@ -92,6 +93,29 @@ func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, e
 	return args.Get(0).([]models.ArbitrageOpportunityResponse), args.Error(1)
 }
 
+func (m *MockCCXTService) FetchFundingRate(ctx context.Context, exchange, symbol string) (*ccxt.FundingRate, error) {
+	args := m.Called(ctx, exchange, symbol)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.FundingRate), args.Error(1)
+}
+
+func (m *MockCCXTService) FetchFundingRates(ctx context.Context, exchange string, symbols []string) ([]ccxt.FundingRate, error) {
+	args := m.Called(ctx, exchange, symbols)
+	return args.Get(0).([]ccxt.FundingRate), args.Error(1)
+}
+
+func (m *MockCCXTService) FetchAllFundingRates(ctx context.Context, exchange string) ([]ccxt.FundingRate, error) {
+	args := m.Called(ctx, exchange)
+	return args.Get(0).([]ccxt.FundingRate), args.Error(1)
+}
+
+func (m *MockCCXTService) CalculateFundingRateArbitrage(ctx context.Context, symbols []string, exchanges []string, minProfit float64) ([]ccxt.FundingArbitrageOpportunity, error) {
+	args := m.Called(ctx, symbols, exchanges, minProfit)
+	return args.Get(0).([]ccxt.FundingArbitrageOpportunity), args.Error(1)
+}
+
 func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
@@ -100,7 +124,7 @@ func TestNewCollectorService(t *testing.T) {
 
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.workers)
-	assert.Equal(t, 60, collector.collectorConfig.IntervalSeconds)
+	assert.Equal(t, 300, collector.collectorConfig.IntervalSeconds)
 	assert.Equal(t, 5, collector.collectorConfig.MaxErrors)
 }
 
@@ -149,4 +173,94 @@ func TestCollectorService_GetWorkerStatus(t *testing.T) {
 	status := collector.GetWorkerStatus()
 	assert.NotNil(t, status)
 	assert.Len(t, status, 0) // No workers created yet
+}
+
+func TestCollectorService_IsHealthy(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	config := &config.Config{}
+
+	collector := NewCollectorService(nil, mockCCXT, config)
+
+	// Test with no workers (should be unhealthy)
+	assert.False(t, collector.IsHealthy())
+
+	// Add a running worker
+	collector.workers["binance"] = &Worker{
+		Exchange:  "binance",
+		IsRunning: true,
+	}
+
+	// Test with one running worker (should be healthy)
+	assert.True(t, collector.IsHealthy())
+
+	// Add a stopped worker
+	collector.workers["coinbase"] = &Worker{
+		Exchange:  "coinbase",
+		IsRunning: false,
+	}
+
+	// Test with 50% workers running (should be healthy)
+	assert.True(t, collector.IsHealthy())
+
+	// Stop the first worker
+	collector.workers["binance"].IsRunning = false
+
+	// Test with 0% workers running (should be unhealthy)
+	assert.False(t, collector.IsHealthy())
+}
+
+func TestCollectorService_RestartWorker(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	config := &config.Config{}
+
+	collector := NewCollectorService(nil, mockCCXT, config)
+
+	// Test restarting non-existent worker
+	err := collector.RestartWorker("nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "worker for exchange nonexistent not found")
+
+	// Add a worker with errors
+	collector.workers["binance"] = &Worker{
+		Exchange:   "binance",
+		IsRunning:  false,
+		ErrorCount: 5,
+		Interval:   60 * time.Second,
+		MaxErrors:  5,
+	}
+
+	// Test restarting existing worker
+	err = collector.RestartWorker("binance")
+	assert.NoError(t, err)
+	assert.Equal(t, 0, collector.workers["binance"].ErrorCount)
+	assert.True(t, collector.workers["binance"].IsRunning)
+}
+
+func TestWorker_Struct(t *testing.T) {
+	worker := &Worker{
+		Exchange:   "binance",
+		Symbols:    []string{"BTC/USDT", "ETH/USDT"},
+		Interval:   60 * time.Second,
+		LastUpdate: time.Now(),
+		IsRunning:  true,
+		ErrorCount: 0,
+		MaxErrors:  5,
+	}
+
+	assert.Equal(t, "binance", worker.Exchange)
+	assert.Len(t, worker.Symbols, 2)
+	assert.Equal(t, 60*time.Second, worker.Interval)
+	assert.True(t, worker.IsRunning)
+	assert.Equal(t, 0, worker.ErrorCount)
+	assert.Equal(t, 5, worker.MaxErrors)
+}
+
+func TestCollectorConfig_Struct(t *testing.T) {
+	config := CollectorConfig{
+		IntervalSeconds: 30,
+		MaxErrors:       10,
+	}
+
+	assert.Equal(t, 30, config.IntervalSeconds)
+	assert.Equal(t, 10, config.MaxErrors)
 }

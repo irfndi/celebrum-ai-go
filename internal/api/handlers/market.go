@@ -73,7 +73,7 @@ func (h *MarketHandler) GetMarketPrices(c *gin.Context) {
 
 	// Build SQL query
 	sqlQuery := `
-		SELECT e.name as exchange, tp.symbol, md.price, md.volume, md.timestamp, md.created_at
+		SELECT e.name as exchange, tp.symbol, md.last_price, md.volume_24h, md.timestamp, md.created_at
 		FROM market_data md
 		JOIN exchanges e ON md.exchange_id = e.id
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id
@@ -194,6 +194,11 @@ func (h *MarketHandler) GetTicker(c *gin.Context) {
 	}
 
 	// Fallback to database data
+	if h.db == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Ticker data not found"})
+		return
+	}
+
 	var result struct {
 		Exchange  string          `json:"exchange"`
 		Symbol    string          `json:"symbol"`
@@ -203,7 +208,7 @@ func (h *MarketHandler) GetTicker(c *gin.Context) {
 	}
 
 	sqlQuery := `
-		SELECT e.name as exchange, tp.symbol, md.price, md.volume, md.timestamp
+		SELECT e.name as exchange, tp.symbol, md.last_price, md.volume_24h, md.timestamp
 		FROM market_data md
 		JOIN exchanges e ON md.exchange_id = e.id
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id

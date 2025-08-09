@@ -15,7 +15,9 @@ import type {
   MultiTickerRequest,
   MultiTickerResponse,
   ErrorResponse,
-  ExchangeManager
+  ExchangeManager,
+  FundingRate,
+  FundingRateResponse
 } from './types';
 
 // Load environment variables
@@ -35,10 +37,17 @@ app.use('*', logger());
 
 // Initialize supported exchanges
 const exchanges: ExchangeManager = {
-  binance: new ccxt.binance({ enableRateLimit: true }),
+  binance: new ccxt.binance({ 
+    enableRateLimit: true,
+    timeout: 30000,
+    rateLimit: 1200, // Binance rate limit
+    options: {
+      'defaultType': 'spot' // Ensure we're using spot trading
+    }
+  }),
   bybit: new ccxt.bybit({ enableRateLimit: true }),
   okx: new ccxt.okx({ enableRateLimit: true }),
-  coinbase: new ccxt.coinbase({ enableRateLimit: true }),
+  coinbasepro: new ccxt.coinbaseexchange({ enableRateLimit: true }),
   kraken: new ccxt.kraken({ enableRateLimit: true })
 };
 
@@ -88,15 +97,30 @@ app.get('/api/ticker/:exchange/:symbol', async (c) => {
       return c.json(errorResponse, 400);
     }
 
-    const ticker = await exchanges[exchange].fetchTicker(symbol);
-    const response: TickerResponse = {
-      exchange,
-      symbol,
-      ticker,
-      timestamp: new Date().toISOString()
-    };
+    // Add retry logic for Binance
+    let retries = exchange === 'binance' ? 3 : 1;
+    let lastError;
     
-    return c.json(response);
+    for (let i = 0; i < retries; i++) {
+      try {
+        const ticker = await exchanges[exchange].fetchTicker(symbol);
+        const response: TickerResponse = {
+          exchange,
+          symbol,
+          ticker,
+          timestamp: new Date().toISOString()
+        };
+        
+        return c.json(response);
+      } catch (error) {
+        lastError = error;
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+        }
+      }
+    }
+    
+    throw lastError;
   } catch (error) {
     const errorResponse: ErrorResponse = {
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -275,6 +299,102 @@ app.get('/api/markets/:exchange', async (c) => {
     return c.json(errorResponse, 500);
   }
 });
+
+// Get funding rates for an exchange
+app.get('/api/funding-rates/:exchange',
+  validator('query', (value, c) => {
+    const symbols = value.symbols ? (value.symbols as string).split(',') : undefined;
+    return { symbols };
+  }),
+  async (c) => {
+    try {
+      const exchange = c.req.param('exchange');
+      const { symbols } = c.req.valid('query');
+      
+      if (!exchanges[exchange]) {
+        const errorResponse: ErrorResponse = {
+          error: 'Exchange not supported',
+          timestamp: new Date().toISOString()
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Check if exchange supports funding rates
+      if (!exchanges[exchange].has['fetchFundingRates'] && !exchanges[exchange].has['fetchFundingRate']) {
+        const errorResponse: ErrorResponse = {
+          error: 'Exchange does not support funding rates',
+          timestamp: new Date().toISOString()
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      let fundingRates: FundingRate[] = [];
+
+      if (symbols && symbols.length > 0) {
+        // Fetch funding rates for specific symbols
+        for (const symbol of symbols) {
+          try {
+            let fundingRate;
+            if (exchanges[exchange].has['fetchFundingRate']) {
+              fundingRate = await exchanges[exchange].fetchFundingRate(symbol);
+            } else {
+              // Fallback to fetchFundingRates with single symbol
+              const rates = await exchanges[exchange].fetchFundingRates([symbol]);
+              fundingRate = rates[symbol];
+            }
+            
+            if (fundingRate) {
+               fundingRates.push({
+                 symbol: fundingRate.symbol || symbol,
+                 fundingRate: fundingRate.fundingRate || 0,
+                 fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
+                 nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
+                 markPrice: fundingRate.markPrice || 0,
+                 indexPrice: fundingRate.indexPrice || 0,
+                 timestamp: fundingRate.timestamp || Date.now()
+               });
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch funding rate for ${symbol} on ${exchange}:`, error);
+          }
+        }
+      } else {
+        // Fetch all funding rates
+        try {
+          if (exchanges[exchange].has['fetchFundingRates']) {
+            const rates = await exchanges[exchange].fetchFundingRates();
+            fundingRates = Object.values(rates).map((rate: any) => ({
+               symbol: rate.symbol,
+               fundingRate: rate.fundingRate || 0,
+               fundingTimestamp: rate.fundingTimestamp || Date.now(),
+               nextFundingTime: rate.nextFundingDatetime ? new Date(rate.nextFundingDatetime).getTime() : 0,
+               markPrice: rate.markPrice || 0,
+               indexPrice: rate.indexPrice || 0,
+               timestamp: rate.timestamp || Date.now()
+             }));
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch all funding rates for ${exchange}:`, error);
+        }
+      }
+
+      const response: FundingRateResponse = {
+        exchange,
+        fundingRates,
+        count: fundingRates.length,
+        timestamp: new Date().toISOString()
+      };
+      
+      return c.json(response);
+    } catch (error) {
+      const errorResponse: ErrorResponse = {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 500);
+    }
+  }
+);
 
 // Global error handler
 app.onError((error, c) => {

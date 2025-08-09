@@ -26,8 +26,14 @@ type CCXTService interface {
 	FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error)
 	FetchMarkets(ctx context.Context, exchange string) (*MarketsResponse, error)
 
+	// Funding rate operations
+	FetchFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error)
+	FetchFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error)
+	FetchAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error)
+
 	// Arbitrage operations
 	CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]models.ArbitrageOpportunityResponse, error)
+	CalculateFundingRateArbitrage(ctx context.Context, symbols []string, exchanges []string, minProfit float64) ([]FundingArbitrageOpportunity, error)
 }
 
 // CCXTClient defines the interface for low-level CCXT HTTP operations

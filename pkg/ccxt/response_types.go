@@ -1,10 +1,36 @@
 package ccxt
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/shopspring/decimal"
 )
+
+// UnixTimestamp is a custom type that can unmarshal Unix timestamps (in milliseconds)
+type UnixTimestamp time.Time
+
+// UnmarshalJSON implements json.Unmarshaler for UnixTimestamp
+func (ut *UnixTimestamp) UnmarshalJSON(data []byte) error {
+	var timestamp int64
+	if err := json.Unmarshal(data, &timestamp); err != nil {
+		return fmt.Errorf("failed to unmarshal timestamp: %w", err)
+	}
+	*ut = UnixTimestamp(time.Unix(timestamp/1000, (timestamp%1000)*1000000))
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for UnixTimestamp
+func (ut UnixTimestamp) MarshalJSON() ([]byte, error) {
+	t := time.Time(ut)
+	return json.Marshal(t.Unix() * 1000)
+}
+
+// Time returns the underlying time.Time
+func (ut UnixTimestamp) Time() time.Time {
+	return time.Time(ut)
+}
 
 // HealthResponse represents the health check response
 type HealthResponse struct {
@@ -40,7 +66,7 @@ type Ticker struct {
 	Close      decimal.Decimal `json:"close"`
 	Change     decimal.Decimal `json:"change"`
 	Percentage decimal.Decimal `json:"percentage"`
-	Timestamp  time.Time       `json:"timestamp"`
+	Timestamp  UnixTimestamp   `json:"timestamp"`
 }
 
 // TickerResponse represents the response from the ticker endpoint
@@ -136,6 +162,44 @@ type MarketsResponse struct {
 	Symbols   []string `json:"symbols"`
 	Count     int      `json:"count"`
 	Timestamp string   `json:"timestamp"`
+}
+
+// FundingRate represents funding rate data from an exchange
+type FundingRate struct {
+	Symbol           string        `json:"symbol"`
+	FundingRate      float64       `json:"fundingRate"`
+	FundingTimestamp UnixTimestamp `json:"fundingTimestamp"`
+	NextFundingTime  UnixTimestamp `json:"nextFundingTime"`
+	MarkPrice        float64       `json:"markPrice"`
+	IndexPrice       float64       `json:"indexPrice"`
+	Timestamp        UnixTimestamp `json:"timestamp"`
+}
+
+// FundingRateResponse represents the response from the funding rates endpoint
+type FundingRateResponse struct {
+	Exchange     string        `json:"exchange"`
+	FundingRates []FundingRate `json:"fundingRates"`
+	Count        int           `json:"count"`
+	Timestamp    string        `json:"timestamp"`
+}
+
+// FundingArbitrageOpportunity represents a funding rate arbitrage opportunity
+type FundingArbitrageOpportunity struct {
+	Symbol                    string        `json:"symbol"`
+	LongExchange              string        `json:"longExchange"`
+	ShortExchange             string        `json:"shortExchange"`
+	LongFundingRate           float64       `json:"longFundingRate"`
+	ShortFundingRate          float64       `json:"shortFundingRate"`
+	NetFundingRate            float64       `json:"netFundingRate"`
+	EstimatedProfit8h         float64       `json:"estimatedProfit8h"`
+	EstimatedProfitDaily      float64       `json:"estimatedProfitDaily"`
+	EstimatedProfitPercentage float64       `json:"estimatedProfitPercentage"`
+	LongMarkPrice             float64       `json:"longMarkPrice"`
+	ShortMarkPrice            float64       `json:"shortMarkPrice"`
+	PriceDifference           float64       `json:"priceDifference"`
+	PriceDifferencePercentage float64       `json:"priceDifferencePercentage"`
+	RiskScore                 float64       `json:"riskScore"`
+	Timestamp                 UnixTimestamp `json:"timestamp"`
 }
 
 // ErrorResponse represents an error response from the CCXT service

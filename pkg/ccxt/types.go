@@ -96,7 +96,7 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 			Symbol:       tickerData.Ticker.Symbol,
 			Price:        tickerData.Ticker.Last,
 			Volume:       tickerData.Ticker.Volume,
-			Timestamp:    tickerData.Ticker.Timestamp,
+			Timestamp:    tickerData.Ticker.Timestamp.Time(),
 		}
 		marketData = append(marketData, md)
 	}
@@ -116,7 +116,7 @@ func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string
 		Symbol:       resp.Ticker.Symbol,
 		Price:        resp.Ticker.Last,
 		Volume:       resp.Ticker.Volume,
-		Timestamp:    resp.Ticker.Timestamp,
+		Timestamp:    resp.Ticker.Timestamp.Time(),
 	}, nil
 }
 
@@ -211,6 +211,154 @@ func (s *Service) CalculateArbitrageOpportunities(ctx context.Context, exchanges
 					DetectedAt:       time.Now(),
 					ExpiresAt:        time.Now().Add(5 * time.Minute), // 5-minute window
 				}
+				opportunities = append(opportunities, opportunity)
+			}
+		}
+	}
+
+	return opportunities, nil
+}
+
+// FetchFundingRate fetches funding rate for a specific symbol on an exchange
+func (s *Service) FetchFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
+	return s.client.GetFundingRate(ctx, exchange, symbol)
+}
+
+// FetchFundingRates fetches funding rates for multiple symbols on an exchange
+func (s *Service) FetchFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
+	return s.client.GetFundingRates(ctx, exchange, symbols)
+}
+
+// FetchAllFundingRates fetches all available funding rates for an exchange
+func (s *Service) FetchAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error) {
+	return s.client.GetAllFundingRates(ctx, exchange)
+}
+
+// CalculateFundingRateArbitrage finds funding rate arbitrage opportunities
+func (s *Service) CalculateFundingRateArbitrage(ctx context.Context, symbols []string, exchanges []string, minProfit float64) ([]FundingArbitrageOpportunity, error) {
+	var opportunities []FundingArbitrageOpportunity
+
+	// Fetch funding rates from all exchanges for all symbols
+	fundingRateMap := make(map[string]map[string]*FundingRate) // exchange -> symbol -> funding rate
+
+	for _, exchange := range exchanges {
+		fundingRates, err := s.FetchFundingRates(ctx, exchange, symbols)
+		if err != nil {
+			continue // Skip this exchange if we can't get funding rates
+		}
+
+		if fundingRateMap[exchange] == nil {
+			fundingRateMap[exchange] = make(map[string]*FundingRate)
+		}
+
+		for i := range fundingRates {
+			fundingRateMap[exchange][fundingRates[i].Symbol] = &fundingRates[i]
+		}
+	}
+
+	// Find arbitrage opportunities for each symbol
+	for _, symbol := range symbols {
+		// Get all exchanges that have this symbol
+		var availableExchanges []string
+		for _, exchange := range exchanges {
+			if fundingRateMap[exchange] != nil && fundingRateMap[exchange][symbol] != nil {
+				availableExchanges = append(availableExchanges, exchange)
+			}
+		}
+
+		// Need at least 2 exchanges to find arbitrage
+		if len(availableExchanges) < 2 {
+			continue
+		}
+
+		// Compare funding rates between all exchange pairs
+		for i := 0; i < len(availableExchanges); i++ {
+			for j := i + 1; j < len(availableExchanges); j++ {
+				exchange1 := availableExchanges[i]
+				exchange2 := availableExchanges[j]
+
+				fr1 := fundingRateMap[exchange1][symbol]
+				fr2 := fundingRateMap[exchange2][symbol]
+
+				// Calculate net funding rate (difference)
+				netFundingRate := fr2.FundingRate - fr1.FundingRate
+				absNetFundingRate := netFundingRate
+				if absNetFundingRate < 0 {
+					absNetFundingRate = -absNetFundingRate
+				}
+
+				// Calculate estimated profits
+				estimatedProfit8h := absNetFundingRate * 100  // Convert to percentage
+				estimatedProfitDaily := estimatedProfit8h * 3 // 3 funding periods per day
+
+				// Check if profit meets minimum threshold
+				if estimatedProfitDaily < minProfit {
+					continue
+				}
+
+				// Determine which exchange to go long/short
+				var longExchange, shortExchange string
+				var longFundingRate, shortFundingRate float64
+				var longMarkPrice, shortMarkPrice float64
+
+				if fr1.FundingRate < fr2.FundingRate {
+					// Go long on exchange1 (pay lower funding), short on exchange2 (receive higher funding)
+					longExchange = exchange1
+					shortExchange = exchange2
+					longFundingRate = fr1.FundingRate
+					shortFundingRate = fr2.FundingRate
+					longMarkPrice = fr1.MarkPrice
+					shortMarkPrice = fr2.MarkPrice
+				} else {
+					// Go long on exchange2 (pay lower funding), short on exchange1 (receive higher funding)
+					longExchange = exchange2
+					shortExchange = exchange1
+					longFundingRate = fr2.FundingRate
+					shortFundingRate = fr1.FundingRate
+					longMarkPrice = fr2.MarkPrice
+					shortMarkPrice = fr1.MarkPrice
+				}
+
+				// Calculate price difference
+				priceDifference := shortMarkPrice - longMarkPrice
+				priceDifferencePercentage := (priceDifference / longMarkPrice) * 100
+
+				// Calculate risk score based on price difference
+				riskScore := 1.0
+				if priceDifferencePercentage < 0 {
+					priceDifferencePercentage = -priceDifferencePercentage
+				}
+				if priceDifferencePercentage > 0.5 {
+					riskScore = 2.0
+				}
+				if priceDifferencePercentage > 1.0 {
+					riskScore = 3.0
+				}
+				if priceDifferencePercentage > 2.0 {
+					riskScore = 4.0
+				}
+				if priceDifferencePercentage > 5.0 {
+					riskScore = 5.0
+				}
+
+				opportunity := FundingArbitrageOpportunity{
+					Symbol:                    symbol,
+					LongExchange:              longExchange,
+					ShortExchange:             shortExchange,
+					LongFundingRate:           longFundingRate,
+					ShortFundingRate:          shortFundingRate,
+					NetFundingRate:            shortFundingRate - longFundingRate,
+					EstimatedProfit8h:         estimatedProfit8h,
+					EstimatedProfitDaily:      estimatedProfitDaily,
+					EstimatedProfitPercentage: estimatedProfitDaily,
+					LongMarkPrice:             longMarkPrice,
+					ShortMarkPrice:            shortMarkPrice,
+					PriceDifference:           priceDifference,
+					PriceDifferencePercentage: priceDifferencePercentage,
+					RiskScore:                 riskScore,
+					Timestamp:                 UnixTimestamp(time.Now()),
+				}
+
 				opportunities = append(opportunities, opportunity)
 			}
 		}

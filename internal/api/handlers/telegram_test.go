@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -245,6 +246,67 @@ func TestTelegramHandler_Integration(t *testing.T) {
 		}
 
 		assert.NotEmpty(t, cfg.BotToken)
+	})
+}
+
+func TestNewTelegramHandler(t *testing.T) {
+	t.Run("create handler with nil parameters", func(t *testing.T) {
+		handler := NewTelegramHandler(nil, nil, nil)
+		assert.NotNil(t, handler)
+	})
+}
+
+func TestTelegramHandler_HandleWebhook_Additional(t *testing.T) {
+	t.Run("bot not initialized", func(t *testing.T) {
+		handler := NewTelegramHandler(nil, nil, nil)
+
+		update := map[string]interface{}{
+			"update_id": 123,
+			"message": map[string]interface{}{
+				"message_id": 1,
+				"text":       "test message",
+				"chat": map[string]interface{}{
+					"id": 123456789,
+				},
+				"from": map[string]interface{}{
+					"id": 987654321,
+				},
+			},
+		}
+
+		jsonData, _ := json.Marshal(update)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("POST", "/telegram/webhook", bytes.NewBuffer(jsonData))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		handler.HandleWebhook(c)
+
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response, "error")
+		assert.Contains(t, response["error"], "Telegram bot not available")
+	})
+
+	t.Run("invalid JSON body", func(t *testing.T) {
+		// Create a mock config to initialize the bot
+		mockConfig := &config.TelegramConfig{
+			BotToken: "invalid_token", // This will fail but handler will still be created
+		}
+		handler := NewTelegramHandler(nil, mockConfig, nil)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("POST", "/telegram/webhook", bytes.NewBuffer([]byte("invalid json")))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		handler.HandleWebhook(c)
+
+		// Should return service unavailable since bot initialization failed with invalid token
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	})
 }
 

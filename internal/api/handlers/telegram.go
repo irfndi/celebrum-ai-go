@@ -22,25 +22,45 @@ import (
 
 // TelegramHandler handles Telegram webhook requests
 type TelegramHandler struct {
-	db     *database.PostgresDB
-	config *config.TelegramConfig
-	bot    *bot.Bot
+	db               *database.PostgresDB
+	config           *config.TelegramConfig
+	bot              *bot.Bot
+	arbitrageHandler *ArbitrageHandler
 }
 
 // NewTelegramHandler creates a new Telegram handler
-func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig) *TelegramHandler {
+func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler) *TelegramHandler {
+	// Return handler with nil bot if config is not provided
+	if cfg == nil {
+		return &TelegramHandler{
+			db:               db,
+			config:           nil,
+			bot:              nil,
+			arbitrageHandler: arbitrageHandler,
+		}
+	}
+
 	// Initialize the bot
 	b, err := bot.New(cfg.BotToken, bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		// This will be handled by our custom webhook handler
 	}))
 	if err != nil {
-		log.Fatalf("Failed to create Telegram bot: %v", err)
+		log.Printf("Failed to create Telegram bot: %v", err)
+		log.Printf("Telegram bot functionality will be disabled")
+		// Return handler with nil bot - webhook will handle gracefully
+		return &TelegramHandler{
+			db:               db,
+			config:           cfg,
+			bot:              nil,
+			arbitrageHandler: arbitrageHandler,
+		}
 	}
 
 	return &TelegramHandler{
-		db:     db,
-		config: cfg,
-		bot:    b,
+		db:               db,
+		config:           cfg,
+		bot:              b,
+		arbitrageHandler: arbitrageHandler,
 	}
 }
 
@@ -48,6 +68,12 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig) *Te
 
 // HandleWebhook processes incoming Telegram webhook requests
 func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
+	if h.bot == nil {
+		log.Printf("Telegram bot is not initialized, ignoring webhook")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Telegram bot not available"})
+		return
+	}
+
 	// Parse the update
 	var update models.Update
 	if err := c.ShouldBindJSON(&update); err != nil {
@@ -170,16 +196,45 @@ Use /help to see all available commands
 
 // handleOpportunitiesCommand handles the /opportunities command
 func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID, userID int64) error {
-	// For now, return a placeholder message
-	// TODO: Implement actual arbitrage opportunity detection
-	msg := `📈 Current Arbitrage Opportunities:
+	// Call the arbitrage handler's underlying function directly
+	minProfit := 1.0   // Minimum 1% profit
+	limit := 5         // Limit to top 5 opportunities for Telegram
+	symbolFilter := "" // No symbol filter
 
-🔄 Scanning markets...
+	opportunities, err := h.arbitrageHandler.FindArbitrageOpportunities(ctx, minProfit, limit, symbolFilter)
+	if err != nil {
+		log.Printf("Error fetching arbitrage opportunities: %v", err)
+		return h.sendMessage(ctx, chatID, "❌ Error fetching arbitrage opportunities. Please try again later.")
+	}
 
-This feature is being implemented. You'll receive real-time alerts as soon as opportunities are detected!
+	// Format the message
+	if len(opportunities) == 0 {
+		msg := `📈 Current Arbitrage Opportunities:
+
+🔍 No profitable opportunities found at the moment.
+
+💡 Opportunities appear when there are price differences ≥1% between exchanges.
 
 ⚙️ Configure alerts: /settings
 🎯 Upgrade for more features: /upgrade`
+		return h.sendMessage(ctx, chatID, msg)
+	}
+
+	// Build opportunities message
+	msg := "📈 Current Arbitrage Opportunities:\n\n"
+	for i, opp := range opportunities {
+		if i >= 5 { // Limit to top 5 for readability
+			break
+		}
+		msg += fmt.Sprintf("💰 %s\n", opp.Symbol)
+		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", opp.ProfitPercent, opp.ProfitAmount)
+		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", opp.BuyExchange, opp.BuyPrice)
+		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
+		msg += "\n"
+	}
+
+	msg += "⚙️ Configure alerts: /settings\n"
+	msg += "🎯 Upgrade for more features: /upgrade"
 
 	return h.sendMessage(ctx, chatID, msg)
 }
@@ -314,6 +369,11 @@ func (h *TelegramHandler) handleTextMessage(ctx context.Context, message *models
 
 // sendMessage sends a message to a Telegram chat using the bot framework
 func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text string) error {
+	if h.bot == nil {
+		log.Printf("Telegram bot is not initialized, cannot send message to chat %d", chatID)
+		return fmt.Errorf("telegram bot not available")
+	}
+
 	_, err := h.bot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   text,

@@ -56,7 +56,19 @@ func NewUserHandler(db *database.PostgresDB) *UserHandler {
 func (h *UserHandler) RegisterUser(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Return error if database is not available
+	if h.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not available"})
+		return
+	}
+
+	// Validate required fields
+	if req.Email == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and password are required"})
 		return
 	}
 
@@ -66,9 +78,8 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user existence"})
 		return
 	}
-
 	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "User with this email already exists"})
+		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
 	}
 
@@ -79,16 +90,17 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	// Create user
+	// Generate user ID
 	userID := uuid.New().String()
+
+	// Insert user into database
 	query := `
 		INSERT INTO users (id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 	`
 
-	now := time.Now()
 	_, err = h.db.Pool.Exec(c.Request.Context(), query,
-		userID, req.Email, string(hashedPassword), req.TelegramChatID, "free", now, now)
+		userID, req.Email, string(hashedPassword), req.TelegramChatID, "free")
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
@@ -96,6 +108,7 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 	}
 
 	// Return user response (without password)
+	now := time.Now()
 	userResponse := UserResponse{
 		ID:               userID,
 		Email:            req.Email,
@@ -200,6 +213,12 @@ func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 		return
 	}
 
+	// Return error if database is not available
+	if h.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not available"})
+		return
+	}
+
 	// Update user profile
 	query := `
 		UPDATE users 
@@ -237,6 +256,11 @@ func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 // Helper functions
 
 func (h *UserHandler) userExists(ctx context.Context, email string) (bool, error) {
+	// Return false if database is not available
+	if h.db == nil {
+		return false, fmt.Errorf("database not available")
+	}
+
 	var count int
 	query := "SELECT COUNT(*) FROM users WHERE email = $1"
 	err := h.db.Pool.QueryRow(ctx, query, email).Scan(&count)
@@ -247,6 +271,11 @@ func (h *UserHandler) userExists(ctx context.Context, email string) (bool, error
 }
 
 func (h *UserHandler) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	// Return error if database is not available
+	if h.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
 	var user models.User
 	query := `
 		SELECT id, email, password_hash, telegram_chat_id, 
@@ -267,6 +296,11 @@ func (h *UserHandler) getUserByEmail(ctx context.Context, email string) (*models
 }
 
 func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.User, error) {
+	// Return error if database is not available
+	if h.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
 	var user models.User
 	query := `
 		SELECT id, email, password_hash, telegram_chat_id, 
@@ -295,6 +329,11 @@ func (h *UserHandler) generateSimpleToken(userID string) string {
 
 // GetUserByTelegramChatID retrieves user by Telegram chat ID (for Telegram bot)
 func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string) (*models.User, error) {
+	// Return error if database is not available
+	if h.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
 	var user models.User
 	query := `
 		SELECT id, email, password_hash, telegram_chat_id, 
@@ -316,6 +355,11 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 
 // CreateTelegramUser creates a new user from Telegram registration
 func (h *UserHandler) CreateTelegramUser(ctx context.Context, chatID string, username string) (*models.User, error) {
+	// Return error if database is not available
+	if h.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
 	userID := uuid.New().String()
 	now := time.Now()
 
