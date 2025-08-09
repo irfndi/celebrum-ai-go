@@ -75,8 +75,8 @@ telegram:
 
 # Market Data configuration
 market_data:
-  collection_interval: 5m  # Collect data every 5 minutes
-  batch_size: 100
+  collection_interval: 90s  # Collect data every 1.5 minutes (aggressive mode)
+  batch_size: 500
   max_retries: 3
   timeout: 15s
   exchanges:

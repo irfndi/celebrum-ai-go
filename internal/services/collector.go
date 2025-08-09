@@ -231,10 +231,10 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 			continue
 		}
 
-		// Add rate limiting delay between requests (100ms)
-		if i < len(worker.Symbols)-1 {
-			time.Sleep(100 * time.Millisecond)
-		}
+		// Add rate limiting delay between requests (aggressive mode: 30ms)
+			if i < len(worker.Symbols)-1 {
+				time.Sleep(30 * time.Millisecond)
+			}
 	}
 
 	return nil
@@ -295,9 +295,9 @@ func (c *CollectorService) collectAllMarketData(worker *Worker) error {
 				// Continue with other symbols even if one fails
 			}
 
-			// Add rate limiting delay between requests (50ms for all market data)
+			// Add rate limiting delay between requests (aggressive mode: 20ms)
 			if i < len(validSymbols)-1 {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
 	}
