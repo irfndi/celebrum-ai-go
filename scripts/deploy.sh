@@ -48,7 +48,8 @@ fi
 
 # Fix Redis system-level memory setting
 log "Applying Redis system-level optimizations..."
-./scripts/fix-redis-sysctl.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/fix-redis-sysctl.sh" || warn "Redis sysctl optimization failed, continuing..."
 
 # Check if docker-compose file exists
 if [[ ! -f "$COMPOSE_FILE" ]]; then
