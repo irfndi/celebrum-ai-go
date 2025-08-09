@@ -68,6 +68,7 @@ services:
       - DATABASE_USER=postgres
       - DATABASE_PASSWORD=postgres
       - DATABASE_DBNAME=celebrum_ai
+      - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
