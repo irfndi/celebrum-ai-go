@@ -19,11 +19,23 @@
 - [x] Update Makefile with new deployment targets
 - [x] Fix Redis import issues in health check handlers
 
+## ✅ **COMPLETED - Arbitrage System Analysis**
+- [x] Analyze arbitrage opportunity handling and deduplication mechanisms
+- [x] Document current real-time calculation approach (no persistence)
+- [x] Identify database schema for arbitrage opportunities table
+- [x] Document cleanup service for historical opportunity management
+
 ## 🔄 **NEXT STEPS - GitHub Actions Integration**
 - [ ] test-https-endpoint: Test HTTPS endpoint with curl -I https://143.198.219.213 (priority: Medium)
 - [ ] verify-webhook-https: Verify Telegram webhook is working with HTTPS (priority: Medium)
 - [ ] setup-github-actions: Configure GitHub Actions to eliminate manual rsync after every push (priority: High)
 - [ ] setup-webhook-automation: Configure automatic deployment on push to main branch (priority: Medium)
+
+## 📋 **FUTURE ENHANCEMENTS - Arbitrage System**
+- [ ] Implement arbitrage opportunity persistence to database
+- [ ] Add deduplication logic with unique constraints
+- [ ] Enable background cleanup service for historical opportunities
+- [ ] Add opportunity expiration and invalidation mechanisms
 
 ## 🚀 **CI/CD IMPROVEMENT ANSWER**
 **Current rsync command you mentioned:**
