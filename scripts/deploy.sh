@@ -46,6 +46,11 @@ if ! docker info > /dev/null 2>&1; then
     error "Docker is not running. Please start Docker and try again."
 fi
 
+# Fix Redis system-level memory setting
+log "Applying Redis system-level optimizations..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/fix-redis-sysctl.sh" || warn "Redis sysctl optimization failed, continuing..."
+
 # Check if docker-compose file exists
 if [[ ! -f "$COMPOSE_FILE" ]]; then
     error "Docker compose file $COMPOSE_FILE not found"

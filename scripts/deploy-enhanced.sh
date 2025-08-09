@@ -169,6 +169,11 @@ zero_downtime_deploy() {
         ln -sfn deployments/${TIMESTAMP} current
         cd current
         source .env
+        
+        # Fix Redis system-level memory setting on server
+        echo '🔧 Applying Redis system-level optimizations...'
+        bash ./scripts/fix-redis-sysctl.sh
+        
         docker-compose -f docker-compose.prod.yml up -d --build
     "
     

@@ -1,9 +1,13 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Config struct {
@@ -17,6 +21,7 @@ type Config struct {
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
+	Security    SecurityConfig   `mapstructure:"security"`
 }
 
 type ServerConfig struct {
@@ -77,6 +82,12 @@ type ArbitrageConfig struct {
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
 }
 
+type SecurityConfig struct {
+	JWTSecret  string `mapstructure:"jwt_secret" json:"-" yaml:"-"`
+	JWTExpiry  string `mapstructure:"jwt_expiry"`
+	BcryptCost int    `mapstructure:"bcrypt_cost"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -90,6 +101,11 @@ func Load() (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
+	// Bind specific environment variables
+	if err := viper.BindEnv("security.jwt_secret", "JWT_SECRET"); err != nil {
+		return nil, fmt.Errorf("failed to bind JWT_SECRET environment variable: %w", err)
+	}
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
@@ -102,6 +118,30 @@ func Load() (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
+
+	// Normalize environment to lowercase for consistent comparison
+	environment := strings.ToLower(config.Environment)
+
+	// Validate JWT secret in non-development environments
+	if environment != "development" && config.Security.JWTSecret == "" {
+		return nil, errors.New("JWT_SECRET environment variable is required in non-development environments")
+	}
+
+	// Validate JWT expiry duration
+	if config.Security.JWTExpiry != "" {
+		if _, err := time.ParseDuration(config.Security.JWTExpiry); err != nil {
+			return nil, fmt.Errorf("invalid JWT expiry duration: %w", err)
+		}
+	}
+
+	// Validate bcrypt cost parameter
+	if config.Security.BcryptCost < bcrypt.MinCost || config.Security.BcryptCost > bcrypt.MaxCost {
+		return nil, fmt.Errorf("bcrypt cost must be between %d and %d, got %d",
+			bcrypt.MinCost, bcrypt.MaxCost, config.Security.BcryptCost)
+	}
+
+	// Update config with normalized environment
+	config.Environment = environment
 
 	return &config, nil
 }
@@ -160,4 +200,9 @@ func setDefaults() {
 	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
 	viper.SetDefault("arbitrage.check_interval", "2m")
 	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
+
+	// Security
+	viper.SetDefault("security.jwt_secret", "")
+	viper.SetDefault("security.jwt_expiry", "24h")
+	viper.SetDefault("security.bcrypt_cost", 12)
 }

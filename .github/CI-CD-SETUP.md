@@ -11,7 +11,7 @@
 ### 2. GitHub Actions Workflows
 
 #### Main CI/CD Pipeline (`.github/workflows/ci-cd.yml`)
-- **Triggers**: Push to `main`/`develop`, PRs to `main`
+- **Triggers**: Push to `main`/`development`, PRs to `main`
 - **Jobs**:
   - **Test**: Go setup, PostgreSQL/Redis services, linting, tests with coverage, build
   - **Build**: Docker image build and push to GitHub Container Registry
@@ -19,7 +19,7 @@
   - **Notify**: Deployment status notifications
 
 #### Lint-only Workflow (`.github/workflows/lint.yml`)
-- **Triggers**: Push to `main`/`develop`, PRs
+- **Triggers**: Push to `main`/`development`, PRs
 - **Jobs**: golangci-lint and Go formatting checks
 
 ### 3. Pre-commit Configuration

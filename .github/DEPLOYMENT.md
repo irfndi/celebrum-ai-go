@@ -228,7 +228,7 @@ ssh user@server 'cd /opt/celebrum-ai-go && docker-compose logs app'
 
 ### Staging Environment
 - Uses `docker-compose.yml`
-- Deploys on pushes to `develop` branch
+- Deploys on pushes to `development` branch
 - Uses staging database and services
 
 ### Production Environment

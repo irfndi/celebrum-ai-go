@@ -58,7 +58,7 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: http://localhost:3001
+  service_url: http://ccxt-service:3001
   timeout: 30
   retry_attempts: 3
   retry_delay: 1s
@@ -85,17 +85,14 @@ market_data:
     - kraken
     - bitfinex
     - huobi
+    - bybit
 
 # Arbitrage configuration
 arbitrage:
   min_profit_threshold: 0.5  # Minimum profit percentage
   max_trade_amount: 1000.0   # Maximum trade amount in USD
   check_interval: 2m  # Check for opportunities every 2 minutes
-  enabled_pairs:
-    - BTC/USDT
-    - ETH/USDT
-    - BNB/USDT
-    - ADA/USDT
+  # enabled_pairs: []  # Deprecated - using dynamic pairs from exchanges
 
 # Technical Analysis configuration
 technical_analysis:
@@ -116,7 +113,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "your-jwt-secret-key-change-this"
+  jwt_secret: ""
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:
