@@ -78,6 +78,7 @@ jobs:
         run: |
           docker build -t celebrum-api:${{ github.sha }} .
           docker save celebrum-api:${{ github.sha }} > celebrum-api.tar
+          docker images | grep celebrum-api
           
       - name: Build CCXT service image
         run: |
@@ -107,6 +108,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-package-${{ github.sha }}
+          
+      - name: Extract Docker images
+        run: |
+          tar -xzf deployment-package-${{ github.sha }}.tar.gz
+          cd deployment-package
+          docker load < celebrum-api.tar
+          
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -115,7 +127,7 @@ jobs:
           output: 'trivy-results.sarif'
           
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
