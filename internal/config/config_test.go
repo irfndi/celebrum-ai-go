@@ -195,6 +195,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	_ = os.Setenv("CCXT_TIMEOUT", "60")
 	_ = os.Setenv("TELEGRAM_BOT_TOKEN", "prod_bot_token")
 	_ = os.Setenv("TELEGRAM_WEBHOOK_URL", "https://prod-api.example.com/webhook")
+	_ = os.Setenv("JWT_SECRET", "test-jwt-secret-for-production-test")
 
 	defer func() {
 		// Clean up environment variables

@@ -2,9 +2,12 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Config struct {
@@ -80,8 +83,8 @@ type ArbitrageConfig struct {
 }
 
 type SecurityConfig struct {
-	JWTSecret string `mapstructure:"jwt_secret"`
-	JWTExpiry string `mapstructure:"jwt_expiry"`
+	JWTSecret  string `mapstructure:"jwt_secret"`
+	JWTExpiry  string `mapstructure:"jwt_expiry"`
 	BcryptCost int    `mapstructure:"bcrypt_cost"`
 }
 
@@ -99,7 +102,9 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	// Bind specific environment variables
-	viper.BindEnv("security.jwt_secret", "JWT_SECRET")
+	if err := viper.BindEnv("security.jwt_secret", "JWT_SECRET"); err != nil {
+		return nil, fmt.Errorf("failed to bind JWT_SECRET environment variable: %w", err)
+	}
 
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
@@ -114,10 +119,29 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Normalize environment to lowercase for consistent comparison
+	environment := strings.ToLower(config.Environment)
+
 	// Validate JWT secret in non-development environments
-	if config.Environment != "development" && config.Security.JWTSecret == "" {
+	if environment != "development" && config.Security.JWTSecret == "" {
 		return nil, errors.New("JWT_SECRET environment variable is required in non-development environments")
 	}
+
+	// Validate JWT expiry duration
+	if config.Security.JWTExpiry != "" {
+		if _, err := time.ParseDuration(config.Security.JWTExpiry); err != nil {
+			return nil, fmt.Errorf("invalid JWT expiry duration: %w", err)
+		}
+	}
+
+	// Validate bcrypt cost parameter
+	if config.Security.BcryptCost < bcrypt.MinCost || config.Security.BcryptCost > bcrypt.MaxCost {
+		return nil, fmt.Errorf("bcrypt cost must be between %d and %d, got %d",
+			bcrypt.MinCost, bcrypt.MaxCost, config.Security.BcryptCost)
+	}
+
+	// Update config with normalized environment
+	config.Environment = environment
 
 	return &config, nil
 }
