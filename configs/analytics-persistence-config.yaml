@@ -1,0 +1,60 @@
+# Analytics Persistence Configuration
+# This configuration extends retention periods for arbitrage opportunities
+# to enable long-term analytics and historical analysis
+
+# Extended retention configuration for analytics purposes
+cleanup:
+  # Market data: Keep for 7 days (168 hours) - allows for weekly analysis
+  market_data_retention_hours: 168
+  
+  # Funding rates: Keep for 7 days (168 hours) - enables funding rate trend analysis
+  funding_rate_retention_hours: 168
+  
+  # Arbitrage opportunities: Keep for 1 year (8760 hours) - enables long-term analytics
+  # This prevents cleanup of generated opportunities for analytics purposes
+  arbitrage_retention_hours: 8760
+  
+  # Funding arbitrage opportunities: Keep for 1 year (8760 hours)
+  funding_arbitrage_retention_hours: 8760
+  
+  # Run cleanup every 6 hours instead of every hour (less aggressive)
+  cleanup_interval_minutes: 360
+
+# Database optimization for long-term storage
+database:
+  # Increase connection pool for handling larger datasets
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: 600s
+  conn_max_idle_time: 120s
+
+# Monitoring configuration for analytics
+monitoring:
+  metrics_enabled: true
+  metrics_port: 9090
+  health_check_interval: 30s
+  
+  # Enable storage monitoring
+  storage_monitoring:
+    enabled: true
+    check_interval: 1h
+    alert_threshold_gb: 10
+    
+  # Analytics-specific metrics
+  analytics_metrics:
+    enabled: true
+    retention_tracking: true
+    opportunity_tracking: true
+
+# Analytics feature flags
+features:
+  telegram_bot: true
+  web_interface: true
+  api_v1: true
+  real_trading: false
+  paper_trading: true
+  
+  # Enable analytics features
+  analytics_dashboard: true
+  historical_data_export: true
+  opportunity_analytics: true

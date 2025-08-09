@@ -1,0 +1,64 @@
+# High-Frequency Data Collection Configuration
+# This configuration optimizes rate limits for maximum data collection
+
+ccxt_service:
+  # Exchange-specific rate limits (requests per second)
+  rate_limits:
+    binance:
+      spot: 1200  # 1200 req/min = 20 req/sec
+      futures: 1200
+      enableRateLimit: true
+      rateLimit: 50  # ms between requests
+    bybit:
+      spot: 120   # 120 req/sec
+      futures: 120
+      enableRateLimit: true
+      rateLimit: 8   # ms between requests
+    okx:
+      spot: 300   # 300 req/sec
+      futures: 300
+      enableRateLimit: true
+      rateLimit: 3   # ms between requests
+    kraken:
+      spot: 60    # 60 req/min = 1 req/sec
+      futures: 60
+      enableRateLimit: true
+      rateLimit: 1000 # ms between requests
+    coinbase:
+      spot: 10    # 10 req/sec
+      futures: 10
+      enableRateLimit: true
+      rateLimit: 100 # ms between requests
+
+# Collection intervals for different data types
+collection_intervals:
+  market_data: "30s"      # Every 30 seconds (was 5 minutes)
+  funding_rates: "60s"    # Every minute (was 5 minutes)
+  orderbook: "15s"        # Every 15 seconds
+  ticker: "10s"           # Every 10 seconds
+  ohlcv: "60s"            # Every minute
+
+# Concurrent workers per exchange
+concurrent_workers: 5
+
+# Batch processing settings
+batch_size: 100
+max_concurrent_requests: 50
+
+# Retry and backoff settings
+retry_attempts: 3
+retry_delay: "100ms"
+exponential_backoff: true
+
+# Database optimization
+database:
+  max_connections: 100
+  connection_pool_size: 50
+  batch_insert_size: 500
+  vacuum_frequency: "1h"
+
+# Monitoring and alerting
+monitoring:
+  rate_limit_threshold: 80  # Alert when 80% of rate limit reached
+  collection_lag_threshold: "30s"
+  error_rate_threshold: 5   # Alert if error rate > 5%
