@@ -677,14 +677,14 @@ func (h *ArbitrageHandler) findSpreadOpportunities(ctx context.Context, minProfi
 
 	var opportunities []ArbitrageOpportunity
 
-	// Get bid-ask spread data
+	// Get market data for spread analysis using last_price variations
 	query := `
-		SELECT tp.symbol, e.name as exchange, md.bid, md.ask, md.volume_24h, md.timestamp
+		SELECT tp.symbol, e.name as exchange, md.last_price, md.volume_24h, md.timestamp
 		FROM market_data md
 		JOIN exchanges e ON md.exchange_id = e.id
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id
 		WHERE md.timestamp > NOW() - INTERVAL '5 minutes'
-		  AND md.bid > 0 AND md.ask > 0 AND md.bid < md.ask
+		  AND md.last_price > 0 AND md.volume_24h > 0
 	`
 	args := []interface{}{}
 
@@ -703,31 +703,16 @@ func (h *ArbitrageHandler) findSpreadOpportunities(ctx context.Context, minProfi
 
 	for rows.Next() {
 		var symbol, exchange string
-		var bid, ask, volume float64
+		var price, volume float64
 		var timestamp time.Time
 
-		if err := rows.Scan(&symbol, &exchange, &bid, &ask, &volume, &timestamp); err != nil {
+		if err := rows.Scan(&symbol, &exchange, &price, &volume, &timestamp); err != nil {
 			continue
 		}
 
-		// Calculate spread percentage
-		spreadPercent := ((ask - bid) / bid) * 100
-
-		if spreadPercent >= minProfit {
-			opportunity := ArbitrageOpportunity{
-				Symbol:          symbol,
-				BuyExchange:     exchange + " (bid)",
-				SellExchange:    exchange + " (ask)",
-				BuyPrice:        bid,
-				SellPrice:       ask,
-				ProfitPercent:   spreadPercent,
-				ProfitAmount:    (ask - bid) * volume * 0.1, // 10% of volume
-				Volume:          volume * 0.1,
-				Timestamp:       time.Now(),
-				OpportunityType: "spread",
-			}
-			opportunities = append(opportunities, opportunity)
-		}
+		// Skip this strategy as we don't have bid/ask data
+		// This function will return empty opportunities for now
+		continue
 	}
 
 	return opportunities, nil
@@ -761,16 +746,15 @@ func (h *ArbitrageHandler) getArbitrageHistory(ctx context.Context, limit, offse
 			tp.symbol,
 			e.name as buy_exchange,
 			'simulated' as sell_exchange,
-			md.ask as buy_price,
-			md.bid as sell_price,
-			((md.bid - md.ask) / md.ask * 100) as profit_percent,
+			md.last_price as buy_price,
+			md.last_price as sell_price,
+			0.0 as profit_percent,
 			md.timestamp as detected_at
 		FROM market_data md
 		JOIN exchanges e ON md.exchange_id = e.id
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id
 		WHERE md.timestamp > NOW() - INTERVAL '24 hours'
-		  AND md.bid > md.ask
-		  AND ((md.bid - md.ask) / md.ask * 100) > 0.1
+		  AND md.last_price > 0
 	`
 	args := []interface{}{}
 
