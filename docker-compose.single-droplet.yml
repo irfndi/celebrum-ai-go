@@ -80,6 +80,10 @@ services:
       - CCXT_SERVICE_URL=http://ccxt-service:3001
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
       - SERVER_PORT=8080
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - FEATURE_TELEGRAM_BOT=${FEATURE_TELEGRAM_BOT:-true}
     volumes:
       - app_data:/data
     depends_on:
