@@ -113,7 +113,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "${JWT_SECRET:-your-jwt-secret-key-change-this}"
+  jwt_secret: ""
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:

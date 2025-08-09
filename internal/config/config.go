@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -17,6 +18,7 @@ type Config struct {
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
+	Security    SecurityConfig   `mapstructure:"security"`
 }
 
 type ServerConfig struct {
@@ -77,6 +79,12 @@ type ArbitrageConfig struct {
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
 }
 
+type SecurityConfig struct {
+	JWTSecret string `mapstructure:"jwt_secret"`
+	JWTExpiry string `mapstructure:"jwt_expiry"`
+	BcryptCost int    `mapstructure:"bcrypt_cost"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -90,6 +98,9 @@ func Load() (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
+	// Bind specific environment variables
+	viper.BindEnv("security.jwt_secret", "JWT_SECRET")
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
@@ -101,6 +112,11 @@ func Load() (*Config, error) {
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
+	}
+
+	// Validate JWT secret in non-development environments
+	if config.Environment != "development" && config.Security.JWTSecret == "" {
+		return nil, errors.New("JWT_SECRET environment variable is required in non-development environments")
 	}
 
 	return &config, nil
@@ -160,4 +176,9 @@ func setDefaults() {
 	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
 	viper.SetDefault("arbitrage.check_interval", "2m")
 	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
+
+	// Security
+	viper.SetDefault("security.jwt_secret", "")
+	viper.SetDefault("security.jwt_expiry", "24h")
+	viper.SetDefault("security.bcrypt_cost", 12)
 }
