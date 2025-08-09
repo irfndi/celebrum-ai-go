@@ -169,6 +169,15 @@ zero_downtime_deploy() {
         ln -sfn deployments/${TIMESTAMP} current
         cd current
         source .env
+        
+        # Fix Redis system-level memory setting on server
+        echo '🔧 Applying Redis system-level optimizations...'
+        echo 1 | sudo tee /proc/sys/vm/overcommit_memory > /dev/null || true
+        if ! grep -q \"vm.overcommit_memory\" /etc/sysctl.conf 2>/dev/null; then
+            echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf > /dev/null
+        fi
+        sudo sysctl -p > /dev/null 2>&1 || true
+        
         docker-compose -f docker-compose.prod.yml up -d --build
     "
     
