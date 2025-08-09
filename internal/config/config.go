@@ -83,7 +83,7 @@ type ArbitrageConfig struct {
 }
 
 type SecurityConfig struct {
-	JWTSecret  string `mapstructure:"jwt_secret"`
+	JWTSecret  string `mapstructure:"jwt_secret" json:"-" yaml:"-"`
 	JWTExpiry  string `mapstructure:"jwt_expiry"`
 	BcryptCost int    `mapstructure:"bcrypt_cost"`
 }
