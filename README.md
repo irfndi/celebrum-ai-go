@@ -141,6 +141,22 @@ make ci-check          # Run full CI suite
 
 ## Deployment
 
+### 🚀 Enhanced Deployment & Monitoring
+
+The project now includes comprehensive deployment automation and monitoring:
+
+- **Zero-downtime deployments** with automatic rollback
+- **Health monitoring** for all services (PostgreSQL, Redis, CCXT, Telegram)
+- **Automated recovery** for failed services
+- **Comprehensive logging** and alerting
+- **Backup automation** before deployments
+
+### 📚 New Documentation
+
+- **[Deployment Improvements Summary](docs/DEPLOYMENT_IMPROVEMENTS_SUMMARY.md)** - Complete overview of all fixes and improvements
+- **[Telegram Bot Troubleshooting](docs/TELEGRAM_BOT_TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Deployment Best Practices](docs/DEPLOYMENT_BEST_PRACTICES.md)** - Comprehensive deployment guide
+
 ### Automated CI/CD Pipeline
 
 The project includes a complete CI/CD pipeline using GitHub Actions that automatically:
@@ -170,6 +186,28 @@ make ci-check
 make ci-lint      # Run linter
 make ci-test      # Run tests with race detection
 make ci-build     # Build with version info
+```
+
+### Quick Deployment Commands
+
+```bash
+# Deploy to production (zero-downtime)
+make deploy
+
+# Deploy to staging
+make deploy-staging
+
+# Check production health
+make health-prod
+
+# Check service status
+make status-prod
+
+# Monitor all services
+./scripts/health-check.sh
+
+# Auto-recover failed services
+./scripts/health-check.sh --recover
 ```
 
 ### Manual Deployment

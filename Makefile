@@ -116,11 +116,19 @@ db-seed: ## Seed database with sample data
 ## Deployment
 deploy: ## Deploy to production
 	@echo "$(GREEN)Deploying to production...$(NC)"
-	./scripts/deploy.sh production
+	./scripts/deploy-enhanced.sh production
 
 deploy-staging: ## Deploy to staging
 	@echo "$(GREEN)Deploying to staging...$(NC)"
-	./scripts/deploy.sh staging
+	./scripts/deploy-enhanced.sh staging
+
+deploy-manual: build ## Manual deployment with rsync
+	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
+	./scripts/deploy.sh production
+
+deploy-rollback: ## Rollback deployment
+	@echo "$(GREEN)Rolling back deployment...$(NC)"
+	./scripts/deploy-enhanced.sh --rollback
 
 ## CI/CD
 ci-test: ## Run CI tests with proper environment
@@ -176,9 +184,17 @@ health: ## Check application health
 	@echo "$(GREEN)Checking application health...$(NC)"
 	curl -f http://localhost:8080/health || echo "$(RED)Health check failed$(NC)"
 
+health-prod: ## Check production health
+	@echo "$(GREEN)Checking production health...$(NC)"
+	curl -f https://localhost/health || echo "$(RED)Production health check failed$(NC)"
+
 status: ## Show service status
 	@echo "$(GREEN)Service Status:$(NC)"
 	docker compose -f $(DOCKER_COMPOSE_FILE) ps
+
+status-prod: ## Show production service status
+	@echo "$(GREEN)Production Service Status:$(NC)"
+	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) ps
 
 ## Logs
 logs: ## Show application logs

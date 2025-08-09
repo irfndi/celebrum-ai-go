@@ -13,6 +13,7 @@ type CCXTService interface {
 	Initialize(ctx context.Context) error
 	IsHealthy(ctx context.Context) bool
 	Close() error
+	GetServiceURL() string
 
 	// Exchange information
 	GetSupportedExchanges() []string

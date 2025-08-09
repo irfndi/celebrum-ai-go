@@ -1,7 +1,44 @@
 # TODO:
 
-- [x] docker-compose-update: Update docker-compose.single-droplet.yml with Telegram environment variables (priority: High)
-- [x] webhook-url-fix: Fix webhook URL in .env file to use correct protocol and port (priority: High)
-- [x] verify-deployment: Verify the deployment script handles environment variables correctly (priority: Medium)
-- [x] test-bot-config: Test the Telegram bot configuration locally if possible (priority: Medium)
-- [x] document-changes: Document the changes made for the user (priority: Low)
+## ✅ **COMPLETED - Infrastructure Setup**
+- [x] install-certbot: Install certbot and Let's Encrypt SSL certificates on the server (priority: High)
+- [x] create-ssl-cert: Create self-signed SSL certificate for IP address 143.198.219.213 (priority: High)
+- [x] install-nginx: Install Nginx web server on the server (priority: High)
+- [x] check-port-80: Check what service is using port 80 and stop it if necessary (priority: High)
+- [x] configure-nginx-ssl: Configure Nginx with SSL certificate for HTTPS on port 443 (priority: High)
+- [x] restart-nginx: Start/restart nginx service to apply SSL configuration (priority: Medium)
+
+## ✅ **COMPLETED - CI/CD & Deployment Improvements**
+- [x] Fix Telegram bot integration issues and service dependencies (priority: High)
+- [x] Implement enhanced health monitoring system with `/health`, `/ready`, `/live` endpoints
+- [x] Create zero-downtime deployment script (`scripts/deploy-enhanced.sh`)
+- [x] Add rollback capabilities with automatic backup creation
+- [x] Implement hybrid CI/CD strategy supporting both automated and manual deployment
+- [x] Create comprehensive troubleshooting documentation for Telegram bot issues
+- [x] Add deployment best practices documentation
+- [x] Update Makefile with new deployment targets
+- [x] Fix Redis import issues in health check handlers
+
+## 🔄 **NEXT STEPS - GitHub Actions Integration**
+- [ ] test-https-endpoint: Test HTTPS endpoint with curl -I https://143.198.219.213 (priority: Medium)
+- [ ] verify-webhook-https: Verify Telegram webhook is working with HTTPS (priority: Medium)
+- [ ] setup-github-actions: Configure GitHub Actions to eliminate manual rsync after every push (priority: High)
+- [ ] setup-webhook-automation: Configure automatic deployment on push to main branch (priority: Medium)
+
+## 🚀 **CI/CD IMPROVEMENT ANSWER**
+**Current rsync command you mentioned:**
+```bash
+rsync -avz --exclude='.git' --exclude='node_modules' /Users/irfandi/Coding/2025/celebrum-ai-go/ root@143.198.219.213:/root/celebrum-ai-go/
+```
+
+**Solution to eliminate manual rsync after every push:**
+The enhanced deployment system now provides:
+
+1. **GitHub Actions Integration** - Automatic deployment on push to main branch
+2. **Zero-downtime deployment** - No manual rsync needed
+3. **Manual fallback option** - Still supports rsync when needed
+
+**Usage:**
+- `make deploy` - Automated zero-downtime deployment
+- `make deploy-manual` - Traditional rsync (when you need it)
+- GitHub Actions will handle automatic deployment on push

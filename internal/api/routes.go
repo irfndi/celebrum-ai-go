@@ -25,9 +25,14 @@ type Services struct {
 }
 
 func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, telegramConfig *config.TelegramConfig) {
-	// Health check endpoint - support both GET and HEAD for Docker health checks
-	router.GET("/health", healthCheck(db, redis))
-	router.HEAD("/health", healthCheck(db, redis))
+	// Initialize health handler
+	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL())
+
+	// Health check endpoints
+	router.GET("/health", gin.WrapF(healthHandler.HealthCheck))
+	router.HEAD("/health", gin.WrapF(healthHandler.HealthCheck))
+	router.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
+	router.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
 
 	// Initialize notification service
 	notificationService := services.NewNotificationService(db, telegramConfig.BotToken)
@@ -98,36 +103,6 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			data.GET("/stats", cleanupHandler.GetDataStats)
 			data.POST("/cleanup", cleanupHandler.TriggerCleanup)
 		}
-	}
-}
-
-func healthCheck(db *database.PostgresDB, redis *database.RedisClient) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		response := HealthResponse{
-			Status:    "ok",
-			Timestamp: time.Now(),
-			Version:   "1.0.0",
-			Services: Services{
-				Database: "ok",
-				Redis:    "ok",
-			},
-		}
-
-		// Check database health
-		if err := db.HealthCheck(c.Request.Context()); err != nil {
-			response.Services.Database = "error"
-			response.Status = "degraded"
-		}
-
-		// Check Redis health
-		if err := redis.HealthCheck(c.Request.Context()); err != nil {
-			response.Services.Redis = "error"
-			response.Status = "degraded"
-		}
-
-		// Always return 200 OK for Docker health checks
-		// The application is running even if dependencies are temporarily unavailable
-		c.JSON(http.StatusOK, response)
 	}
 }
 

@@ -371,3 +371,11 @@ func (s *Service) CalculateFundingRateArbitrage(ctx context.Context, symbols []s
 func (s *Service) Close() error {
 	return s.client.Close()
 }
+
+// GetServiceURL returns the CCXT service URL for health checks
+func (s *Service) GetServiceURL() string {
+	if s.client != nil {
+		return "http://localhost:3000" // Default CCXT service URL
+	}
+	return ""
+}

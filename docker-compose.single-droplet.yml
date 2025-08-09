@@ -112,6 +112,8 @@ services:
       - "443:443"
     volumes:
       - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
+      - /etc/ssl/certs/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
+      - /etc/ssl/private/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
     depends_on:
       app:
         condition: service_healthy

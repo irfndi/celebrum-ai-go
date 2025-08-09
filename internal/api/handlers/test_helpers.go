@@ -111,3 +111,8 @@ func (m *MockCCXTService) CalculateFundingRateArbitrage(ctx context.Context, sym
 	args := m.Called(ctx, symbols, exchanges, minProfit)
 	return args.Get(0).([]ccxt.FundingArbitrageOpportunity), args.Error(1)
 }
+
+func (m *MockCCXTService) GetServiceURL() string {
+	args := m.Called()
+	return args.String(0)
+}
