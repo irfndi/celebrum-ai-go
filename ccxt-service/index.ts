@@ -42,11 +42,21 @@ const exchanges: ExchangeManager = {
     timeout: 30000,
     rateLimit: 1200, // Binance rate limit
     options: {
-      'defaultType': 'spot' // Ensure we're using spot trading
+      'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  bybit: new ccxt.bybit({ enableRateLimit: true }),
-  okx: new ccxt.okx({ enableRateLimit: true }),
+  bybit: new ccxt.bybit({ 
+    enableRateLimit: true,
+    options: {
+      'defaultType': 'future' // Enable futures trading for funding rates
+    }
+  }),
+  okx: new ccxt.okx({ 
+    enableRateLimit: true,
+    options: {
+      'defaultType': 'future' // Enable futures trading for funding rates
+    }
+  }),
   coinbasepro: new ccxt.coinbaseexchange({ enableRateLimit: true }),
   kraken: new ccxt.kraken({ enableRateLimit: true })
 };

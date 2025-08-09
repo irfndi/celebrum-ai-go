@@ -237,6 +237,12 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 		}
 	}
 
+	// Collect funding rates for futures markets
+	if err := c.collectFundingRates(worker); err != nil {
+		log.Printf("Failed to collect funding rates for %s: %v", worker.Exchange, err)
+		// Continue even if funding rate collection fails
+	}
+
 	return nil
 }
 
@@ -300,6 +306,12 @@ func (c *CollectorService) collectAllMarketData(worker *Worker) error {
 				time.Sleep(20 * time.Millisecond)
 			}
 		}
+	}
+
+	// Collect funding rates for futures markets
+	if err := c.collectFundingRates(worker); err != nil {
+		log.Printf("Failed to collect funding rates for %s: %v", worker.Exchange, err)
+		// Continue even if funding rate collection fails
 	}
 
 	return nil
