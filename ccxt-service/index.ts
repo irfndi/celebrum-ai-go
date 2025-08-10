@@ -433,6 +433,7 @@ console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
 
 export default {
   port: PORT,
+  hostname: '0.0.0.0',
   fetch: app.fetch,
   idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
 };

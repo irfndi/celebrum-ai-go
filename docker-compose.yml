@@ -46,10 +46,11 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ccxt-service:3001/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     profiles:
       - ccxt
 
@@ -63,14 +64,12 @@ services:
     container_name: celebrum-app
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
-      - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres
-      - DATABASE_DBNAME=celebrum_ai
-      - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
