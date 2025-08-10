@@ -5,21 +5,14 @@
 
 set -euo pipefail
 
-# --- Docker Compose Command Detection ---
-if command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
-elif docker compose version &> /dev/null; then
-    COMPOSE_CMD="docker compose"
-else
-    echo "Error: Neither docker-compose nor docker compose found. Please install one of them." >&2
-    exit 1
-fi
+# Docker Compose command will be detected remotely via SSH
+# Remote detection ensures compatibility with the server's Docker installation
 # --------------------------------------
 
-# Default configuration
-SERVER_USER="root"
-SERVER_IP="143.198.219.213"
-REMOTE_DIR="/root/celebrum-ai-go"
+# Default configuration - override with environment variables or command-line flags
+SERVER_USER="${SERVER_USER:-your_user}"
+SERVER_IP="${SERVER_IP:-your_server_ip}"
+REMOTE_DIR="${REMOTE_DIR:-/home/${SERVER_USER}/celebrum-ai-go}"
 LOCAL_DIR="$(pwd)"
 
 # Parse command line arguments
@@ -36,9 +29,12 @@ while getopts "s:d:u:h" opt; do
             ;;
         h)
             echo "Usage: $0 [-s server_ip] [-d remote_dir] [-u server_user]"
-            echo "  -s server_ip    Server IP address (default: 143.198.219.213)"
-            echo "  -d remote_dir   Remote directory path (default: /root/celebrum-ai-go)"
-            echo "  -u server_user  Server username (default: root)"
+            echo "  -s server_ip    Server IP address (default: your_server_ip)"
+            echo "  -d remote_dir   Remote directory path (default: /home/your_user/celebrum-ai-go)"
+            echo "  -u server_user  Server username (default: your_user)"
+            echo ""
+            echo "Environment variables can also be used:"
+            echo "  SERVER_USER, SERVER_IP, REMOTE_DIR"
             exit 0
             ;;
         \?)
@@ -90,7 +86,7 @@ fi"
 
 # Stop current services gracefully
 print_status "Stopping current services..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && $COMPOSE_CMD -f docker-compose.single-droplet.yml down --remove-orphans || true"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD -f docker-compose.single-droplet.yml down --remove-orphans || true"
 
 # Check if .env file exists locally, skip setup if it does
 if [ -f "$LOCAL_DIR/.env" ]; then
@@ -110,7 +106,7 @@ FEATURE_TELEGRAM_BOT=${FEATURE_TELEGRAM_BOT:-true}
 ENVIRONMENT=production
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/celebrum_ai
 REDIS_URL=redis://redis:6379
-CCXT_SERVICE_URL=http://ccxt-service:8081
+CCXT_SERVICE_URL=http://ccxt-service:3001
 EOF
 )
     else
@@ -133,11 +129,12 @@ FEATURE_TELEGRAM_BOT=true
 ENVIRONMENT=production
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/celebrum_ai
 REDIS_URL=redis://redis:6379
-CCXT_SERVICE_URL=http://ccxt-service:8081
+CCXT_SERVICE_URL=http://ccxt-service:3001
 EOF
 )
     fi
     echo "$ENV_CONTENT" | ssh "$SERVER" "cat > \"$REMOTE_DIR/.env\""
+    ssh "$SERVER" "chmod 600 \"$REMOTE_DIR/.env\""
 fi
 
 # Sync files to server using rsync
@@ -157,8 +154,8 @@ rsync -avz --delete \
 
 # Build and start services
 print_status "Building and starting services..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && $COMPOSE_CMD -f docker-compose.single-droplet.yml build --no-cache"
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && $COMPOSE_CMD -f docker-compose.single-droplet.yml up -d"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD -f docker-compose.single-droplet.yml build --no-cache"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD -f docker-compose.single-droplet.yml up -d"
 
 # Wait for services to start
 print_status "Waiting for services to start..."
@@ -166,20 +163,20 @@ sleep 30
 
 # Check service health
 print_status "Checking service health..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && $COMPOSE_CMD -f docker-compose.single-droplet.yml ps"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD -f docker-compose.single-droplet.yml ps"
 
 # Show logs for debugging
 print_status "Showing recent logs..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && $COMPOSE_CMD -f docker-compose.single-droplet.yml logs --tail=50"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD -f docker-compose.single-droplet.yml logs --tail=50"
 
 # Test health endpoints
 print_status "Testing health endpoints..."
 ssh "$SERVER" "curl -f http://localhost:8080/health || echo 'Main app health check failed'"
-ssh "$SERVER" "curl -f http://localhost:8081/health || echo 'CCXT service health check failed'"
+ssh "$SERVER" "curl -f http://localhost:3001/health || echo 'CCXT service health check failed'"
 
 print_status "Manual deployment completed!"
 print_status "Services should now be running on the server."
-print_status "Check status with: ssh $SERVER 'cd $REMOTE_DIR && $COMPOSE_CMD ps'"
+print_status "Check status with: ssh $SERVER 'cd $REMOTE_DIR && COMPOSE_CMD=\$(command -v docker-compose &>/dev/null && echo 'docker-compose' || echo 'docker compose') && \$COMPOSE_CMD ps'"
 print_status "Script executed with:"
 print_status "  Server: $SERVER"
 print_status "  Remote Directory: $REMOTE_DIR"

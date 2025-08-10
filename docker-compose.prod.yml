@@ -1,6 +1,6 @@
 # Docker Compose Production Configuration
 # This file is optimized for production deployments
-# Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 secrets:
   postgres_password:
@@ -20,6 +20,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
       - postgres_password
     volumes:
@@ -69,7 +70,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+    secrets:
+      - redis_password
     # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
@@ -80,7 +85,7 @@ services:
           cpus: '0.5'
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -95,8 +100,13 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USER=${POSTGRES_USER}
       - DATABASE_DBNAME=${POSTGRES_DB}
+      - DATABASE_PASSWORD_FILE=/run/secrets/postgres_password
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - TELEGRAM_BOT_TOKEN_FILE=/run/secrets/telegram_bot_token
+      - TELEGRAM_WEBHOOK_SECRET_FILE=/run/secrets/telegram_webhook_secret
       - CCXT_SERVICE_URL=http://ccxt-service:3001
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
     secrets:

@@ -179,8 +179,7 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
-          CCXT_SERVICE_URL=${{ secrets.CCXT_SERVICE_URL }}
-          CONFIG_PATH=configs/config.prod.yml
+          # Runtime variables are injected via environment variables at deploy time
         cache-from: type=gha
         cache-to: type=gha,mode=max
     

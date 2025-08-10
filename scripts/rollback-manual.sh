@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Manual rollback script for quick recovery
-set -euo pipefail
+set -Eeuo pipefail
+
+trap 'echo "Error: command failed at line $LINENO"' ERR
 
 # Default values
 DEPLOY_USER="${DEPLOY_USER:-deploy}"

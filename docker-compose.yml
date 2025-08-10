@@ -3,7 +3,6 @@ version: '3.8'
 services:
   postgres:
     image: postgres:17
-    container_name: celebrum-postgres
     restart: unless-stopped
     ports:
       - "5433:5432"
@@ -24,7 +23,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: celebrum-redis
     restart: unless-stopped
     ports:
       - "6380:6379"
@@ -41,10 +39,9 @@ services:
   ccxt-service:
     build:
       context: ./ccxt-service
-    container_name: celebrum-ccxt-service
     restart: unless-stopped
     ports:
-      - "3002:3001"
+      - "3001:3001"
     env_file:
       - .env
     healthcheck:
@@ -59,15 +56,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: celebrum-app
     restart: unless-stopped
     ports:
       - "8081:8080"
     env_file:
       - .env
     environment:
-      CCXT_SERVICE_URL: "http://ccxt-service:3002"
-      CONFIG_PATH: "config.yml"
+      CCXT_SERVICE_URL: "http://ccxt-service:3001"
+      CONFIG_PATH: "config.local.yml"
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       REDIS_HOST: redis
@@ -84,7 +80,6 @@ services:
 
   adminer:
     image: adminer
-    container_name: celebrum-adminer
     restart: unless-stopped
     ports:
       - "8082:8080"
@@ -95,7 +90,6 @@ services:
 
   redis-commander:
     image: rediscommander/redis-commander:latest
-    container_name: celebrum-redis-commander
     restart: unless-stopped
     ports:
       - "8083:8081"

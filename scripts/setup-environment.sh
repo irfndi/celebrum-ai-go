@@ -13,10 +13,10 @@ function error_handler() {
 }
 
 # --- Docker Compose Command Detection ---
-if command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
-elif docker compose version &> /dev/null; then
+if docker compose version &> /dev/null; then
     COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
 else
     echo "Error: Neither docker-compose nor docker compose found. Please install one of them." >&2
     exit 1
@@ -175,18 +175,19 @@ fi
 # Create SSL certificates for development (self-signed)
 if [[ "$ENVIRONMENT" == "development" ]]; then
     if ! command -v openssl &> /dev/null; then
-        print_error "openssl command not found. Please install openssl to generate certificates."
-        exit 1
-    fi
-    print_status "Creating self-signed SSL certificates for development..."
-    if [[ ! -f "configs/ssl/server.crt" ]] || [[ "$FORCE" == "true" ]]; then
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout configs/ssl/server.key \
-            -out configs/ssl/server.crt \
-            -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
-        print_status "Created self-signed SSL certificates"
+        print_warning "openssl command not found. Skipping SSL certificate generation."
+        print_warning "Please install openssl to generate certificates for development."
     else
-        print_status "SSL certificates already exist, skipping"
+        print_status "Creating self-signed SSL certificates for development..."
+        if [[ ! -f "configs/ssl/server.crt" ]] || [[ "$FORCE" == "true" ]]; then
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout configs/ssl/server.key \
+                -out configs/ssl/server.crt \
+                -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+            print_status "Created self-signed SSL certificates"
+        else
+            print_status "SSL certificates already exist, skipping"
+        fi
     fi
 fi
 

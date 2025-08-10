@@ -27,7 +27,7 @@ server:
 # Database configuration
 database:
   host: localhost
-  port: 5432
+  port: 5433
   user: postgres
   password: postgres
   dbname: celebrum_ai
@@ -40,7 +40,7 @@ database:
 # Redis configuration
 redis:
   host: localhost
-  port: 6379
+  port: 6380
   password: ""
   db: 0
   pool_size: 10
@@ -53,7 +53,7 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: http://localhost:3001
+  service_url: http://localhost:3002
   timeout: 30
   retry_attempts: 3
   retry_delay: 1s

@@ -12,6 +12,19 @@ ADD COLUMN IF NOT EXISTS has_spot BOOLEAN DEFAULT true;
 ALTER TABLE exchanges 
 ADD COLUMN IF NOT EXISTS has_futures BOOLEAN DEFAULT false;
 
+-- Backfill existing rows with default boolean values
+UPDATE exchanges 
+SET has_spot = true, 
+    has_futures = false
+WHERE has_spot IS NULL OR has_futures IS NULL;
+
+-- Make boolean columns NOT NULL after backfilling
+ALTER TABLE exchanges 
+ALTER COLUMN has_spot SET NOT NULL;
+
+ALTER TABLE exchanges 
+ALTER COLUMN has_futures SET NOT NULL;
+
 -- Add display_name column to exchanges table (also missing based on error logs)
 ALTER TABLE exchanges 
 ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
@@ -51,7 +64,13 @@ WHERE exchanges.id = duplicate_cte.id AND rn > 1;
 ALTER TABLE exchanges 
 ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
 
+-- Backfill existing rows with default status value
+UPDATE exchanges 
+SET status = 'active' 
+WHERE status IS NULL;
+
 -- Add named CHECK constraint for status column, only if it doesn't exist
+-- Make status NOT NULL after backfilling
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -62,6 +81,10 @@ BEGIN
         ADD CONSTRAINT exchanges_status_check 
         CHECK (status IN ('active', 'inactive', 'maintenance'));
     END IF;
+    
+    -- Alter column to NOT NULL after backfilling
+    ALTER TABLE exchanges 
+    ALTER COLUMN status SET NOT NULL;
 END $$;
 
 -- Create indexes for new columns

@@ -5,6 +5,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "bun run index.ts",
+    "start:ci": "bun run index.ts",
     "dev": "bun --watch index.ts",
     "build": "bun build index.ts --outdir ./dist --target node",
     "test": "bun test",

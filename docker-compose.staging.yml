@@ -28,7 +28,7 @@ services:
     volumes:
       - redis_data:/data
       - ./configs/redis.staging.conf:/usr/local/etc/redis/redis.conf:ro
-    command: sh -c "exec redis-server /usr/local/etc/redis/redis.conf --requirepass $$REDIS_PASSWORD"
+    command: sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then exec redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\"; else exec redis-server /usr/local/etc/redis/redis.conf; fi"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     mem_limit: 256M

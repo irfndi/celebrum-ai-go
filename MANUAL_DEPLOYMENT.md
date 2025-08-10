@@ -74,7 +74,8 @@ rsync -avz --delete \
 
 ```bash
 # Build and start services
-# Note: Use 'docker compose' if your Docker version uses the Compose V2 CLI.
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
+# Example with Compose V2: ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker compose -f docker-compose.single-droplet.yml build"
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml up -d"
 ```
@@ -83,6 +84,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 
 ```bash
 # Check service status
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
 
 # Check logs
@@ -116,6 +118,7 @@ This will:
 
 ```bash
 # Check individual service logs
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs ccxt-service"
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs app"
 
@@ -127,6 +130,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 
 ```bash
 # Check database status
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose exec postgres pg_isready"
 
 # Reset database if needed
@@ -137,7 +141,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 
 ```bash
 # Verify .env file exists and has correct values
-ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && cat .env | awk -F= '{print $1 \"=<redacted>\"}'"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && awk -F= '{print $1 \"=<redacted>\"}' .env"
 
 # Recreate .env file if corrupted
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .env && # then recreate using steps above"
@@ -163,6 +167,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .e
 
 ```bash
 # Watch live logs
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs -f"
 
 # Monitor specific service
@@ -173,6 +178,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 
 ```bash
 # Check all services
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
 
 # Test external endpoints
@@ -210,6 +216,7 @@ Replace all instances of:
 
 ```bash
 # Use build cache
+# Note: Use 'docker compose' (Compose V2) instead of 'docker-compose' (Compose V1) if your Docker version uses the newer CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
 
 # Pre-pull base images

@@ -435,7 +435,7 @@ app.notFound((c) => {
 // Start server with proper error handling and retry logic
 let server: Server | null = null;
 
-async function start() {
+export async function start() {
   let retryCount = 0;
   const maxRetries = 3;
   let lastError: unknown = null;
@@ -499,8 +499,7 @@ async function start() {
       console.log(`Retrying server start in ${delay.toFixed(0)}ms... (attempt ${retryCount}/${maxRetries})`);
       setTimeout(tryStartServer, delay);
     } else if (!server) {
-      console.error('Failed to start server after maximum retries. Last error:', lastError);
-      process.exit(1);
+      throw new Error(`Failed to start server after maximum retries. Last error: ${lastError}`);
     }
   }
 
@@ -509,5 +508,8 @@ async function start() {
 }
 
 if (import.meta.main) {
-  start();
+  start().catch(error => {
+    console.error('❌ Failed to start CCXT service:', error);
+    process.exit(1);
+  });
 }
