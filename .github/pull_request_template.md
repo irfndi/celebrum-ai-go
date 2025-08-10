@@ -57,12 +57,14 @@ Thank you for contributing to Celebrum AI! Please ensure your PR follows our gui
 <!-- Describe how you tested your changes -->
 
 ### ✅ Test Coverage
+
 - [ ] Unit tests added/updated
 - [ ] Integration tests added/updated
 - [ ] Manual testing completed
 - [ ] Performance tests run
 
 ### 🔍 Test Results
+
 ```bash
 # Run the following commands and paste results:
 make test
@@ -86,6 +88,7 @@ make build
 ## 📋 Checklist
 
 ### ✅ Pre-submission
+
 - [ ] I have read the [CONTRIBUTING.md](CONTRIBUTING.md) guidelines
 - [ ] My code follows the project's style guidelines
 - [ ] I have performed a self-review of my code
@@ -96,6 +99,7 @@ make build
 - [ ] New and existing unit tests pass locally with my changes
 
 ### 🔍 Code Quality
+
 - [ ] Code follows [Effective Go](https://golang.org/doc/effective_go.html) standards
 - [ ] TypeScript code follows project conventions
 - [ ] No hardcoded secrets or credentials
@@ -104,6 +108,7 @@ make build
 - [ ] Security best practices followed
 
 ### 📊 Performance
+
 - [ ] Performance impact assessed
 - [ ] No significant performance degradation
 - [ ] Database queries optimized
@@ -140,6 +145,7 @@ make build
 - **Testing needed**: <!-- What manual testing should be done? -->
 
 ### 🔄 After Review
+
 - [ ] Address review feedback
 - [ ] Update documentation if needed
 - [ ] Ensure CI/CD passes
@@ -147,6 +153,6 @@ make build
 
 ---
 
-**Thank you for contributing to Celebrum AI! 🎉**
+## 🎉 Thank you for contributing to Celebrum AI!
 
 *This PR template helps ensure quality and consistency across all contributions.*

@@ -209,6 +209,7 @@ test: add integration tests for arbitrage detection
 - **Pass all CI checks**
 
 ### PR Template
+
 ```markdown
 ## Description
 Brief description of changes

@@ -1,7 +1,7 @@
 name: Security Report
 description: Report a security vulnerability (Please read SECURITY.md first)
 title: "[SECURITY] "
-labels: ["security", "critical"]
+labels: ["security"]
 assignees: ["irfandi"]
 body:
   - type: markdown

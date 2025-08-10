@@ -10,12 +10,23 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+      timezone: "UTC"
     open-pull-requests-limit: 10
     commit-message:
       prefix: "chore"
       include: "scope"
     reviewers:
       - "irfandi"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # CCXT service (Bun/Node.js)
   - package-ecosystem: "npm"
@@ -24,12 +35,23 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+      timezone: "UTC"
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore"
       include: "scope"
     reviewers:
       - "irfandi"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Docker dependencies
   - package-ecosystem: "docker"
@@ -38,12 +60,23 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+      timezone: "UTC"
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore"
       include: "scope"
     reviewers:
       - "irfandi"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Docker dependencies for CCXT service
   - package-ecosystem: "docker"
@@ -52,9 +85,20 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+      timezone: "UTC"
     open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
       include: "scope"
     reviewers:
       - "irfandi"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
