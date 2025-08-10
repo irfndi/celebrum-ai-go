@@ -21,8 +21,13 @@ type Service struct {
 
 // NewService creates a new CCXT service instance
 func NewService(cfg *config.CCXTConfig) *Service {
+	// Debug: Log the actual service URL being used
+	fmt.Printf("DEBUG: CCXT Service URL from config: %s\n", cfg.ServiceURL)
+	client := NewClient(cfg)
+	fmt.Printf("DEBUG: CCXT Service initialized with ServiceURL: %s\n", cfg.ServiceURL)
+	fmt.Printf("DEBUG: Creating CCXT service with ServiceURL: %s\n", cfg.ServiceURL)
 	return &Service{
-		client:             NewClient(cfg),
+		client:             client,
 		supportedExchanges: make(map[string]ExchangeInfo),
 	}
 }
@@ -375,7 +380,10 @@ func (s *Service) Close() error {
 // GetServiceURL returns the CCXT service URL for health checks
 func (s *Service) GetServiceURL() string {
 	if s.client != nil {
-		return "http://localhost:3000" // Default CCXT service URL
+		url := s.client.BaseURL
+		fmt.Printf("DEBUG: CCXT ServiceURL returning: %s\n", url)
+		return url
 	}
+	fmt.Printf("DEBUG: CCXT ServiceURL returning empty string (client is nil)\n")
 	return ""
 }

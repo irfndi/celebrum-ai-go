@@ -58,6 +58,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - CCXT_SERVICE_URL=http://ccxt-service:3001
     container_name: celebrum-app
     ports:
       - "8080:8080"
