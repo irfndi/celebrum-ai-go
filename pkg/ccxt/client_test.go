@@ -17,7 +17,7 @@ import (
 
 func TestNewClient(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://ccxt-service:3001",
 		Timeout:    30,
 	}
 

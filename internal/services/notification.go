@@ -102,13 +102,13 @@ func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context,
 func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userModels.User, error) {
 	query := `
 		SELECT id, email, telegram_chat_id, subscription_tier, created_at, updated_at
-		FROM users 
-		WHERE telegram_chat_id IS NOT NULL 
+		FROM users
+		WHERE telegram_chat_id IS NOT NULL
 		  AND telegram_chat_id != ''
 		  AND id NOT IN (
-			  SELECT DISTINCT user_id 
-			  FROM user_alerts 
-			  WHERE alert_type = 'arbitrage' 
+			  SELECT DISTINCT user_id
+			  FROM user_alerts
+			  WHERE alert_type = 'arbitrage'
 			    AND is_active = false
 			    AND conditions->>'notifications_enabled' = 'false'
 		  )
@@ -232,10 +232,10 @@ func (ns *NotificationService) logNotification(ctx context.Context, userID, noti
 // CheckUserNotificationPreferences checks if a user wants to receive arbitrage notifications
 func (ns *NotificationService) CheckUserNotificationPreferences(ctx context.Context, userID string) (bool, error) {
 	query := `
-		SELECT COUNT(*) 
-		FROM user_alerts 
-		WHERE user_id = $1 
-		  AND alert_type = 'arbitrage' 
+		SELECT COUNT(*)
+		FROM user_alerts
+		WHERE user_id = $1
+		  AND alert_type = 'arbitrage'
 		  AND is_active = false
 		  AND conditions->>'notifications_enabled' = 'false'
 	`

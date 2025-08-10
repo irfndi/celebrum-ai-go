@@ -54,7 +54,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://ccxt-service:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 15s
       retries: 5

@@ -164,9 +164,9 @@ func (h *AnalysisHandler) GetTradingSignals(c *gin.Context) {
 func (h *AnalysisHandler) getOHLCVData(ctx context.Context, symbol, exchange, timeframe string, limit int) ([]OHLCV, error) {
 	// Try to get data from database first (market_data table)
 	query := `
-		SELECT timestamp, bid as close, ask as open, 
+		SELECT timestamp, bid as close, ask as open,
 		       GREATEST(bid, ask) as high, LEAST(bid, ask) as low, volume
-		FROM market_data 
+		FROM market_data
 		WHERE symbol = $1 AND exchange = $2
 		  AND timestamp > NOW() - INTERVAL '24 hours'
 		ORDER BY timestamp ASC
@@ -203,7 +203,7 @@ func (h *AnalysisHandler) getOHLCVData(ctx context.Context, symbol, exchange, ti
 func (h *AnalysisHandler) simulateOHLCVFromTickers(ctx context.Context, symbol, exchange string, limit int) ([]OHLCV, error) {
 	query := `
 		SELECT timestamp, bid, ask, volume
-		FROM market_data 
+		FROM market_data
 		WHERE symbol = $1 AND exchange = $2
 		  AND timestamp > NOW() - INTERVAL '6 hours'
 		ORDER BY timestamp ASC
@@ -531,7 +531,7 @@ func (h *AnalysisHandler) getAllTradingSignals(ctx context.Context, timeframe st
 	// Get active trading pairs from recent market data
 	query := `
 		SELECT DISTINCT symbol, exchange
-		FROM market_data 
+		FROM market_data
 		WHERE timestamp > NOW() - INTERVAL '1 hour'
 		LIMIT 20
 	`

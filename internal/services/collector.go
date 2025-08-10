@@ -268,7 +268,7 @@ func (c *CollectorService) collectTickerData(exchange, symbol string) error {
 
 	// Save market data to database with proper column mapping
 	_, err = c.db.Pool.Exec(c.ctx,
-		`INSERT INTO market_data (exchange_id, trading_pair_id, last_price, volume_24h, timestamp, created_at) 
+		`INSERT INTO market_data (exchange_id, trading_pair_id, last_price, volume_24h, timestamp, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		exchangeID, tradingPairID, ticker.Price, ticker.Volume, ticker.Timestamp, time.Now())
 	if err != nil {

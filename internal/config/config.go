@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -109,11 +111,11 @@ func Load() (*Config, error) {
 
 	// Set default values (after environment variables are bound)
 	setDefaults()
-	
+
 	// Debug: Log configuration sources
 	log.Printf("DEBUG: Config file path: %s", viper.ConfigFileUsed())
 	log.Printf("DEBUG: CCXT service_url from viper: %s", viper.GetString("ccxt.service_url"))
-	log.Printf("DEBUG: CCXT_SERVICE_URL from env: %s", viper.GetString("CCXT_SERVICE_URL"))
+	log.Printf("DEBUG: CCXT_SERVICE_URL from env: %s", os.Getenv("CCXT_SERVICE_URL"))
 	log.Printf("DEBUG: Effective CCXT config: %+v", viper.GetStringMap("ccxt"))
 	if err := viper.BindEnv("database.host", "DATABASE_HOST"); err != nil {
 		return nil, fmt.Errorf("failed to bind DATABASE_HOST environment variable: %w", err)
@@ -161,7 +163,7 @@ func Load() (*Config, error) {
 
 	// Debug: Log configuration after reading config file
 	log.Printf("DEBUG: After reading config file - CCXT service_url: %s", viper.GetString("ccxt.service_url"))
-	log.Printf("DEBUG: Environment CCXT_SERVICE_URL: %s", viper.GetString("CCXT_SERVICE_URL"))
+	log.Printf("DEBUG: Environment CCXT_SERVICE_URL: %s", os.Getenv("CCXT_SERVICE_URL"))
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {

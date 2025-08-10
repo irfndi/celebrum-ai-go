@@ -46,7 +46,7 @@ lint: ## Run linter
 	@echo "$(GREEN)Running linter...$(NC)"
 	golangci-lint run
 
-fmt: ## Format code
+go-fmt: ## Format code
 	@echo "$(GREEN)Formatting code...$(NC)"
 	go fmt ./...
 	goimports -w .
@@ -81,7 +81,7 @@ dev-down: ## Stop development environment
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
-	go install github.com/cosmtrek/air@latest
+	go install github.com/air-verse/air@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	@echo "$(GREEN)Tools installed!$(NC)"
@@ -150,11 +150,50 @@ docker-push: ## Push Docker image to registry
 	@echo "$(GREEN)Pushing Docker image...$(NC)"
 	docker push $(DOCKER_IMAGE)
 
+## TypeScript/Go Combined Commands
+ts-fmt: ## Format TypeScript code
+	@echo "$(GREEN)Formatting TypeScript code...$(NC)"
+	cd ccxt-service && bun run oxlint --fix || echo "$(YELLOW)No format script found, skipping$(NC)"
+
+ts-lint: ## Lint TypeScript code
+	@echo "$(GREEN)Linting TypeScript code...$(NC)"
+	cd ccxt-service && bun run oxlint || echo "$(YELLOW)No lint script found, skipping$(NC)"
+
+ts-test: ## Run TypeScript tests
+	@echo "$(GREEN)Running TypeScript tests...$(NC)"
+	cd ccxt-service && bun test
+
+ts-build: ## Build TypeScript service
+	@echo "$(GREEN)Building TypeScript service...$(NC)"
+	cd ccxt-service && bun run build
+
+## Type Checking
+go-typecheck: ## Run Go type checking
+	@echo "$(GREEN)Running Go type checking...$(NC)"
+	go vet ./...
+	@echo "$(GREEN)Type checking complete!$(NC)"
+
+## Combined Commands
+all-fmt: go-fmt ts-fmt ## Format both Go and TypeScript code
+all-lint: lint go-typecheck ts-lint ## Lint both Go and TypeScript code
+all-test: test ts-test ## Run both Go and TypeScript tests
+all-build: build ts-build ## Build both Go and TypeScript services
+
+## Setup and Installation
+setup-all: install-tools ccxt-setup ## Install all development tools
+	@echo "$(GREEN)All development tools installed!$(NC)"
+
+## Health Checks
+health-all: health ## Check health of all services
+	@echo "$(GREEN)Checking CCXT service health...$(NC)"
+	curl -f http://localhost:3001/health || echo "$(RED)CCXT service health check failed$(NC)"
+
 ## Utilities
 clean: ## Clean build artifacts
 	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"
 	rm -rf bin/
 	rm -f coverage.out coverage.html
+	cd ccxt-service && rm -rf dist/
 	docker system prune -f
 	@echo "$(GREEN)Clean complete!$(NC)"
 

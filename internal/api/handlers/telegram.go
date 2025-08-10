@@ -166,7 +166,7 @@ func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID
 	now := time.Now()
 
 	_, err = h.db.Pool.Exec(ctx, `
-		INSERT INTO users (id, email, telegram_chat_id, subscription_tier, created_at, updated_at) 
+		INSERT INTO users (id, email, telegram_chat_id, subscription_tier, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		userID_str, email, telegramChatID, subscriptionTier, now, now)
 	if err != nil {
