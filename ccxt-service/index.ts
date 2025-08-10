@@ -69,6 +69,7 @@ app.get('/health', (c) => {
     service: 'ccxt-service',
     version: '1.0.0'
   };
+  console.log('Health check requested at', new Date().toISOString());
   return c.json(response);
 });
 
@@ -428,12 +429,19 @@ app.notFound((c) => {
 });
 
 // Start server
-console.log(`🚀 CCXT Service starting on port ${PORT}`);
-console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
-
-export default {
+const server = Bun.serve({
   port: PORT,
   hostname: '0.0.0.0',
   fetch: app.fetch,
   idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
-};
+});
+
+console.log(`🚀 CCXT Service starting on port ${PORT}`);
+console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
+
+// Add startup delay to ensure service is fully ready
+setTimeout(() => {
+  console.log('✅ CCXT Service is ready');
+}, 2000);
+
+export default server;
