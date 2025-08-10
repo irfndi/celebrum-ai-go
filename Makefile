@@ -5,7 +5,9 @@ APP_NAME=celebrum-ai
 GO_VERSION=1.24
 DOCKER_IMAGE=$(APP_NAME):latest
 DOCKER_COMPOSE_FILE=docker-compose.yml
-DOCKER_COMPOSE_PROD_FILE=docker-compose.single-droplet.yml
+DOCKER_COMPOSE_DEV_FILE=docker-compose.override.yml
+DOCKER_COMPOSE_STAGING_FILE=docker-compose.staging.yml
+DOCKER_COMPOSE_PROD_FILE=docker-compose.prod.yml
 
 # Colors for output
 RED=\033[0;31m
@@ -72,14 +74,41 @@ dev: ## Run with hot reload (requires air)
 	air
 
 ## Environment Setup
-dev-setup: ## Setup development environment
+setup-dev: ## Setup development environment with new config
 	@echo "$(GREEN)Setting up development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
-	@echo "$(GREEN)Development environment ready!$(NC)"
+	./scripts/setup-environment.sh -e development
+
+dev-up: ## Start development environment
+	@echo "$(GREEN)Starting development environment...$(NC)"
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_DEV_FILE) up -d
 
 dev-down: ## Stop development environment
 	@echo "$(YELLOW)Stopping development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) down
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_DEV_FILE) down
+
+setup-staging: ## Setup staging environment
+	@echo "$(GREEN)Setting up staging environment...$(NC)"
+	./scripts/setup-environment.sh -e staging
+
+staging-up: ## Start staging environment
+	@echo "$(GREEN)Starting staging environment...$(NC)"
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_STAGING_FILE) up -d
+
+staging-down: ## Stop staging environment
+	@echo "$(YELLOW)Stopping staging environment...$(NC)"
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_STAGING_FILE) down
+
+setup-prod: ## Setup production environment
+	@echo "$(GREEN)Setting up production environment...$(NC)"
+	./scripts/setup-environment.sh -e production
+
+prod-up: ## Start production environment
+	@echo "$(GREEN)Starting production environment...$(NC)"
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_PROD_FILE) up -d
+
+prod-down: ## Stop production environment
+	@echo "$(YELLOW)Stopping production environment...$(NC)"
+	docker-compose -f $(DOCKER_COMPOSE_FILE) -f $(DOCKER_COMPOSE_PROD_FILE) down
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"

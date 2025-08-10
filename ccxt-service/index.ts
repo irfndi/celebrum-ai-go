@@ -19,9 +19,11 @@ import type {
   FundingRate,
   FundingRateResponse
 } from './types';
+import type { Server } from 'bun';
 
 // Load environment variables
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8081;
+const numericPort = Number(PORT);
 
 // Initialize Hono app
 const app = new Hono();
@@ -36,8 +38,9 @@ app.use('*', logger());
 // For now, we rely on exchange-level rate limiting via CCXT
 
 // Initialize supported exchanges
+const coinbaseInstance = new ccxt.coinbaseexchange({ enableRateLimit: true });
 const exchanges: ExchangeManager = {
-  binance: new ccxt.binance({ 
+  binance: new ccxt.binance({
     enableRateLimit: true,
     timeout: 30000,
     rateLimit: 1200, // Binance rate limit
@@ -45,19 +48,20 @@ const exchanges: ExchangeManager = {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  bybit: new ccxt.bybit({ 
+  bybit: new ccxt.bybit({
     enableRateLimit: true,
     options: {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  okx: new ccxt.okx({ 
+  okx: new ccxt.okx({
     enableRateLimit: true,
     options: {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  coinbasepro: new ccxt.coinbaseexchange({ enableRateLimit: true }),
+  coinbase: coinbaseInstance,
+  coinbasepro: coinbaseInstance, // Alias for backward compatibility
   kraken: new ccxt.kraken({ enableRateLimit: true })
 };
 
@@ -428,20 +432,84 @@ app.notFound((c) => {
   return c.json(errorResponse, 404);
 });
 
-// Start server
-const server = Bun.serve({
-  port: PORT,
-  hostname: '0.0.0.0',
-  fetch: app.fetch,
-  idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
-});
+// Start server with proper error handling and retry logic
+let server: Server | null = null;
 
-console.log(`🚀 CCXT Service starting on port ${PORT}`);
-console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
+export async function start() {
+  let retryCount = 0;
+  const maxRetries = 3;
+  let lastError: unknown = null;
 
-// Add startup delay to ensure service is fully ready
-setTimeout(() => {
-  console.log('✅ CCXT Service is ready');
-}, 2000);
+  function startServer() {
+    try {
+      server = Bun.serve({
+        port: numericPort,
+        hostname: '0.0.0.0',
+        fetch: app.fetch,
+        idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
+      });
 
-export default server;
+      console.log(`🚀 CCXT Service starting on port ${PORT}`);
+      console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
+
+      // Add startup delay to ensure service is fully ready
+      setTimeout(() => {
+        console.log('✅ CCXT Service is ready');
+      }, 2000);
+
+      return server;
+    } catch (error) {
+      lastError = error;
+      console.error(`Failed to start server on port ${PORT}:`, error);
+      return null;
+    }
+  }
+
+  let shuttingDown = false;
+  // Handle graceful shutdown
+  function gracefulShutdown() {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    console.log('Received shutdown signal, closing server...');
+    if (server) {
+      try {
+        server.stop();
+        console.log('Server stopped gracefully');
+      } catch (error) {
+        console.error('Error while stopping the server:', error);
+      }
+    }
+    process.exit(0);
+  }
+
+  // Handle signals
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
+
+  // Start server with retry logic
+  function tryStartServer() {
+    server = startServer();
+    
+    if (!server && retryCount < maxRetries) {
+      retryCount++;
+      const jitter = Math.random() * 1000; // Add jitter to avoid thundering herd
+      const delay = 2000 + jitter;
+      console.log(`Retrying server start in ${delay.toFixed(0)}ms... (attempt ${retryCount}/${maxRetries})`);
+      setTimeout(tryStartServer, delay);
+    } else if (!server) {
+      throw new Error(`Failed to start server after maximum retries. Last error: ${lastError}`);
+    }
+  }
+
+  // Initial server start
+  tryStartServer();
+}
+
+if (import.meta.main) {
+  start().catch(error => {
+    console.error('❌ Failed to start CCXT service:', error);
+    process.exit(1);
+  });
+}

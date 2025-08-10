@@ -1,0 +1,135 @@
+# Celebrum AI Staging Configuration
+# Optimized for staging environment with realistic settings
+
+# Application environment
+environment: staging
+
+# Logging configuration
+logging:
+  level: info
+  format: json
+  output: stdout
+
+# Server configuration
+server:
+  port: 8080
+  host: 0.0.0.0
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 60s
+  allowed_origins:
+    - "*"
+
+# Database configuration
+database:
+  host: postgres
+  port: 5432
+  user: ${POSTGRES_USER:-postgres}
+  password: ${POSTGRES_PASSWORD:-postgres}
+  dbname: ${POSTGRES_DB:-celebrum_staging}
+  sslmode: disable
+  max_open_conns: 20
+  max_idle_conns: 10
+  conn_max_lifetime: 300s
+  conn_max_idle_time: 60s
+
+# Redis configuration
+redis:
+  host: redis
+  port: 6379
+  password: ${REDIS_PASSWORD:-}
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  idle_timeout: 300s
+
+# CCXT Service configuration
+ccxt:
+  service_url: http://ccxt-service:3001
+  timeout: 30
+  retry_attempts: 3
+  retry_delay: 1s
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+# Telegram Bot configuration
+telegram:
+  bot_token: "${BOT_TOKEN}"
+  webhook_url: "https://staging.yourdomain.com/api/v1/telegram/webhook"
+  webhook_secret: "${WEBHOOK_SECRET}"
+  timeout: 30s
+
+# Market Data configuration
+market_data:
+  collection_interval: 30s
+  batch_size: 100
+  max_retries: 3
+  timeout: 15s
+  exchanges:
+    - binance
+    - coinbase
+    - kraken
+    - bitfinex
+
+# Arbitrage configuration
+arbitrage:
+  min_profit_threshold: 0.5
+  max_trade_amount: 1000.0
+  check_interval: 15s
+
+# Technical Analysis configuration
+technical_analysis:
+  indicators:
+    - RSI
+    - MACD
+    - BollingerBands
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  calculation_interval: 30s
+
+# Security configuration
+security:
+  jwt_secret: "${JWT_SECRET}"
+  jwt_expiry: 24h
+  bcrypt_cost: 12
+  rate_limit:
+    requests_per_minute: 100
+    burst: 200
+
+# Monitoring configuration
+monitoring:
+  metrics_enabled: true
+  metrics_port: 9090
+  health_check_interval: 30s
+  prometheus:
+    enabled: true
+    path: /metrics
+
+# Feature flags
+features:
+  telegram_bot: true
+  web_interface: true
+  api_v1: true
+  real_trading: false
+  paper_trading: true
+  analytics_persistence: true
+
+# External APIs
+external_apis:
+  coingecko:
+    base_url: https://api.coingecko.com/api/v3
+    timeout: 10s
+    rate_limit: 20
+  coinmarketcap:
+    base_url: https://pro-api.coinmarketcap.com/v1
+    api_key: "${CMC_API_KEY}"
+    timeout: 10s
+    rate_limit: 20
