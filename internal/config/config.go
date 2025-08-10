@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"os"
-
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -112,11 +110,7 @@ func Load() (*Config, error) {
 	// Set default values (after environment variables are bound)
 	setDefaults()
 
-	// Debug: Log configuration sources
-	log.Printf("DEBUG: Config file path: %s", viper.ConfigFileUsed())
-	log.Printf("DEBUG: CCXT service_url from viper: %s", viper.GetString("ccxt.service_url"))
-	log.Printf("DEBUG: CCXT_SERVICE_URL from env: %s", os.Getenv("CCXT_SERVICE_URL"))
-	log.Printf("DEBUG: Effective CCXT config: %+v", viper.GetStringMap("ccxt"))
+	// Configuration sources will be logged after config is loaded
 	if err := viper.BindEnv("database.host", "DATABASE_HOST"); err != nil {
 		return nil, fmt.Errorf("failed to bind DATABASE_HOST environment variable: %w", err)
 	}
@@ -149,7 +143,6 @@ func Load() (*Config, error) {
 	}
 
 	// Read config file
-	log.Printf("DEBUG: Looking for config file at: %s", viper.ConfigFileUsed())
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -160,10 +153,6 @@ func Load() (*Config, error) {
 	} else {
 		log.Printf("DEBUG: Config file loaded: %s", viper.ConfigFileUsed())
 	}
-
-	// Debug: Log configuration after reading config file
-	log.Printf("DEBUG: After reading config file - CCXT service_url: %s", viper.GetString("ccxt.service_url"))
-	log.Printf("DEBUG: Environment CCXT_SERVICE_URL: %s", os.Getenv("CCXT_SERVICE_URL"))
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
@@ -194,11 +183,8 @@ func Load() (*Config, error) {
 	// Update config with normalized environment
 	config.Environment = environment
 
-	// Debug: Log the final CCXT service URL
-	log.Printf("DEBUG: Final CCXT ServiceURL from config: %s", config.CCXT.ServiceURL)
-	log.Printf("DEBUG: CCXT config dump: %+v", config.CCXT)
-	log.Printf("DEBUG: Environment CCXT_SERVICE_URL: %s", viper.GetString("CCXT_SERVICE_URL"))
-	log.Printf("DEBUG: Viper CCXT service_url: %s", viper.GetString("ccxt.service_url"))
+	// Debug: Log final configuration
+	log.Printf("DEBUG: CCXT ServiceURL=%s timeout=%d", config.CCXT.ServiceURL, config.CCXT.Timeout)
 
 	return &config, nil
 }
@@ -235,9 +221,7 @@ func setDefaults() {
 	viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
 	viper.SetDefault("ccxt.timeout", 30)
 
-	// Debug: Log the actual CCXT service URL being loaded
-	log.Printf("CCXT service_url from config: %s", viper.GetString("ccxt.service_url"))
-	log.Printf("CCXT service_url from env: %s", viper.GetString("CCXT_SERVICE_URL"))
+	// Configuration defaults set silently to avoid side effects
 
 	// Telegram
 	viper.SetDefault("telegram.bot_token", "")

@@ -32,7 +32,6 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 
 	// Log the actual service URL being used
 	log.Printf("CCXT Service URL from config: %s", cfg.ServiceURL)
-	fmt.Printf("DEBUG: Creating CCXT client with ServiceURL: %s\n", cfg.ServiceURL)
 
 	client := &Client{
 		HTTPClient: &http.Client{
@@ -41,7 +40,6 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 		BaseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
 		timeout: timeout,
 	}
-	fmt.Printf("DEBUG: CCXT client created with BaseURL: %s\n", client.BaseURL)
 	log.Printf("DEBUG: CCXT Client initialized with BaseURL: %s", client.BaseURL)
 	return client
 }
