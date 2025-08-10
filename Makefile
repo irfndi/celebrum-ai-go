@@ -14,8 +14,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage lint fmt go-fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean \
-ts-fmt ts-lint ts-test ts-build go-typecheck all-fmt all-lint all-test all-build setup-all health-all
+.PHONY: all help build test test-coverage lint fmt go-fmt fmt-check run dev dev-setup dev-down install-tools security docker-build docker-run docker-prod docker-push db-migrate db-seed deploy deploy-staging deploy-manual deploy-rollback ci-test ci-lint ci-build ci-check ts-fmt ts-lint ts-test ts-build ensure-bun go-typecheck all-fmt all-lint all-test all-build setup-all health-all clean docker-prune clean-deep mod-tidy mod-download ccxt-setup health
 
 # Default target
 all: build
@@ -87,6 +86,7 @@ install-tools: ## Install development tools
 	go install github.com/air-verse/air@v1.52.0
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0
 	go install golang.org/x/tools/cmd/goimports@v0.24.0
+	go install github.com/securecodewarrior/gosec/v2/cmd/gosec@v2.20.0
 	@echo "$(GREEN)Tools installed!$(NC)"
 
 security: ## Run security scan
@@ -159,11 +159,19 @@ ensure-bun:
 
 ts-fmt: ensure-bun ## Format TypeScript code
 	@echo "$(GREEN)Formatting TypeScript code...$(NC)"
-	cd ccxt-service && bun run format || echo "$(YELLOW)No format script found, skipping$(NC)"
+	@if [ -d "ccxt-service" ]; then \
+		cd ccxt-service && bun run format; \
+	else \
+		echo "$(YELLOW)ccxt-service directory not found, skipping TypeScript formatting$(NC)"; \
+	fi
 
 ts-lint: ensure-bun ## Lint TypeScript code
 	@echo "$(GREEN)Linting TypeScript code...$(NC)"
-	cd ccxt-service && bun run lint || echo "$(YELLOW)No lint script found, skipping$(NC)"
+	@if [ -d "ccxt-service" ]; then \
+		cd ccxt-service && bun run lint; \
+	else \
+		echo "$(YELLOW)ccxt-service directory not found, skipping TypeScript linting$(NC)"; \
+	fi
 
 ts-test: ensure-bun ## Run TypeScript tests
 	@echo "$(GREEN)Running TypeScript tests...$(NC)"
@@ -186,7 +194,7 @@ all-test: test ts-test ## Run both Go and TypeScript tests
 all-build: build ts-build ## Build both Go and TypeScript services
 
 ## Setup and Installation
-setup-all: install-tools mod-download ccxt-setup ## Install all development tools
+setup-all: install-tools ensure-bun mod-download ccxt-setup ## Install all development tools
 	@echo "$(GREEN)All development tools installed!$(NC)"
 
 ## Health Checks
@@ -199,7 +207,7 @@ clean: ## Clean build artifacts
 	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"
 	rm -rf bin/
 	rm -f coverage.out coverage.html
-	cd ccxt-service && rm -rf dist/
+	@if [ -d "ccxt-service" ]; then rm -rf ccxt-service/dist/; fi
 	@echo "$(GREEN)Clean complete!$(NC)"
 
 docker-prune: ## Clean up Docker resources
