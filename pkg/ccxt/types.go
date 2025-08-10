@@ -3,6 +3,7 @@ package ccxt
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -21,8 +22,10 @@ type Service struct {
 
 // NewService creates a new CCXT service instance
 func NewService(cfg *config.CCXTConfig) *Service {
+	log.Printf("DEBUG: Creating CCXT service with URL: %s", cfg.ServiceURL)
+	client := NewClient(cfg)
 	return &Service{
-		client:             NewClient(cfg),
+		client:             client,
 		supportedExchanges: make(map[string]ExchangeInfo),
 	}
 }
@@ -375,7 +378,7 @@ func (s *Service) Close() error {
 // GetServiceURL returns the CCXT service URL for health checks
 func (s *Service) GetServiceURL() string {
 	if s.client != nil {
-		return "http://localhost:3000" // Default CCXT service URL
+		return s.client.BaseURL
 	}
 	return ""
 }

@@ -22,6 +22,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/server/m
 # Final stage
 FROM alpine:latest
 
+ARG CCXT_SERVICE_URL="http://ccxt-service:3001"
+ENV CCXT_SERVICE_URL=${CCXT_SERVICE_URL}
+
 # Install ca-certificates and wget for HTTPS requests and health checks
 RUN apk --no-cache add ca-certificates tzdata wget
 

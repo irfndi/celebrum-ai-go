@@ -221,7 +221,7 @@ func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 
 	// Update user profile
 	query := `
-		UPDATE users 
+		UPDATE users
 		SET telegram_chat_id = $2, updated_at = $3
 		WHERE id = $1
 	`
@@ -278,7 +278,7 @@ func (h *UserHandler) getUserByEmail(ctx context.Context, email string) (*models
 
 	var user models.User
 	query := `
-		SELECT id, email, password_hash, telegram_chat_id, 
+		SELECT id, email, password_hash, telegram_chat_id,
 		       subscription_tier, created_at, updated_at
 		FROM users WHERE email = $1
 	`
@@ -303,7 +303,7 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 
 	var user models.User
 	query := `
-		SELECT id, email, password_hash, telegram_chat_id, 
+		SELECT id, email, password_hash, telegram_chat_id,
 		       subscription_tier, created_at, updated_at
 		FROM users WHERE id = $1
 	`
@@ -336,7 +336,7 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 
 	var user models.User
 	query := `
-		SELECT id, email, password_hash, telegram_chat_id, 
+		SELECT id, email, password_hash, telegram_chat_id,
 		       subscription_tier, created_at, updated_at
 		FROM users WHERE telegram_chat_id = $1
 	`

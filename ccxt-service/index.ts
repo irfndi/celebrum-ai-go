@@ -312,7 +312,7 @@ app.get('/api/markets/:exchange', async (c) => {
 
 // Get funding rates for an exchange
 app.get('/api/funding-rates/:exchange',
-  validator('query', (value, c) => {
+  validator('query', (value, _c) => {
     const symbols = value.symbols ? (value.symbols as string).split(',') : undefined;
     return { symbols };
   }),

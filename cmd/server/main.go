@@ -40,6 +40,7 @@ func main() {
 	defer redis.Close()
 
 	// Initialize CCXT service
+	log.Printf("MAIN: CCXT Service URL from config: %s", cfg.CCXT.ServiceURL)
 	ccxtService := ccxt.NewService(&cfg.CCXT)
 
 	// Initialize collector service

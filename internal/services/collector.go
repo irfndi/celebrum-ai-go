@@ -268,9 +268,9 @@ func (c *CollectorService) collectTickerData(exchange, symbol string) error {
 
 	// Save market data to database with proper column mapping
 	_, err = c.db.Pool.Exec(c.ctx,
-		`INSERT INTO market_data (exchange_id, trading_pair_id, last_price, volume_24h, timestamp, created_at) 
+		`INSERT INTO market_data (exchange_id, trading_pair_id, last_price, volume_24h, timestamp, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		exchangeID, tradingPairID, ticker.Price, ticker.Volume, ticker.Timestamp, time.Now())
+		exchangeID, tradingPairID, ticker.Price, ticker.Volume, ticker.Timestamp, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("failed to save market data: %w", err)
 	}
@@ -363,7 +363,7 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 	// Save funding rate to database
 	_, err = c.db.Pool.Exec(c.ctx,
 		"INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_time, next_funding_time, mark_price, index_price, timestamp, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), rate.MarkPrice, rate.IndexPrice, rate.Timestamp.Time(), time.Now())
+		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), rate.MarkPrice, rate.IndexPrice, rate.Timestamp.Time(), time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("failed to save funding rate: %w", err)
 	}

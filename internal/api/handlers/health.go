@@ -10,6 +10,8 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 )
 
+var startTime = time.Now()
+
 type HealthHandler struct {
 	db      *database.PostgresDB
 	redis   *database.RedisClient
@@ -22,11 +24,6 @@ type HealthResponse struct {
 	Services  map[string]string `json:"services"`
 	Version   string            `json:"version"`
 	Uptime    string            `json:"uptime"`
-}
-
-type ServiceStatus struct {
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
 }
 
 func NewHealthHandler(db *database.PostgresDB, redis *database.RedisClient, ccxtURL string) *HealthHandler {
@@ -125,9 +122,6 @@ func (h *HealthHandler) checkCCXTService() error {
 
 	return nil
 }
-
-// Global start time for uptime calculation
-var startTime = time.Now()
 
 // Readiness check for Kubernetes-style deployments
 func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {

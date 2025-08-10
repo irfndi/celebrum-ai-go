@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -94,9 +95,6 @@ func Load() (*Config, error) {
 	viper.AddConfigPath("./configs")
 	viper.AddConfigPath(".")
 
-	// Set default values
-	setDefaults()
-
 	// Enable environment variable support
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
@@ -105,13 +103,55 @@ func Load() (*Config, error) {
 	if err := viper.BindEnv("security.jwt_secret", "JWT_SECRET"); err != nil {
 		return nil, fmt.Errorf("failed to bind JWT_SECRET environment variable: %w", err)
 	}
+	if err := viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL"); err != nil {
+		return nil, fmt.Errorf("failed to bind CCXT_SERVICE_URL environment variable: %w", err)
+	}
+
+	// Set default values (after environment variables are bound)
+	setDefaults()
+
+	// Configuration sources will be logged after config is loaded
+	if err := viper.BindEnv("database.host", "DATABASE_HOST"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_HOST environment variable: %w", err)
+	}
+	if err := viper.BindEnv("database.port", "DATABASE_PORT"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_PORT environment variable: %w", err)
+	}
+	if err := viper.BindEnv("database.user", "DATABASE_USER"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_USER environment variable: %w", err)
+	}
+	if err := viper.BindEnv("database.password", "DATABASE_PASSWORD"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_PASSWORD environment variable: %w", err)
+	}
+	if err := viper.BindEnv("database.dbname", "DATABASE_DBNAME"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_DBNAME environment variable: %w", err)
+	}
+	if err := viper.BindEnv("database.sslmode", "DATABASE_SSLMODE"); err != nil {
+		return nil, fmt.Errorf("failed to bind DATABASE_SSLMODE environment variable: %w", err)
+	}
+	if err := viper.BindEnv("redis.host", "REDIS_HOST"); err != nil {
+		return nil, fmt.Errorf("failed to bind REDIS_HOST environment variable: %w", err)
+	}
+	if err := viper.BindEnv("redis.port", "REDIS_PORT"); err != nil {
+		return nil, fmt.Errorf("failed to bind REDIS_PORT environment variable: %w", err)
+	}
+	if err := viper.BindEnv("ccxt.timeout", "CCXT_TIMEOUT"); err != nil {
+		return nil, fmt.Errorf("failed to bind CCXT_TIMEOUT environment variable: %w", err)
+	}
+	if err := viper.BindEnv("telegram.bot_token", "TELEGRAM_BOT_TOKEN"); err != nil {
+		return nil, fmt.Errorf("failed to bind TELEGRAM_BOT_TOKEN environment variable: %w", err)
+	}
 
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.Printf("DEBUG: Error reading config file: %v", err)
 			return nil, err
 		}
+		log.Printf("DEBUG: Config file not found, using defaults and environment variables")
+	} else {
+		log.Printf("DEBUG: Config file loaded: %s", viper.ConfigFileUsed())
 	}
 
 	var config Config
@@ -142,6 +182,9 @@ func Load() (*Config, error) {
 
 	// Update config with normalized environment
 	config.Environment = environment
+
+	// Debug: Log final configuration
+	log.Printf("DEBUG: CCXT ServiceURL=%s timeout=%d", config.CCXT.ServiceURL, config.CCXT.Timeout)
 
 	return &config, nil
 }
@@ -175,8 +218,10 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
+	viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
 	viper.SetDefault("ccxt.timeout", 30)
+
+	// Configuration defaults set silently to avoid side effects
 
 	// Telegram
 	viper.SetDefault("telegram.bot_token", "")
