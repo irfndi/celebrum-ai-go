@@ -41,7 +41,7 @@ jobs:
           - 6379:6379
 
     env:
-      CCXT_SERVICE_URL: http://localhost:3001
+      CCXT_SERVICE_URL: http://localhost:8081
       CONFIG_PATH: configs/config.ci.yml
 
     steps:
@@ -279,8 +279,26 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
           
-          # Health check
-          sleep 30
-          docker compose ps
-          curl -f http://localhost:8080/health || exit 1
+          # Health check with polling loop
+          echo "Waiting for services to become healthy..."
+          max_attempts=30
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "Health check attempt $attempt/$max_attempts"
+            
+            if curl -f http://localhost:8080/health >/dev/null 2>&1; then
+              echo "Services are healthy!"
+              docker compose ps
+              exit 0
+            fi
+            
+            echo "Services not ready yet, waiting 10 seconds..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          
+          echo "Services failed to become healthy after $max_attempts attempts"
+          docker compose logs --tail=50
+          exit 1
         EOF
