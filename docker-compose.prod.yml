@@ -2,16 +2,30 @@
 # This file is optimized for production deployments
 # Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  telegram_bot_token:
+    file: ./secrets/telegram_bot_token.txt
+  telegram_webhook_secret:
+    file: ./secrets/telegram_webhook_secret.txt
+
 services:
   postgres:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    secrets:
+      - postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
         limits:
@@ -32,7 +46,10 @@ services:
     volumes:
       - redis_data:/data
       - ./configs/redis.prod.conf:/usr/local/etc/redis/redis.conf:ro
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: sh -c "exec redis-server /usr/local/etc/redis/redis.conf --requirepass $(cat /run/secrets/redis_password)"
+    secrets:
+      - redis_password
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
         limits:
@@ -42,7 +59,7 @@ services:
           cpus: '0.5'
           memory: 256M
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $(cat /run/secrets/redis_password) ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -53,6 +70,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - REDIS_URL=redis://redis:6379
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
         limits:
@@ -76,16 +94,18 @@ services:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=${POSTGRES_USER}
-      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
       - DATABASE_DBNAME=${POSTGRES_DB}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - CCXT_SERVICE_URL=http://ccxt-service:3001
-      - JWT_SECRET=${JWT_SECRET}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
-      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+    secrets:
+      - postgres_password
+      - redis_password
+      - jwt_secret
+      - telegram_bot_token
+      - telegram_webhook_secret
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
         limits:
@@ -109,6 +129,7 @@ services:
     volumes:
       - ./configs/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./configs/ssl:/etc/nginx/ssl:ro
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
     deploy:
       resources:
         limits:

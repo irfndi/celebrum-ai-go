@@ -3,7 +3,25 @@
 # Celebrum AI Environment Setup Script
 # This script sets up the environment for different deployment scenarios
 
-set -e
+set -euo pipefail
+
+trap 'error_handler $? $LINENO' ERR
+
+function error_handler() {
+  echo "Error: command failed with exit code $1 at line $2"
+  exit 1
+}
+
+# --- Docker Compose Command Detection ---
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+else
+    echo "Error: Neither docker-compose nor docker compose found. Please install one of them." >&2
+    exit 1
+fi
+# --------------------------------------
 
 # Colors for output
 RED='\033[0;31m'
@@ -125,16 +143,16 @@ fi
 case $ENVIRONMENT in
     development)
         print_status "Setting up for development..."
-        print_status "Use: docker-compose up -d"
-        print_status "Optional development tools: docker-compose --profile dev-tools up -d"
+        print_status "Use: $COMPOSE_CMD up -d"
+        print_status "Optional development tools: $COMPOSE_CMD --profile dev-tools up -d"
         ;;
     staging)
         print_status "Setting up for staging..."
-        print_status "Use: docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d"
+        print_status "Use: $COMPOSE_CMD -f docker-compose.yml -f docker-compose.staging.yml up -d"
         ;;
     production)
         print_status "Setting up for production..."
-        print_status "Use: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d"
+        print_status "Use: $COMPOSE_CMD -f docker-compose.yml -f docker-compose.prod.yml up -d"
         ;;
 esac
 
@@ -143,19 +161,23 @@ if [[ "$SKIP_BUILD" != "true" ]]; then
     print_status "Building Docker images..."
     case $ENVIRONMENT in
         development)
-            docker-compose build
+            $COMPOSE_CMD build
             ;;
         staging)
-            docker-compose -f docker-compose.yml -f docker-compose.staging.yml build
+            $COMPOSE_CMD -f docker-compose.yml -f docker-compose.staging.yml build
             ;;
         production)
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+            $COMPOSE_CMD -f docker-compose.yml -f docker-compose.prod.yml build
             ;;
     esac
 fi
 
 # Create SSL certificates for development (self-signed)
 if [[ "$ENVIRONMENT" == "development" ]]; then
+    if ! command -v openssl &> /dev/null; then
+        print_error "openssl command not found. Please install openssl to generate certificates."
+        exit 1
+    fi
     print_status "Creating self-signed SSL certificates for development..."
     if [[ ! -f "configs/ssl/server.crt" ]] || [[ "$FORCE" == "true" ]]; then
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -190,8 +212,8 @@ print_status "Environment setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Edit .env file with your actual configuration values"
-echo "2. For development: docker-compose up -d"
-echo "3. For production: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d"
+echo "2. For development: $COMPOSE_CMD up -d"
+echo "3. For production: $COMPOSE_CMD -f docker-compose.yml -f docker-compose.prod.yml up -d"
 echo ""
 echo "Available services:"
 echo "- PostgreSQL: localhost:5432"
@@ -200,7 +222,7 @@ echo "- CCXT Service: localhost:3001"
 echo "- Main App: localhost:8080"
 echo ""
 echo "For development tools (Adminer, Redis Commander):"
-echo "docker-compose --profile dev-tools up -d"
+echo "$COMPOSE_CMD --profile dev-tools up -d"
 echo ""
 echo "Adminer: http://localhost:8081"
 echo "Redis Commander: http://localhost:8082"

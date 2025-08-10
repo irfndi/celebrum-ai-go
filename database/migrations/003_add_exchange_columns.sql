@@ -56,7 +56,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint 
-n        WHERE conname = 'exchanges_status_check'
+        WHERE conname = 'exchanges_status_check' AND conrelid = 'exchanges'::regclass
     ) THEN
         ALTER TABLE exchanges 
         ADD CONSTRAINT exchanges_status_check 

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # Default values
-DEPLOY_USER="${DEPLOY_USER:-root}"
+DEPLOY_USER="${DEPLOY_USER:-deploy}"
 SERVER_IP="${SERVER_IP:-localhost}"
 DEPLOY_PATH="${DEPLOY_PATH:-/home/${DEPLOY_USER}/celebrum-ai-go}"
 
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -u, --user USER        SSH username (default: root or $DEPLOY_USER)"
+            echo "  -u, --user USER        SSH username (default: deploy or $DEPLOY_USER)"
             echo "  -s, --server SERVER    Server IP or hostname (default: localhost or $SERVER_IP)"
             echo "  -p, --path PATH        Remote deployment path (default: /home/USER/celebrum-ai-go)"
             echo "  -h, --help             Show this help message"
@@ -49,15 +49,10 @@ REMOTE_DIR="${DEPLOY_PATH}"
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m'
 
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 print_error() {
@@ -76,28 +71,16 @@ print_status "Rolling back from backup: $LATEST_BACKUP"
 
 # Stop current services
 print_status "Stopping current services..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml down --remove-orphans || true"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker compose -f docker-compose.single-droplet.yml down --remove-orphans || true"
 
 # Restore from backup
 print_status "Restoring from backup..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && 
-    # Verify backup path is safe (not empty and within expected directory)
-    if [ -z \"$LATEST_BACKUP\" ] || [[ ! \"$LATEST_BACKUP\" =~ ^backups/ ]]; then
-        echo 'ERROR: Invalid backup path' >&2
-        exit 1
-    fi && 
-    # Safely remove only intended files with ./ prefix
-    rm -rf ./*.yml ./Dockerfile ./.env ./ccxt-service/ ./configs/ ./scripts/ ./internal/ ./pkg/ ./cmd/ ./api/ ./database/ ./docs/ ./go.* && 
-    # Extract backup to staging directory first, then swap
-    mkdir -p ./rollback_staging && 
-    tar -xzf \"$LATEST_BACKUP\" -C ./rollback_staging && 
-    mv ./rollback_staging/* ./ && 
-    rm -rf ./rollback_staging"
+ssh "$SERVER" "bash -c 'set -euo pipefail; cd \"$REMOTE_DIR\"; if [ -z \"$LATEST_BACKUP\" ] || [[ ! \"$LATEST_BACKUP\" =~ ^backups/ ]]; then echo \"ERROR: Invalid backup path\" >&2; exit 1; fi; rm -rf ./*.yml ./Dockerfile ./.env ./ccxt-service/ ./configs/ ./scripts/ ./internal/ ./pkg/ ./cmd/ ./api/ ./database/ ./docs/ ./go.*; tar -xzf \"$LATEST_BACKUP\" --strip-components=1'"
 
 # Rebuild and restart
 print_status "Rebuilding services..."
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml build"
-ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml up -d"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker compose -f docker-compose.single-droplet.yml build --pull"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker compose -f docker-compose.single-droplet.yml up -d"
 
 print_status "Rollback completed!"
-print_status "Check status with: ssh \"$SERVER\" 'cd \"$REMOTE_DIR\" && docker-compose ps'"
+print_status "Check status with: ssh \"$SERVER\" 'cd \"$REMOTE_DIR\" && docker compose ps'"

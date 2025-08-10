@@ -19,6 +19,7 @@ import type {
   FundingRate,
   FundingRateResponse
 } from './types';
+import type { Server } from 'bun';
 
 // Load environment variables
 const PORT = process.env.PORT || 8081;
@@ -37,8 +38,9 @@ app.use('*', logger());
 // For now, we rely on exchange-level rate limiting via CCXT
 
 // Initialize supported exchanges
+const coinbaseInstance = new ccxt.coinbaseexchange({ enableRateLimit: true });
 const exchanges: ExchangeManager = {
-  binance: new ccxt.binance({ 
+  binance: new ccxt.binance({
     enableRateLimit: true,
     timeout: 30000,
     rateLimit: 1200, // Binance rate limit
@@ -46,19 +48,20 @@ const exchanges: ExchangeManager = {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  bybit: new ccxt.bybit({ 
+  bybit: new ccxt.bybit({
     enableRateLimit: true,
     options: {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  okx: new ccxt.okx({ 
+  okx: new ccxt.okx({
     enableRateLimit: true,
     options: {
       'defaultType': 'future' // Enable futures trading for funding rates
     }
   }),
-  coinbasepro: new ccxt.coinbaseexchange({ enableRateLimit: true }),
+  coinbase: coinbaseInstance,
+  coinbasepro: coinbaseInstance, // Alias for backward compatibility
   kraken: new ccxt.kraken({ enableRateLimit: true })
 };
 
@@ -430,11 +433,12 @@ app.notFound((c) => {
 });
 
 // Start server with proper error handling and retry logic
-let server: any = null;
+let server: Server | null = null;
 
 async function start() {
   let retryCount = 0;
   const maxRetries = 3;
+  let lastError: unknown = null;
 
   function startServer() {
     try {
@@ -455,17 +459,27 @@ async function start() {
 
       return server;
     } catch (error) {
+      lastError = error;
       console.error(`Failed to start server on port ${PORT}:`, error);
       return null;
     }
   }
 
+  let shuttingDown = false;
   // Handle graceful shutdown
   function gracefulShutdown() {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
     console.log('Received shutdown signal, closing server...');
     if (server) {
-      server.stop();
-      console.log('Server stopped gracefully');
+      try {
+        server.stop();
+        console.log('Server stopped gracefully');
+      } catch (error) {
+        console.error('Error while stopping the server:', error);
+      }
     }
     process.exit(0);
   }
@@ -480,10 +494,12 @@ async function start() {
     
     if (!server && retryCount < maxRetries) {
       retryCount++;
-      console.log(`Retrying server start in 2 seconds... (attempt ${retryCount}/${maxRetries})`);
-      setTimeout(tryStartServer, 2000);
+      const jitter = Math.random() * 1000; // Add jitter to avoid thundering herd
+      const delay = 2000 + jitter;
+      console.log(`Retrying server start in ${delay.toFixed(0)}ms... (attempt ${retryCount}/${maxRetries})`);
+      setTimeout(tryStartServer, delay);
     } else if (!server) {
-      console.error('Failed to start server after maximum retries');
+      console.error('Failed to start server after maximum retries. Last error:', lastError);
       process.exit(1);
     }
   }

@@ -107,7 +107,9 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "dev-jwt-secret-change-this-in-production"
+  # It is strongly recommended to set this value via an environment variable or a .env file
+  # For example: export JWT_SECRET=$(openssl rand -hex 32)
+  jwt_secret: ""
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:

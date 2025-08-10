@@ -1,10 +1,11 @@
 # Manual Deployment Guide
 
-This guide provides instructions for deploying Celebrum AI using manual rsync and SSH instead of CI/CD pipeline.
+This guide provides instructions for deploying Celebrum AI using manual rsync and SSH instead of a CI/CD pipeline.
 
 ## Quick Start
 
 ### Prerequisites
+
 - SSH access to the server (`${DEPLOY_USER}@${SERVER_IP}`)
 - Environment variables configured
 - Local development environment ready
@@ -17,6 +18,7 @@ This guide provides instructions for deploying Celebrum AI using manual rsync an
 ```
 
 This script will:
+
 - Check server connectivity
 - Create a backup of the current deployment
 - Stop existing services gracefully
@@ -29,11 +31,12 @@ This script will:
 If you prefer to run each step manually:
 
 #### Step 1: Create Environment File
+
 ```bash
 # SSH to server and create .env file
-ssh ${DEPLOY_USER}@${SERVER_IP} << 'EOF'
+ssh ${DEPLOY_USER}@${SERVER_IP} << \'EOF'
 cd /home/${DEPLOY_USER}/celebrum-ai-go
-cat > .env << 'ENV_EOF'
+cat > .env << \'ENV_EOF'
 JWT_SECRET=your-jwt-secret-here
 TELEGRAM_BOT_TOKEN=your-bot-token-here
 TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook
@@ -42,13 +45,14 @@ FEATURE_TELEGRAM_BOT=true
 ENVIRONMENT=production
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/celebrum_ai
 REDIS_URL=redis://redis:6379
-CCXT_SERVICE_URL=http://ccxt-service:3001
+CCXT_SERVICE_URL=http://ccxt-service:8081
 ENV_EOF
 chmod 600 .env
 EOF
 ```
 
 #### Step 2: Sync Files
+
 ```bash
 # Sync all files to server (excluding unnecessary ones)
 rsync -avz --delete \
@@ -67,13 +71,16 @@ rsync -avz --delete \
 ```
 
 #### Step 3: Build and Deploy
+
 ```bash
 # Build and start services
+# Note: Use 'docker compose' if your Docker version uses the Compose V2 CLI.
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml up -d"
 ```
 
 #### Step 4: Verify Deployment
+
 ```bash
 # Check service status
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
@@ -82,8 +89,8 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs --tail=50"
 
 # Test health endpoints
-ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:3000/health"
-ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:3001/health"
+ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:8080/health"
+ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:8081/health"
 ```
 
 ## Troubleshooting
@@ -97,6 +104,7 @@ If deployment fails, quickly rollback:
 ```
 
 This will:
+
 - Find the latest backup
 - Stop current services
 - Restore from backup
@@ -105,6 +113,7 @@ This will:
 ### Common Issues and Solutions
 
 #### 1. Service Health Check Failures
+
 ```bash
 # Check individual service logs
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs ccxt-service"
@@ -115,6 +124,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 ```
 
 #### 2. Database Connection Issues
+
 ```bash
 # Check database status
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose exec postgres pg_isready"
@@ -124,9 +134,10 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 ```
 
 #### 3. Environment Variable Issues
+
 ```bash
 # Verify .env file exists and has correct values
-ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && cat .env"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && cat .env | awk -F= '{print $1 \"=<redacted>\"}'"
 
 # Recreate .env file if corrupted
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .env && # then recreate using steps above"
@@ -135,18 +146,21 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .e
 ## Environment Variables Setup
 
 ### Required Variables
+
 - `JWT_SECRET`: Random 32+ character string
 - `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
 - `TELEGRAM_WEBHOOK_URL`: Your webhook URL (https://your-domain.com/webhook)
 - `TELEGRAM_WEBHOOK_SECRET`: Random 32+ character string
 
 ### Optional Variables
+
 - `FEATURE_TELEGRAM_BOT`: Set to "true" to enable Telegram bot
 - `ENVIRONMENT`: Set to "production" for production deployment
 
 ## Monitoring After Deployment
 
 ### Real-time Logs
+
 ```bash
 # Watch live logs
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs -f"
@@ -156,23 +170,26 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docke
 ```
 
 ### Health Checks
+
 ```bash
 # Check all services
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
 
 # Test external endpoints
 curl -I https://${SERVER_DOMAIN}/health
-curl -I https://${SERVER_DOMAIN}:3001/health
+curl -I https://${SERVER_DOMAIN}:8081/health
 ```
 
 ## Security Best Practices
 
 ### User Management
+
 - **Never use root user for deployment** - create a dedicated deploy user with limited privileges
 - Use SSH key authentication instead of passwords
 - Configure proper sudo access for the deploy user if needed
 
 ### Create Deploy User (if needed)
+
 ```bash
 # On the server, create a deploy user
 sudo adduser deploy
@@ -181,13 +198,16 @@ sudo usermod -aG sudo deploy
 ```
 
 ### Update Deployment Commands
+
 Replace all instances of:
+
 - `root@143.198.219.213` → `${DEPLOY_USER}@${SERVER_IP}`
 - `/root/celebrum-ai-go` → `/home/${DEPLOY_USER}/celebrum-ai-go`
 
 ## Performance Tips
 
 ### 1. Optimize Build Time
+
 ```bash
 # Use build cache
 ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
@@ -197,6 +217,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "docker pull postgres:15-alpine && docker pull r
 ```
 
 ### 2. Resource Management
+
 ```bash
 # Monitor resource usage
 ssh ${DEPLOY_USER}@${SERVER_IP} "docker stats"
@@ -208,6 +229,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "docker system prune -f"
 ## Security Notes
 
 ### .env File Security
+
 - Never commit `.env` file to version control
 - Always set secure file permissions: `chmod 600 .env`
 - **Never include secrets in shell commands** - use file transfer methods instead
@@ -215,6 +237,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "docker system prune -f"
 - Consider using encrypted file transfer or secrets management systems
 
 ### Best Practices for Environment Variables
+
 - Use strong, unique secrets for JWT and webhook (32+ characters)
 - Regularly rotate secrets (quarterly recommended)
 - Monitor server logs for security issues
@@ -222,6 +245,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "docker system prune -f"
 - Avoid exposing secrets in shell command history
 
 ### Secure .env File Transfer Example
+
 ```bash
 # Instead of creating .env via SSH commands, use secure transfer:
 scp .env ${DEPLOY_USER}@${SERVER_IP}:/home/${DEPLOY_USER}/celebrum-ai-go/.env

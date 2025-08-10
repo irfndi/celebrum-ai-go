@@ -69,17 +69,15 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
       with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: ccxt-service/package-lock.json
+        bun-version: latest
     
     - name: Install dependencies
       run: |
         cd ccxt-service
-        npm install
+        bun install
     
     - name: Download Go dependencies
       run: go mod download
@@ -96,7 +94,7 @@ jobs:
     - name: Start CCXT service
       run: |
         cd ccxt-service
-        npm run start:ci &
+        bun run start:ci &
         CCXT_PID=$!
         echo "Waiting for CCXT service to be ready..."
         for i in {1..30}; do
