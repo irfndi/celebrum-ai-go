@@ -46,7 +46,7 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 5
@@ -70,10 +70,6 @@ services:
       - ENVIRONMENT=development
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
-      - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres
-      - DATABASE_DBNAME=celebrum_ai
-      - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
