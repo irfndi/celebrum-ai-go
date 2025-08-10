@@ -1,0 +1,101 @@
+# Docker Compose Staging Configuration
+# This file is optimized for staging/testing environments
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-celebrum_staging}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  redis:
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+      - ./configs/redis.staging.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  ccxt-service:
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=staging
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  app:
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=staging
+      - CONFIG_PATH=/app/configs/config.ci.yml
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${POSTGRES_USER:-postgres}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_staging}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  nginx:
+    restart: unless-stopped
+    ports:
+      - "8080:80"  # Use port 8080 for staging to avoid conflicts
+    volumes:
+      - ./configs/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  celebrum-network:
+    name: celebrum-network
+    driver: bridge

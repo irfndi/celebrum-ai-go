@@ -16,9 +16,43 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     
-    # Removed PostgreSQL and Redis services for faster CI
-    # Tests will use in-memory alternatives
+    # Use environment variables for configuration
+    env:
+      ENVIRONMENT: testing
+      DATABASE_HOST: localhost
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_DBNAME: celebrum_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      CCXT_SERVICE_URL: http://localhost:3001
+      CONFIG_PATH: configs/config.ci.yml
     
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: celebrum_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
     - uses: actions/checkout@v4
     
@@ -35,7 +69,19 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     
-    - name: Download dependencies
+    - name: Setup Node.js for CCXT service
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ccxt-service/package-lock.json
+    
+    - name: Install Node.js dependencies
+      run: |
+        cd ccxt-service
+        npm ci
+    
+    - name: Download Go dependencies
       run: go mod download
     
     - name: Run golangci-lint
@@ -48,7 +94,19 @@ jobs:
       run: make fmt-check
     
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out ./...
+      run: |
+        # Start CCXT service for integration tests
+        cd ccxt-service
+        npm run dev &
+        CCXT_PID=$!
+        sleep 10
+        
+        # Run Go tests
+        cd ..
+        go test -v -race -coverprofile=coverage.out ./...
+        
+        # Clean up CCXT service
+        kill $CCXT_PID || true
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
         REDIS_URL: redis://localhost:6379
@@ -61,7 +119,9 @@ jobs:
         name: codecov-umbrella
     
     - name: Build application
-      run: go build -v ./cmd/server
+      run: |
+        # Build with production configuration
+        CONFIG_PATH=configs/config.ci.yml make build
 
   build-and-push:
     name: Build and Push Docker Image
@@ -78,6 +138,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
     
     - name: Log in to Container Registry
       uses: docker/login-action@v3
@@ -105,15 +168,18 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          CCXT_SERVICE_URL=${{ secrets.CCXT_SERVICE_URL }}
+          CONFIG_PATH=configs/config.prod.yml
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
     - name: Generate build provenance attestation
       uses: actions/attest-build-provenance@v1
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         subject-digest: ${{ steps.build.outputs.digest }}
         push-to-registry: true
-
-  # Removed test-deployment step to speed up CI
-  # Full deployment testing is done in production environment
 
   deploy:
     name: Deploy to Production
@@ -140,11 +206,7 @@ jobs:
         
         # Setup SSH key with proper formatting
         echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key_raw
-        
-        # Clean up the key format
         cat ~/.ssh/deploy_key_raw | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
-        
-        # Ensure proper line endings
         sed -i 's/$//' ~/.ssh/deploy_key
         
         # Verify key format
@@ -152,36 +214,22 @@ jobs:
         head -1 ~/.ssh/deploy_key
         tail -1 ~/.ssh/deploy_key
         
-        # Ensure the key starts and ends properly
         if ! head -1 ~/.ssh/deploy_key | grep -q "BEGIN.*PRIVATE KEY"; then
           echo "Error: SSH key does not start with proper header"
-          echo "First line: $(head -1 ~/.ssh/deploy_key)"
           exit 1
         fi
         
         if ! tail -1 ~/.ssh/deploy_key | grep -q "END.*PRIVATE KEY"; then
           echo "Error: SSH key does not end with proper footer"
-          echo "Last line: $(tail -1 ~/.ssh/deploy_key)"
           exit 1
         fi
         
-        # Set proper permissions
         chmod 600 ~/.ssh/deploy_key
-        
-        # Add server to known hosts
         ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
         
-        # Verify key can be loaded
-        ssh-keygen -l -f ~/.ssh/deploy_key || {
-          echo "Error: SSH key validation failed"
-          echo "Key content (first 3 lines):"
-          head -3 ~/.ssh/deploy_key
-          exit 1
-        }
-        
-        # Test SSH connection with increased timeout and keep-alive
+        # Test SSH connection
         for i in {1..3}; do
-          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"; then
+          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"; then
             echo "SSH connection test successful"
             break
           else
@@ -194,109 +242,32 @@ jobs:
           fi
         done
     
-    - name: Update deployment
+    - name: Deploy with environment variables
       run: |
-        IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-        
-        # Deploy to server with retry mechanism
-        for attempt in {1..3}; do
-          echo "Deployment attempt $attempt..."
-          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=60 -o ServerAliveInterval=60 -o ServerAliveCountMax=20 -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-        set -e
-        
-        # Create application directory if it doesn't exist
-        sudo mkdir -p /opt/celebrum-ai-go
-        sudo chown $USER:$USER /opt/celebrum-ai-go
-        
-        # Clone or update repository
-        if [ ! -d "/opt/celebrum-ai-go/.git" ]; then
-          echo "Cloning repository..."
-          git clone https://github.com/${{ github.repository }}.git /opt/celebrum-ai-go
-        else
-          echo "Updating repository..."
-          cd /opt/celebrum-ai-go
-          git fetch origin
-          git reset --hard origin/main
-        fi
-        
-        # Change to application directory
-        cd /opt/celebrum-ai-go
-        
-        # Create .env file from GitHub Secrets
-        echo "Creating environment configuration..."
-        cat > .env << 'ENV_EOF'
-        JWT_SECRET=${{ secrets.JWT_SECRET }}
-        TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
-        TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-        FEATURE_TELEGRAM_BOT=${{ secrets.FEATURE_TELEGRAM_BOT }}
-        ENVIRONMENT=production
-        ENV_EOF
-        
-        # Create minimal .env if secrets are empty
-        if [[ ! -s .env ]]; then
-          echo "JWT_SECRET=your-super-secret-jwt-key-change-this" > .env
-          echo "ENVIRONMENT=production" >> .env
-          echo "FEATURE_TELEGRAM_BOT=true" >> .env
-        fi
-        
-        # Stop existing services
-        docker compose -f docker-compose.single-droplet.yml down || true
-        
-        # Pull latest images
-        docker compose -f docker-compose.single-droplet.yml pull
-        
-        # Update and restart services with increased timeout
-        COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.single-droplet.yml up -d --remove-orphans
-        
-        # Wait for services to be healthy with longer timeout
-        echo "Waiting for services to be healthy..."
-        timeout 600 bash -c 'until docker compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 10; done' || {
-          echo "Services failed to become healthy within timeout"
-          docker compose -f docker-compose.single-droplet.yml logs --tail=50
-          exit 1
-        }
-        
-        # Clean up unused images
-        docker system prune -f
-        
-        # Verify deployment
-        docker compose -f docker-compose.single-droplet.yml ps
+        # Create production environment file
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          # Create production environment file
+          cat > /root/celebrum-ai-go/.env << 'ENV_EOF'
+          ENVIRONMENT=production
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          CCXT_SERVICE_URL=http://ccxt-service:3001
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          CONFIG_PATH=configs/config.prod.yml
+          ENV_EOF
+          
+          # Deploy with production configuration
+          cd /root/celebrum-ai-go
+          docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull
+          docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
+          
+          # Health check
+          sleep 30
+          docker-compose ps
+          curl -f http://localhost:8080/health || exit 1
         EOF
-          then
-            echo "Deployment successful on attempt $attempt"
-            break
-          else
-            echo "Deployment attempt $attempt failed"
-            if [ $attempt -eq 3 ]; then
-              echo "Deployment failed after 3 attempts"
-              exit 1
-            fi
-            echo "Retrying in 30 seconds..."
-            sleep 30
-          fi
-        done
-    
-    - name: Cleanup SSH key
-      if: always()
-      run: |
-        rm -f ~/.ssh/deploy_key ~/.ssh/deploy_key_raw
-
-  notify:
-    name: Notify Deployment Status
-    runs-on: ubuntu-latest
-    needs: [test, build-and-push, deploy]
-    if: always()
-    
-    steps:
-    - name: Notify Success
-      if: needs.deploy.result == 'success'
-      run: |
-        echo "✅ Deployment successful!"
-        # Add notification logic here (Slack, Discord, etc.)
-    
-    - name: Notify Failure
-      if: needs.deploy.result == 'failure' || needs.test.result == 'failure' || needs.build-and-push.result == 'failure'
-      run: |
-        echo "❌ Deployment failed!"
-        # Add notification logic here (Slack, Discord, etc.)

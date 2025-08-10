@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 FROM base AS install
 RUN mkdir -p /temp/dev
 COPY package.json bun.lock /temp/dev/
-RUN cd /temp/dev && bun install --frozen-lockfile
+RUN cd /temp/dev && bun install
 
 # Install with --production (exclude devDependencies)
 RUN mkdir -p /temp/prod
 COPY package.json bun.lock /temp/prod/
-RUN cd /temp/prod && bun install --frozen-lockfile --production
+RUN cd /temp/prod && bun install --production
 
 # Copy node_modules from temp directory
 # Then copy all (non-ignored) project files into the image
@@ -38,7 +38,7 @@ COPY --from=prerelease /usr/src/app/types.ts .
 COPY --from=prerelease /usr/src/app/package.json .
 
 # Expose port
-EXPOSE 3001
+EXPOSE 8081
 
 # Run the app
 USER bun

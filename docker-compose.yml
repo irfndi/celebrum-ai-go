@@ -1,18 +1,22 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:17
     container_name: celebrum-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: celebrum_ai
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-celebrum_ai}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - celebrum-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,38 +25,42 @@ services:
     image: redis:7-alpine
     container_name: celebrum-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
       - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - celebrum-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # CCXT Service (Node.js)
+  # CCXT Service (TypeScript/Node.js)
   ccxt-service:
     build:
       context: ./ccxt-service
       dockerfile: Dockerfile
     container_name: celebrum-ccxt
     ports:
-      - "3001:3001"
+      - "${CCXT_SERVICE_PORT:-3001}:3001"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - PORT=3001
+      - REDIS_URL=redis://redis:6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    networks:
+      - celebrum-network
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 5
       start_period: 60s
-    profiles:
-      - ccxt
 
   # Main Go Application
   app:
@@ -60,39 +68,51 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        CCXT_SERVICE_URL: http://ccxt-service:3001
+        - CCXT_SERVICE_URL=${CCXT_SERVICE_URL:-http://ccxt-service:3001}
     container_name: celebrum-app
     ports:
-      - "8080:8080"
+      - "${SERVER_PORT:-8080}:8080"
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
+      - DATABASE_USER=${POSTGRES_USER:-postgres}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_ai}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - CCXT_SERVICE_URL=${CCXT_SERVICE_URL:-http://ccxt-service:3001}
+      - CONFIG_PATH=${CONFIG_PATH:-/app/configs/config.local.yml}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    profiles:
-      - app
+      ccxt-service:
+        condition: service_healthy
+    networks:
+      - celebrum-network
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./logs:/app/logs
 
   # Nginx reverse proxy (for production-like setup)
   nginx:
     image: nginx:alpine
     container_name: celebrum-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
-      - ./configs/nginx.conf:/etc/nginx/nginx.conf
-      - ./configs/ssl:/etc/nginx/ssl
+      - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
+    networks:
+      - celebrum-network
     profiles:
       - nginx
 
@@ -103,5 +123,6 @@ volumes:
     driver: local
 
 networks:
-  default:
+  celebrum-network:
     name: celebrum-network
+    driver: bridge

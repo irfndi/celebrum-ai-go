@@ -21,7 +21,7 @@ import type {
 } from './types';
 
 // Load environment variables
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3003;
 
 // Initialize Hono app
 const app = new Hono();
@@ -428,20 +428,63 @@ app.notFound((c) => {
   return c.json(errorResponse, 404);
 });
 
-// Start server
-const server = Bun.serve({
-  port: PORT,
-  hostname: '0.0.0.0',
-  fetch: app.fetch,
-  idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
-});
+// Start server with proper error handling and retry logic
+let server: any = null;
 
-console.log(`🚀 CCXT Service starting on port ${PORT}`);
-console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
+function startServer() {
+  try {
+    server = Bun.serve({
+      port: parseInt(PORT.toString()),
+      hostname: '0.0.0.0',
+      fetch: app.fetch,
+      idleTimeout: 30, // 30 seconds timeout to prevent Bun.serve timeout issues
+    });
 
-// Add startup delay to ensure service is fully ready
-setTimeout(() => {
-  console.log('✅ CCXT Service is ready');
-}, 2000);
+    console.log(`🚀 CCXT Service starting on port ${PORT}`);
+    console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
 
-export default server;
+    // Add startup delay to ensure service is fully ready
+    setTimeout(() => {
+      console.log('✅ CCXT Service is ready');
+    }, 2000);
+
+    return server;
+  } catch (error) {
+    console.error(`Failed to start server on port ${PORT}:`, error);
+    return null;
+  }
+}
+
+// Handle graceful shutdown
+function gracefulShutdown() {
+  console.log('Received shutdown signal, closing server...');
+  if (server) {
+    server.stop();
+    console.log('Server stopped gracefully');
+  }
+  process.exit(0);
+}
+
+// Handle signals
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Start server with retry logic
+let retryCount = 0;
+const maxRetries = 3;
+
+function tryStartServer() {
+  server = startServer();
+  
+  if (!server && retryCount < maxRetries) {
+    retryCount++;
+    console.log(`Retrying server start in 2 seconds... (attempt ${retryCount}/${maxRetries})`);
+    setTimeout(tryStartServer, 2000);
+  } else if (!server) {
+    console.error('Failed to start server after maximum retries');
+    process.exit(1);
+  }
+}
+
+// Initial server start
+tryStartServer();
