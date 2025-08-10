@@ -153,11 +153,11 @@ docker-push: ## Push Docker image to registry
 ## TypeScript/Go Combined Commands
 ts-fmt: ## Format TypeScript code
 	@echo "$(GREEN)Formatting TypeScript code...$(NC)"
-	cd ccxt-service && bun run oxlint --fix || echo "$(YELLOW)No format script found, skipping$(NC)"
+	cd ccxt-service && bun run format || echo "$(YELLOW)No format script found, skipping$(NC)"
 
 ts-lint: ## Lint TypeScript code
 	@echo "$(GREEN)Linting TypeScript code...$(NC)"
-	cd ccxt-service && bun run oxlint || echo "$(YELLOW)No lint script found, skipping$(NC)"
+	cd ccxt-service && bun run lint || echo "$(YELLOW)No lint script found, skipping$(NC)"
 
 ts-test: ## Run TypeScript tests
 	@echo "$(GREEN)Running TypeScript tests...$(NC)"
@@ -186,7 +186,7 @@ setup-all: install-tools ccxt-setup ## Install all development tools
 ## Health Checks
 health-all: health ## Check health of all services
 	@echo "$(GREEN)Checking CCXT service health...$(NC)"
-	curl -f http://localhost:3001/health || echo "$(RED)CCXT service health check failed$(NC)"
+	curl -f http://localhost/ccxt/health || echo "$(RED)CCXT service health check failed$(NC)"
 
 ## Utilities
 clean: ## Clean build artifacts
