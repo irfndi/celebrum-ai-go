@@ -15,10 +15,10 @@ services:
       - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 20s
-      timeout: 30s
-      retries: 20
-      start_period: 120s
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - celebrum-network
 
@@ -33,9 +33,9 @@ services:
     command: redis-server /usr/local/etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 3
     networks:
       - celebrum-network
 
@@ -55,10 +55,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 10
-      start_period: 120s
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - celebrum-network
 
@@ -97,10 +97,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 60s
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - celebrum-network
 
@@ -121,9 +121,9 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 15s
+      timeout: 5s
+      retries: 2
     networks:
       - celebrum-network
 

@@ -179,59 +179,85 @@ jobs:
           exit 1
         }
         
-        # Test SSH connection
-        ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
+        # Test SSH connection with increased timeout and keep-alive
+        for i in {1..3}; do
+          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"; then
+            echo "SSH connection test successful"
+            break
+          else
+            echo "SSH connection attempt $i failed, retrying..."
+            sleep 15
+            if [ $i -eq 3 ]; then
+              echo "SSH connection failed after 3 attempts"
+              exit 1
+            fi
+          fi
+        done
     
     - name: Update deployment
       run: |
-        # Get the latest image tag
         IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
         
-        # Deploy to server with proper SSH options
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-          set -e
-          
-          # Create application directory if it doesn't exist
-          sudo mkdir -p /opt/celebrum-ai-go
-          sudo chown $USER:$USER /opt/celebrum-ai-go
-          
-          # Clone or update repository
-          if [ ! -d "/opt/celebrum-ai-go/.git" ]; then
-            echo "Cloning repository..."
-            git clone https://github.com/${{ github.repository }}.git /opt/celebrum-ai-go
-          else
-            echo "Updating repository..."
-            cd /opt/celebrum-ai-go
-            git fetch origin
-            git reset --hard origin/main
-          fi
-          
-          # Change to application directory
+        # Deploy to server with retry mechanism
+        for attempt in {1..3}; do
+          echo "Deployment attempt $attempt..."
+          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=60 -o ServerAliveInterval=60 -o ServerAliveCountMax=20 -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+        set -e
+        
+        # Create application directory if it doesn't exist
+        sudo mkdir -p /opt/celebrum-ai-go
+        sudo chown $USER:$USER /opt/celebrum-ai-go
+        
+        # Clone or update repository
+        if [ ! -d "/opt/celebrum-ai-go/.git" ]; then
+          echo "Cloning repository..."
+          git clone https://github.com/${{ github.repository }}.git /opt/celebrum-ai-go
+        else
+          echo "Updating repository..."
           cd /opt/celebrum-ai-go
-          
-          # Stop existing services
-          docker compose -f docker-compose.single-droplet.yml down || true
-          
-          # Pull latest images
-          docker compose -f docker-compose.single-droplet.yml pull
-          
-          # Update and restart services with increased timeout
-          COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.single-droplet.yml up -d --remove-orphans
-          
-          # Wait for services to be healthy
-          echo "Waiting for services to be healthy..."
-          timeout 300 bash -c 'until docker compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 5; done' || {
-            echo "Services failed to become healthy"
-            docker compose -f docker-compose.single-droplet.yml logs
-            exit 1
-          }
-          
-          # Clean up unused images
-          docker system prune -f
-          
-          # Verify deployment
-          docker compose -f docker-compose.single-droplet.yml ps
+          git fetch origin
+          git reset --hard origin/main
+        fi
+        
+        # Change to application directory
+        cd /opt/celebrum-ai-go
+        
+        # Stop existing services
+        docker compose -f docker-compose.single-droplet.yml down || true
+        
+        # Pull latest images
+        docker compose -f docker-compose.single-droplet.yml pull
+        
+        # Update and restart services with increased timeout
+        COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.single-droplet.yml up -d --remove-orphans
+        
+        # Wait for services to be healthy with longer timeout
+        echo "Waiting for services to be healthy..."
+        timeout 600 bash -c 'until docker compose -f docker-compose.single-droplet.yml ps | grep -q "healthy"; do sleep 10; done' || {
+          echo "Services failed to become healthy within timeout"
+          docker compose -f docker-compose.single-droplet.yml logs --tail=50
+          exit 1
+        }
+        
+        # Clean up unused images
+        docker system prune -f
+        
+        # Verify deployment
+        docker compose -f docker-compose.single-droplet.yml ps
         EOF
+          then
+            echo "Deployment successful on attempt $attempt"
+            break
+          else
+            echo "Deployment attempt $attempt failed"
+            if [ $attempt -eq 3 ]; then
+              echo "Deployment failed after 3 attempts"
+              exit 1
+            fi
+            echo "Retrying in 30 seconds..."
+            sleep 30
+          fi
+        done
     
     - name: Cleanup SSH key
       if: always()
