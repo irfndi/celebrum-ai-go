@@ -39,7 +39,7 @@ cd /home/${DEPLOY_USER}/celebrum-ai-go
 cat > .env << \'ENV_EOF'
 JWT_SECRET=your-jwt-secret-here
 TELEGRAM_BOT_TOKEN=your-bot-token-here
-TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook
+TELEGRAM_WEBHOOK_URL=<https://your-domain.com/webhook>
 TELEGRAM_WEBHOOK_SECRET=your-webhook-secret
 FEATURE_TELEGRAM_BOT=true
 ENVIRONMENT=production
@@ -153,7 +153,7 @@ ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .e
 
 - `JWT_SECRET`: Random 32+ character string
 - `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
-- `TELEGRAM_WEBHOOK_URL`: Your webhook URL (https://your-domain.com/webhook)
+- `TELEGRAM_WEBHOOK_URL`: Your webhook URL (<https://your-domain.com/webhook>)
 - `TELEGRAM_WEBHOOK_SECRET`: Random 32+ character string
 
 ### Optional Variables

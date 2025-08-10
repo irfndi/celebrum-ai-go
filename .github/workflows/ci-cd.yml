@@ -41,15 +41,6 @@ jobs:
           - 6379:6379
 
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
-      DATABASE_HOST: localhost
-      DATABASE_PORT: 5432
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-      DATABASE_DBNAME: celebrum_test
-      REDIS_HOST: localhost
-      REDIS_PORT: 6379
-      REDIS_URL: redis://localhost:6379
       CCXT_SERVICE_URL: http://localhost:3001
       CONFIG_PATH: configs/config.ci.yml
 
@@ -98,14 +89,14 @@ jobs:
         CCXT_PID=$!
         echo "Waiting for CCXT service to be ready..."
         for i in {1..30}; do
-          if curl -f http://localhost:3001/health >/dev/null 2>&1; then
+          if curl -f http://localhost:8081/health >/dev/null 2>&1; then
             echo "CCXT service is ready"
             break
           fi
           echo "Attempt $i/30: CCXT service not ready, waiting..."
           sleep 2
         done
-        if ! curl -f http://localhost:3001/health >/dev/null 2>&1; then
+        if ! curl -f http://localhost:8081/health >/dev/null 2>&1; then
           echo "CCXT service failed to start within 60 seconds"
           kill $CCXT_PID || true
           exit 1
@@ -119,6 +110,13 @@ jobs:
         kill $CCXT_PID || true
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
+        DATABASE_HOST: localhost
+        DATABASE_PORT: 5432
+        DATABASE_USER: postgres
+        DATABASE_PASSWORD: postgres
+        DATABASE_DBNAME: celebrum_test
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
         REDIS_URL: redis://localhost:6379
     
     - name: Upload coverage to Codecov
