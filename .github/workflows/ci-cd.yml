@@ -72,6 +72,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write  # Required for OIDC
+      attestations: write  # Required for provenance
     
     steps:
     - name: Checkout repository
@@ -96,12 +98,19 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
     
     - name: Build and push Docker image
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+    - name: Generate build provenance attestation
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        push-to-registry: true
 
   # Removed test-deployment step to speed up CI
   # Full deployment testing is done in production environment
