@@ -222,6 +222,24 @@ jobs:
         # Change to application directory
         cd /opt/celebrum-ai-go
         
+        # Create .env file from GitHub Secrets
+        echo "Creating environment configuration..."
+        cat > .env << 'ENV_EOF'
+        JWT_SECRET=${{ secrets.JWT_SECRET }}
+        TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
+        TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        FEATURE_TELEGRAM_BOT=${{ secrets.FEATURE_TELEGRAM_BOT }}
+        ENVIRONMENT=production
+        ENV_EOF
+        
+        # Create minimal .env if secrets are empty
+        if [[ ! -s .env ]]; then
+          echo "JWT_SECRET=your-super-secret-jwt-key-change-this" > .env
+          echo "ENVIRONMENT=production" >> .env
+          echo "FEATURE_TELEGRAM_BOT=true" >> .env
+        fi
+        
         # Stop existing services
         docker compose -f docker-compose.single-droplet.yml down || true
         
