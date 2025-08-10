@@ -14,7 +14,8 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean
+.PHONY: help build test test-coverage lint fmt go-fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean \
+ts-fmt ts-lint ts-test ts-build go-typecheck all-fmt all-lint all-test all-build setup-all health-all
 
 # Default target
 all: build
@@ -51,6 +52,8 @@ go-fmt: ## Format code
 	go fmt ./...
 	goimports -w .
 
+fmt: go-fmt ## Alias for go-fmt (backward compatibility)
+
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
 	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
@@ -81,9 +84,9 @@ dev-down: ## Stop development environment
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
-	go install github.com/air-verse/air@latest
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install golang.org/x/tools/cmd/goimports@latest
+	go install github.com/air-verse/air@v1.52.0
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0
+	go install golang.org/x/tools/cmd/goimports@v0.24.0
 	@echo "$(GREEN)Tools installed!$(NC)"
 
 security: ## Run security scan
@@ -151,19 +154,22 @@ docker-push: ## Push Docker image to registry
 	docker push $(DOCKER_IMAGE)
 
 ## TypeScript/Go Combined Commands
-ts-fmt: ## Format TypeScript code
+ensure-bun:
+	@command -v bun >/dev/null || { echo "$(RED)Bun is not installed. See https://bun.sh/docs/installation$(NC)"; exit 1; }
+
+ts-fmt: ensure-bun ## Format TypeScript code
 	@echo "$(GREEN)Formatting TypeScript code...$(NC)"
 	cd ccxt-service && bun run format || echo "$(YELLOW)No format script found, skipping$(NC)"
 
-ts-lint: ## Lint TypeScript code
+ts-lint: ensure-bun ## Lint TypeScript code
 	@echo "$(GREEN)Linting TypeScript code...$(NC)"
 	cd ccxt-service && bun run lint || echo "$(YELLOW)No lint script found, skipping$(NC)"
 
-ts-test: ## Run TypeScript tests
+ts-test: ensure-bun ## Run TypeScript tests
 	@echo "$(GREEN)Running TypeScript tests...$(NC)"
 	cd ccxt-service && bun test
 
-ts-build: ## Build TypeScript service
+ts-build: ensure-bun ## Build TypeScript service
 	@echo "$(GREEN)Building TypeScript service...$(NC)"
 	cd ccxt-service && bun run build
 
@@ -180,13 +186,13 @@ all-test: test ts-test ## Run both Go and TypeScript tests
 all-build: build ts-build ## Build both Go and TypeScript services
 
 ## Setup and Installation
-setup-all: install-tools ccxt-setup ## Install all development tools
+setup-all: install-tools mod-download ccxt-setup ## Install all development tools
 	@echo "$(GREEN)All development tools installed!$(NC)"
 
 ## Health Checks
 health-all: health ## Check health of all services
 	@echo "$(GREEN)Checking CCXT service health...$(NC)"
-	curl -f http://localhost/ccxt/health || echo "$(RED)CCXT service health check failed$(NC)"
+	curl -sf http://localhost/ccxt/health >/dev/null || echo "$(RED)CCXT service health check failed$(NC)"
 
 ## Utilities
 clean: ## Clean build artifacts
@@ -194,8 +200,14 @@ clean: ## Clean build artifacts
 	rm -rf bin/
 	rm -f coverage.out coverage.html
 	cd ccxt-service && rm -rf dist/
-	docker system prune -f
 	@echo "$(GREEN)Clean complete!$(NC)"
+
+docker-prune: ## Clean up Docker resources
+	@echo "$(YELLOW)Cleaning up Docker resources...$(NC)"
+	docker system prune -f
+	@echo "$(GREEN)Docker cleanup complete!$(NC)"
+
+clean-deep: clean docker-prune ## Deep clean including Docker resources
 
 mod-tidy: ## Tidy Go modules
 	@echo "$(GREEN)Tidying Go modules...$(NC)"
