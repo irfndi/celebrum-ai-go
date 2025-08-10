@@ -29,6 +29,9 @@ ENV NODE_ENV=production
 
 # Copy production dependencies and source code into final image
 FROM base AS release
+# Install curl in final image for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=install /temp/prod/node_modules node_modules
 COPY --from=prerelease /usr/src/app/index.ts .
 COPY --from=prerelease /usr/src/app/types.ts .
