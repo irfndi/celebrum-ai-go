@@ -3,13 +3,13 @@
 # Configuration Validation Script
 # Validates that the configuration system is set up correctly
 
-set -e
+set -euo pipefail
+trap 'error "Script failed at line $LINENO"' ERR
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
@@ -78,11 +78,12 @@ validate_yaml() {
 }
 
 validate_docker_compose() {
-    local files="$1"
-    local description="$2"
+    local description="$1"
+    shift
+    local files=("$@")
     
     if command -v docker-compose &> /dev/null; then
-        if docker-compose $files config > /dev/null 2>&1; then
+        if docker-compose "${files[@]}" config > /dev/null 2>&1; then
             success "$description Docker Compose is valid"
             return 0
         else
@@ -115,12 +116,14 @@ main() {
     check_file "configs/config.local.yml" "Development configuration" || ((errors++))
     check_file "configs/config.ci.yml" "CI configuration" || ((errors++))
     check_file "configs/config.prod.yml" "Production configuration" || ((errors++))
+    check_file "configs/config.yml" "Base configuration" || ((errors++))
     
     # Check Docker Compose files
     check_file "docker-compose.yml" "Base Docker Compose" || ((errors++))
     check_file "docker-compose.override.yml" "Development Docker Compose" || ((errors++))
     check_file "docker-compose.staging.yml" "Staging Docker Compose" || ((errors++))
     check_file "docker-compose.prod.yml" "Production Docker Compose" || ((errors++))
+    check_file "docker-compose.single-droplet.yml" "Single Droplet Docker Compose" || ((errors++))
     
     # Validate YAML files
     validate_yaml "configs/config.local.yml" "Development config" || ((errors++))
@@ -128,14 +131,15 @@ main() {
     validate_yaml "configs/config.prod.yml" "Production config" || ((errors++))
     
     # Validate Docker Compose files
-    validate_docker_compose "docker-compose.yml" "Base" || ((errors++))
-    validate_docker_compose "-f docker-compose.yml -f docker-compose.override.yml" "Development" || ((errors++))
-    validate_docker_compose "-f docker-compose.yml -f docker-compose.staging.yml" "Staging" || ((errors++))
-    validate_docker_compose "-f docker-compose.yml -f docker-compose.prod.yml" "Production" || ((errors++))
+    validate_docker_compose "Base" "docker-compose.yml" || ((errors++))
+    validate_docker_compose "Development" "-f" "docker-compose.yml" "-f" "docker-compose.override.yml" || ((errors++))
+    validate_docker_compose "Staging" "-f" "docker-compose.yml" "-f" "docker-compose.staging.yml" || ((errors++))
+    validate_docker_compose "Production" "-f" "docker-compose.yml" "-f" "docker-compose.prod.yml" || ((errors++))
     
     # Check scripts
     check_file "scripts/setup-environment.sh" "Setup script" || ((errors++))
     check_file "scripts/deploy-enhanced.sh" "Deployment script" || ((errors++))
+    check_file "scripts/deploy-manual.sh" "Manual deployment script" || ((errors++))
     
     # Check if setup script is executable
     if [[ -x "scripts/setup-environment.sh" ]]; then

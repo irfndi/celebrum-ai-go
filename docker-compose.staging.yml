@@ -12,14 +12,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+    mem_limit: 512M
+    cpus: 1.0
+    networks:
+      - celebrum-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-celebrum_staging}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   redis:
     restart: unless-stopped
@@ -27,14 +29,16 @@ services:
       - redis_data:/data
       - ./configs/redis.staging.conf:/usr/local/etc/redis/redis.conf:ro
     command: redis-server /usr/local/etc/redis/redis.conf
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+    mem_limit: 256M
+    cpus: 0.5
+    networks:
+      - celebrum-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   ccxt-service:
     restart: unless-stopped
@@ -42,20 +46,25 @@ services:
       - NODE_ENV=staging
       - PORT=3001
       - REDIS_URL=redis://redis:6379
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+    mem_limit: 256M
+    cpus: 0.5
+    networks:
+      - celebrum-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   app:
     restart: unless-stopped
     environment:
       - ENVIRONMENT=staging
-      - CONFIG_PATH=/app/configs/config.ci.yml
+      - CONFIG_PATH=/app/configs/config.staging.yml
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=${POSTGRES_USER:-postgres}
@@ -65,14 +74,23 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - CCXT_SERVICE_URL=http://ccxt-service:3001
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+    mem_limit: 512M
+    cpus: 1.0
+    networks:
+      - celebrum-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ccxt-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   nginx:
     restart: unless-stopped
@@ -80,14 +98,13 @@ services:
       - "8080:80"  # Use port 8080 for staging to avoid conflicts
     volumes:
       - ./configs/nginx.staging.conf:/etc/nginx/nginx.conf:ro
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 128M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
+    mem_limit: 128M
+    cpus: 0.25
+    networks:
+      - celebrum-network
+    depends_on:
+      app:
+        condition: service_healthy
 
 volumes:
   postgres_data:

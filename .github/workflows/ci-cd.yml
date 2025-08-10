@@ -16,19 +16,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     
-    # Use environment variables for configuration
-    env:
-      ENVIRONMENT: testing
-      DATABASE_HOST: localhost
-      DATABASE_PORT: 5432
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-      DATABASE_DBNAME: celebrum_test
-      REDIS_HOST: localhost
-      REDIS_PORT: 6379
-      CCXT_SERVICE_URL: http://localhost:3001
-      CONFIG_PATH: configs/config.ci.yml
-    
     services:
       postgres:
         image: postgres:17
@@ -53,6 +40,19 @@ jobs:
         ports:
           - 6379:6379
 
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
+      DATABASE_HOST: localhost
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_DBNAME: celebrum_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_URL: redis://localhost:6379
+      CCXT_SERVICE_URL: http://localhost:3001
+      CONFIG_PATH: configs/config.ci.yml
+
     steps:
     - uses: actions/checkout@v4
     
@@ -69,17 +69,17 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     
-    - name: Setup Node.js for CCXT service
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
         cache-dependency-path: ccxt-service/package-lock.json
     
-    - name: Install Node.js dependencies
+    - name: Install dependencies
       run: |
         cd ccxt-service
-        npm ci
+        npm install
     
     - name: Download Go dependencies
       run: go mod download
@@ -93,13 +93,25 @@ jobs:
     - name: Check formatting
       run: make fmt-check
     
-    - name: Run tests
+    - name: Start CCXT service
       run: |
-        # Start CCXT service for integration tests
         cd ccxt-service
-        npm run dev &
+        npm run start:ci &
         CCXT_PID=$!
-        sleep 10
+        echo "Waiting for CCXT service to be ready..."
+        for i in {1..30}; do
+          if curl -f http://localhost:3001/health >/dev/null 2>&1; then
+            echo "CCXT service is ready"
+            break
+          fi
+          echo "Attempt $i/30: CCXT service not ready, waiting..."
+          sleep 2
+        done
+        if ! curl -f http://localhost:3001/health >/dev/null 2>&1; then
+          echo "CCXT service failed to start within 60 seconds"
+          kill $CCXT_PID || true
+          exit 1
+        fi
         
         # Run Go tests
         cd ..
@@ -120,7 +132,7 @@ jobs:
     
     - name: Build application
       run: |
-        # Build with production configuration
+        # Build with CI configuration
         CONFIG_PATH=configs/config.ci.yml make build
 
   build-and-push:
@@ -206,7 +218,7 @@ jobs:
         
         # Setup SSH key with proper formatting
         echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key_raw
-        cat ~/.ssh/deploy_key_raw | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+        cat ~/.ssh/deploy_key_raw | tr -d '\r' | sed 's/\n/\n/g' > ~/.ssh/deploy_key
         sed -i 's/$//' ~/.ssh/deploy_key
         
         # Verify key format
@@ -245,8 +257,13 @@ jobs:
     - name: Deploy with environment variables
       run: |
         # Create production environment file
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-          # Create production environment file
+        ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          set -euo pipefail
+          
+          # Ensure target directory exists
+          mkdir -p /root/celebrum-ai-go
+          
+          # Create production environment file with secure permissions
           cat > /root/celebrum-ai-go/.env << 'ENV_EOF'
           ENVIRONMENT=production
           POSTGRES_USER=${{ secrets.POSTGRES_USER }}
@@ -260,14 +277,15 @@ jobs:
           TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           CONFIG_PATH=configs/config.prod.yml
           ENV_EOF
+          chmod 600 /root/celebrum-ai-go/.env
           
           # Deploy with production configuration
           cd /root/celebrum-ai-go
-          docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull
-          docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
           
           # Health check
           sleep 30
-          docker-compose ps
+          docker compose ps
           curl -f http://localhost:8080/health || exit 1
         EOF

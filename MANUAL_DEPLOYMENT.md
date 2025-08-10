@@ -5,7 +5,7 @@ This guide provides instructions for deploying Celebrum AI using manual rsync an
 ## Quick Start
 
 ### Prerequisites
-- SSH access to the server (`root@143.198.219.213`)
+- SSH access to the server (`${DEPLOY_USER}@${SERVER_IP}`)
 - Environment variables configured
 - Local development environment ready
 
@@ -31,8 +31,9 @@ If you prefer to run each step manually:
 #### Step 1: Create Environment File
 ```bash
 # SSH to server and create .env file
-ssh root@143.198.219.213
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && cat > .env << EOF
+ssh ${DEPLOY_USER}@${SERVER_IP} << 'EOF'
+cd /home/${DEPLOY_USER}/celebrum-ai-go
+cat > .env << 'ENV_EOF'
 JWT_SECRET=your-jwt-secret-here
 TELEGRAM_BOT_TOKEN=your-bot-token-here
 TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook
@@ -42,7 +43,9 @@ ENVIRONMENT=production
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/celebrum_ai
 REDIS_URL=redis://redis:6379
 CCXT_SERVICE_URL=http://ccxt-service:3001
-EOF"
+ENV_EOF
+chmod 600 .env
+EOF
 ```
 
 #### Step 2: Sync Files
@@ -58,30 +61,29 @@ rsync -avz --delete \
     --exclude='dist' \
     --exclude='*.log' \
     --exclude='backups' \
-    --exclude='.trae' \
     --exclude='docs' \
     --exclude='tests' \
-    ./ root@143.198.219.213:/root/celebrum-ai-go/
+    ./ ${DEPLOY_USER}@${SERVER_IP}:/home/${DEPLOY_USER}/celebrum-ai-go/
 ```
 
 #### Step 3: Build and Deploy
 ```bash
 # Build and start services
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build --no-cache"
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml up -d"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml up -d"
 ```
 
 #### Step 4: Verify Deployment
 ```bash
 # Check service status
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose ps"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
 
 # Check logs
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs --tail=50"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs --tail=50"
 
 # Test health endpoints
-ssh root@143.198.219.213 "curl -f http://localhost:3000/health"
-ssh root@143.198.219.213 "curl -f http://localhost:3001/health"
+ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:3000/health"
+ssh ${DEPLOY_USER}@${SERVER_IP} "curl -f http://localhost:3001/health"
 ```
 
 ## Troubleshooting
@@ -105,29 +107,29 @@ This will:
 #### 1. Service Health Check Failures
 ```bash
 # Check individual service logs
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs ccxt-service"
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs app"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs ccxt-service"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs app"
 
 # Restart specific service
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose restart ccxt-service"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose restart ccxt-service"
 ```
 
 #### 2. Database Connection Issues
 ```bash
 # Check database status
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose exec postgres pg_isready"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose exec postgres pg_isready"
 
 # Reset database if needed
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose restart postgres"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose restart postgres"
 ```
 
 #### 3. Environment Variable Issues
 ```bash
 # Verify .env file exists and has correct values
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && cat .env"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && cat .env"
 
 # Recreate .env file if corrupted
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && rm .env && # then recreate using steps above"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && rm .env && # then recreate using steps above"
 ```
 
 ## Environment Variables Setup
@@ -147,48 +149,87 @@ ssh root@143.198.219.213 "cd /root/celebrum-ai-go && rm .env && # then recreate 
 ### Real-time Logs
 ```bash
 # Watch live logs
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs -f"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs -f"
 
 # Monitor specific service
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs -f app"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose logs -f app"
 ```
 
 ### Health Checks
 ```bash
 # Check all services
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose ps"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose ps"
 
 # Test external endpoints
-curl -I https://143.198.219.213/health
-curl -I https://143.198.219.213:3001/health
+curl -I https://${SERVER_DOMAIN}/health
+curl -I https://${SERVER_DOMAIN}:3001/health
 ```
+
+## Security Best Practices
+
+### User Management
+- **Never use root user for deployment** - create a dedicated deploy user with limited privileges
+- Use SSH key authentication instead of passwords
+- Configure proper sudo access for the deploy user if needed
+
+### Create Deploy User (if needed)
+```bash
+# On the server, create a deploy user
+sudo adduser deploy
+sudo usermod -aG docker deploy
+sudo usermod -aG sudo deploy
+```
+
+### Update Deployment Commands
+Replace all instances of:
+- `root@143.198.219.213` → `${DEPLOY_USER}@${SERVER_IP}`
+- `/root/celebrum-ai-go` → `/home/${DEPLOY_USER}/celebrum-ai-go`
 
 ## Performance Tips
 
 ### 1. Optimize Build Time
 ```bash
 # Use build cache
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
+ssh ${DEPLOY_USER}@${SERVER_IP} "cd /home/${DEPLOY_USER}/celebrum-ai-go && docker-compose -f docker-compose.single-droplet.yml build"
 
 # Pre-pull base images
-ssh root@143.198.219.213 "docker pull postgres:15-alpine && docker pull redis:7-alpine"
+ssh ${DEPLOY_USER}@${SERVER_IP} "docker pull postgres:15-alpine && docker pull redis:7-alpine"
 ```
 
 ### 2. Resource Management
 ```bash
 # Monitor resource usage
-ssh root@143.198.219.213 "docker stats"
+ssh ${DEPLOY_USER}@${SERVER_IP} "docker stats"
 
 # Clean up unused images
-ssh root@143.198.219.213 "docker system prune -f"
+ssh ${DEPLOY_USER}@${SERVER_IP} "docker system prune -f"
 ```
 
 ## Security Notes
 
+### .env File Security
 - Never commit `.env` file to version control
-- Use strong, unique secrets for JWT and webhook
-- Regularly rotate secrets
+- Always set secure file permissions: `chmod 600 .env`
+- **Never include secrets in shell commands** - use file transfer methods instead
+- Use secure file transfer methods like `scp` or `rsync` to move .env files
+- Consider using encrypted file transfer or secrets management systems
+
+### Best Practices for Environment Variables
+- Use strong, unique secrets for JWT and webhook (32+ characters)
+- Regularly rotate secrets (quarterly recommended)
 - Monitor server logs for security issues
+- Use a non-root user for deployment (see Security Best Practices section)
+- Avoid exposing secrets in shell command history
+
+### Secure .env File Transfer Example
+```bash
+# Instead of creating .env via SSH commands, use secure transfer:
+scp .env ${DEPLOY_USER}@${SERVER_IP}:/home/${DEPLOY_USER}/celebrum-ai-go/.env
+ssh ${DEPLOY_USER}@${SERVER_IP} "chmod 600 /home/${DEPLOY_USER}/celebrum-ai-go/.env"
+
+# Or use rsync for encrypted transfer:
+rsync -avz --chmod=600 .env ${DEPLOY_USER}@${SERVER_IP}:/home/${DEPLOY_USER}/celebrum-ai-go/.env
+```
 
 ## Quick Commands Reference
 
@@ -198,10 +239,4 @@ ssh root@143.198.219.213 "docker system prune -f"
 
 # Quick rollback
 ./scripts/rollback-manual.sh
-
-# Check status
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose ps"
-
-# View logs
-ssh root@143.198.219.213 "cd /root/celebrum-ai-go && docker-compose logs --tail=20"
 ```

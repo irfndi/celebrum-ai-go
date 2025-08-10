@@ -5,7 +5,7 @@
 services:
   postgres:
     ports:
-      - "5432:5432"  # Expose PostgreSQL on standard port for local development
+      - "127.0.0.1:5432:5432"  # Expose PostgreSQL on standard port for local development
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -13,11 +13,11 @@ services:
 
   redis:
     ports:
-      - "6379:6379"  # Expose Redis on standard port for local development
+      - "127.0.0.1:6379:6379"  # Expose Redis on standard port for local development
 
   ccxt-service:
     ports:
-      - "3001:3001"  # Expose CCXT service on standard port
+      - "127.0.0.1:3001:3001"  # Expose CCXT service on standard port
     environment:
       NODE_ENV: development
       PORT: 3001
@@ -27,7 +27,7 @@ services:
 
   app:
     ports:
-      - "8080:8080"  # Expose main app on standard port
+      - "127.0.0.1:8080:8080"  # Expose main app on standard port
     environment:
       ENVIRONMENT: development
       CONFIG_PATH: /app/configs/config.local.yml
@@ -50,7 +50,7 @@ services:
     image: adminer:latest
     container_name: celebrum-adminer
     ports:
-      - "8081:8080"  # Database admin interface
+      - "127.0.0.1:8081:8080"  # Database admin interface
     depends_on:
       - postgres
     profiles:
@@ -62,7 +62,7 @@ services:
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
-      - "8082:8081"  # Redis admin interface
+      - "127.0.0.1:8082:8081"  # Redis admin interface
     depends_on:
       - redis
     profiles:

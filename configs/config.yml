@@ -26,12 +26,12 @@ server:
 
 # Database configuration
 database:
-  host: localhost
-  port: 5432
-  user: postgres
-  password: postgres
-  dbname: celebrum_ai
-  sslmode: disable
+  host: ${DATABASE_HOST:-localhost}
+  port: ${DATABASE_PORT:-5432}
+  user: ${DATABASE_USER:-postgres}
+  password: ${DATABASE_PASSWORD:-postgres}
+  dbname: ${DATABASE_DBNAME:-celebrum_ai}
+  sslmode: ${DATABASE_SSLMODE:-disable}
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 300s
@@ -53,8 +53,8 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: http://localhost:3001
-  timeout: 30
+  service_url: http://localhost:8081
+  timeout: 30s
   retry_attempts: 3
   retry_delay: 1s
   rate_limit:
@@ -107,7 +107,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "dev-jwt-secret-change-this-in-production"
+  jwt_secret: ${JWT_SECRET:-dev-jwt-secret-change-this-in-production}
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:

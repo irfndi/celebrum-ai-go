@@ -5,11 +5,11 @@ services:
     image: postgres:17
     container_name: celebrum-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-celebrum_ai}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -24,8 +24,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: celebrum-redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
       - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -67,25 +67,23 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - CCXT_SERVICE_URL=${CCXT_SERVICE_URL:-http://ccxt-service:3001}
     container_name: celebrum-app
     ports:
       - "${SERVER_PORT:-8080}:8080"
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=${ENVIRONMENT}
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
-      - DATABASE_USER=${POSTGRES_USER:-postgres}
-      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_ai}
+      - DATABASE_USER=${POSTGRES_USER}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - DATABASE_DBNAME=${POSTGRES_DB}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - CCXT_SERVICE_URL=${CCXT_SERVICE_URL:-http://ccxt-service:3001}
-      - CONFIG_PATH=${CONFIG_PATH:-/app/configs/config.local.yml}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CCXT_SERVICE_URL=${CCXT_SERVICE_URL}
+      - CONFIG_PATH=${CONFIG_PATH}
     depends_on:
       postgres:
         condition: service_healthy

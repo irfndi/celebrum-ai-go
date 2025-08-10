@@ -32,7 +32,6 @@ database:
   dbname: ${DATABASE_DBNAME:-celebrum_ai}
   sslmode: ${DATABASE_SSLMODE:-disable}
   database_url: ${DATABASE_URL:-}
-  
   # Connection pool settings
   max_open_conns: ${DATABASE_MAX_OPEN_CONNS:-25}
   max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:-5}
@@ -55,7 +54,7 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: ${CCXT_SERVICE_URL:-http://localhost:3001}
+  service_url: ${CCXT_SERVICE_URL:-http://localhost:8081}
   timeout: ${CCXT_TIMEOUT:-30}
   retry_attempts: ${CCXT_RETRY_ATTEMPTS:-3}
   retry_delay: ${CCXT_RETRY_DELAY:-1s}

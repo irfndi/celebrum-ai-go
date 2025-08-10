@@ -49,7 +49,7 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: http://ccxt-service:3001
+  service_url: http://ccxt-service:8081
   timeout: 30
   retry_attempts: 2
   retry_delay: 500ms
@@ -59,9 +59,9 @@ ccxt:
 
 # Telegram Bot configuration
 telegram:
-  bot_token: "test-bot-token"
+  bot_token: "${BOT_TOKEN}"
   webhook_url: "http://localhost:8080/api/v1/telegram/webhook"
-  webhook_secret: "test-webhook-secret"
+  webhook_secret: "${WEBHOOK_SECRET}"
   timeout: 30s
 
 # Market Data configuration
@@ -92,7 +92,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "test-jwt-secret-for-ci"
+  jwt_secret: "${JWT_SECRET}"
   jwt_expiry: 1h
   bcrypt_cost: 10
   rate_limit:

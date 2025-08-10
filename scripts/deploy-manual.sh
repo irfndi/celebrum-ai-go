@@ -3,12 +3,42 @@
 # Manual deployment script using rsync and SSH
 # This bypasses CI/CD and deploys directly to the server
 
-set -e
+set -euo pipefail
 
-# Configuration
-SERVER="root@143.198.219.213"
+# Default configuration
+SERVER_USER="root"
+SERVER_IP="143.198.219.213"
 REMOTE_DIR="/root/celebrum-ai-go"
 LOCAL_DIR="$(pwd)"
+
+# Parse command line arguments
+while getopts "s:d:u:h" opt; do
+    case $opt in
+        s)
+            SERVER_IP="$OPTARG"
+            ;;
+        d)
+            REMOTE_DIR="$OPTARG"
+            ;;
+        u)
+            SERVER_USER="$OPTARG"
+            ;;
+        h)
+            echo "Usage: $0 [-s server_ip] [-d remote_dir] [-u server_user]"
+            echo "  -s server_ip    Server IP address (default: 143.198.219.213)"
+            echo "  -d remote_dir   Remote directory path (default: /root/celebrum-ai-go)"
+            echo "  -u server_user  Server username (default: root)"
+            exit 0
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Construct server connection string
+SERVER="${SERVER_USER}@${SERVER_IP}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,14 +68,14 @@ fi
 
 # Create backup of current deployment
 print_status "Creating backup of current deployment..."
-ssh $SERVER "cd $REMOTE_DIR && if [ -f docker-compose.single-droplet.yml ]; then 
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && if [ -f docker-compose.single-droplet.yml ]; then 
     mkdir -p backups && 
-    tar -czf backups/backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude=backups . || true; 
+    tar -czf backups/backup-\$(date +%Y%m%d-%H%M%S).tar.gz --exclude=backups . || true; 
 fi"
 
 # Stop current services gracefully
 print_status "Stopping current services..."
-ssh $SERVER "cd $REMOTE_DIR && docker-compose -f docker-compose.single-droplet.yml down --remove-orphans || true"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml down --remove-orphans || true"
 
 # Check if .env file exists locally, skip setup if it does
 if [ -f "$LOCAL_DIR/.env" ]; then
@@ -54,7 +84,7 @@ else
     print_warning "No .env file found locally. Creating from environment variables..."
     if [ -n "$JWT_SECRET" ] && [ -n "$TELEGRAM_BOT_TOKEN" ]; then
         # Using GitHub Secrets or environment variables
-        ssh $SERVER "cd $REMOTE_DIR && cat > .env << EOF
+        ssh "$SERVER" "cd \"$REMOTE_DIR\" && cat > .env << 'EOF'
 JWT_SECRET=$JWT_SECRET
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_WEBHOOK_URL=$TELEGRAM_WEBHOOK_URL
@@ -67,12 +97,16 @@ CCXT_SERVICE_URL=http://ccxt-service:3001
 EOF"
     else
         print_warning "GitHub Secrets not found. Please provide environment variables:"
-        read -p "JWT_SECRET: " jwt_secret
-        read -p "TELEGRAM_BOT_TOKEN: " telegram_bot_token
-        read -p "TELEGRAM_WEBHOOK_URL: " telegram_webhook_url
-        read -p "TELEGRAM_WEBHOOK_SECRET: " telegram_webhook_secret
+        read -r -s -p "JWT_SECRET: " jwt_secret
+        echo
+        read -r -s -p "TELEGRAM_BOT_TOKEN: " telegram_bot_token
+        echo
+        read -r -s -p "TELEGRAM_WEBHOOK_URL: " telegram_webhook_url
+        echo
+        read -r -s -p "TELEGRAM_WEBHOOK_SECRET: " telegram_webhook_secret
+        echo
         
-        ssh $SERVER "cd $REMOTE_DIR && cat > .env << EOF
+        ssh "$SERVER" "cd \"$REMOTE_DIR\" && cat > .env << 'EOF'
 JWT_SECRET=$jwt_secret
 TELEGRAM_BOT_TOKEN=$telegram_bot_token
 TELEGRAM_WEBHOOK_URL=$telegram_webhook_url
@@ -85,6 +119,10 @@ CCXT_SERVICE_URL=http://ccxt-service:3001
 EOF"
     fi
 fi
+
+# Create remote directory if it doesn't exist
+print_status "Creating remote directory if needed..."
+ssh "$SERVER" "mkdir -p \"$REMOTE_DIR\""
 
 # Sync files to server using rsync
 print_status "Syncing files to server..."
@@ -99,12 +137,12 @@ rsync -avz --delete \
     --exclude='.trae' \
     --exclude='docs' \
     --exclude='tests' \
-    $LOCAL_DIR/ $SERVER:$REMOTE_DIR/
+    "$LOCAL_DIR/" "$SERVER:$REMOTE_DIR/"
 
 # Build and start services
 print_status "Building and starting services..."
-ssh $SERVER "cd $REMOTE_DIR && docker-compose -f docker-compose.single-droplet.yml build --no-cache"
-ssh $SERVER "cd $REMOTE_DIR && docker-compose -f docker-compose.single-droplet.yml up -d"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml build --no-cache"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml up -d"
 
 # Wait for services to start
 print_status "Waiting for services to start..."
@@ -112,17 +150,20 @@ sleep 30
 
 # Check service health
 print_status "Checking service health..."
-ssh $SERVER "cd $REMOTE_DIR && docker-compose -f docker-compose.single-droplet.yml ps"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml ps"
 
 # Show logs for debugging
 print_status "Showing recent logs..."
-ssh $SERVER "cd $REMOTE_DIR && docker-compose -f docker-compose.single-droplet.yml logs --tail=50"
+ssh "$SERVER" "cd \"$REMOTE_DIR\" && docker-compose -f docker-compose.single-droplet.yml logs --tail=50"
 
 # Test health endpoints
 print_status "Testing health endpoints..."
-ssh $SERVER "curl -f http://localhost:3000/health || echo 'Main app health check failed'"
-ssh $SERVER "curl -f http://localhost:3001/health || echo 'CCXT service health check failed'"
+ssh "$SERVER" "curl -f http://localhost:3000/health || echo 'Main app health check failed'"
+ssh "$SERVER" "curl -f http://localhost:3001/health || echo 'CCXT service health check failed'"
 
 print_status "Manual deployment completed!"
 print_status "Services should now be running on the server."
 print_status "Check status with: ssh $SERVER 'cd $REMOTE_DIR && docker-compose ps'"
+print_status "Script executed with:"
+print_status "  Server: $SERVER"
+print_status "  Remote Directory: $REMOTE_DIR"
