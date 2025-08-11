@@ -117,24 +117,24 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Get all available markets from the exchange first
-	markets, err := c.ccxtService.FetchMarkets(c.ctx, exchangeID)
+	// Get active symbols from the exchange
+	activeSymbols, err := c.getActiveSymbols(exchangeID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch markets for exchange %s: %w", exchangeID, err)
+		return fmt.Errorf("failed to fetch active symbols for exchange %s: %w", exchangeID, err)
 	}
 
 	// Filter out invalid symbols (options, derivatives, etc.)
-	validSymbols := c.filterValidSymbols(markets.Symbols)
+	validSymbols := c.filterValidSymbols(activeSymbols)
 
 	// Further filter to only include symbols that appear on multiple exchanges (for arbitrage)
 	arbitrageSymbols := c.filterArbitrageSymbols(validSymbols, multiExchangeSymbols)
-	log.Printf("Filtered %d arbitrage symbols from %d valid symbols (%d total) for %s",
-		len(arbitrageSymbols), len(validSymbols), len(markets.Symbols), exchangeID)
+	log.Printf("Filtered %d arbitrage symbols from %d valid active symbols for %s",
+		len(arbitrageSymbols), len(validSymbols), exchangeID)
 
-	// Use arbitrage symbols if available, otherwise fall back to valid symbols
+	// Use arbitrage symbols if available, otherwise fall back to valid active symbols
 	finalSymbols := arbitrageSymbols
 	if len(finalSymbols) == 0 {
-		log.Printf("No arbitrage symbols found for %s, using all valid symbols", exchangeID)
+		log.Printf("No arbitrage symbols found for %s, using all valid active symbols", exchangeID)
 		finalSymbols = validSymbols
 	}
 
@@ -146,11 +146,11 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	}
 
 	if len(finalSymbols) == 0 {
-		log.Printf("No valid trading pairs found for exchange %s, skipping worker creation", exchangeID)
+		log.Printf("No valid active trading pairs found for exchange %s, skipping worker creation", exchangeID)
 		return nil
 	}
 
-	// Create worker with filtered symbols
+	// Create worker with filtered active symbols
 	worker := &Worker{
 		Exchange:  exchangeID,
 		Symbols:   finalSymbols,
@@ -165,7 +165,7 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	c.wg.Add(1)
 	go c.runWorker(worker)
 
-	log.Printf("Created worker for exchange %s with %d symbols", exchangeID, len(finalSymbols))
+	log.Printf("Created worker for exchange %s with %d active symbols", exchangeID, len(finalSymbols))
 	return nil
 }
 
@@ -246,11 +246,47 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 	return nil
 }
 
+// isSymbolActive checks if a symbol is active on a given exchange
+func (c *CollectorService) isSymbolActive(exchange, symbol string) (bool, error) {
+	// Fetch active symbols from the exchange
+	activeSymbols, err := c.getActiveSymbols(exchange)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch active symbols for %s: %w", exchange, err)
+	}
+
+	// Check if symbol exists in active symbols
+	for _, activeSymbol := range activeSymbols {
+		if activeSymbol == symbol {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // collectTickerData collects and stores ticker data for a specific symbol
 func (c *CollectorService) collectTickerData(exchange, symbol string) error {
+	// Check if symbol is active before attempting to fetch data
+	isActive, err := c.isSymbolActive(exchange, symbol)
+	if err != nil {
+		log.Printf("Warning: Failed to check symbol status for %s:%s: %v", exchange, symbol, err)
+		// Continue anyway, let the CCXT service handle the error
+	} else if !isActive {
+		log.Printf("Skipping inactive/delisted symbol: %s:%s", exchange, symbol)
+		return nil
+	}
+
 	// Fetch ticker data from CCXT service
 	ticker, err := c.ccxtService.FetchSingleTicker(c.ctx, exchange, symbol)
 	if err != nil {
+		// Check if the error indicates delisted/inactive symbol
+		if strings.Contains(err.Error(), "delisted") ||
+			strings.Contains(err.Error(), "inactive") ||
+			strings.Contains(err.Error(), "Not allowed") ||
+			strings.Contains(err.Error(), "does not have market symbol") {
+			log.Printf("Skipping symbol due to exchange error: %s:%s - %v", exchange, symbol, err)
+			return nil
+		}
 		return fmt.Errorf("failed to fetch ticker data: %w", err)
 	}
 
@@ -278,19 +314,19 @@ func (c *CollectorService) collectTickerData(exchange, symbol string) error {
 	return nil
 }
 
-// collectAllMarketData collects ticker data for all available markets on an exchange
+// collectAllMarketData collects ticker data for all active markets on an exchange
 func (c *CollectorService) collectAllMarketData(worker *Worker) error {
-	// Get all available markets from the exchange
-	markets, err := c.ccxtService.FetchMarkets(c.ctx, worker.Exchange)
+	// Get active symbols from the exchange
+	activeSymbols, err := c.getActiveSymbols(worker.Exchange)
 	if err != nil {
-		return fmt.Errorf("failed to fetch markets for %s: %w", worker.Exchange, err)
+		return fmt.Errorf("failed to fetch active symbols for %s: %w", worker.Exchange, err)
 	}
 
 	// Filter out invalid symbols (options, derivatives, etc.)
-	validSymbols := c.filterValidSymbols(markets.Symbols)
-	log.Printf("Filtered %d valid symbols from %d total symbols for %s", len(validSymbols), len(markets.Symbols), worker.Exchange)
+	validSymbols := c.filterValidSymbols(activeSymbols)
+	log.Printf("Filtered %d valid active symbols for %s", len(validSymbols), worker.Exchange)
 
-	// Collect ticker data for each valid market symbol with rate limiting
+	// Collect ticker data for each valid active symbol with rate limiting
 	for i, symbol := range validSymbols {
 		select {
 		case <-c.ctx.Done():
@@ -360,9 +396,18 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 		return fmt.Errorf("failed to get or create trading pair: %w", err)
 	}
 
-	// Save funding rate to database
+	// Save funding rate to database with upsert to handle duplicates
 	_, err = c.db.Pool.Exec(c.ctx,
-		"INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_time, next_funding_time, mark_price, index_price, timestamp, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		`INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_time, next_funding_time, mark_price, index_price, timestamp, created_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT (exchange_id, trading_pair_id, funding_time) 
+		 DO UPDATE SET 
+			funding_rate = EXCLUDED.funding_rate,
+			next_funding_time = EXCLUDED.next_funding_time,
+			mark_price = EXCLUDED.mark_price,
+			index_price = EXCLUDED.index_price,
+			timestamp = EXCLUDED.timestamp,
+			updated_at = NOW()`,
 		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), rate.MarkPrice, rate.IndexPrice, rate.Timestamp.Time(), time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to save funding rate: %w", err)
@@ -588,6 +633,29 @@ func (c *CollectorService) isFuturesSymbol(symbol string) bool {
 	return false
 }
 
+// getActiveSymbols fetches active symbols from an exchange using market data
+func (c *CollectorService) getActiveSymbols(exchangeID string) ([]string, error) {
+	log.Printf("Fetching active markets for exchange: %s", exchangeID)
+
+	markets, err := c.ccxtService.FetchMarkets(c.ctx, exchangeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch markets for %s: %w", exchangeID, err)
+	}
+
+	// Since markets.Symbols is a slice of strings, we assume CCXT returns only active symbols
+	// Filter out empty strings and invalid formats
+	var activeSymbols []string
+	for _, symbol := range markets.Symbols {
+		if symbol == "" {
+			continue
+		}
+		activeSymbols = append(activeSymbols, symbol)
+	}
+
+	log.Printf("Found %d active symbols on %s", len(activeSymbols), exchangeID)
+	return activeSymbols, nil
+}
+
 // getMultiExchangeSymbols collects symbols from all exchanges and returns those that appear on multiple exchanges
 func (c *CollectorService) getMultiExchangeSymbols(exchanges []string) (map[string]int, error) {
 	symbolCount := make(map[string]int)
@@ -595,23 +663,23 @@ func (c *CollectorService) getMultiExchangeSymbols(exchanges []string) (map[stri
 
 	log.Printf("Collecting symbols from %d exchanges for arbitrage filtering...", len(exchanges))
 
-	// Collect symbols from each exchange
+	// Collect active symbols from each exchange
 	for _, exchangeID := range exchanges {
-		markets, err := c.ccxtService.FetchMarkets(c.ctx, exchangeID)
+		activeSymbols, err := c.getActiveSymbols(exchangeID)
 		if err != nil {
-			log.Printf("Warning: Failed to fetch markets for %s: %v", exchangeID, err)
+			log.Printf("Warning: Failed to fetch active symbols for %s: %v", exchangeID, err)
 			continue
 		}
 
 		// Filter valid symbols for this exchange
-		validSymbols := c.filterValidSymbols(markets.Symbols)
+		validSymbols := c.filterValidSymbols(activeSymbols)
 
 		// Count occurrences of each symbol
 		for _, symbol := range validSymbols {
 			symbolCount[symbol]++
 		}
 
-		log.Printf("Found %d valid symbols on %s", len(validSymbols), exchangeID)
+		log.Printf("Found %d valid active symbols on %s", len(validSymbols), exchangeID)
 	}
 
 	// Filter to only symbols that appear on multiple exchanges

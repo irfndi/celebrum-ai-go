@@ -145,7 +145,7 @@ func (c *CleanupService) cleanupArbitrageOpportunities(retentionHours int) error
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
 	result, err := c.db.Pool.Exec(c.ctx,
-		"DELETE FROM arbitrage_opportunities WHERE created_at < $1",
+		"DELETE FROM arbitrage_opportunities WHERE detected_at < $1",
 		cutoffTime)
 	if err != nil {
 		return fmt.Errorf("failed to delete old arbitrage opportunities: %w", err)

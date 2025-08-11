@@ -6,9 +6,9 @@ environment: development
 
 # Logging configuration
 logging:
-  level: info  # debug, info, warn, error
-  format: json  # json, text
-  output: stdout  # stdout, file
+  level: info # debug, info, warn, error
+  format: json # json, text
+  output: stdout # stdout, file
   file_path: logs/app.log
 
 # Server configuration
@@ -32,10 +32,10 @@ database:
   password: postgres
   dbname: celebrum_ai
   sslmode: disable
-  
+
   # For Digital Ocean managed database (use DATABASE_URL environment variable)
   # database_url: "postgres://username:password@host:port/dbname?sslmode=require"
-  
+
   # Connection pool settings (optimized for cloud deployment)
   max_open_conns: 25
   max_idle_conns: 5
@@ -75,7 +75,7 @@ telegram:
 
 # Market Data configuration
 market_data:
-  collection_interval: 90s  # Collect data every 1.5 minutes (aggressive mode)
+  collection_interval: 5m # Collect data every 5 minutes (optimized for efficiency)
   batch_size: 500
   max_retries: 3
   timeout: 15s
@@ -88,9 +88,9 @@ market_data:
 
 # Arbitrage configuration
 arbitrage:
-  min_profit_threshold: 0.5  # Minimum profit percentage
-  max_trade_amount: 1000.0   # Maximum trade amount in USD
-  check_interval: 2m  # Check for opportunities every 2 minutes
+  min_profit_threshold: 0.5 # Minimum profit percentage
+  max_trade_amount: 1000.0 # Maximum trade amount in USD
+  check_interval: 2m # Check for opportunities every 2 minutes
   enabled_pairs:
     - BTC/USDT
     - ETH/USDT
@@ -137,7 +137,7 @@ features:
   telegram_bot: true
   web_interface: true
   api_v1: true
-  real_trading: false  # Set to true only in production with proper safeguards
+  real_trading: false # Set to true only in production with proper safeguards
   paper_trading: true
 
 # External APIs
@@ -145,9 +145,9 @@ external_apis:
   coingecko:
     base_url: https://api.coingecko.com/api/v3
     timeout: 10s
-    rate_limit: 50  # requests per minute
+    rate_limit: 50 # requests per minute
   coinmarketcap:
     base_url: https://pro-api.coinmarketcap.com/v1
     api_key: ""
     timeout: 10s
-    rate_limit: 333  # requests per day for free tier
+    rate_limit: 333 # requests per day for free tier

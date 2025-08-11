@@ -177,7 +177,7 @@ func (c *Client) formatSymbolForExchange(exchange, symbol string) string {
 	case "kraken", "okx":
 		// Kraken and OKX use URL-encoded slash format
 		return url.QueryEscape(symbol)
-	case "coinbase":
+	case "coinbase", "coinbasepro":
 		// Coinbase uses dash format (BTC-USDT)
 		return strings.ReplaceAll(symbol, "/", "-")
 	default:

@@ -17,13 +17,33 @@ services:
       timeout: 5s
       retries: 5
 
+  # Migration Service - Runs automatically to sync all environments
+  migrate:
+    image: postgres:17
+    container_name: celebrum-migrate
+    environment:
+      PGPASSWORD: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: celebrum_ai
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    volumes:
+      - ./scripts:/scripts
+      - ./database/migrations:/database/migrations
+    command: ["bash", "/scripts/robust-migrate.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   redis:
     image: redis:7-alpine
     container_name: celebrum-redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro
+    command: redis-server /etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -35,6 +55,7 @@ services:
     build:
       context: ./ccxt-service
       dockerfile: Dockerfile
+    image: celebrum-ai/ccxt-service:latest
     container_name: celebrum-ccxt
     ports:
       - "3001:3001"
@@ -56,6 +77,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: celebrum-ai/app:latest
     container_name: celebrum-app
     ports:
       - "8080:8080"
@@ -70,11 +92,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - CCXT_TIMEOUT=30
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     profiles:
       - app
 
