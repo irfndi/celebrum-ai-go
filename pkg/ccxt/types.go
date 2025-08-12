@@ -375,7 +375,32 @@ func (s *Service) Close() error {
 // GetServiceURL returns the CCXT service URL for health checks
 func (s *Service) GetServiceURL() string {
 	if s.client != nil {
-		return "http://localhost:3000" // Default CCXT service URL
+		return s.client.BaseURL
 	}
 	return ""
+}
+
+// GetExchangeConfig retrieves the current exchange configuration
+func (s *Service) GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error) {
+	return s.client.GetExchangeConfig(ctx)
+}
+
+// AddExchangeToBlacklist adds an exchange to the blacklist
+func (s *Service) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	return s.client.AddExchangeToBlacklist(ctx, exchange)
+}
+
+// RemoveExchangeFromBlacklist removes an exchange from the blacklist
+func (s *Service) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	return s.client.RemoveExchangeFromBlacklist(ctx, exchange)
+}
+
+// RefreshExchanges refreshes all non-blacklisted exchanges
+func (s *Service) RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error) {
+	return s.client.RefreshExchanges(ctx)
+}
+
+// AddExchange dynamically adds and initializes a new exchange
+func (s *Service) AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	return s.client.AddExchange(ctx, exchange)
 }

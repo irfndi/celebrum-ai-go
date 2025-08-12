@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -298,7 +297,7 @@ func TestMarketDataRequest_Struct(t *testing.T) {
 
 // Test TradingPair struct and methods
 func TestTradingPair_Struct(t *testing.T) {
-	id := uuid.New()
+	id := 1
 	now := time.Now()
 
 	tp := TradingPair{

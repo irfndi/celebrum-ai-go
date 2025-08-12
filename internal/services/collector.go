@@ -13,13 +13,244 @@ import (
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/shopspring/decimal"
 )
 
 // CollectorConfig holds configuration for the collector service
 type CollectorConfig struct {
 	IntervalSeconds int `mapstructure:"interval_seconds"`
 	MaxErrors       int `mapstructure:"max_errors"`
+}
+
+// SymbolCacheEntry represents a cached entry for exchange symbols
+type SymbolCacheEntry struct {
+	Symbols   []string
+	ExpiresAt time.Time
+}
+
+// SymbolCacheStats tracks cache performance metrics
+type SymbolCacheStats struct {
+	Hits   int64
+	Misses int64
+	Sets   int64
+}
+
+// SymbolCache manages cached active symbols for exchanges
+type SymbolCache struct {
+	cache map[string]*SymbolCacheEntry
+	mu    sync.RWMutex
+	ttl   time.Duration
+	stats SymbolCacheStats
+}
+
+// BlacklistCacheEntry represents a cached entry for blacklisted symbols
+type BlacklistCacheEntry struct {
+	Reason    string
+	ExpiresAt time.Time
+}
+
+// BlacklistCacheStats tracks blacklist cache performance metrics
+type BlacklistCacheStats struct {
+	Hits      int64
+	Misses    int64
+	Additions int64
+	Skips     int64
+}
+
+// BlacklistCache manages cached blacklisted symbols that consistently fail
+type BlacklistCache struct {
+	cache map[string]*BlacklistCacheEntry // key: "exchange:symbol"
+	mu    sync.RWMutex
+	ttl   time.Duration
+	stats BlacklistCacheStats
+}
+
+// NewSymbolCache creates a new symbol cache with specified TTL
+func NewSymbolCache(ttl time.Duration) *SymbolCache {
+	return &SymbolCache{
+		cache: make(map[string]*SymbolCacheEntry),
+		ttl:   ttl,
+	}
+}
+
+// Get retrieves symbols from cache if not expired
+func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	entry, exists := sc.cache[exchangeID]
+	if !exists {
+		sc.stats.Misses++
+		log.Printf("Cache MISS for %s (total hits: %d, misses: %d)", exchangeID, sc.stats.Hits, sc.stats.Misses)
+		return nil, false
+	}
+
+	sc.stats.Hits++
+
+	// During runtime, always return cached symbols even if expired to prevent API calls
+	// Only check expiration during startup phase
+	if time.Now().After(entry.ExpiresAt) {
+		// Log that cache is expired but still returning cached data
+		log.Printf("Cache HIT (expired) for %s but returning cached symbols to prevent runtime API calls (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
+	} else {
+		log.Printf("Cache HIT for %s (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
+	}
+
+	return entry.Symbols, true
+}
+
+// Set stores symbols in cache with TTL
+func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	sc.stats.Sets++
+	sc.cache[exchangeID] = &SymbolCacheEntry{
+		Symbols:   symbols,
+		ExpiresAt: time.Now().Add(sc.ttl),
+	}
+	log.Printf("Cache SET for %s (%d symbols, total sets: %d)", exchangeID, len(symbols), sc.stats.Sets)
+}
+
+// GetStats returns current cache statistics
+func (sc *SymbolCache) GetStats() SymbolCacheStats {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.stats
+}
+
+// LogStats logs current cache performance statistics
+func (sc *SymbolCache) LogStats() {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	total := sc.stats.Hits + sc.stats.Misses
+	hitRate := float64(0)
+	if total > 0 {
+		hitRate = float64(sc.stats.Hits) / float64(total) * 100
+	}
+
+	log.Printf("Symbol Cache Stats - Hits: %d, Misses: %d, Sets: %d, Hit Rate: %.2f%%",
+		sc.stats.Hits, sc.stats.Misses, sc.stats.Sets, hitRate)
+}
+
+// NewBlacklistCache creates a new blacklist cache with specified TTL
+func NewBlacklistCache(ttl time.Duration) *BlacklistCache {
+	return &BlacklistCache{
+		cache: make(map[string]*BlacklistCacheEntry),
+		ttl:   ttl,
+	}
+}
+
+// IsBlacklisted checks if a symbol is blacklisted for a specific exchange
+func (bc *BlacklistCache) IsBlacklisted(exchange, symbol string) (bool, string) {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+
+	key := fmt.Sprintf("%s:%s", exchange, symbol)
+	entry, exists := bc.cache[key]
+	if !exists {
+		bc.stats.Misses++
+		return false, ""
+	}
+
+	// Check if entry has expired
+	if time.Now().After(entry.ExpiresAt) {
+		// Remove expired entry
+		delete(bc.cache, key)
+		bc.stats.Misses++
+		return false, ""
+	}
+
+	bc.stats.Hits++
+	bc.stats.Skips++
+	return true, entry.Reason
+}
+
+// Add adds a symbol to the blacklist with a reason
+func (bc *BlacklistCache) Add(exchange, symbol, reason string) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
+	key := fmt.Sprintf("%s:%s", exchange, symbol)
+	bc.stats.Additions++
+	bc.cache[key] = &BlacklistCacheEntry{
+		Reason:    reason,
+		ExpiresAt: time.Now().Add(bc.ttl),
+	}
+	log.Printf("Blacklisted symbol %s (reason: %s, expires in %v)", key, reason, bc.ttl)
+}
+
+// GetStats returns current blacklist cache statistics
+func (bc *BlacklistCache) GetStats() BlacklistCacheStats {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+	return bc.stats
+}
+
+// LogStats logs current blacklist cache performance statistics
+func (bc *BlacklistCache) LogStats() {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+
+	total := bc.stats.Hits + bc.stats.Misses
+	hitRate := float64(0)
+	if total > 0 {
+		hitRate = float64(bc.stats.Hits) / float64(total) * 100
+	}
+
+	log.Printf("Blacklist Cache Stats - Hits: %d, Misses: %d, Additions: %d, Skips: %d, Hit Rate: %.2f%%",
+		bc.stats.Hits, bc.stats.Misses, bc.stats.Additions, bc.stats.Skips, hitRate)
+}
+
+// isBlacklistableError checks if an error indicates a symbol should be blacklisted
+func isBlacklistableError(err error) (bool, string) {
+	if err == nil {
+		return false, ""
+	}
+
+	errorMsg := err.Error()
+
+	// Coinbase delisted products
+	if strings.Contains(errorMsg, "Not allowed for delisted products") {
+		return true, "coinbase_delisted"
+	}
+
+	// Binance missing market symbols
+	if strings.Contains(errorMsg, "does not have market symbol") {
+		return true, "binance_missing_symbol"
+	}
+
+	// General delisted indicators
+	if strings.Contains(errorMsg, "delisted") {
+		return true, "delisted"
+	}
+
+	// Inactive symbols
+	if strings.Contains(errorMsg, "inactive") {
+		return true, "inactive"
+	}
+
+	// Symbol not found or unavailable
+	if strings.Contains(errorMsg, "symbol not found") ||
+		strings.Contains(errorMsg, "symbol unavailable") ||
+		strings.Contains(errorMsg, "market not found") {
+		return true, "symbol_not_found"
+	}
+
+	// Exchange-specific error patterns
+	if strings.Contains(errorMsg, "CCXT service error (500)") {
+		// Check for specific 500 error patterns that indicate permanent issues
+		if strings.Contains(errorMsg, "Not allowed") ||
+			strings.Contains(errorMsg, "does not have") ||
+			strings.Contains(errorMsg, "delisted") {
+			return true, "ccxt_500_permanent"
+		}
+	}
+
+	return false, ""
 }
 
 // CollectorService handles market data collection from exchanges
@@ -33,6 +264,17 @@ type CollectorService struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	wg              sync.WaitGroup
+	// Caching and timing controls
+	symbolCache           *SymbolCache
+	blacklistCache        *BlacklistCache
+	lastSymbolRefresh     map[string]time.Time
+	lastFundingCollection map[string]time.Time
+	symbolRefreshMu       sync.RWMutex
+	fundingCollectionMu   sync.RWMutex
+	// Separate intervals
+	tickerInterval        time.Duration
+	symbolRefreshInterval time.Duration
+	fundingRateInterval   time.Duration
 }
 
 // Worker represents a background worker for collecting data from a specific exchange
@@ -62,6 +304,12 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		IntervalSeconds: intervalSeconds,
 		MaxErrors:       5, // Default 5 max errors
 	}
+
+	// Initialize separate intervals for different operations
+	tickerInterval := time.Duration(intervalSeconds) * time.Second // 5 minutes (from config)
+	symbolRefreshInterval := 1 * time.Hour                         // 1 hour for symbol refresh
+	fundingRateInterval := 15 * time.Minute                        // 15 minutes for funding rates
+
 	return &CollectorService{
 		db:              db,
 		ccxtService:     ccxtService,
@@ -70,6 +318,15 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		workers:         make(map[string]*Worker),
 		ctx:             ctx,
 		cancel:          cancel,
+		// Initialize caching and timing controls
+		symbolCache:           NewSymbolCache(1 * time.Hour),     // 1 hour TTL for symbols
+		blacklistCache:        NewBlacklistCache(24 * time.Hour), // 24 hour TTL for blacklisted symbols
+		lastSymbolRefresh:     make(map[string]time.Time),
+		lastFundingCollection: make(map[string]time.Time),
+		// Set separate intervals
+		tickerInterval:        tickerInterval,
+		symbolRefreshInterval: symbolRefreshInterval,
+		fundingRateInterval:   fundingRateInterval,
 	}
 }
 
@@ -117,10 +374,16 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Get active symbols from the exchange
-	activeSymbols, err := c.getActiveSymbols(exchangeID)
-	if err != nil {
-		return fmt.Errorf("failed to fetch active symbols for exchange %s: %w", exchangeID, err)
+	// Try to get symbols from cache first (should be populated by getMultiExchangeSymbols)
+	var activeSymbols []string
+
+	if cached, found := c.symbolCache.Get(exchangeID); found {
+		activeSymbols = cached
+		log.Printf("Using cached symbols for %s (%d symbols)", exchangeID, len(activeSymbols))
+	} else {
+		// Cache should always be populated during startup, log error if not found
+		log.Printf("Error: No cached symbols found for %s during worker creation", exchangeID)
+		return fmt.Errorf("no cached symbols found for exchange %s - cache should be populated during startup", exchangeID)
 	}
 
 	// Filter out invalid symbols (options, derivatives, etc.)
@@ -138,9 +401,15 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 		finalSymbols = validSymbols
 	}
 
+	// Get exchange ID for database operations
+	exchangeDBID, err := c.getOrCreateExchange(exchangeID)
+	if err != nil {
+		return fmt.Errorf("failed to get or create exchange %s: %w", exchangeID, err)
+	}
+
 	// Ensure all trading pairs exist in database
 	for _, symbol := range finalSymbols {
-		if err := c.ensureTradingPairExists(symbol); err != nil {
+		if err := c.ensureTradingPairExists(exchangeDBID, symbol); err != nil {
 			log.Printf("Warning: Failed to ensure trading pair %s exists: %v", symbol, err)
 		}
 	}
@@ -169,25 +438,37 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	return nil
 }
 
-// runWorker runs the collection loop for a specific worker
+// runWorker runs the collection loop for a specific worker with separate intervals
 func (c *CollectorService) runWorker(worker *Worker) {
 	defer c.wg.Done()
 
-	ticker := time.NewTicker(worker.Interval)
+	// Use ticker interval for main ticker data collection
+	ticker := time.NewTicker(c.tickerInterval)
 	defer ticker.Stop()
 
-	log.Printf("Worker for exchange %s started with %d symbols", worker.Exchange, len(worker.Symbols))
+	// Add cache statistics logging every 10 minutes
+	cacheStatsTicker := time.NewTicker(10 * time.Minute)
+	defer cacheStatsTicker.Stop()
+
+	log.Printf("Worker for exchange %s started with %d symbols (ticker: %v, funding: %v)",
+		worker.Exchange, len(worker.Symbols), c.tickerInterval, c.fundingRateInterval)
 
 	for {
 		select {
 		case <-c.ctx.Done():
 			log.Printf("Worker for exchange %s stopping due to context cancellation", worker.Exchange)
 			return
+		case <-cacheStatsTicker.C:
+			// Log cache statistics periodically
+			c.symbolCache.LogStats()
+			c.blacklistCache.LogStats()
 		case <-ticker.C:
-			// Collect market data for active trading pairs
-			if err := c.collectMarketData(worker); err != nil {
+			log.Printf("Worker tick for exchange %s - starting collection cycle", worker.Exchange)
+
+			// Collect market data for active trading pairs (no funding rates here)
+			if err := c.collectTickerDataOnly(worker); err != nil {
 				worker.ErrorCount++
-				log.Printf("Error collecting data for exchange %s: %v (error count: %d)", worker.Exchange, err, worker.ErrorCount)
+				log.Printf("Error collecting ticker data for exchange %s: %v (error count: %d)", worker.Exchange, err, worker.ErrorCount)
 
 				if worker.ErrorCount >= worker.MaxErrors {
 					log.Printf("Worker for exchange %s exceeded max errors (%d), stopping", worker.Exchange, worker.MaxErrors)
@@ -200,22 +481,29 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				worker.LastUpdate = time.Now()
 			}
 
-			// Collect all available market data (not limited to active pairs)
-			if err := c.collectAllMarketData(worker); err != nil {
-				log.Printf("Warning: Failed to collect all market data for exchange %s: %v", worker.Exchange, err)
-			}
+			// Check if it's time to collect funding rates (separate interval)
+			c.fundingCollectionMu.RLock()
+			lastFundingCollection, exists := c.lastFundingCollection[worker.Exchange]
+			c.fundingCollectionMu.RUnlock()
 
-			// Collect funding rates for futures markets
-			if err := c.collectFundingRates(worker); err != nil {
-				log.Printf("Warning: Failed to collect funding rates for exchange %s: %v", worker.Exchange, err)
+			if !exists || time.Since(lastFundingCollection) >= c.fundingRateInterval {
+				log.Printf("Collecting funding rates for exchange %s (interval: %v)", worker.Exchange, c.fundingRateInterval)
+				if err := c.collectFundingRates(worker); err != nil {
+					log.Printf("Warning: Failed to collect funding rates for exchange %s: %v", worker.Exchange, err)
+				} else {
+					// Update last funding collection time
+					c.fundingCollectionMu.Lock()
+					c.lastFundingCollection[worker.Exchange] = time.Now()
+					c.fundingCollectionMu.Unlock()
+				}
 			}
 		}
 	}
 }
 
-// collectMarketData collects market data for all symbols of a specific exchange
-func (c *CollectorService) collectMarketData(worker *Worker) error {
-	log.Printf("Collecting market data for exchange %s (%d symbols)", worker.Exchange, len(worker.Symbols))
+// collectTickerDataOnly collects only ticker data for worker symbols (no funding rates)
+func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
+	log.Printf("Collecting ticker data for exchange %s (%d symbols)", worker.Exchange, len(worker.Symbols))
 
 	// Collect ticker data for all symbols with rate limiting
 	for i, symbol := range worker.Symbols {
@@ -225,7 +513,8 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 		default:
 		}
 
-		if err := c.collectTickerData(worker.Exchange, symbol); err != nil {
+		// Use direct collection for worker symbols (skip activity check)
+		if err := c.collectTickerDataDirect(worker.Exchange, symbol); err != nil {
 			log.Printf("Failed to collect ticker data for %s:%s: %v", worker.Exchange, symbol, err)
 			// Continue with other symbols even if one fails
 			continue
@@ -237,54 +526,24 @@ func (c *CollectorService) collectMarketData(worker *Worker) error {
 		}
 	}
 
-	// Collect funding rates for futures markets
-	if err := c.collectFundingRates(worker); err != nil {
-		log.Printf("Failed to collect funding rates for %s: %v", worker.Exchange, err)
-		// Continue even if funding rate collection fails
-	}
-
 	return nil
 }
 
-// isSymbolActive checks if a symbol is active on a given exchange
-func (c *CollectorService) isSymbolActive(exchange, symbol string) (bool, error) {
-	// Fetch active symbols from the exchange
-	activeSymbols, err := c.getActiveSymbols(exchange)
-	if err != nil {
-		return false, fmt.Errorf("failed to fetch active symbols for %s: %w", exchange, err)
-	}
-
-	// Check if symbol exists in active symbols
-	for _, activeSymbol := range activeSymbols {
-		if activeSymbol == symbol {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-// collectTickerData collects and stores ticker data for a specific symbol
-func (c *CollectorService) collectTickerData(exchange, symbol string) error {
-	// Check if symbol is active before attempting to fetch data
-	isActive, err := c.isSymbolActive(exchange, symbol)
-	if err != nil {
-		log.Printf("Warning: Failed to check symbol status for %s:%s: %v", exchange, symbol, err)
-		// Continue anyway, let the CCXT service handle the error
-	} else if !isActive {
-		log.Printf("Skipping inactive/delisted symbol: %s:%s", exchange, symbol)
+// collectTickerDataDirect collects ticker data without checking symbol activity (for worker symbols)
+func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) error {
+	// Check if symbol is blacklisted before making API call
+	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(exchange, symbol); isBlacklisted {
+		log.Printf("Skipping blacklisted symbol: %s:%s (reason: %s)", exchange, symbol, reason)
 		return nil
 	}
 
-	// Fetch ticker data from CCXT service
+	// Fetch ticker data from CCXT service directly
 	ticker, err := c.ccxtService.FetchSingleTicker(c.ctx, exchange, symbol)
 	if err != nil {
-		// Check if the error indicates delisted/inactive symbol
-		if strings.Contains(err.Error(), "delisted") ||
-			strings.Contains(err.Error(), "inactive") ||
-			strings.Contains(err.Error(), "Not allowed") ||
-			strings.Contains(err.Error(), "does not have market symbol") {
-			log.Printf("Skipping symbol due to exchange error: %s:%s - %v", exchange, symbol, err)
+		// Check if the error indicates a symbol that should be blacklisted
+		if shouldBlacklist, reason := isBlacklistableError(err); shouldBlacklist {
+			c.blacklistCache.Add(exchange, symbol, reason)
+			log.Printf("Added symbol to blacklist: %s:%s (reason: %s) - %v", exchange, symbol, reason, err)
 			return nil
 		}
 		return fmt.Errorf("failed to fetch ticker data: %w", err)
@@ -297,9 +556,15 @@ func (c *CollectorService) collectTickerData(exchange, symbol string) error {
 	}
 
 	// Ensure trading pair exists and get its ID
-	tradingPairID, err := c.getOrCreateTradingPair(symbol)
+	tradingPairID, err := c.getOrCreateTradingPair(exchangeID, symbol)
 	if err != nil {
 		return fmt.Errorf("failed to get or create trading pair: %w", err)
+	}
+
+	// Validate price data before saving to database
+	if err := c.validateMarketData(ticker, exchange, symbol); err != nil {
+		log.Printf("Invalid market data for %s:%s - %v", exchange, symbol, err)
+		return nil // Don't save invalid data, but don't fail the collection
 	}
 
 	// Save market data to database with proper column mapping
@@ -314,52 +579,17 @@ func (c *CollectorService) collectTickerData(exchange, symbol string) error {
 	return nil
 }
 
-// collectAllMarketData collects ticker data for all active markets on an exchange
-func (c *CollectorService) collectAllMarketData(worker *Worker) error {
-	// Get active symbols from the exchange
-	activeSymbols, err := c.getActiveSymbols(worker.Exchange)
-	if err != nil {
-		return fmt.Errorf("failed to fetch active symbols for %s: %w", worker.Exchange, err)
-	}
-
-	// Filter out invalid symbols (options, derivatives, etc.)
-	validSymbols := c.filterValidSymbols(activeSymbols)
-	log.Printf("Filtered %d valid active symbols for %s", len(validSymbols), worker.Exchange)
-
-	// Collect ticker data for each valid active symbol with rate limiting
-	for i, symbol := range validSymbols {
-		select {
-		case <-c.ctx.Done():
-			return c.ctx.Err()
-		default:
-			if err := c.collectTickerData(worker.Exchange, symbol); err != nil {
-				log.Printf("Failed to collect ticker for %s:%s: %v", worker.Exchange, symbol, err)
-				// Continue with other symbols even if one fails
-			}
-
-			// Add rate limiting delay between requests (aggressive mode: 20ms)
-			if i < len(validSymbols)-1 {
-				time.Sleep(20 * time.Millisecond)
-			}
-		}
-	}
-
-	// Collect funding rates for futures markets
-	if err := c.collectFundingRates(worker); err != nil {
-		log.Printf("Failed to collect funding rates for %s: %v", worker.Exchange, err)
-		// Continue even if funding rate collection fails
-	}
-
-	return nil
-}
-
 // collectFundingRates collects funding rates for futures markets
 func (c *CollectorService) collectFundingRates(worker *Worker) error {
+	log.Printf("Starting funding rate collection for exchange: %s", worker.Exchange)
+
 	// Get all funding rates for the exchange
 	fundingRates, err := c.ccxtService.FetchAllFundingRates(c.ctx, worker.Exchange)
 	if err != nil {
 		return fmt.Errorf("failed to fetch funding rates for %s: %w", worker.Exchange, err)
 	}
+
+	log.Printf("Fetched %d funding rates for exchange %s", len(fundingRates), worker.Exchange)
 
 	// Store funding rates in database with rate limiting
 	for i, rate := range fundingRates {
@@ -370,6 +600,8 @@ func (c *CollectorService) collectFundingRates(worker *Worker) error {
 			if err := c.storeFundingRate(worker.Exchange, rate); err != nil {
 				log.Printf("Failed to store funding rate for %s:%s: %v", worker.Exchange, rate.Symbol, err)
 				// Continue with other rates even if one fails
+			} else {
+				log.Printf("Successfully stored funding rate for %s:%s (rate: %.6f)", worker.Exchange, rate.Symbol, rate.FundingRate)
 			}
 
 			// Add rate limiting delay between database writes (25ms)
@@ -391,24 +623,21 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 	}
 
 	// Ensure trading pair exists and get its ID
-	tradingPairID, err := c.getOrCreateTradingPair(rate.Symbol)
+	tradingPairID, err := c.getOrCreateTradingPair(exchangeID, rate.Symbol)
 	if err != nil {
 		return fmt.Errorf("failed to get or create trading pair: %w", err)
 	}
 
 	// Save funding rate to database with upsert to handle duplicates
 	_, err = c.db.Pool.Exec(c.ctx,
-		`INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_time, next_funding_time, mark_price, index_price, timestamp, created_at) 
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		 ON CONFLICT (exchange_id, trading_pair_id, funding_time) 
+		`INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_rate_timestamp, next_funding_time, created_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (exchange_id, trading_pair_id, funding_rate_timestamp) 
 		 DO UPDATE SET 
 			funding_rate = EXCLUDED.funding_rate,
 			next_funding_time = EXCLUDED.next_funding_time,
-			mark_price = EXCLUDED.mark_price,
-			index_price = EXCLUDED.index_price,
-			timestamp = EXCLUDED.timestamp,
 			updated_at = NOW()`,
-		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), rate.MarkPrice, rate.IndexPrice, rate.Timestamp.Time(), time.Now())
+		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to save funding rate: %w", err)
 	}
@@ -479,16 +708,16 @@ func (c *CollectorService) IsHealthy() bool {
 }
 
 // ensureTradingPairExists ensures a trading pair exists in the database
-func (c *CollectorService) ensureTradingPairExists(symbol string) error {
-	_, err := c.getOrCreateTradingPair(symbol)
+func (c *CollectorService) ensureTradingPairExists(exchangeID int, symbol string) error {
+	_, err := c.getOrCreateTradingPair(exchangeID, symbol)
 	return err
 }
 
 // getOrCreateTradingPair gets or creates a trading pair and returns its ID
-func (c *CollectorService) getOrCreateTradingPair(symbol string) (int, error) {
-	// First try to get existing trading pair
+func (c *CollectorService) getOrCreateTradingPair(exchangeID int, symbol string) (int, error) {
+	// First try to get existing trading pair for this exchange and symbol
 	var tradingPairID int
-	err := c.db.Pool.QueryRow(c.ctx, "SELECT id FROM trading_pairs WHERE symbol = $1", symbol).Scan(&tradingPairID)
+	err := c.db.Pool.QueryRow(c.ctx, "SELECT id FROM trading_pairs WHERE exchange_id = $1 AND symbol = $2", exchangeID, symbol).Scan(&tradingPairID)
 	if err == nil {
 		return tradingPairID, nil
 	}
@@ -499,44 +728,48 @@ func (c *CollectorService) getOrCreateTradingPair(symbol string) (int, error) {
 		return 0, fmt.Errorf("failed to parse symbol: %s", symbol)
 	}
 
-	// Check if it's a futures pair
-	isFutures := c.isFuturesSymbol(symbol)
-
-	// Insert new trading pair
+	// Insert new trading pair with exchange_id
 	err = c.db.Pool.QueryRow(c.ctx,
-		"INSERT INTO trading_pairs (symbol, base_currency, quote_currency, is_futures) VALUES ($1, $2, $3, $4) RETURNING id",
-		symbol, baseCurrency, quoteCurrency, isFutures).Scan(&tradingPairID)
+		"INSERT INTO trading_pairs (exchange_id, symbol, base_currency, quote_currency, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		exchangeID, symbol, baseCurrency, quoteCurrency, true).Scan(&tradingPairID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create trading pair: %w", err)
 	}
 
-	log.Printf("Created new trading pair: %s (ID: %d)", symbol, tradingPairID)
+	log.Printf("Created new trading pair: %s for exchange %d (ID: %d)", symbol, exchangeID, tradingPairID)
 	return tradingPairID, nil
 }
 
 // getOrCreateExchange gets or creates an exchange and returns its ID
 func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
-	// First try to get existing exchange
+	// First try to get existing exchange by ccxt_id
 	var exchangeID int
 	err := c.db.Pool.QueryRow(c.ctx, "SELECT id FROM exchanges WHERE ccxt_id = $1", ccxtID).Scan(&exchangeID)
 	if err == nil {
 		return exchangeID, nil
 	}
 
+	// Also check by name in case exchange exists with different ccxt_id
+	name := strings.ToLower(ccxtID)
+	err = c.db.Pool.QueryRow(c.ctx, "SELECT id FROM exchanges WHERE name = $1", name).Scan(&exchangeID)
+	if err == nil {
+		log.Printf("Found existing exchange by name: %s (ID: %d)", name, exchangeID)
+		return exchangeID, nil
+	}
+
 	// If not found, create new exchange with basic information
 	caser := cases.Title(language.English)
 	displayName := caser.String(ccxtID)
-	name := strings.ToLower(ccxtID)
 
-	// Insert new exchange with default values
+	// Insert new exchange with conflict resolution
 	err = c.db.Pool.QueryRow(c.ctx,
-		"INSERT INTO exchanges (name, display_name, ccxt_id, status, has_spot, has_futures) VALUES ($1, $2, $3, 'active', true, true) RETURNING id",
+		"INSERT INTO exchanges (name, display_name, ccxt_id, status, has_spot, has_futures) VALUES ($1, $2, $3, 'active', true, true) ON CONFLICT (name) DO UPDATE SET ccxt_id = EXCLUDED.ccxt_id, display_name = EXCLUDED.display_name RETURNING id",
 		name, displayName, ccxtID).Scan(&exchangeID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create exchange: %w", err)
+		return 0, fmt.Errorf("failed to create or update exchange: %w", err)
 	}
 
-	log.Printf("Created new exchange: %s (ID: %d)", ccxtID, exchangeID)
+	log.Printf("Created or updated exchange: %s (ID: %d)", ccxtID, exchangeID)
 	return exchangeID, nil
 }
 
@@ -615,31 +848,21 @@ func (c *CollectorService) isInvalidSymbolFormat(symbol string) bool {
 	return false
 }
 
-// isFuturesSymbol determines if a symbol represents a futures contract
-func (c *CollectorService) isFuturesSymbol(symbol string) bool {
-	// Common futures indicators
-	futuresIndicators := []string{"PERP", "-PERP", "_PERP", "SWAP", "-SWAP", "_SWAP"}
-	for _, indicator := range futuresIndicators {
-		if strings.Contains(strings.ToUpper(symbol), indicator) {
-			return true
-		}
-	}
 
-	// Check for settlement currency (e.g., BTC/USDT:USDT)
-	if strings.Contains(symbol, ":") {
-		return true
-	}
 
-	return false
-}
-
-// getActiveSymbols fetches active symbols from an exchange using market data
-func (c *CollectorService) getActiveSymbols(exchangeID string) ([]string, error) {
+// fetchAndCacheSymbols fetches symbols from CCXT service and populates cache (used during startup)
+func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, error) {
 	log.Printf("Fetching active markets for exchange: %s", exchangeID)
 
-	markets, err := c.ccxtService.FetchMarkets(c.ctx, exchangeID)
+	// Add timeout context for better error handling
+	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
+	defer cancel()
+
+	markets, err := c.ccxtService.FetchMarkets(ctx, exchangeID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch markets for %s: %w", exchangeID, err)
+		// Log warning but don't fail startup for individual exchange errors
+		log.Printf("Warning: Failed to fetch markets for %s (exchange may be unavailable): %v", exchangeID, err)
+		return []string{}, nil // Return empty slice instead of error
 	}
 
 	// Since markets.Symbols is a slice of strings, we assume CCXT returns only active symbols
@@ -652,20 +875,30 @@ func (c *CollectorService) getActiveSymbols(exchangeID string) ([]string, error)
 		activeSymbols = append(activeSymbols, symbol)
 	}
 
-	log.Printf("Found %d active symbols on %s", len(activeSymbols), exchangeID)
+	// Cache the symbols
+	c.symbolCache.Set(exchangeID, activeSymbols)
+
+	// Update last refresh time
+	c.symbolRefreshMu.Lock()
+	c.lastSymbolRefresh[exchangeID] = time.Now()
+	c.symbolRefreshMu.Unlock()
+
+	log.Printf("Successfully fetched %d symbols for %s", len(activeSymbols), exchangeID)
 	return activeSymbols, nil
 }
 
 // getMultiExchangeSymbols collects symbols from all exchanges and returns those that appear on multiple exchanges
+// This function also populates the symbol cache to avoid double API calls during startup
 func (c *CollectorService) getMultiExchangeSymbols(exchanges []string) (map[string]int, error) {
 	symbolCount := make(map[string]int)
 	minExchanges := 2 // Minimum number of exchanges a symbol must appear on
 
 	log.Printf("Collecting symbols from %d exchanges for arbitrage filtering...", len(exchanges))
 
-	// Collect active symbols from each exchange
+	// Collect active symbols from each exchange and populate cache
 	for _, exchangeID := range exchanges {
-		activeSymbols, err := c.getActiveSymbols(exchangeID)
+		// Force fetch symbols to populate cache (bypass interval check during startup)
+		activeSymbols, err := c.fetchAndCacheSymbols(exchangeID)
 		if err != nil {
 			log.Printf("Warning: Failed to fetch active symbols for %s: %v", exchangeID, err)
 			continue
@@ -679,7 +912,7 @@ func (c *CollectorService) getMultiExchangeSymbols(exchanges []string) (map[stri
 			symbolCount[symbol]++
 		}
 
-		log.Printf("Found %d valid active symbols on %s", len(validSymbols), exchangeID)
+		log.Printf("Found %d valid active symbols on %s (cached)", len(validSymbols), exchangeID)
 	}
 
 	// Filter to only symbols that appear on multiple exchanges
@@ -710,4 +943,39 @@ func (c *CollectorService) filterArbitrageSymbols(symbols []string, multiExchang
 	}
 
 	return arbitrageSymbols
+}
+
+// validateMarketData validates ticker data before saving to database
+func (c *CollectorService) validateMarketData(ticker *models.MarketPrice, exchange, symbol string) error {
+	// Check for zero or negative price
+	if ticker.Price.IsZero() || ticker.Price.IsNegative() {
+		return fmt.Errorf("invalid price: %s for %s on %s", ticker.Price, symbol, exchange)
+	}
+
+	// Check for extremely high prices (potential data corruption)
+	maxPrice := decimal.NewFromFloat(10000000) // 10 million
+	if ticker.Price.GreaterThan(maxPrice) {
+		return fmt.Errorf("extremely high price: %s for %s on %s", ticker.Price, symbol, exchange)
+	}
+
+	// Check for negative volume
+	if ticker.Volume.IsNegative() {
+		return fmt.Errorf("negative volume: %s for %s on %s", ticker.Volume, symbol, exchange)
+	}
+
+	// Check for invalid timestamp
+	timestamp := ticker.Timestamp
+	now := time.Now()
+
+	// Check if timestamp is in the future (more than 1 minute)
+	if timestamp.After(now.Add(time.Minute)) {
+		return fmt.Errorf("future timestamp: %s for %s on %s", timestamp, symbol, exchange)
+	}
+
+	// Check if timestamp is too old (more than 24 hours)
+	if timestamp.Before(now.Add(-24 * time.Hour)) {
+		return fmt.Errorf("old timestamp: %s for %s on %s", timestamp, symbol, exchange)
+	}
+
+	return nil
 }

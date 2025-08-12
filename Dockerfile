@@ -22,8 +22,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/server/m
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates and wget for HTTPS requests and health checks
-RUN apk --no-cache add ca-certificates tzdata wget
+# Install ca-certificates, wget, and system monitoring tools
+RUN apk --no-cache add ca-certificates tzdata wget procps htop curl
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \

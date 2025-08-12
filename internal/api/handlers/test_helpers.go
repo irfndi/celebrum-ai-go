@@ -116,3 +116,44 @@ func (m *MockCCXTService) GetServiceURL() string {
 	args := m.Called()
 	return args.String(0)
 }
+
+// Exchange management methods
+func (m *MockCCXTService) GetExchangeConfig(ctx context.Context) (*ccxt.ExchangeConfigResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeConfigResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RefreshExchanges(ctx context.Context) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}

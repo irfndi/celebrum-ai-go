@@ -121,6 +121,47 @@ func (m *MockCCXTService) GetServiceURL() string {
 	return args.String(0)
 }
 
+// Exchange management methods
+func (m *MockCCXTService) GetExchangeConfig(ctx context.Context) (*ccxt.ExchangeConfigResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeConfigResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RefreshExchanges(ctx context.Context) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
 func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
@@ -268,4 +309,239 @@ func TestCollectorConfig_Struct(t *testing.T) {
 
 	assert.Equal(t, 30, config.IntervalSeconds)
 	assert.Equal(t, 10, config.MaxErrors)
+}
+
+// Test validateMarketData function
+func TestCollectorService_ValidateMarketData(t *testing.T) {
+	collector := &CollectorService{}
+
+	tests := []struct {
+		name     string
+		ticker   *models.MarketPrice
+		exchange string
+		symbol   string
+		wantErr  bool
+	}{
+		{
+			name: "valid data",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(50000.0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now(),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  false,
+		},
+		{
+			name: "zero price",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now(),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+		{
+			name: "negative price",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(-100.0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now(),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+		{
+			name: "extremely high price",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(20000000.0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now(),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+		{
+			name: "negative volume",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(50000.0),
+				Volume:    decimal.NewFromFloat(-100.0),
+				Timestamp: time.Now(),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+		{
+			name: "future timestamp",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(50000.0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now().Add(2 * time.Hour),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+		{
+			name: "old timestamp",
+			ticker: &models.MarketPrice{
+				Price:     decimal.NewFromFloat(50000.0),
+				Volume:    decimal.NewFromFloat(1000.0),
+				Timestamp: time.Now().Add(-25 * time.Hour),
+			},
+			exchange: "binance",
+			symbol:   "BTC/USDT",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := collector.validateMarketData(tt.ticker, tt.exchange, tt.symbol)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateMarketData() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// Test parseSymbol function
+func TestCollectorService_ParseSymbol(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	config := &config.Config{}
+	collector := NewCollectorService(nil, mockCCXT, config)
+
+	tests := []struct {
+		name          string
+		symbol        string
+		expectedBase  string
+		expectedQuote string
+	}{
+		{
+			name:          "standard slash format",
+			symbol:        "BTC/USDT",
+			expectedBase:  "BTC",
+			expectedQuote: "USDT",
+		},
+		{
+			name:          "futures format with settlement",
+			symbol:        "BTC/USDT:USDT",
+			expectedBase:  "BTC",
+			expectedQuote: "USDT",
+		},
+		{
+			name:          "concatenated format USDT",
+			symbol:        "BTCUSDT",
+			expectedBase:  "BTC",
+			expectedQuote: "USDT",
+		},
+		{
+			name:          "concatenated format USD",
+			symbol:        "BTCUSD",
+			expectedBase:  "BTC",
+			expectedQuote: "USD",
+		},
+		{
+			name:          "invalid symbol",
+			symbol:        "INVALID",
+			expectedBase:  "",
+			expectedQuote: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base, quote := collector.parseSymbol(tt.symbol)
+			assert.Equal(t, tt.expectedBase, base)
+			assert.Equal(t, tt.expectedQuote, quote)
+		})
+	}
+}
+
+// Test isOptionsContract function
+func TestCollectorService_IsOptionsContract(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	config := &config.Config{}
+	collector := NewCollectorService(nil, mockCCXT, config)
+
+	tests := []struct {
+		name     string
+		symbol   string
+		expected bool
+	}{
+		{
+			name:     "call option",
+			symbol:   "SOLUSDT:USDT-250815-180-C",
+			expected: true,
+		},
+		{
+			name:     "put option",
+			symbol:   "BTC-25DEC20-20000-P",
+			expected: true,
+		},
+		{
+			name:     "regular spot pair",
+			symbol:   "BTC/USDT",
+			expected: false,
+		},
+		{
+			name:     "futures pair",
+			symbol:   "BTC/USDT:USDT",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := collector.isOptionsContract(tt.symbol)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// Test isInvalidSymbolFormat function
+func TestCollectorService_IsInvalidSymbolFormat(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	config := &config.Config{}
+	collector := NewCollectorService(nil, mockCCXT, config)
+
+	tests := []struct {
+		name     string
+		symbol   string
+		expected bool
+	}{
+		{
+			name:     "valid short symbol",
+			symbol:   "BTC/USDT",
+			expected: false,
+		},
+		{
+			name:     "too long symbol",
+			symbol:   "VERYLONGSYMBOLNAMETHATEXCEEDSLIMIT",
+			expected: true,
+		},
+		{
+			name:     "multiple colons",
+			symbol:   "BTC:USDT:USD:EUR",
+			expected: true,
+		},
+		{
+			name:     "complex derivative",
+			symbol:   "BTC_USDT-PERP_SWAP",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := collector.isInvalidSymbolFormat(tt.symbol)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

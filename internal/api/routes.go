@@ -44,6 +44,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
+	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService)
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -102,6 +103,19 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			data.GET("/stats", cleanupHandler.GetDataStats)
 			data.POST("/cleanup", cleanupHandler.TriggerCleanup)
+		}
+
+		// Exchange management
+		exchanges := v1.Group("/exchanges")
+		{
+			exchanges.GET("/config", exchangeHandler.GetExchangeConfig)
+			exchanges.GET("/supported", exchangeHandler.GetSupportedExchanges)
+			exchanges.GET("/workers/status", exchangeHandler.GetWorkerStatus)
+			exchanges.POST("/refresh", exchangeHandler.RefreshExchanges)
+			exchanges.POST("/add/:exchange", exchangeHandler.AddExchange)
+			exchanges.POST("/blacklist/:exchange", exchangeHandler.AddExchangeToBlacklist)
+			exchanges.DELETE("/blacklist/:exchange", exchangeHandler.RemoveExchangeFromBlacklist)
+			exchanges.POST("/workers/:exchange/restart", exchangeHandler.RestartWorker)
 		}
 	}
 }

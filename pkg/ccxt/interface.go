@@ -19,6 +19,13 @@ type CCXTService interface {
 	GetSupportedExchanges() []string
 	GetExchangeInfo(exchangeID string) (ExchangeInfo, bool)
 
+	// Exchange management
+	GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error)
+	AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
+	RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
+	RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error)
+	AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
+
 	// Market data operations
 	FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error)
 	FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error)
@@ -44,6 +51,13 @@ type CCXTClient interface {
 
 	// Exchange operations
 	GetExchanges(ctx context.Context) (*ExchangesResponse, error)
+
+	// Exchange management operations
+	GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error)
+	AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
+	RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
+	RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error)
+	AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
 
 	// Market data operations
 	GetTicker(ctx context.Context, exchange, symbol string) (*TickerResponse, error)

@@ -171,6 +171,46 @@ func (c *Client) GetAllFundingRates(ctx context.Context, exchange string) ([]Fun
 	return response.FundingRates, nil
 }
 
+// Exchange Management Methods
+
+// GetExchangeConfig retrieves the current exchange configuration
+func (c *Client) GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error) {
+	var response ExchangeConfigResponse
+	err := c.makeRequest(ctx, "GET", "/api/admin/exchanges/config", nil, &response)
+	return &response, err
+}
+
+// AddExchangeToBlacklist adds an exchange to the blacklist
+func (c *Client) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	path := fmt.Sprintf("/api/admin/exchanges/blacklist/%s", exchange)
+	var response ExchangeManagementResponse
+	err := c.makeRequest(ctx, "POST", path, nil, &response)
+	return &response, err
+}
+
+// RemoveExchangeFromBlacklist removes an exchange from the blacklist
+func (c *Client) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	path := fmt.Sprintf("/api/admin/exchanges/blacklist/%s", exchange)
+	var response ExchangeManagementResponse
+	err := c.makeRequest(ctx, "DELETE", path, nil, &response)
+	return &response, err
+}
+
+// RefreshExchanges refreshes all exchanges (re-initializes non-blacklisted exchanges)
+func (c *Client) RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error) {
+	var response ExchangeManagementResponse
+	err := c.makeRequest(ctx, "POST", "/api/admin/exchanges/refresh", nil, &response)
+	return &response, err
+}
+
+// AddExchange dynamically adds a new exchange
+func (c *Client) AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	path := fmt.Sprintf("/api/admin/exchanges/add/%s", exchange)
+	var response ExchangeManagementResponse
+	err := c.makeRequest(ctx, "POST", path, nil, &response)
+	return &response, err
+}
+
 // formatSymbolForExchange formats the symbol based on exchange requirements
 func (c *Client) formatSymbolForExchange(exchange, symbol string) string {
 	switch strings.ToLower(exchange) {

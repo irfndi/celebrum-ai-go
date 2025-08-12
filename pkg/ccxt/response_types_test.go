@@ -523,12 +523,15 @@ func TestErrorResponse_JSONMarshaling(t *testing.T) {
 
 // Test edge cases and error conditions
 func TestUnixTimestamp_EdgeCases(t *testing.T) {
-	// Test zero timestamp
+	// Test zero timestamp - should use current time instead of epoch
 	zeroJSON := []byte("0")
 	var ut UnixTimestamp
+	before := time.Now()
 	err := ut.UnmarshalJSON(zeroJSON)
 	require.NoError(t, err)
-	assert.Equal(t, time.Unix(0, 0), ut.Time())
+	after := time.Now()
+	// Verify the timestamp is between before and after (current time)
+	assert.True(t, ut.Time().After(before.Add(-time.Second)) && ut.Time().Before(after.Add(time.Second)))
 
 	// Test negative timestamp
 	negativeJSON := []byte("-1000")

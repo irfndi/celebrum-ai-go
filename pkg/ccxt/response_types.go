@@ -17,7 +17,12 @@ func (ut *UnixTimestamp) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &timestamp); err != nil {
 		return fmt.Errorf("failed to unmarshal timestamp: %w", err)
 	}
-	*ut = UnixTimestamp(time.Unix(timestamp/1000, (timestamp%1000)*1000000))
+	// If timestamp is 0 or null, use current time instead of 0001-01-01
+	if timestamp == 0 {
+		*ut = UnixTimestamp(time.Now())
+	} else {
+		*ut = UnixTimestamp(time.Unix(timestamp/1000, (timestamp%1000)*1000000))
+	}
 	return nil
 }
 
@@ -207,4 +212,28 @@ type ErrorResponse struct {
 	Error     string `json:"error"`
 	Message   string `json:"message,omitempty"`
 	Timestamp string `json:"timestamp"`
+}
+
+// ExchangeConfig represents the exchange configuration
+type ExchangeConfig struct {
+	BlacklistedExchanges []string               `json:"blacklistedExchanges"`
+	PriorityExchanges    []string               `json:"priorityExchanges"`
+	ExchangeConfigs      map[string]interface{} `json:"exchangeConfigs"`
+}
+
+// ExchangeConfigResponse represents the response from the exchange config endpoint
+type ExchangeConfigResponse struct {
+	Config             ExchangeConfig `json:"config"`
+	ActiveExchanges    []string       `json:"activeExchanges"`
+	AvailableExchanges []string       `json:"availableExchanges"`
+	Timestamp          string         `json:"timestamp"`
+}
+
+// ExchangeManagementResponse represents the response from exchange management endpoints
+type ExchangeManagementResponse struct {
+	Message              string   `json:"message"`
+	BlacklistedExchanges []string `json:"blacklistedExchanges,omitempty"`
+	ActiveExchanges      []string `json:"activeExchanges,omitempty"`
+	AvailableExchanges   []string `json:"availableExchanges,omitempty"`
+	Timestamp            string   `json:"timestamp"`
 }

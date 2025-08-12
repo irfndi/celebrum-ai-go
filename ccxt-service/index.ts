@@ -35,31 +35,136 @@ app.use('*', logger());
 // Simple rate limiting can be implemented later if needed
 // For now, we rely on exchange-level rate limiting via CCXT
 
-// Initialize supported exchanges
-const exchanges: ExchangeManager = {
-  binance: new ccxt.binance({ 
+// Exchange configuration for different types of exchanges
+const exchangeConfigs: Record<string, any> = {
+  binance: {
     enableRateLimit: true,
     timeout: 30000,
-    rateLimit: 1200, // Binance rate limit
-    options: {
-      'defaultType': 'future' // Enable futures trading for funding rates
-    }
-  }),
-  bybit: new ccxt.bybit({ 
+    rateLimit: 1200,
+    options: { 'defaultType': 'future' }
+  },
+  bybit: {
     enableRateLimit: true,
-    options: {
-      'defaultType': 'future' // Enable futures trading for funding rates
-    }
-  }),
-  okx: new ccxt.okx({ 
+    options: { 'defaultType': 'future' }
+  },
+  okx: {
     enableRateLimit: true,
-    options: {
-      'defaultType': 'future' // Enable futures trading for funding rates
-    }
-  }),
-  coinbasepro: new ccxt.coinbaseexchange({ enableRateLimit: true }),
-  kraken: new ccxt.kraken({ enableRateLimit: true })
+    options: { 'defaultType': 'future' }
+  },
+  coinbaseexchange: { enableRateLimit: true },
+  kraken: { enableRateLimit: true },
+  // Default config for other exchanges
+  default: {
+    enableRateLimit: true,
+    timeout: 30000,
+    rateLimit: 2000
+  }
 };
+
+// Blacklisted exchanges (known to have issues or require special handling)
+const blacklistedExchanges = new Set([
+  'test', 'mock', 'sandbox', 'demo', 'testnet',
+  'coinbaseprime', // Use coinbaseexchange instead
+  'ftx', 'ftxus', // Defunct exchanges
+  'liquid', 'quoine', // Defunct exchanges
+  'idex', 'ethfinex', // Deprecated exchanges
+  'yobit', 'livecoin', 'coinfloor', // Problematic exchanges
+  'southxchange', 'coinmate', 'lakebtc', // Often unreliable
+]);
+
+// Priority exchanges (will be initialized first)
+const priorityExchanges = [
+  'binance', 'bybit', 'okx', 'coinbasepro', 'kraken',
+  'kucoin', 'huobi', 'gateio', 'mexc', 'bitget',
+  'coinbaseexchange', 'bingx', 'cryptocom', 'htx'
+];
+
+// Initialize supported exchanges dynamically
+const exchanges: ExchangeManager = {};
+
+// Function to initialize an exchange
+function initializeExchange(exchangeId: string): boolean {
+  try {
+    if (blacklistedExchanges.has(exchangeId)) {
+      console.log(`Skipping blacklisted exchange: ${exchangeId}`);
+      return false;
+    }
+
+    // Check if exchange class exists in CCXT
+    const ExchangeClass = (ccxt as any)[exchangeId];
+    if (!ExchangeClass || typeof ExchangeClass !== 'function') {
+      console.warn(`Exchange class not found for: ${exchangeId}`);
+      return false;
+    }
+
+    // Get configuration for this exchange
+    const config = exchangeConfigs[exchangeId] || exchangeConfigs.default;
+    
+    // Initialize the exchange
+    const exchange = new ExchangeClass(config);
+    
+    // Basic validation - check if exchange has required methods
+    if (!exchange.fetchTicker) {
+      console.warn(`Exchange ${exchangeId} missing fetchTicker method`);
+      return false;
+    }
+    
+    if (!exchange.fetchMarkets) {
+      console.warn(`Exchange ${exchangeId} missing fetchMarkets method`);
+      return false;
+    }
+
+    // Additional validation - check if exchange has basic properties
+    if (!exchange.id || !exchange.name) {
+      console.warn(`Exchange ${exchangeId} missing basic properties`);
+      return false;
+    }
+
+    exchanges[exchangeId] = exchange;
+    console.log(`✓ Successfully initialized exchange: ${exchangeId} (${exchange.name})`);
+    return true;
+  } catch (error) {
+    console.warn(`✗ Failed to initialize exchange ${exchangeId}:`, error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+// Get all available exchanges from CCXT
+const allExchanges = Object.keys(ccxt.exchanges);
+console.log(`Total CCXT exchanges available: ${allExchanges.length}`);
+console.log(`Blacklisted exchanges: ${Array.from(blacklistedExchanges).join(', ')}`);
+
+// Initialize priority exchanges first
+let initializedCount = 0;
+let failedCount = 0;
+const failedExchanges: string[] = [];
+
+for (const exchangeId of priorityExchanges) {
+  if (initializeExchange(exchangeId)) {
+    initializedCount++;
+  } else {
+    failedCount++;
+    failedExchanges.push(exchangeId);
+  }
+}
+
+console.log(`Priority exchanges initialized: ${initializedCount}/${priorityExchanges.length}`);
+
+// Initialize remaining exchanges
+for (const exchangeId of allExchanges) {
+  if (!exchanges[exchangeId] && !priorityExchanges.includes(exchangeId)) {
+    if (initializeExchange(exchangeId)) {
+      initializedCount++;
+    } else {
+      failedCount++;
+      failedExchanges.push(exchangeId);
+    }
+  }
+}
+
+console.log(`Successfully initialized ${Object.keys(exchanges).length} out of ${allExchanges.length} total exchanges`);
+console.log(`Failed to initialize ${failedCount} exchanges:`, failedExchanges.slice(0, 10).join(', '), failedCount > 10 ? `... and ${failedCount - 10} more` : '');
+console.log(`Active exchanges:`, Object.keys(exchanges).sort().join(', '));
 
 // Health check endpoint
 app.get('/health', (c) => {
@@ -405,6 +510,224 @@ app.get('/api/funding-rates/:exchange',
     }
   }
 );
+
+// Get funding rate for a specific symbol on an exchange
+app.get('/api/funding-rate/:exchange/:symbol', async (c) => {
+  try {
+    const exchange = c.req.param('exchange');
+    const symbol = c.req.param('symbol');
+    
+    if (!exchanges[exchange]) {
+      const errorResponse: ErrorResponse = {
+        error: 'Exchange not supported',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Check if exchange supports funding rates
+    if (!exchanges[exchange].has['fetchFundingRates'] && !exchanges[exchange].has['fetchFundingRate']) {
+      const errorResponse: ErrorResponse = {
+        error: 'Exchange does not support funding rates',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    let fundingRate;
+    try {
+      if (exchanges[exchange].has['fetchFundingRate']) {
+        fundingRate = await exchanges[exchange].fetchFundingRate(symbol);
+      } else {
+        // Fallback to fetchFundingRates with single symbol
+        const rates = await exchanges[exchange].fetchFundingRates([symbol]);
+        fundingRate = rates[symbol];
+      }
+      
+      if (!fundingRate) {
+        const errorResponse: ErrorResponse = {
+          error: `No funding rate found for symbol ${symbol}`,
+          timestamp: new Date().toISOString()
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      const response = {
+        exchange,
+        symbol: fundingRate.symbol || symbol,
+        fundingRate: fundingRate.fundingRate || 0,
+        fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
+        nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
+        markPrice: fundingRate.markPrice || 0,
+        indexPrice: fundingRate.indexPrice || 0,
+        timestamp: fundingRate.timestamp || Date.now()
+      };
+      
+      return c.json(response);
+    } catch (error) {
+      const errorResponse: ErrorResponse = {
+        error: `Failed to fetch funding rate for ${symbol} on ${exchange}`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 500);
+    }
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// Exchange management endpoints
+
+// Add exchange to blacklist
+app.post('/api/admin/exchanges/blacklist/:exchange', async (c) => {
+  try {
+    const exchange = c.req.param('exchange');
+    
+    if (!exchangeConfig.blacklistedExchanges.includes(exchange)) {
+      exchangeConfig.blacklistedExchanges.push(exchange);
+      
+      // Remove from active exchanges if it exists
+      if (exchanges[exchange]) {
+        delete exchanges[exchange];
+      }
+      
+      console.log(`Exchange ${exchange} added to blacklist`);
+    }
+    
+    return c.json({
+      message: `Exchange ${exchange} blacklisted successfully`,
+      blacklistedExchanges: exchangeConfig.blacklistedExchanges,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// Remove exchange from blacklist
+app.delete('/api/admin/exchanges/blacklist/:exchange', async (c) => {
+  try {
+    const exchange = c.req.param('exchange');
+    
+    const index = exchangeConfig.blacklistedExchanges.indexOf(exchange);
+    if (index > -1) {
+      exchangeConfig.blacklistedExchanges.splice(index, 1);
+      
+      // Try to initialize the exchange if it's available
+      try {
+        await initializeExchange(exchange);
+        console.log(`Exchange ${exchange} removed from blacklist and initialized`);
+      } catch (error) {
+        console.warn(`Failed to initialize ${exchange} after removing from blacklist:`, error);
+      }
+    }
+    
+    return c.json({
+      message: `Exchange ${exchange} removed from blacklist`,
+      blacklistedExchanges: exchangeConfig.blacklistedExchanges,
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// Get exchange configuration
+app.get('/api/admin/exchanges/config', async (c) => {
+  return c.json({
+    config: exchangeConfig,
+    activeExchanges: Object.keys(exchanges),
+    availableExchanges: Object.keys(ccxt.exchanges),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Refresh exchanges (re-initialize all non-blacklisted exchanges)
+app.post('/api/admin/exchanges/refresh', async (c) => {
+  try {
+    // Clear current exchanges
+    Object.keys(exchanges).forEach(key => delete exchanges[key]);
+    
+    // Re-initialize exchanges
+    await initializeExchanges();
+    
+    return c.json({
+      message: 'Exchanges refreshed successfully',
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// Add new exchange dynamically
+app.post('/api/admin/exchanges/add/:exchange', async (c) => {
+  try {
+    const exchange = c.req.param('exchange');
+    
+    // Check if exchange is available in CCXT
+    if (!ccxt.exchanges[exchange]) {
+      const errorResponse: ErrorResponse = {
+        error: `Exchange ${exchange} is not available in CCXT library`,
+        availableExchanges: Object.keys(ccxt.exchanges),
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+    
+    // Check if already blacklisted
+    if (exchangeConfig.blacklistedExchanges.includes(exchange)) {
+      const errorResponse: ErrorResponse = {
+        error: `Exchange ${exchange} is blacklisted. Remove from blacklist first.`,
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+    
+    // Try to initialize the exchange
+    try {
+      await initializeExchange(exchange);
+      
+      return c.json({
+        message: `Exchange ${exchange} added successfully`,
+        activeExchanges: Object.keys(exchanges),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      const errorResponse: ErrorResponse = {
+        error: `Failed to initialize exchange ${exchange}`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 500);
+    }
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
 
 // Global error handler
 app.onError((error, c) => {
