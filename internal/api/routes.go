@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/api/handlers"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
+	futuresHandlers "github.com/irfndi/celebrum-ai-go/internal/handlers"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 )
@@ -46,6 +48,19 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService)
 
+	// Initialize futures arbitrage handler with error handling
+	var futuresArbitrageHandler *futuresHandlers.FuturesArbitrageHandler
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("PANIC during futures arbitrage handler initialization: %v\n", r)
+				futuresArbitrageHandler = nil
+			}
+		}()
+		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
+		fmt.Println("Futures arbitrage handler initialized successfully")
+	}()
+
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
@@ -66,6 +81,21 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			// Funding rate arbitrage
 			arbitrage.GET("/funding", arbitrageHandler.GetFundingRateArbitrage)
 			arbitrage.GET("/funding-rates/:exchange", arbitrageHandler.GetFundingRates)
+		}
+
+		// Futures arbitrage routes (only if handler initialized successfully)
+		if futuresArbitrageHandler != nil {
+			futuresArbitrage := v1.Group("/futures-arbitrage")
+			{
+				futuresArbitrage.GET("/opportunities", futuresArbitrageHandler.GetFuturesArbitrageOpportunities)
+				futuresArbitrage.POST("/calculate", futuresArbitrageHandler.CalculateFuturesArbitrage)
+				futuresArbitrage.GET("/strategy/:id", futuresArbitrageHandler.GetFuturesArbitrageStrategy)
+				futuresArbitrage.GET("/market-summary", futuresArbitrageHandler.GetFuturesMarketSummary)
+				futuresArbitrage.POST("/position-sizing", futuresArbitrageHandler.GetPositionSizingRecommendation)
+			}
+			fmt.Println("Futures arbitrage routes registered successfully")
+		} else {
+			fmt.Println("Skipping futures arbitrage routes due to handler initialization failure")
 		}
 
 		// Technical analysis routes

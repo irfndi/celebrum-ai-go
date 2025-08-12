@@ -49,14 +49,36 @@ func main() {
 	}
 	defer collectorService.Stop()
 
+	// Perform historical data backfill if needed
+	log.Println("Checking for historical data backfill requirements...")
+	if err := collectorService.PerformBackfillIfNeeded(); err != nil {
+		log.Printf("Warning: Backfill failed: %v", err)
+		// Don't fail startup if backfill fails, just log the warning
+	} else {
+		log.Println("Historical data backfill check completed successfully")
+	}
+
+	// Initialize futures arbitrage service
+	futuresArbitrageService := services.NewFuturesArbitrageService(db, cfg)
+	if err := futuresArbitrageService.Start(); err != nil {
+		log.Fatalf("Failed to start futures arbitrage service: %v", err)
+	}
+	defer futuresArbitrageService.Stop()
+
 	// Initialize cleanup service
 	cleanupService := services.NewCleanupService(db)
-	cleanupService.Start(services.CleanupConfig{
-		MarketDataRetentionHours:  cfg.Cleanup.MarketDataRetentionHours,
-		FundingRateRetentionHours: cfg.Cleanup.FundingRateRetentionHours,
-		ArbitrageRetentionHours:   cfg.Cleanup.ArbitrageRetentionHours,
-		CleanupIntervalMinutes:    cfg.Cleanup.CleanupIntervalMinutes,
-	})
+
+	// Start cleanup service with configuration
+	cleanupConfig := services.CleanupConfig{
+		MarketDataRetentionHours:  cfg.Cleanup.MarketData.RetentionHours,
+		MarketDataDeletionHours:   cfg.Cleanup.MarketData.DeletionHours,
+		FundingRateRetentionHours: cfg.Cleanup.FundingRates.RetentionHours,
+		FundingRateDeletionHours:  cfg.Cleanup.FundingRates.DeletionHours,
+		ArbitrageRetentionHours:   cfg.Cleanup.ArbitrageOpportunities.RetentionHours,
+		CleanupIntervalMinutes:    cfg.Cleanup.IntervalMinutes,
+		EnableSmartCleanup:        cfg.Cleanup.EnableSmartCleanup,
+	}
+	go cleanupService.Start(cleanupConfig)
 	defer cleanupService.Stop()
 
 	// Setup Gin router

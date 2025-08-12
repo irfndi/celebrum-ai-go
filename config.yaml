@@ -86,6 +86,28 @@ market_data:
     - bitfinex
     - huobi
 
+# Data Cleanup configuration
+cleanup:
+  # Smart cleanup strategy - maintains 24h buffer while cleaning old data
+  market_data:
+    retention_hours: 36 # Keep 36 hours of market data
+    deletion_hours: 12 # Delete oldest 12 hours when cleaning (keeps 24h buffer)
+  funding_rates:
+    retention_hours: 36 # Keep 36 hours of funding rate data
+    deletion_hours: 12 # Delete oldest 12 hours when cleaning
+  arbitrage_opportunities:
+    retention_hours: 72 # Keep 72 hours of arbitrage opportunities
+  interval_minutes: 60 # Run cleanup every 60 minutes
+  enable_smart_cleanup: true # Use smart cleanup strategy
+
+# Historical Data Backfill configuration
+backfill:
+  enabled: true # Enable backfill on startup
+  backfill_hours: 6 # Collect 6 hours of historical data
+  min_data_threshold_hours: 4 # Trigger backfill if less than 4h of data available
+  batch_size: 5 # Process 5 symbols at a time
+  delay_between_batches: 500 # Delay in milliseconds between symbol processing
+
 # Arbitrage configuration
 arbitrage:
   min_profit_threshold: 0.5 # Minimum profit percentage

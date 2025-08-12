@@ -15,6 +15,7 @@ type Config struct {
 	CCXT        CCXTConfig       `mapstructure:"ccxt"`
 	Telegram    TelegramConfig   `mapstructure:"telegram"`
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
+	Backfill    BackfillConfig   `mapstructure:"backfill"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
 }
@@ -56,10 +57,28 @@ type TelegramConfig struct {
 }
 
 type CleanupConfig struct {
-	MarketDataRetentionHours  int `mapstructure:"market_data_retention_hours"`
-	FundingRateRetentionHours int `mapstructure:"funding_rate_retention_hours"`
-	ArbitrageRetentionHours   int `mapstructure:"arbitrage_retention_hours"`
-	CleanupIntervalMinutes    int `mapstructure:"cleanup_interval_minutes"`
+	MarketData             CleanupDataConfig      `mapstructure:"market_data"`
+	FundingRates           CleanupDataConfig      `mapstructure:"funding_rates"`
+	ArbitrageOpportunities CleanupArbitrageConfig `mapstructure:"arbitrage_opportunities"`
+	IntervalMinutes        int                    `mapstructure:"interval"`
+	EnableSmartCleanup     bool                   `mapstructure:"enable_smart_cleanup"`
+}
+
+type CleanupDataConfig struct {
+	RetentionHours int `mapstructure:"retention_hours"`
+	DeletionHours  int `mapstructure:"deletion_hours"`
+}
+
+type CleanupArbitrageConfig struct {
+	RetentionHours int `mapstructure:"retention_hours"`
+}
+
+type BackfillConfig struct {
+	Enabled               bool `mapstructure:"enabled"`
+	BackfillHours         int  `mapstructure:"backfill_hours"`
+	MinDataThresholdHours int  `mapstructure:"min_data_threshold_hours"`
+	BatchSize             int  `mapstructure:"batch_size"`
+	DelayBetweenBatches   int  `mapstructure:"delay_between_batches"`
 }
 
 type MarketDataConfig struct {
@@ -142,11 +161,21 @@ func setDefaults() {
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
 
-	// Cleanup
-	viper.SetDefault("cleanup.market_data_retention_hours", 24)
-	viper.SetDefault("cleanup.funding_rate_retention_hours", 24)
-	viper.SetDefault("cleanup.arbitrage_retention_hours", 72)
-	viper.SetDefault("cleanup.cleanup_interval_minutes", 60)
+	// Cleanup - Enhanced configuration with smart cleanup
+	viper.SetDefault("cleanup.market_data.retention_hours", 36)
+	viper.SetDefault("cleanup.market_data.deletion_hours", 12)
+	viper.SetDefault("cleanup.funding_rates.retention_hours", 36)
+	viper.SetDefault("cleanup.funding_rates.deletion_hours", 12)
+	viper.SetDefault("cleanup.arbitrage_opportunities.retention_hours", 72)
+	viper.SetDefault("cleanup.interval", 60)
+	viper.SetDefault("cleanup.enable_smart_cleanup", true)
+
+	// Backfill
+	viper.SetDefault("backfill.enabled", true)
+	viper.SetDefault("backfill.backfill_hours", 6)
+	viper.SetDefault("backfill.min_data_threshold_hours", 4)
+	viper.SetDefault("backfill.batch_size", 5)
+	viper.SetDefault("backfill.delay_between_batches", 500)
 
 	// Market Data
 	viper.SetDefault("market_data.collection_interval", "5m")

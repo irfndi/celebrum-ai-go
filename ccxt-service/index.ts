@@ -130,7 +130,7 @@ function initializeExchange(exchangeId: string): boolean {
 }
 
 // Get all available exchanges from CCXT
-const allExchanges = Object.keys(ccxt.exchanges);
+const allExchanges = ccxt.exchanges; // ccxt.exchanges is an array of exchange names
 console.log(`Total CCXT exchanges available: ${allExchanges.length}`);
 console.log(`Blacklisted exchanges: ${Array.from(blacklistedExchanges).join(', ')}`);
 
