@@ -36,15 +36,15 @@ type ArbitrageOpportunity struct {
 	TradingPair      *TradingPair    `json:"trading_pair,omitempty"`
 	BuyExchange      *Exchange       `json:"buy_exchange,omitempty"`
 	SellExchange     *Exchange       `json:"sell_exchange,omitempty"`
-	
+
 	// Enhanced fields for price ranges and multiple exchanges
-	BuyPriceRange    *PriceRange     `json:"buy_price_range,omitempty"`
-	SellPriceRange   *PriceRange     `json:"sell_price_range,omitempty"`
-	ProfitRange      *ProfitRange    `json:"profit_range,omitempty"`
-	BuyExchanges     []string        `json:"buy_exchanges,omitempty"`
-	SellExchanges    []string        `json:"sell_exchanges,omitempty"`
-	MinVolume        decimal.Decimal `json:"min_volume,omitempty"`
-	EstimatedVolume  decimal.Decimal `json:"estimated_volume,omitempty"`
+	BuyPriceRange   *PriceRange     `json:"buy_price_range,omitempty"`
+	SellPriceRange  *PriceRange     `json:"sell_price_range,omitempty"`
+	ProfitRange     *ProfitRange    `json:"profit_range,omitempty"`
+	BuyExchanges    []string        `json:"buy_exchanges,omitempty"`
+	SellExchanges   []string        `json:"sell_exchanges,omitempty"`
+	MinVolume       decimal.Decimal `json:"min_volume,omitempty"`
+	EstimatedVolume decimal.Decimal `json:"estimated_volume,omitempty"`
 }
 
 // ArbitrageOpportunityRequest represents request parameters for arbitrage opportunities
@@ -65,15 +65,15 @@ type ArbitrageOpportunityResponse struct {
 	ProfitPercentage decimal.Decimal `json:"profit_percentage"`
 	DetectedAt       time.Time       `json:"detected_at"`
 	ExpiresAt        time.Time       `json:"expires_at"`
-	
+
 	// Enhanced fields for price ranges and multiple exchanges
-	BuyPriceRange    *PriceRange     `json:"buy_price_range,omitempty"`
-	SellPriceRange   *PriceRange     `json:"sell_price_range,omitempty"`
-	ProfitRange      *ProfitRange    `json:"profit_range,omitempty"`
-	BuyExchanges     []string        `json:"buy_exchanges,omitempty"`
-	SellExchanges    []string        `json:"sell_exchanges,omitempty"`
-	MinVolume        decimal.Decimal `json:"min_volume,omitempty"`
-	ValidForMinutes  int             `json:"valid_for_minutes,omitempty"`
+	BuyPriceRange   *PriceRange     `json:"buy_price_range,omitempty"`
+	SellPriceRange  *PriceRange     `json:"sell_price_range,omitempty"`
+	ProfitRange     *ProfitRange    `json:"profit_range,omitempty"`
+	BuyExchanges    []string        `json:"buy_exchanges,omitempty"`
+	SellExchanges   []string        `json:"sell_exchanges,omitempty"`
+	MinVolume       decimal.Decimal `json:"min_volume,omitempty"`
+	ValidForMinutes int             `json:"valid_for_minutes,omitempty"`
 }
 
 // ArbitrageOpportunitiesResponse represents the response for arbitrage opportunities list

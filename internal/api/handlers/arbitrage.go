@@ -2,24 +2,28 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/redis/go-redis/v9"
 )
 
 type ArbitrageHandler struct {
 	db                  *database.PostgresDB
 	ccxtService         ccxt.CCXTService
 	notificationService *services.NotificationService
+	redisClient         *redis.Client
 }
 
 type ArbitrageOpportunity struct {
@@ -59,11 +63,12 @@ type ArbitrageHistoryResponse struct {
 	Limit   int                    `json:"limit"`
 }
 
-func NewArbitrageHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, notificationService *services.NotificationService) *ArbitrageHandler {
+func NewArbitrageHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, notificationService *services.NotificationService, redisClient *redis.Client) *ArbitrageHandler {
 	return &ArbitrageHandler{
 		db:                  db,
 		ccxtService:         ccxtService,
 		notificationService: notificationService,
+		redisClient:         redisClient,
 	}
 }
 
@@ -265,6 +270,34 @@ func (h *ArbitrageHandler) GetFundingRates(c *gin.Context) {
 	// Get symbols from query parameters
 	symbols := c.QueryArray("symbols")
 
+	// Create cache key based on exchange and symbols
+	var cacheKey string
+	if len(symbols) == 0 {
+		cacheKey = fmt.Sprintf("funding_rates:all:%s", exchange)
+	} else {
+		// Sort symbols for consistent cache key
+		sortedSymbols := make([]string, len(symbols))
+		copy(sortedSymbols, symbols)
+		sort.Strings(sortedSymbols)
+		cacheKey = fmt.Sprintf("funding_rates:%s:%s", exchange, strings.Join(sortedSymbols, ","))
+	}
+
+	// Check Redis cache first
+	if h.redisClient != nil {
+		if cachedData, err := h.redisClient.Get(c.Request.Context(), cacheKey).Result(); err == nil {
+			var fundingRates []ccxt.FundingRate
+			if json.Unmarshal([]byte(cachedData), &fundingRates) == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"exchange":      exchange,
+					"funding_rates": fundingRates,
+					"count":         len(fundingRates),
+					"cached":        true,
+				})
+				return
+			}
+		}
+	}
+
 	var fundingRates []ccxt.FundingRate
 	var err error
 
@@ -281,10 +314,18 @@ func (h *ArbitrageHandler) GetFundingRates(c *gin.Context) {
 		return
 	}
 
+	// Cache the result with 1-minute TTL
+	if h.redisClient != nil {
+		if jsonData, err := json.Marshal(fundingRates); err == nil {
+			h.redisClient.Set(c.Request.Context(), cacheKey, jsonData, time.Minute)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"exchange":      exchange,
 		"funding_rates": fundingRates,
 		"count":         len(fundingRates),
+		"cached":        false,
 	})
 }
 

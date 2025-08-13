@@ -1,29 +1,63 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/redis/go-redis/v9"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 )
+
+// RedisInterface defines the interface for Redis operations used by ExchangeHandler
+type RedisInterface interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+}
+
+// CollectorInterface defines the interface for collector service operations
+type CollectorInterface interface {
+	Start() error
+	Stop()
+	RestartWorker(exchangeID string) error
+	IsReady() bool
+	IsInitialized() bool
+}
 
 // ExchangeHandler handles exchange management API endpoints
 type ExchangeHandler struct {
 	ccxtService      ccxt.CCXTService
-	collectorService *services.CollectorService
+	collectorService CollectorInterface
+	redisClient      RedisInterface
 }
 
 // NewExchangeHandler creates a new exchange handler
-func NewExchangeHandler(ccxtService ccxt.CCXTService, collectorService *services.CollectorService) *ExchangeHandler {
+func NewExchangeHandler(ccxtService ccxt.CCXTService, collectorService CollectorInterface, redisClient RedisInterface) *ExchangeHandler {
 	return &ExchangeHandler{
 		ccxtService:      ccxtService,
 		collectorService: collectorService,
+		redisClient:      redisClient,
 	}
 }
 
 // GetExchangeConfig retrieves the current exchange configuration
 func (h *ExchangeHandler) GetExchangeConfig(c *gin.Context) {
+	cacheKey := "exchange:config"
+	ctx := context.Background()
+
+	// Try to get from cache first
+	cachedData, err := h.redisClient.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var config interface{}
+		if err := json.Unmarshal([]byte(cachedData), &config); err == nil {
+			c.JSON(http.StatusOK, config)
+			return
+		}
+	}
+
+	// Cache miss or error, fetch from service
 	config, err := h.ccxtService.GetExchangeConfig(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -31,6 +65,11 @@ func (h *ExchangeHandler) GetExchangeConfig(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	// Cache the result for 1 hour
+	if configData, err := json.Marshal(config); err == nil {
+		h.redisClient.Set(ctx, cacheKey, configData, time.Hour)
 	}
 
 	c.JSON(http.StatusOK, config)
@@ -160,7 +199,30 @@ func (h *ExchangeHandler) AddExchange(c *gin.Context) {
 
 // GetSupportedExchanges returns the list of currently supported exchanges
 func (h *ExchangeHandler) GetSupportedExchanges(c *gin.Context) {
+	cacheKey := "exchange:supported"
+	ctx := context.Background()
+
+	// Try to get from cache first
+	cachedData, err := h.redisClient.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var exchanges []string
+		if err := json.Unmarshal([]byte(cachedData), &exchanges); err == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"exchanges": exchanges,
+				"count":     len(exchanges),
+			})
+			return
+		}
+	}
+
+	// Cache miss or error, fetch from service
 	exchanges := h.ccxtService.GetSupportedExchanges()
+
+	// Cache the result for 30 minutes
+	if exchangesData, err := json.Marshal(exchanges); err == nil {
+		h.redisClient.Set(ctx, cacheKey, exchangesData, 30*time.Minute)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"exchanges": exchanges,
 		"count":     len(exchanges),

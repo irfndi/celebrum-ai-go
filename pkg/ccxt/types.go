@@ -9,6 +9,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
+	"github.com/sirupsen/logrus"
 )
 
 // Service provides high-level CCXT operations
@@ -17,14 +18,18 @@ type Service struct {
 	supportedExchanges map[string]ExchangeInfo
 	mu                 sync.RWMutex
 	lastUpdate         time.Time
+	logger             *logrus.Logger
 }
 
 // NewService creates a new CCXT service instance
-func NewService(cfg *config.CCXTConfig) *Service {
-	return &Service{
+func NewService(cfg *config.CCXTConfig, logger *logrus.Logger) *Service {
+	s := &Service{
 		client:             NewClient(cfg),
 		supportedExchanges: make(map[string]ExchangeInfo),
+		logger:             logger,
 	}
+
+	return s
 }
 
 // Initialize initializes the service by fetching supported exchanges
@@ -122,22 +127,38 @@ func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string
 
 // FetchOrderBook fetches order book data for a specific exchange and symbol
 func (s *Service) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
-	return s.client.GetOrderBook(ctx, exchange, symbol, limit)
+	resp, err := s.client.GetOrderBook(ctx, exchange, symbol, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch order book for %s on %s: %w", symbol, exchange, err)
+	}
+	return resp, nil
 }
 
 // FetchOHLCV fetches OHLCV data for technical analysis
 func (s *Service) FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
-	return s.client.GetOHLCV(ctx, exchange, symbol, timeframe, limit)
+	resp, err := s.client.GetOHLCV(ctx, exchange, symbol, timeframe, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch OHLCV for %s on %s: %w", symbol, exchange, err)
+	}
+	return resp, nil
 }
 
 // FetchTrades fetches recent trades for a specific exchange and symbol
 func (s *Service) FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
-	return s.client.GetTrades(ctx, exchange, symbol, limit)
+	resp, err := s.client.GetTrades(ctx, exchange, symbol, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch trades for %s on %s: %w", symbol, exchange, err)
+	}
+	return resp, nil
 }
 
 // FetchMarkets fetches all available trading pairs for an exchange
 func (s *Service) FetchMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
-	return s.client.GetMarkets(ctx, exchange)
+	resp, err := s.client.GetMarkets(ctx, exchange)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch markets for %s: %w", exchange, err)
+	}
+	return resp, nil
 }
 
 // CalculateArbitrageOpportunities identifies arbitrage opportunities from market data

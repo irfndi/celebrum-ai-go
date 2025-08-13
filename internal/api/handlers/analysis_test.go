@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -141,4 +145,139 @@ func TestOHLCV_Struct(t *testing.T) {
 	assert.Equal(t, 49500.0, ohlcv.Low)
 	assert.Equal(t, 50500.0, ohlcv.Close)
 	assert.Equal(t, 1000.0, ohlcv.Volume)
+}
+
+func TestNewAnalysisHandler(t *testing.T) {
+	mockCCXT := &MockCCXTService{}
+	handler := NewAnalysisHandler(nil, mockCCXT)
+
+	assert.NotNil(t, handler)
+	assert.Equal(t, mockCCXT, handler.ccxtService)
+}
+
+func TestAnalysisHandler_GetTechnicalIndicators(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		symbol         string
+		exchange       string
+		timeframe      string
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "missing symbol",
+			symbol:         "",
+			exchange:       "binance",
+			timeframe:      "1h",
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name:           "missing exchange",
+			symbol:         "BTC/USDT",
+			exchange:       "",
+			timeframe:      "1h",
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCCXT := &MockCCXTService{}
+			handler := NewAnalysisHandler(nil, mockCCXT)
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			// Set query parameters
+			c.Request = httptest.NewRequest("GET", "/analysis/indicators", nil)
+			q := c.Request.URL.Query()
+			if tt.symbol != "" {
+				q.Add("symbol", tt.symbol)
+			}
+			if tt.exchange != "" {
+				q.Add("exchange", tt.exchange)
+			}
+			if tt.timeframe != "" {
+				q.Add("timeframe", tt.timeframe)
+			}
+			c.Request.URL.RawQuery = q.Encode()
+
+			handler.GetTechnicalIndicators(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if tt.expectError {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
+}
+
+func TestAnalysisHandler_GetTradingSignals(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		symbol         string
+		exchange       string
+		timeframe      string
+		minConfidence  string
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "invalid min_confidence",
+			symbol:         "BTC/USDT",
+			exchange:       "binance",
+			timeframe:      "1h",
+			minConfidence:  "invalid",
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCCXT := &MockCCXTService{}
+			handler := NewAnalysisHandler(nil, mockCCXT)
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			// Set query parameters
+			c.Request = httptest.NewRequest("GET", "/analysis/signals", nil)
+			q := c.Request.URL.Query()
+			if tt.symbol != "" {
+				q.Add("symbol", tt.symbol)
+			}
+			if tt.exchange != "" {
+				q.Add("exchange", tt.exchange)
+			}
+			if tt.timeframe != "" {
+				q.Add("timeframe", tt.timeframe)
+			}
+			if tt.minConfidence != "" {
+				q.Add("min_confidence", tt.minConfidence)
+			}
+			c.Request.URL.RawQuery = q.Encode()
+
+			handler.GetTradingSignals(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if tt.expectError {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
 }

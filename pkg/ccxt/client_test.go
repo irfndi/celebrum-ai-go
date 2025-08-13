@@ -3,6 +3,7 @@ package ccxt_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -287,6 +288,469 @@ func TestClient_GetOrderBook(t *testing.T) {
 	assert.Equal(t, "BTC/USDT", resp.OrderBook.Symbol)
 	assert.Len(t, resp.OrderBook.Bids, 2)
 	assert.Len(t, resp.OrderBook.Asks, 2)
+}
+
+func TestClient_GetTrades(t *testing.T) {
+	expectedTrades := []ccxt.Trade{
+		{
+			ID:        "12345",
+			Timestamp: time.Now(),
+			Symbol:    "BTC/USDT",
+			Side:      "buy",
+			Amount:    decimal.NewFromFloat(1.5),
+			Price:     decimal.NewFromFloat(44500.0),
+			Cost:      decimal.NewFromFloat(66750.0),
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/trades/binance/BTCUSDT", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "50", r.URL.Query().Get("limit"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(ccxt.TradesResponse{
+			Trades: expectedTrades,
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	resp, err := client.GetTrades(ctx, "binance", "BTC/USDT", 50)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Len(t, resp.Trades, 1)
+	assert.Equal(t, "12345", resp.Trades[0].ID)
+	assert.Equal(t, "buy", resp.Trades[0].Side)
+}
+
+func TestClient_GetOHLCV(t *testing.T) {
+	expectedOHLCV := []ccxt.OHLCV{
+		{
+			Timestamp: time.Now(),
+			Open:      decimal.NewFromFloat(44000.0),
+			High:      decimal.NewFromFloat(45000.0),
+			Low:       decimal.NewFromFloat(43500.0),
+			Close:     decimal.NewFromFloat(44500.0),
+			Volume:    decimal.NewFromFloat(1234.56),
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/ohlcv/binance/BTCUSDT", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "1h", r.URL.Query().Get("timeframe"))
+		assert.Equal(t, "100", r.URL.Query().Get("limit"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(ccxt.OHLCVResponse{
+			OHLCV: expectedOHLCV,
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	resp, err := client.GetOHLCV(ctx, "binance", "BTC/USDT", "1h", 100)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Len(t, resp.OHLCV, 1)
+	assert.True(t, resp.OHLCV[0].Open.Equal(decimal.NewFromFloat(44000.0)))
+	assert.True(t, resp.OHLCV[0].Close.Equal(decimal.NewFromFloat(44500.0)))
+}
+
+func TestClient_GetMarkets(t *testing.T) {
+	expectedSymbols := []string{"BTC/USDT", "ETH/USDT"}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/markets/binance", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(ccxt.MarketsResponse{
+			Exchange:  "binance",
+			Symbols:   expectedSymbols,
+			Count:     len(expectedSymbols),
+			Timestamp: time.Now().Format(time.RFC3339),
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	resp, err := client.GetMarkets(ctx, "binance")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Len(t, resp.Symbols, 2)
+	assert.Equal(t, "binance", resp.Exchange)
+	assert.Contains(t, resp.Symbols, "BTC/USDT")
+}
+
+func TestClient_GetFundingRate(t *testing.T) {
+	expectedFundingRate := ccxt.FundingRate{
+		Symbol:      "BTC/USDT",
+		FundingRate: 0.0001,
+		Timestamp:   ccxt.UnixTimestamp(time.Now()),
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/funding-rate/binance/BTCUSDT", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedFundingRate); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	resp, err := client.GetFundingRate(ctx, "binance", "BTC/USDT")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "BTC/USDT", resp.Symbol)
+	assert.Equal(t, 0.0001, resp.FundingRate)
+}
+
+func TestClient_GetFundingRates(t *testing.T) {
+	t.Run("with symbols", func(t *testing.T) {
+		expectedRates := []ccxt.FundingRate{
+			{
+				Symbol:      "BTC/USDT",
+				FundingRate: 0.0001,
+				Timestamp:   ccxt.UnixTimestamp(time.Now()),
+			},
+			{
+				Symbol:      "ETH/USDT",
+				FundingRate: 0.0002,
+				Timestamp:   ccxt.UnixTimestamp(time.Now()),
+			},
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/funding-rates/binance", r.URL.Path)
+			assert.Equal(t, "GET", r.Method)
+			assert.Contains(t, r.URL.RawQuery, "symbols=")
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(ccxt.FundingRateResponse{
+				FundingRates: expectedRates,
+			}); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.GetFundingRates(ctx, "binance", []string{"BTC/USDT", "ETH/USDT"})
+
+		require.NoError(t, err)
+		assert.Len(t, resp, 2)
+		assert.Equal(t, "BTC/USDT", resp[0].Symbol)
+		assert.Equal(t, "ETH/USDT", resp[1].Symbol)
+	})
+
+	t.Run("empty symbols", func(t *testing.T) {
+		cfg := &config.CCXTConfig{
+			ServiceURL: "http://localhost:3001",
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.GetFundingRates(ctx, "binance", []string{})
+
+		require.NoError(t, err)
+		assert.Empty(t, resp)
+	})
+}
+
+func TestClient_GetAllFundingRates(t *testing.T) {
+	expectedRates := []ccxt.FundingRate{
+		{
+			Symbol:      "BTC/USDT",
+			FundingRate: 0.0001,
+			Timestamp:   ccxt.UnixTimestamp(time.Now()),
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/funding-rates/binance", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Empty(t, r.URL.RawQuery)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(ccxt.FundingRateResponse{
+			FundingRates: expectedRates,
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	resp, err := client.GetAllFundingRates(ctx, "binance")
+
+	require.NoError(t, err)
+	assert.Len(t, resp, 1)
+	assert.Equal(t, "BTC/USDT", resp[0].Symbol)
+}
+
+func TestClient_ExchangeManagement(t *testing.T) {
+	t.Run("GetExchangeConfig", func(t *testing.T) {
+		expectedConfig := ccxt.ExchangeConfigResponse{
+			ActiveExchanges:    []string{"binance", "coinbase"},
+			AvailableExchanges: []string{"binance", "coinbase", "ftx"},
+			Config: ccxt.ExchangeConfig{
+				BlacklistedExchanges: []string{"ftx"},
+				PriorityExchanges:    []string{"binance"},
+			},
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/admin/exchanges/config", r.URL.Path)
+			assert.Equal(t, "GET", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(expectedConfig); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.GetExchangeConfig(ctx)
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Len(t, resp.ActiveExchanges, 2)
+		assert.Len(t, resp.Config.BlacklistedExchanges, 1)
+		assert.Contains(t, resp.ActiveExchanges, "binance")
+	})
+
+	t.Run("AddExchangeToBlacklist", func(t *testing.T) {
+		expectedResponse := ccxt.ExchangeManagementResponse{
+			Message:   "Exchange added to blacklist",
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
+			assert.Equal(t, "POST", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.AddExchangeToBlacklist(ctx, "ftx")
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, "Exchange added to blacklist", resp.Message)
+	})
+
+	t.Run("RemoveExchangeFromBlacklist", func(t *testing.T) {
+		expectedResponse := ccxt.ExchangeManagementResponse{
+			Message:   "Exchange removed from blacklist",
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
+			assert.Equal(t, "DELETE", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.RemoveExchangeFromBlacklist(ctx, "ftx")
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, "Exchange removed from blacklist", resp.Message)
+	})
+
+	t.Run("RefreshExchanges", func(t *testing.T) {
+		expectedResponse := ccxt.ExchangeManagementResponse{
+			Message:   "Exchanges refreshed successfully",
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/admin/exchanges/refresh", r.URL.Path)
+			assert.Equal(t, "POST", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.RefreshExchanges(ctx)
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, "Exchanges refreshed successfully", resp.Message)
+	})
+
+	t.Run("AddExchange", func(t *testing.T) {
+		expectedResponse := ccxt.ExchangeManagementResponse{
+			Message:   "Exchange added successfully",
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/admin/exchanges/add/kraken", r.URL.Path)
+			assert.Equal(t, "POST", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL: server.URL,
+			Timeout:    30,
+		}
+		client := ccxt.NewClient(cfg)
+
+		ctx := context.Background()
+		resp, err := client.AddExchange(ctx, "kraken")
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, "Exchange added successfully", resp.Message)
+	})
+}
+
+func TestClient_FormatSymbolForExchange(t *testing.T) {
+	tests := []struct {
+		name     string
+		exchange string
+			symbol   string
+		expected string
+	}{
+		{"binance", "binance", "BTC/USDT", "/api/ticker/binance/BTCUSDT"},
+		{"coinbase", "coinbase", "BTC/USDT", "/api/ticker/coinbase/BTC-USDT"},
+		{"coinbasepro", "coinbasepro", "BTC/USDT", "/api/ticker/coinbasepro/BTC-USDT"},
+		{"kraken", "kraken", "BTC/USDT", "/api/ticker/kraken/BTC/USDT"},
+		{"okx", "okx", "BTC/USDT", "/api/ticker/okx/BTC/USDT"},
+		{"unknown", "unknown", "BTC/USDT", "/api/ticker/unknown/BTCUSDT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// The URL path will be decoded by the HTTP server, so BTC%2FUSDT becomes BTC/USDT
+				assert.Equal(t, tt.expected, r.URL.Path)
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, `{"symbol":"BTC/USDT","price":50000}`)
+			}))
+			defer server.Close()
+
+			cfg := &config.CCXTConfig{
+				ServiceURL: server.URL,
+				Timeout:    30,
+			}
+			client := ccxt.NewClient(cfg)
+
+			ctx := context.Background()
+			_, err := client.GetTicker(ctx, tt.exchange, tt.symbol)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestClient_Close(t *testing.T) {

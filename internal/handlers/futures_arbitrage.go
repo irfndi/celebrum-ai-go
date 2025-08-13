@@ -11,18 +11,34 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/internal/utils"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
+// DBQuerier interface for database operations
+type DBQuerier interface {
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+}
+
 // FuturesArbitrageHandler handles futures arbitrage related endpoints
 type FuturesArbitrageHandler struct {
-	db         *pgxpool.Pool
+	db         DBQuerier
 	calculator *services.FuturesArbitrageCalculator
 }
 
 // NewFuturesArbitrageHandler creates a new futures arbitrage handler
 func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
+	return &FuturesArbitrageHandler{
+		db:         db,
+		calculator: services.NewFuturesArbitrageCalculator(),
+	}
+}
+
+// NewFuturesArbitrageHandlerWithQuerier creates a new futures arbitrage handler with custom querier
+func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandler {
 	return &FuturesArbitrageHandler{
 		db:         db,
 		calculator: services.NewFuturesArbitrageCalculator(),
@@ -95,8 +111,8 @@ func (h *FuturesArbitrageHandler) CalculateFuturesArbitrage(c *gin.Context) {
 
 	// Store opportunity in database
 	if err := h.storeFuturesOpportunity(opportunity, &riskMetrics); err != nil {
-		// Log error but don't fail the request
-		// In production, you'd want proper logging here
+		// Log error but don't fail the request as this is a best-effort operation
+		_ = c.Error(err)
 	}
 
 	response := struct {
@@ -134,6 +150,7 @@ func (h *FuturesArbitrageHandler) GetFuturesMarketSummary(c *gin.Context) {
 	// Get all active opportunities
 	opportunities, _, err := h.getFuturesOpportunitiesFromDB(models.FuturesArbitrageRequest{
 		Limit: 1000, // Get all for summary
+		Page:  1,    // Default page
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch market data", "details": err.Error()})

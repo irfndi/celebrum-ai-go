@@ -12,6 +12,7 @@ import (
 
 type RedisClient struct {
 	Client *redis.Client
+	logger *logrus.Logger
 }
 
 func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
@@ -29,18 +30,22 @@ func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
-	logrus.Info("Successfully connected to Redis")
+	logger := logrus.New()
+	logger.Info("Successfully connected to Redis")
 
-	return &RedisClient{Client: rdb}, nil
+	return &RedisClient{
+		Client: rdb,
+		logger: logger,
+	}, nil
 }
 
 func (r *RedisClient) Close() {
 	if r.Client != nil {
 		if err := r.Client.Close(); err != nil {
 			// Log error but don't return it since this is a cleanup function
-			logrus.Errorf("Error closing Redis client: %v", err)
+			r.logger.Errorf("Error closing Redis client: %v", err)
 		}
-		logrus.Info("Redis connection closed")
+		r.logger.Info("Redis connection closed")
 	}
 }
 

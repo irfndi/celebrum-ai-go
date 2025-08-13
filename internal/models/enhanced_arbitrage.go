@@ -8,23 +8,21 @@ import (
 
 // EnhancedArbitrageOpportunity represents an arbitrage opportunity with price ranges and volume data
 type EnhancedArbitrageOpportunity struct {
-	ID                   string                    `json:"id" db:"id"`
-	Symbol               string                    `json:"symbol"`
-	BuyPriceRange        PriceRange                `json:"buy_price_range"`
-	SellPriceRange       PriceRange                `json:"sell_price_range"`
-	ProfitRange          ProfitRange               `json:"profit_range"`
-	BuyExchanges         []ExchangePrice           `json:"buy_exchanges"`
-	SellExchanges        []ExchangePrice           `json:"sell_exchanges"`
-	MinVolume            decimal.Decimal           `json:"min_volume"`
-	TotalVolume          decimal.Decimal           `json:"total_volume"`
-	ValidityDuration     time.Duration             `json:"validity_duration"`
-	DetectedAt           time.Time                 `json:"detected_at"`
-	ExpiresAt            time.Time                 `json:"expires_at"`
-	QualityScore         decimal.Decimal           `json:"quality_score"`
-	VolumeWeightedPrice  VolumeWeightedPrices      `json:"volume_weighted_price"`
+	ID                  string               `json:"id" db:"id"`
+	Symbol              string               `json:"symbol"`
+	BuyPriceRange       PriceRange           `json:"buy_price_range"`
+	SellPriceRange      PriceRange           `json:"sell_price_range"`
+	ProfitRange         ProfitRange          `json:"profit_range"`
+	BuyExchanges        []ExchangePrice      `json:"buy_exchanges"`
+	SellExchanges       []ExchangePrice      `json:"sell_exchanges"`
+	MinVolume           decimal.Decimal      `json:"min_volume"`
+	TotalVolume         decimal.Decimal      `json:"total_volume"`
+	ValidityDuration    time.Duration        `json:"validity_duration"`
+	DetectedAt          time.Time            `json:"detected_at"`
+	ExpiresAt           time.Time            `json:"expires_at"`
+	QualityScore        decimal.Decimal      `json:"quality_score"`
+	VolumeWeightedPrice VolumeWeightedPrices `json:"volume_weighted_price"`
 }
-
-
 
 // ExchangePrice represents price and volume data from a specific exchange
 type ExchangePrice struct {
@@ -52,11 +50,11 @@ type ArbitrageAggregationInput struct {
 
 // ArbitrageQualityMetrics represents quality assessment metrics for arbitrage opportunities
 type ArbitrageQualityMetrics struct {
-	VolumeScore      decimal.Decimal `json:"volume_score"`
-	SpreadScore      decimal.Decimal `json:"spread_score"`
-	ExchangeScore    decimal.Decimal `json:"exchange_score"`
-	LiquidityScore   decimal.Decimal `json:"liquidity_score"`
-	OverallScore     decimal.Decimal `json:"overall_score"`
-	IsAcceptable     bool            `json:"is_acceptable"`
-	RejectionReason  string          `json:"rejection_reason,omitempty"`
+	VolumeScore     decimal.Decimal `json:"volume_score"`
+	SpreadScore     decimal.Decimal `json:"spread_score"`
+	ExchangeScore   decimal.Decimal `json:"exchange_score"`
+	LiquidityScore  decimal.Decimal `json:"liquidity_score"`
+	OverallScore    decimal.Decimal `json:"overall_score"`
+	IsAcceptable    bool            `json:"is_acceptable"`
+	RejectionReason string          `json:"rejection_reason,omitempty"`
 }

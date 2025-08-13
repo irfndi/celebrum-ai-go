@@ -26,9 +26,9 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, telegramConfig *config.TelegramConfig) {
 	// Initialize health handler
-	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL())
+	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL(), cacheAnalyticsService)
 
 	// Health check endpoints
 	router.GET("/health", gin.WrapF(healthHandler.HealthCheck))
@@ -36,17 +36,18 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	router.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
 	router.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
 
-	// Initialize notification service
-	notificationService := services.NewNotificationService(db, telegramConfig.BotToken)
+	// Initialize notification service with Redis caching
+	notificationService := services.NewNotificationService(db, redis, telegramConfig.BotToken)
 
 	// Initialize handlers
-	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
-	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService)
-	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler)
+	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis)
+	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
+	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, redis.Client)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
-	userHandler := handlers.NewUserHandler(db)
+	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
-	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService)
+	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
+	cacheHandler := handlers.NewCacheHandler(cacheAnalyticsService)
 
 	// Initialize futures arbitrage handler with error handling
 	var futuresArbitrageHandler *futuresHandlers.FuturesArbitrageHandler
@@ -69,8 +70,11 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			market.GET("/prices", marketHandler.GetMarketPrices)
 			market.GET("/ticker/:exchange/:symbol", marketHandler.GetTicker)
+			market.GET("/tickers/:exchange", marketHandler.GetBulkTickers)
 			market.GET("/orderbook/:exchange/:symbol", marketHandler.GetOrderBook)
 			market.GET("/workers/status", marketHandler.GetWorkerStatus)
+			market.GET("/cache/stats", marketHandler.GetCacheStats)
+			market.POST("/cache/reset", marketHandler.ResetCacheStats)
 		}
 
 		// Arbitrage routes
@@ -146,6 +150,17 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			exchanges.POST("/blacklist/:exchange", exchangeHandler.AddExchangeToBlacklist)
 			exchanges.DELETE("/blacklist/:exchange", exchangeHandler.RemoveExchangeFromBlacklist)
 			exchanges.POST("/workers/:exchange/restart", exchangeHandler.RestartWorker)
+		}
+
+		// Cache monitoring and analytics
+		cache := v1.Group("/cache")
+		{
+			cache.GET("/stats", cacheHandler.GetCacheStats)
+			cache.GET("/stats/:category", cacheHandler.GetCacheStatsByCategory)
+			cache.GET("/metrics", cacheHandler.GetCacheMetrics)
+			cache.POST("/stats/reset", cacheHandler.ResetCacheStats)
+			cache.POST("/hit", cacheHandler.RecordCacheHit)
+			cache.POST("/miss", cacheHandler.RecordCacheMiss)
 		}
 	}
 }

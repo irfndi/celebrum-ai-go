@@ -21,9 +21,12 @@ import (
 
 // TechnicalAnalysisService provides technical analysis capabilities
 type TechnicalAnalysisService struct {
-	config *config.Config
-	db     *database.PostgresDB
-	logger *logrus.Logger
+	config               *config.Config
+	db                   *database.PostgresDB
+	logger               *logrus.Logger
+	errorRecoveryManager *ErrorRecoveryManager
+	resourceManager      *ResourceManager
+	performanceMonitor   *PerformanceMonitor
 }
 
 // IndicatorResult represents the result of a technical indicator calculation
@@ -37,13 +40,13 @@ type IndicatorResult struct {
 
 // TechnicalAnalysisResult contains all calculated indicators for a symbol
 type TechnicalAnalysisResult struct {
-	Symbol     string             `json:"symbol"`
-	Exchange   string             `json:"exchange"`
-	Timeframe  string             `json:"timeframe"`
-	Indicators []*IndicatorResult `json:"indicators"`
-	OverallSignal string          `json:"overall_signal"`
-	Confidence    decimal.Decimal  `json:"confidence"`
-	CalculatedAt  time.Time        `json:"calculated_at"`
+	Symbol        string             `json:"symbol"`
+	Exchange      string             `json:"exchange"`
+	Timeframe     string             `json:"timeframe"`
+	Indicators    []*IndicatorResult `json:"indicators"`
+	OverallSignal string             `json:"overall_signal"`
+	Confidence    decimal.Decimal    `json:"confidence"`
+	CalculatedAt  time.Time          `json:"calculated_at"`
 }
 
 // PriceData represents historical price data for analysis
@@ -63,33 +66,43 @@ type IndicatorConfig struct {
 	// Moving Averages
 	SMAPeriods []int `json:"sma_periods"`
 	EMAPeriods []int `json:"ema_periods"`
-	
+
 	// Momentum Indicators
 	RSIPeriod    int `json:"rsi_period"`
 	StochKPeriod int `json:"stoch_k_period"`
 	StochDPeriod int `json:"stoch_d_period"`
-	
+
 	// Trend Indicators
 	MACDFast   int `json:"macd_fast"`
 	MACDSlow   int `json:"macd_slow"`
 	MACDSignal int `json:"macd_signal"`
-	
+
 	// Volatility Indicators
-	BBPeriod    int     `json:"bb_period"`
-	BBStdDev    float64 `json:"bb_std_dev"`
-	ATRPeriod   int     `json:"atr_period"`
-	
+	BBPeriod  int     `json:"bb_period"`
+	BBStdDev  float64 `json:"bb_std_dev"`
+	ATRPeriod int     `json:"atr_period"`
+
 	// Volume Indicators
-	OBVEnabled bool `json:"obv_enabled"`
+	OBVEnabled  bool `json:"obv_enabled"`
 	VWAPEnabled bool `json:"vwap_enabled"`
 }
 
 // NewTechnicalAnalysisService creates a new technical analysis service
-func NewTechnicalAnalysisService(cfg *config.Config, db *database.PostgresDB, logger *logrus.Logger) *TechnicalAnalysisService {
+func NewTechnicalAnalysisService(
+	cfg *config.Config,
+	db *database.PostgresDB,
+	logger *logrus.Logger,
+	errorRecoveryManager *ErrorRecoveryManager,
+	resourceManager *ResourceManager,
+	performanceMonitor *PerformanceMonitor,
+) *TechnicalAnalysisService {
 	return &TechnicalAnalysisService{
-		config: cfg,
-		db:     db,
-		logger: logger,
+		config:               cfg,
+		db:                   db,
+		logger:               logger,
+		errorRecoveryManager: errorRecoveryManager,
+		resourceManager:      resourceManager,
+		performanceMonitor:   performanceMonitor,
 	}
 }
 
@@ -114,13 +127,33 @@ func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfi
 
 // AnalyzeSymbol performs comprehensive technical analysis on a symbol
 func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, exchange string, config *IndicatorConfig) (*TechnicalAnalysisResult, error) {
+	// Register operation with resource manager
+	operationID := fmt.Sprintf("technical_analysis_%s_%s_%d", symbol, exchange, time.Now().UnixNano())
+	tas.resourceManager.RegisterResource(operationID, GoroutineResource, func() error {
+		return nil
+	}, map[string]interface{}{"symbol": symbol, "exchange": exchange, "operation": "technical_analysis"})
+	defer func() {
+		if err := tas.resourceManager.CleanupResource(operationID); err != nil {
+			tas.logger.WithFields(logrus.Fields{"operation_id": operationID}).Warnf("Failed to cleanup resource: %v", err)
+		}
+	}()
+
+	// Create timeout context for analysis
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
 	tas.logger.WithFields(logrus.Fields{
 		"symbol":   symbol,
 		"exchange": exchange,
 	}).Info("Starting technical analysis")
 
-	// Fetch price data from database
-	priceData, err := tas.fetchPriceData(ctx, symbol, exchange)
+	// Fetch price data from database with error recovery
+	var priceData *PriceData
+	err := tas.errorRecoveryManager.ExecuteWithRetry(ctx, "fetch_price_data", func() error {
+		var err error
+		priceData, err = tas.fetchPriceData(ctx, symbol, exchange)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch price data: %w", err)
 	}
@@ -132,8 +165,15 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 	// Convert to asset snapshots for cinar/indicator
 	snapshots := tas.convertToSnapshots(priceData)
 
-	// Calculate all indicators
-	indicators := tas.calculateAllIndicators(snapshots, config)
+	// Calculate all indicators with error recovery
+	var indicators []*IndicatorResult
+	err = tas.errorRecoveryManager.ExecuteWithRetry(ctx, "calculate_indicators", func() error {
+		indicators = tas.calculateAllIndicators(snapshots, config)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate indicators: %w", err)
+	}
 
 	// Determine overall signal and confidence
 	overallSignal, confidence := tas.determineOverallSignal(indicators)
@@ -361,7 +401,7 @@ func (tas *TechnicalAnalysisService) calculateATR(high, low, close []float64, pe
 
 	// Use ATR with default period, then slice to get the desired period
 	atrIndicator := volatility.NewAtr[float64]()
-	
+
 	// Convert to channels for ATR calculation
 	highChan := helper.SliceToChan(high)
 	lowChan := helper.SliceToChan(low)
@@ -410,7 +450,7 @@ func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []floa
 				lowestLow = low[j]
 			}
 		}
-		
+
 		// Calculate %K
 		if highestHigh != lowestLow {
 			result[i] = ((close[i] - lowestLow) / (highestHigh - lowestLow)) * 100
@@ -445,7 +485,7 @@ func (tas *TechnicalAnalysisService) calculateOBV(prices, volumes []float64) *In
 	}
 
 	obvIndicator := volume.NewObv[float64]()
-	
+
 	// Convert to channels for OBV calculation
 	priceChan := helper.SliceToChan(prices)
 	volumeChan := helper.SliceToChan(volumes)
@@ -727,7 +767,7 @@ func (tas *TechnicalAnalysisService) fetchPriceData(ctx context.Context, symbol,
 	}
 
 	for i, data := range marketData {
-		priceData.Open[i] = data.LastPrice    // Using last price as OHLC for now
+		priceData.Open[i] = data.LastPrice // Using last price as OHLC for now
 		priceData.High[i] = data.LastPrice
 		priceData.Low[i] = data.LastPrice
 		priceData.Close[i] = data.LastPrice

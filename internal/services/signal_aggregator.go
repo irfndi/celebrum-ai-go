@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
+	// "sync"
 	"time"
 
 	"github.com/cinar/indicator/v2/asset"
 	"github.com/cinar/indicator/v2/helper"
-	"github.com/cinar/indicator/v2/trend"
 	"github.com/cinar/indicator/v2/momentum"
+	"github.com/cinar/indicator/v2/trend"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
@@ -40,19 +40,19 @@ const (
 
 // AggregatedSignal represents a consolidated trading signal
 type AggregatedSignal struct {
-	ID               string          `json:"id" gorm:"primaryKey"`
-	SignalType       SignalType      `json:"signal_type"`
-	Symbol           string          `json:"symbol"`
-	Action           string          `json:"action"` // "buy", "sell", "hold"
-	Strength         SignalStrength  `json:"strength"`
-	Confidence       decimal.Decimal `json:"confidence"`
-	ProfitPotential  decimal.Decimal `json:"profit_potential"`
-	RiskLevel        decimal.Decimal `json:"risk_level"`
-	Exchanges        []string        `json:"exchanges"`
-	Indicators       []string        `json:"indicators"`
-	Metadata         map[string]interface{} `json:"metadata"`
-	CreatedAt        time.Time       `json:"created_at"`
-	ExpiresAt        time.Time       `json:"expires_at"`
+	ID              string                 `json:"id" gorm:"primaryKey"`
+	SignalType      SignalType             `json:"signal_type"`
+	Symbol          string                 `json:"symbol"`
+	Action          string                 `json:"action"` // "buy", "sell", "hold"
+	Strength        SignalStrength         `json:"strength"`
+	Confidence      decimal.Decimal        `json:"confidence"`
+	ProfitPotential decimal.Decimal        `json:"profit_potential"`
+	RiskLevel       decimal.Decimal        `json:"risk_level"`
+	Exchanges       []string               `json:"exchanges"`
+	Indicators      []string               `json:"indicators"`
+	Metadata        map[string]interface{} `json:"metadata"`
+	CreatedAt       time.Time              `json:"created_at"`
+	ExpiresAt       time.Time              `json:"expires_at"`
 }
 
 // SignalFingerprint represents a unique identifier for deduplication
@@ -73,10 +73,10 @@ type SignalComponent struct {
 
 // TechnicalSignalInput represents input data for technical analysis
 type TechnicalSignalInput struct {
-	Symbol    string
-	Exchange  string
-	Prices    []decimal.Decimal
-	Volumes   []decimal.Decimal
+	Symbol     string
+	Exchange   string
+	Prices     []decimal.Decimal
+	Volumes    []decimal.Decimal
 	Timestamps []time.Time
 }
 
@@ -104,7 +104,6 @@ type SignalAggregator struct {
 	logger        *logrus.Logger
 	sigConfig     SignalAggregatorConfig
 	qualityScorer *SignalQualityScorer
-	mu            sync.RWMutex
 	cache         map[string]*AggregatedSignal
 }
 
@@ -117,7 +116,7 @@ func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *lo
 		sigConfig: SignalAggregatorConfig{
 			MinConfidence:       decimal.NewFromFloat(0.6),
 			MinProfitThreshold:  decimal.NewFromFloat(0.5), // 0.5%
-			MaxRiskLevel:        decimal.NewFromFloat(0.3),  // 30%
+			MaxRiskLevel:        decimal.NewFromFloat(0.3), // 30%
 			SignalTTL:           15 * time.Minute,
 			DeduplicationWindow: 5 * time.Minute,
 			MaxSignalsPerSymbol: 3,
@@ -153,16 +152,16 @@ func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input
 			// Skip opportunities without trading pair info
 			continue
 		}
-		
+
 		// Apply volume filtering (simulate volume check - in real implementation, this would come from exchange data)
 		estimatedVolume := opp.BuyPrice.Mul(decimal.NewFromFloat(1000)) // Simulate volume calculation
 		if estimatedVolume.GreaterThanOrEqual(minVolume) {
 			symbolGroups[symbol] = append(symbolGroups[symbol], opp)
 		} else {
 			sa.logger.WithFields(logrus.Fields{
-				"symbol": symbol,
+				"symbol":           symbol,
 				"estimated_volume": estimatedVolume,
-				"min_volume": minVolume,
+				"min_volume":       minVolume,
 			}).Debug("Filtered out low volume arbitrage opportunity")
 		}
 	}
@@ -189,21 +188,21 @@ func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input
 		// Create aggregated signal with price ranges from multiple opportunities
 		if len(validOpps) > 0 {
 			signal := sa.createEnhancedArbitrageSignal(validOpps, symbol, minVolume, baseAmount)
-			
+
 			// Assess signal quality
 			qualityInput := SignalQualityInput{
-				SignalType:      string(signal.SignalType),
-				Symbol:          signal.Symbol,
-				Exchanges:       signal.Exchanges,
-				Volume:          minVolume, // Use minimum volume requirement
-				ProfitPotential: signal.ProfitPotential,
-				Confidence:      signal.Confidence,
-				Timestamp:       signal.CreatedAt,
-				Indicators:      map[string]interface{}{"arbitrage": true, "opportunity_count": len(validOpps)},
-				SignalCount:     len(validOpps),
+				SignalType:       string(signal.SignalType),
+				Symbol:           signal.Symbol,
+				Exchanges:        signal.Exchanges,
+				Volume:           minVolume, // Use minimum volume requirement
+				ProfitPotential:  signal.ProfitPotential,
+				Confidence:       signal.Confidence,
+				Timestamp:        signal.CreatedAt,
+				Indicators:       map[string]interface{}{"arbitrage": true, "opportunity_count": len(validOpps)},
+				SignalCount:      len(validOpps),
 				SignalComponents: []string{"arbitrage"},
 			}
-			
+
 			qualityMetrics, err := sa.qualityScorer.AssessSignalQuality(ctx, &qualityInput)
 			if err != nil {
 				sa.logger.WithError(err).Warn("Failed to assess signal quality")
@@ -251,10 +250,10 @@ func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input
 	}
 
 	// Extract prices from snapshots
-		prices = make([]float64, len(snapshots))
-		for i, snapshot := range snapshots {
-			prices[i] = snapshot.Close
-		}
+	prices = make([]float64, len(snapshots))
+	for i, snapshot := range snapshots {
+		prices[i] = snapshot.Close
+	}
 
 	// Calculate technical indicators
 	indicators := sa.calculateTechnicalIndicators(prices)
@@ -321,12 +320,12 @@ func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*A
 
 	for _, signal := range signals {
 		hash := sa.generateSignalHash(signal)
-		
+
 		// Check if we've seen this hash recently
 		if !sa.isHashRecent(ctx, hash) {
 			uniqueSignals = append(uniqueSignals, signal)
 			seenHashes[hash] = true
-			
+
 			// Store fingerprint
 			fingerprint := &SignalFingerprint{
 				ID:        uuid.New().String(),
@@ -346,32 +345,7 @@ func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*A
 	return uniqueSignals, nil
 }
 
-// createArbitrageSignal creates an aggregated signal from an arbitrage opportunity
-func (sa *SignalAggregator) createArbitrageSignal(opp models.ArbitrageOpportunity, symbol string) *AggregatedSignal {
-	confidence := sa.calculateArbitrageConfidence(opp)
-	strength := sa.determineSignalStrengthWithProfit(confidence, opp.ProfitPercentage)
 
-	return &AggregatedSignal{
-		ID:              uuid.New().String(),
-		SignalType:      SignalTypeArbitrage,
-		Symbol:          symbol,
-		Action:          "buy",
-		Strength:        strength,
-		Confidence:      confidence,
-		ProfitPotential: opp.ProfitPercentage,
-		RiskLevel:       decimal.NewFromFloat(0.1), // Low risk for arbitrage
-		Exchanges:       []string{fmt.Sprintf("%d", opp.BuyExchangeID), fmt.Sprintf("%d", opp.SellExchangeID)},
-		Indicators:      []string{"arbitrage"},
-		Metadata: map[string]interface{}{
-			"buy_price":    opp.BuyPrice,
-			"sell_price":   opp.SellPrice,
-			"buy_exchange": opp.BuyExchangeID,
-			"sell_exchange": opp.SellExchangeID,
-		},
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(sa.sigConfig.SignalTTL),
-	}
-}
 
 // createEnhancedArbitrageSignal creates an aggregated signal with price ranges from multiple opportunities
 func (sa *SignalAggregator) createEnhancedArbitrageSignal(opportunities []models.ArbitrageOpportunity, symbol string, minVolume, baseAmount decimal.Decimal) *AggregatedSignal {
@@ -389,17 +363,17 @@ func (sa *SignalAggregator) createEnhancedArbitrageSignal(opportunities []models
 	for _, opp := range opportunities {
 		buyPrices = append(buyPrices, opp.BuyPrice)
 		sellPrices = append(sellPrices, opp.SellPrice)
-		
+
 		buyExchangeName := fmt.Sprintf("%d", opp.BuyExchangeID)
 		sellExchangeName := fmt.Sprintf("%d", opp.SellExchangeID)
-		
+
 		if opp.BuyExchange != nil {
 			buyExchangeName = opp.BuyExchange.Name
 		}
 		if opp.SellExchange != nil {
 			sellExchangeName = opp.SellExchange.Name
 		}
-		
+
 		buyExchanges = append(buyExchanges, buyExchangeName)
 		sellExchanges = append(sellExchanges, sellExchangeName)
 		allExchanges[buyExchangeName] = true
@@ -646,8 +620,6 @@ func (sa *SignalAggregator) generateTechnicalSignals(symbol, exchange string, in
 		}
 	}
 
-
-
 	// Aggregate signals
 	var aggregatedSignals []*AggregatedSignal
 
@@ -666,29 +638,7 @@ func (sa *SignalAggregator) generateTechnicalSignals(symbol, exchange string, in
 	return aggregatedSignals
 }
 
-// createTechnicalSignal creates a technical analysis signal
-func (sa *SignalAggregator) createTechnicalSignal(symbol, exchange, action, indicator string, confidence decimal.Decimal) *AggregatedSignal {
-	strength := sa.determineSignalStrength(confidence)
 
-	return &AggregatedSignal{
-		ID:              uuid.New().String(),
-		SignalType:      SignalTypeTechnical,
-		Symbol:          symbol,
-		Action:          action,
-		Strength:        strength,
-		Confidence:      confidence,
-		ProfitPotential: decimal.NewFromFloat(2.0), // Estimated 2% potential
-		RiskLevel:       decimal.NewFromFloat(0.2), // 20% risk
-		Exchanges:       []string{exchange},
-		Indicators:      []string{indicator},
-		Metadata: map[string]interface{}{
-			"indicator_type": indicator,
-			"exchange":       exchange,
-		},
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(sa.sigConfig.SignalTTL),
-	}
-}
 
 // createAggregatedTechnicalSignal creates an aggregated signal from multiple signal components
 func (sa *SignalAggregator) createAggregatedTechnicalSignal(symbol, exchange, action string, components []SignalComponent) *AggregatedSignal {
@@ -799,19 +749,19 @@ func (sa *SignalAggregator) determineSignalStrengthWithProfit(confidence, profit
 	// For arbitrage signals, consider both confidence and profit potential
 	// Both factors must be considered together, not individually
 	// Note: profitPotential is expected as decimal (e.g., 0.015 = 1.5%)
-	
+
 	// Strong: Very high profit (>2%) with good confidence (>0.7) OR very high confidence (>0.9) with decent profit (>1%)
 	if (profitPotential.GreaterThanOrEqual(decimal.NewFromFloat(0.02)) && confidence.GreaterThanOrEqual(decimal.NewFromFloat(0.7))) ||
 		(confidence.GreaterThanOrEqual(decimal.NewFromFloat(0.9)) && profitPotential.GreaterThanOrEqual(decimal.NewFromFloat(0.01))) {
 		return SignalStrengthStrong
 	}
-	
+
 	// Medium: Medium profit (>1%) with decent confidence (>0.6) OR high confidence (>0.8) with medium profit (>0.8%)
 	if (profitPotential.GreaterThanOrEqual(decimal.NewFromFloat(0.01)) && confidence.GreaterThanOrEqual(decimal.NewFromFloat(0.6))) ||
 		(confidence.GreaterThanOrEqual(decimal.NewFromFloat(0.8)) && profitPotential.GreaterThanOrEqual(decimal.NewFromFloat(0.008))) {
 		return SignalStrengthMedium
 	}
-	
+
 	// Weak: Everything else (including high confidence with very low profit)
 	return SignalStrengthWeak
 }
@@ -822,12 +772,12 @@ func (sa *SignalAggregator) generateSignalHash(signal *AggregatedSignal) string 
 	sortedExchanges := make([]string, len(signal.Exchanges))
 	copy(sortedExchanges, signal.Exchanges)
 	sort.Strings(sortedExchanges)
-	
+
 	// Sort indicators as well for consistency
 	sortedIndicators := make([]string, len(signal.Indicators))
 	copy(sortedIndicators, signal.Indicators)
 	sort.Strings(sortedIndicators)
-	
+
 	hashInput := fmt.Sprintf("%s_%s_%s_%s_%s",
 		signal.SignalType,
 		signal.Symbol,
@@ -855,7 +805,7 @@ func (sa *SignalAggregator) isHashRecent(ctx context.Context, hash string) bool 
 
 func (sa *SignalAggregator) storeFingerprint(ctx context.Context, fingerprint *SignalFingerprint) {
 	query := `INSERT INTO signal_fingerprints (hash, signal_id, created_at) VALUES ($1, $2, $3)`
-		_, err := sa.db.Pool.Exec(ctx, query, fingerprint.Hash, fingerprint.SignalID, fingerprint.CreatedAt)
+	_, err := sa.db.Pool.Exec(ctx, query, fingerprint.Hash, fingerprint.SignalID, fingerprint.CreatedAt)
 	if err != nil {
 		sa.logger.WithError(err).Error("Failed to store signal fingerprint")
 	}

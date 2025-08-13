@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -10,27 +11,45 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
 // FuturesArbitrageService manages futures arbitrage opportunity calculation and storage
 type FuturesArbitrageService struct {
-	db         *database.PostgresDB
-	calculator *FuturesArbitrageCalculator
-	config     *config.Config
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	running    bool
-	mu         sync.RWMutex
+	db          *database.PostgresDB
+	redisClient *redis.Client
+	calculator  *FuturesArbitrageCalculator
+	config      *config.Config
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	running     bool
+	mu          sync.RWMutex
+
+	// Error recovery components
+	errorRecoveryManager *ErrorRecoveryManager
+	resourceManager      *ResourceManager
+	performanceMonitor   *PerformanceMonitor
 }
 
 // NewFuturesArbitrageService creates a new futures arbitrage service
-func NewFuturesArbitrageService(db *database.PostgresDB, cfg *config.Config) *FuturesArbitrageService {
+func NewFuturesArbitrageService(
+	db *database.PostgresDB,
+	redisClient *redis.Client,
+	cfg *config.Config,
+	errorRecoveryManager *ErrorRecoveryManager,
+	resourceManager *ResourceManager,
+	performanceMonitor *PerformanceMonitor,
+) *FuturesArbitrageService {
 	return &FuturesArbitrageService{
-		db:         db,
-		calculator: NewFuturesArbitrageCalculator(),
-		config:     cfg,
+		db:                   db,
+		redisClient:          redisClient,
+		calculator:           NewFuturesArbitrageCalculator(),
+		config:               cfg,
+		errorRecoveryManager: errorRecoveryManager,
+		resourceManager:      resourceManager,
+		performanceMonitor:   performanceMonitor,
 	}
 }
 
@@ -70,42 +89,74 @@ func (s *FuturesArbitrageService) Stop() {
 	log.Println("Futures arbitrage service stopped")
 }
 
-// runOpportunityCalculator runs the main opportunity calculation loop
+// runOpportunityCalculator runs the periodic opportunity calculation
 func (s *FuturesArbitrageService) runOpportunityCalculator() {
 	defer s.wg.Done()
 
-	// Calculate opportunities immediately on startup
-	if err := s.calculateAndStoreOpportunities(); err != nil {
-		log.Printf("Initial opportunity calculation failed: %v", err)
-	}
+	// Register this operation with resource manager
+	operationID := fmt.Sprintf("futures_arbitrage_calculator_%d", time.Now().UnixNano())
+	s.resourceManager.RegisterResource(operationID, GoroutineResource, func() error {
+		return nil
+	}, map[string]interface{}{"operation": "periodic_calculation", "service": "futures_arbitrage"})
+	defer func() {
+		if err := s.resourceManager.CleanupResource(operationID); err != nil {
+			log.Printf("Failed to cleanup resource %s: %v", operationID, err)
+		}
+	}()
 
-	// Set up ticker for periodic calculations (every 5 minutes)
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(30 * time.Second) // Calculate every 30 seconds
 	defer ticker.Stop()
+
+	log.Println("Futures arbitrage opportunity calculator started")
 
 	for {
 		select {
 		case <-s.ctx.Done():
+			log.Println("Futures arbitrage opportunity calculator stopped")
 			return
 		case <-ticker.C:
-			if err := s.calculateAndStoreOpportunities(); err != nil {
-				log.Printf("Opportunity calculation failed: %v", err)
+			// Create timeout context for each calculation cycle
+			calcCtx, calcCancel := context.WithTimeout(s.ctx, 25*time.Second)
+
+			// Execute with error recovery
+			err := s.errorRecoveryManager.ExecuteWithRetry(calcCtx, "calculate_opportunities", func() error {
+				return s.calculateAndStoreOpportunities(calcCtx)
+			})
+
+			if err != nil {
+				log.Printf("Error calculating opportunities: %v", err)
+				// Record failure in performance monitor
+				if s.performanceMonitor != nil {
+					metrics := s.performanceMonitor.GetApplicationMetrics().CollectorMetrics
+					metrics.FailedCollections++
+					s.performanceMonitor.UpdateCollectorMetrics(metrics)
+				}
 			}
+
+			calcCancel()
 		}
 	}
 }
 
 // calculateAndStoreOpportunities fetches funding rates and calculates arbitrage opportunities
-func (s *FuturesArbitrageService) calculateAndStoreOpportunities() error {
+func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Context) error {
 	log.Println("Starting futures arbitrage opportunity calculation...")
 
-	// Clean up expired opportunities first
-	if err := s.cleanupExpiredOpportunities(); err != nil {
+	// Clean up expired opportunities first with error recovery
+	err := s.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_opportunities", func() error {
+		return s.cleanupExpiredOpportunities(ctx)
+	})
+	if err != nil {
 		log.Printf("Warning: Failed to cleanup expired opportunities: %v", err)
 	}
 
-	// Get latest funding rates grouped by symbol
-	fundingRateMap, err := s.getLatestFundingRates()
+	// Get latest funding rates grouped by symbol with error recovery
+	var fundingRateMap map[string][]FundingRateData
+	err = s.errorRecoveryManager.ExecuteWithRetry(ctx, "get_funding_rates", func() error {
+		var err error
+		fundingRateMap, err = s.getLatestFundingRates(ctx)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to get funding rates: %w", err)
 	}
@@ -120,6 +171,13 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities() error {
 
 	// Calculate opportunities for each symbol
 	for symbol, exchangeRates := range fundingRateMap {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if len(exchangeRates) < 2 {
 			continue // Need at least 2 exchanges for arbitrage
 		}
@@ -133,7 +191,7 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities() error {
 
 				// Calculate net funding rate (short - long)
 				netFundingRate := shortRate.Rate.Sub(longRate.Rate)
-				
+
 				// Only consider profitable opportunities (positive net funding rate)
 				if netFundingRate.LessThanOrEqual(decimal.NewFromFloat(0.0001)) {
 					continue // Minimum 0.01% threshold
@@ -156,15 +214,18 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities() error {
 				// Calculate opportunity
 				opportunity, err := s.calculator.CalculateFuturesArbitrage(input)
 				if err != nil {
-					log.Printf("Failed to calculate opportunity for %s %s/%s: %v", 
+					log.Printf("Failed to calculate opportunity for %s %s/%s: %v",
 						symbol, longRate.Exchange, shortRate.Exchange, err)
 					continue
 				}
 
-				// Only store active opportunities
+				// Only store active opportunities with error recovery
 				if opportunity.IsActive {
-					if err := s.storeOpportunity(opportunity); err != nil {
-						log.Printf("Failed to store opportunity for %s %s/%s: %v", 
+					err := s.errorRecoveryManager.ExecuteWithRetry(ctx, "store_opportunity", func() error {
+						return s.storeOpportunity(ctx, opportunity)
+					})
+					if err != nil {
+						log.Printf("Failed to store opportunity for %s %s/%s: %v",
 							symbol, longRate.Exchange, shortRate.Exchange, err)
 						continue
 					}
@@ -174,7 +235,7 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities() error {
 		}
 	}
 
-	log.Printf("Opportunity calculation completed: %d calculated, %d stored", 
+	log.Printf("Opportunity calculation completed: %d calculated, %d stored",
 		opportunitiesCalculated, opportunitiesStored)
 	return nil
 }
@@ -189,7 +250,19 @@ type FundingRateData struct {
 }
 
 // getLatestFundingRates retrieves the latest funding rates grouped by symbol
-func (s *FuturesArbitrageService) getLatestFundingRates() (map[string][]FundingRateData, error) {
+func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (map[string][]FundingRateData, error) {
+	cacheKey := "funding_rates:latest:all"
+
+	// Check Redis cache first
+	if s.redisClient != nil {
+		if cachedData, err := s.redisClient.Get(ctx, cacheKey).Result(); err == nil {
+			var fundingRateMap map[string][]FundingRateData
+			if json.Unmarshal([]byte(cachedData), &fundingRateMap) == nil {
+				return fundingRateMap, nil
+			}
+		}
+	}
+
 	query := `
 		SELECT DISTINCT ON (e.name, tp.symbol) 
 			e.name as exchange,
@@ -207,7 +280,7 @@ func (s *FuturesArbitrageService) getLatestFundingRates() (map[string][]FundingR
 		ORDER BY e.name, tp.symbol, fr.timestamp DESC
 	`
 
-	rows, err := s.db.Pool.Query(s.ctx, query)
+	rows, err := s.db.Pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query funding rates: %w", err)
 	}
@@ -234,11 +307,25 @@ func (s *FuturesArbitrageService) getLatestFundingRates() (map[string][]FundingR
 		return nil, fmt.Errorf("error iterating funding rates: %w", err)
 	}
 
+	// Cache the result with 1-minute TTL using error recovery
+	if s.redisClient != nil {
+		if jsonData, err := json.Marshal(fundingRateMap); err == nil {
+			err := s.errorRecoveryManager.ExecuteWithRetry(ctx, "redis_set_funding_rates", func() error {
+				return s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute).Err()
+			})
+			if err != nil {
+				log.Printf("Failed to cache funding rates: %v", err)
+			} else {
+				log.Printf("Cached %d symbols funding rates for 1 minute", len(fundingRateMap))
+			}
+		}
+	}
+
 	return fundingRateMap, nil
 }
 
 // storeOpportunity stores a calculated opportunity in the database
-func (s *FuturesArbitrageService) storeOpportunity(opportunity *models.FuturesArbitrageOpportunity) error {
+func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportunity *models.FuturesArbitrageOpportunity) error {
 	query := `
 		INSERT INTO futures_arbitrage_opportunities (
 			symbol, base_currency, quote_currency,
@@ -290,7 +377,7 @@ func (s *FuturesArbitrageService) storeOpportunity(opportunity *models.FuturesAr
 			is_active = EXCLUDED.is_active
 	`
 
-	_, err := s.db.Pool.Exec(s.ctx, query,
+	_, err := s.db.Pool.Exec(ctx, query,
 		opportunity.Symbol, opportunity.BaseCurrency, opportunity.QuoteCurrency,
 		opportunity.LongExchange, opportunity.ShortExchange,
 		opportunity.LongFundingRate, opportunity.ShortFundingRate, opportunity.NetFundingRate, opportunity.FundingInterval,
@@ -311,13 +398,13 @@ func (s *FuturesArbitrageService) storeOpportunity(opportunity *models.FuturesAr
 }
 
 // cleanupExpiredOpportunities removes expired opportunities from the database
-func (s *FuturesArbitrageService) cleanupExpiredOpportunities() error {
+func (s *FuturesArbitrageService) cleanupExpiredOpportunities(ctx context.Context) error {
 	query := `
 		DELETE FROM futures_arbitrage_opportunities 
 		WHERE expires_at < NOW() OR detected_at < NOW() - INTERVAL '1 hour'
 	`
 
-	result, err := s.db.Pool.Exec(s.ctx, query)
+	result, err := s.db.Pool.Exec(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup expired opportunities: %w", err)
 	}

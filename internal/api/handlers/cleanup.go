@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -8,13 +9,19 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 )
 
+// CleanupInterface defines the interface for cleanup operations
+type CleanupInterface interface {
+	GetDataStats(ctx context.Context) (map[string]int64, error)
+	RunCleanup(config services.CleanupConfig) error
+}
+
 // CleanupHandler handles cleanup-related API endpoints
 type CleanupHandler struct {
-	cleanupService *services.CleanupService
+	cleanupService CleanupInterface
 }
 
 // NewCleanupHandler creates a new cleanup handler
-func NewCleanupHandler(cleanupService *services.CleanupService) *CleanupHandler {
+func NewCleanupHandler(cleanupService CleanupInterface) *CleanupHandler {
 	return &CleanupHandler{
 		cleanupService: cleanupService,
 	}
@@ -31,7 +38,7 @@ type DataStatsResponse struct {
 
 // GetDataStats returns statistics about current data storage
 func (h *CleanupHandler) GetDataStats(c *gin.Context) {
-	stats, err := h.cleanupService.GetDataStats()
+	stats, err := h.cleanupService.GetDataStats(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get data statistics"})
 		return
@@ -95,7 +102,7 @@ func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 	}
 
 	// Get updated stats after cleanup
-	stats, err := h.cleanupService.GetDataStats()
+	stats, err := h.cleanupService.GetDataStats(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cleanup completed but failed to get updated statistics"})
 		return

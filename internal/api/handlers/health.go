@@ -1,27 +1,41 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfndi/celebrum-ai-go/internal/services"
 )
 
+// DatabaseHealthChecker interface for database health checks
+type DatabaseHealthChecker interface {
+	HealthCheck(ctx context.Context) error
+}
+
+// RedisHealthChecker interface for redis health checks
+type RedisHealthChecker interface {
+	HealthCheck(ctx context.Context) error
+}
+
 type HealthHandler struct {
-	db      *database.PostgresDB
-	redis   *database.RedisClient
-	ccxtURL string
+	db             DatabaseHealthChecker
+	redis          RedisHealthChecker
+	ccxtURL        string
+	cacheAnalytics CacheAnalyticsInterface
 }
 
 type HealthResponse struct {
-	Status    string            `json:"status"`
-	Timestamp time.Time         `json:"timestamp"`
-	Services  map[string]string `json:"services"`
-	Version   string            `json:"version"`
-	Uptime    string            `json:"uptime"`
+	Status       string                         `json:"status"`
+	Timestamp    time.Time                      `json:"timestamp"`
+	Services     map[string]string              `json:"services"`
+	Version      string                         `json:"version"`
+	Uptime       string                         `json:"uptime"`
+	CacheMetrics *services.CacheMetrics         `json:"cache_metrics,omitempty"`
+	CacheStats   map[string]services.CacheStats `json:"cache_stats,omitempty"`
 }
 
 type ServiceStatus struct {
@@ -29,11 +43,12 @@ type ServiceStatus struct {
 	Message string `json:"message,omitempty"`
 }
 
-func NewHealthHandler(db *database.PostgresDB, redis *database.RedisClient, ccxtURL string) *HealthHandler {
+func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtURL string, cacheAnalytics CacheAnalyticsInterface) *HealthHandler {
 	return &HealthHandler{
-		db:      db,
-		redis:   redis,
-		ccxtURL: ccxtURL,
+		db:             db,
+		redis:          redis,
+		ccxtURL:        ccxtURL,
+		cacheAnalytics: cacheAnalytics,
 	}
 }
 
@@ -92,6 +107,14 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		Services:  services,
 		Version:   os.Getenv("APP_VERSION"),
 		Uptime:    time.Since(startTime).String(),
+	}
+
+	// Add cache metrics if cache analytics service is available
+	if h.cacheAnalytics != nil {
+		if cacheMetrics, err := h.cacheAnalytics.GetMetrics(r.Context()); err == nil {
+			response.CacheMetrics = cacheMetrics
+		}
+		response.CacheStats = h.cacheAnalytics.GetAllStats()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -166,7 +166,7 @@ func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.workers)
@@ -182,11 +182,14 @@ func TestCollectorService_Start(t *testing.T) {
 	mockCCXT.On("Initialize", mock.Anything).Return(nil)
 	mockCCXT.On("GetSupportedExchanges").Return([]string{}) // Return empty slice to avoid database operations
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Test that the service can start without errors
 	err := collector.Start()
 	assert.NoError(t, err)
+
+	// Clean up: stop the collector to prevent it from running indefinitely
+	collector.Stop()
 
 	mockCCXT.AssertExpectations(t)
 }
@@ -195,7 +198,7 @@ func TestCollectorService_Stop(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Test that the service can be stopped without errors
 	collector.Stop()
@@ -213,7 +216,7 @@ func TestCollectorService_GetWorkerStatus(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Get worker status (should be empty initially)
 	status := collector.GetWorkerStatus()
@@ -225,7 +228,7 @@ func TestCollectorService_IsHealthy(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Test with no workers (should be unhealthy)
 	assert.False(t, collector.IsHealthy())
@@ -259,7 +262,7 @@ func TestCollectorService_RestartWorker(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Test restarting non-existent worker
 	err := collector.RestartWorker("nonexistent")
@@ -415,7 +418,7 @@ func TestCollectorService_ValidateMarketData(t *testing.T) {
 func TestCollectorService_ParseSymbol(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	tests := []struct {
 		name          string
@@ -468,7 +471,7 @@ func TestCollectorService_ParseSymbol(t *testing.T) {
 func TestCollectorService_IsOptionsContract(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	tests := []struct {
 		name     string
@@ -509,7 +512,7 @@ func TestCollectorService_IsOptionsContract(t *testing.T) {
 func TestCollectorService_IsInvalidSymbolFormat(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config)
+	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	tests := []struct {
 		name     string

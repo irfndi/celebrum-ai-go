@@ -11,9 +11,12 @@ import (
 
 // CleanupService handles automatic cleanup of old data
 type CleanupService struct {
-	db     *database.PostgresDB
-	ctx    context.Context
-	cancel context.CancelFunc
+	db                   *database.PostgresDB
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	errorRecoveryManager *ErrorRecoveryManager
+	resourceManager      *ResourceManager
+	performanceMonitor   *PerformanceMonitor
 }
 
 // CleanupConfig defines cleanup configuration
@@ -28,12 +31,15 @@ type CleanupConfig struct {
 }
 
 // NewCleanupService creates a new cleanup service
-func NewCleanupService(db *database.PostgresDB) *CleanupService {
+func NewCleanupService(db *database.PostgresDB, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CleanupService{
-		db:     db,
-		ctx:    ctx,
-		cancel: cancel,
+		db:                   db,
+		ctx:                  ctx,
+		cancel:               cancel,
+		errorRecoveryManager: errorRecoveryManager,
+		resourceManager:      resourceManager,
+		performanceMonitor:   performanceMonitor,
 	}
 }
 
@@ -47,10 +53,20 @@ func (c *CleanupService) Start(config CleanupConfig) {
 			config.MarketDataRetentionHours, config.FundingRateRetentionHours)
 	}
 
+	// Note: Resource manager registration not needed for cleanup service
+
 	// Run initial cleanup
 	go func() {
-		if err := c.runCleanup(config); err != nil {
+		// Create timeout context for initial cleanup
+		ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
+		defer cancel()
+
+		err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "initial_cleanup", func() error {
+			return c.runCleanup(ctx, config)
+		})
+		if err != nil {
 			log.Printf("Initial cleanup failed: %v", err)
+			// Note: Performance monitor doesn't have RecordFailure method
 		}
 	}()
 
@@ -63,9 +79,17 @@ func (c *CleanupService) Start(config CleanupConfig) {
 			case <-c.ctx.Done():
 				return
 			case <-ticker.C:
-				if err := c.runCleanup(config); err != nil {
+				// Create timeout context for periodic cleanup
+				ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
+
+				err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "periodic_cleanup", func() error {
+					return c.runCleanup(ctx, config)
+				})
+				if err != nil {
 					log.Printf("Cleanup failed: %v", err)
+					// Note: Performance monitor doesn't have RecordFailure method
 				}
+				cancel()
 			}
 		}
 	}()
@@ -79,15 +103,22 @@ func (c *CleanupService) Stop() {
 
 // RunCleanup performs a manual cleanup operation
 func (c *CleanupService) RunCleanup(config CleanupConfig) error {
-	return c.runCleanup(config)
+	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
+	defer cancel()
+	return c.runCleanup(ctx, config)
 }
 
 // runCleanup performs the actual cleanup operations
-func (c *CleanupService) runCleanup(config CleanupConfig) error {
+func (c *CleanupService) runCleanup(ctx context.Context, config CleanupConfig) error {
 	log.Printf("Starting cleanup process (Smart Cleanup: %v)...", config.EnableSmartCleanup)
 
-	// Get data statistics before cleanup
-	statsBefore, err := c.GetDataStats()
+	// Get data statistics before cleanup with error recovery
+	var statsBefore map[string]int64
+	err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "get_stats_before", func() error {
+		var err error
+		statsBefore, err = c.GetDataStats(ctx)
+		return err
+	})
 	if err != nil {
 		log.Printf("Warning: Failed to get data statistics before cleanup: %v", err)
 	} else {
@@ -101,37 +132,60 @@ func (c *CleanupService) runCleanup(config CleanupConfig) error {
 		log.Printf("Using smart cleanup strategy - Market Data: %dh retention/%dh deletion, Funding Rates: %dh retention/%dh deletion",
 			config.MarketDataRetentionHours, config.MarketDataDeletionHours,
 			config.FundingRateRetentionHours, config.FundingRateDeletionHours)
-		if err := c.cleanupMarketDataSmart(config.MarketDataRetentionHours, config.MarketDataDeletionHours); err != nil {
+		err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_market_data_smart", func() error {
+			return c.cleanupMarketDataSmart(ctx, config.MarketDataRetentionHours, config.MarketDataDeletionHours)
+		})
+		if err != nil {
 			return fmt.Errorf("failed to cleanup market data: %w", err)
 		}
-		if err := c.cleanupFundingRatesSmart(config.FundingRateRetentionHours, config.FundingRateDeletionHours); err != nil {
+		err = c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_funding_rates_smart", func() error {
+			return c.cleanupFundingRatesSmart(ctx, config.FundingRateRetentionHours, config.FundingRateDeletionHours)
+		})
+		if err != nil {
 			return fmt.Errorf("failed to cleanup funding rates: %w", err)
 		}
 	} else {
 		// Fallback to traditional cleanup
 		log.Printf("Using traditional cleanup strategy - Market Data: %dh retention, Funding Rates: %dh retention",
 			config.MarketDataRetentionHours, config.FundingRateRetentionHours)
-		if err := c.cleanupMarketData(config.MarketDataRetentionHours); err != nil {
+		err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_market_data", func() error {
+			return c.cleanupMarketData(ctx, config.MarketDataRetentionHours)
+		})
+		if err != nil {
 			return fmt.Errorf("failed to cleanup market data: %w", err)
 		}
-		if err := c.cleanupFundingRates(config.FundingRateRetentionHours); err != nil {
+		err = c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_funding_rates", func() error {
+			return c.cleanupFundingRates(ctx, config.FundingRateRetentionHours)
+		})
+		if err != nil {
 			return fmt.Errorf("failed to cleanup funding rates: %w", err)
 		}
 	}
 
-	// Clean up old arbitrage opportunities
+	// Clean up old arbitrage opportunities with error recovery
 	log.Printf("Cleaning up arbitrage opportunities older than %dh", config.ArbitrageRetentionHours)
-	if err := c.cleanupArbitrageOpportunities(config.ArbitrageRetentionHours); err != nil {
+	err = c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_arbitrage_opportunities", func() error {
+		return c.cleanupArbitrageOpportunities(ctx, config.ArbitrageRetentionHours)
+	})
+	if err != nil {
 		return fmt.Errorf("failed to cleanup arbitrage opportunities: %w", err)
 	}
 
-	// Clean up old funding arbitrage opportunities
-	if err := c.cleanupFundingArbitrageOpportunities(config.ArbitrageRetentionHours); err != nil {
+	// Clean up old funding arbitrage opportunities with error recovery
+	err = c.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_funding_arbitrage_opportunities", func() error {
+		return c.cleanupFundingArbitrageOpportunities(ctx, config.ArbitrageRetentionHours)
+	})
+	if err != nil {
 		return fmt.Errorf("failed to cleanup funding arbitrage opportunities: %w", err)
 	}
 
-	// Get data statistics after cleanup
-	statsAfter, err := c.GetDataStats()
+	// Get data statistics after cleanup with error recovery
+	var statsAfter map[string]int64
+	err = c.errorRecoveryManager.ExecuteWithRetry(ctx, "get_stats_after", func() error {
+		var err error
+		statsAfter, err = c.GetDataStats(ctx)
+		return err
+	})
 	if err != nil {
 		log.Printf("Warning: Failed to get data statistics after cleanup: %v", err)
 	} else {
@@ -156,16 +210,16 @@ func (c *CleanupService) runCleanup(config CleanupConfig) error {
 }
 
 // cleanupMarketData removes market data using smart cleanup strategy
-func (c *CleanupService) cleanupMarketData(retentionHours int) error {
-	return c.cleanupMarketDataSmart(retentionHours, 12) // Default 12h deletion
+func (c *CleanupService) cleanupMarketData(ctx context.Context, retentionHours int) error {
+	return c.cleanupMarketDataSmart(ctx, retentionHours, 12) // Default 12h deletion
 }
 
 // cleanupMarketDataSmart removes oldest data while keeping a buffer
-func (c *CleanupService) cleanupMarketDataSmart(retentionHours, deletionHours int) error {
+func (c *CleanupService) cleanupMarketDataSmart(ctx context.Context, retentionHours, deletionHours int) error {
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(c.ctx,
+	result, err := c.db.Pool.Exec(ctx,
 		"DELETE FROM market_data WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -182,16 +236,16 @@ func (c *CleanupService) cleanupMarketDataSmart(retentionHours, deletionHours in
 }
 
 // cleanupFundingRates removes funding rates using smart cleanup strategy
-func (c *CleanupService) cleanupFundingRates(retentionHours int) error {
-	return c.cleanupFundingRatesSmart(retentionHours, 12) // Default 12h deletion
+func (c *CleanupService) cleanupFundingRates(ctx context.Context, retentionHours int) error {
+	return c.cleanupFundingRatesSmart(ctx, retentionHours, 12) // Default 12h deletion
 }
 
 // cleanupFundingRatesSmart removes oldest funding rates while keeping a buffer
-func (c *CleanupService) cleanupFundingRatesSmart(retentionHours, deletionHours int) error {
+func (c *CleanupService) cleanupFundingRatesSmart(ctx context.Context, retentionHours, deletionHours int) error {
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(c.ctx,
+	result, err := c.db.Pool.Exec(ctx,
 		"DELETE FROM funding_rates WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -208,10 +262,10 @@ func (c *CleanupService) cleanupFundingRatesSmart(retentionHours, deletionHours 
 }
 
 // cleanupArbitrageOpportunities removes old arbitrage opportunities
-func (c *CleanupService) cleanupArbitrageOpportunities(retentionHours int) error {
+func (c *CleanupService) cleanupArbitrageOpportunities(ctx context.Context, retentionHours int) error {
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(c.ctx,
+	result, err := c.db.Pool.Exec(ctx,
 		"DELETE FROM arbitrage_opportunities WHERE detected_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -227,10 +281,10 @@ func (c *CleanupService) cleanupArbitrageOpportunities(retentionHours int) error
 }
 
 // cleanupFundingArbitrageOpportunities removes old funding arbitrage opportunities
-func (c *CleanupService) cleanupFundingArbitrageOpportunities(retentionHours int) error {
+func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Context, retentionHours int) error {
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(c.ctx,
+	result, err := c.db.Pool.Exec(ctx,
 		"DELETE FROM funding_arbitrage_opportunities WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -246,12 +300,12 @@ func (c *CleanupService) cleanupFundingArbitrageOpportunities(retentionHours int
 }
 
 // GetDataStats returns statistics about current data storage
-func (c *CleanupService) GetDataStats() (map[string]int64, error) {
+func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	stats := make(map[string]int64)
 
 	// Count market data records
 	var marketDataCount int64
-	err := c.db.Pool.QueryRow(c.ctx, "SELECT COUNT(*) FROM market_data").Scan(&marketDataCount)
+	err := c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM market_data").Scan(&marketDataCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count market data: %w", err)
 	}
@@ -259,7 +313,7 @@ func (c *CleanupService) GetDataStats() (map[string]int64, error) {
 
 	// Count funding rates
 	var fundingRatesCount int64
-	err = c.db.Pool.QueryRow(c.ctx, "SELECT COUNT(*) FROM funding_rates").Scan(&fundingRatesCount)
+	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM funding_rates").Scan(&fundingRatesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count funding rates: %w", err)
 	}
@@ -267,7 +321,7 @@ func (c *CleanupService) GetDataStats() (map[string]int64, error) {
 
 	// Count arbitrage opportunities
 	var arbitrageOpportunitiesCount int64
-	err = c.db.Pool.QueryRow(c.ctx, "SELECT COUNT(*) FROM arbitrage_opportunities").Scan(&arbitrageOpportunitiesCount)
+	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM arbitrage_opportunities").Scan(&arbitrageOpportunitiesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count arbitrage opportunities: %w", err)
 	}
@@ -275,7 +329,7 @@ func (c *CleanupService) GetDataStats() (map[string]int64, error) {
 
 	// Count funding arbitrage opportunities
 	var fundingArbitrageOpportunitiesCount int64
-	err = c.db.Pool.QueryRow(c.ctx, "SELECT COUNT(*) FROM funding_arbitrage_opportunities").Scan(&fundingArbitrageOpportunitiesCount)
+	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM funding_arbitrage_opportunities").Scan(&fundingArbitrageOpportunitiesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count funding arbitrage opportunities: %w", err)
 	}

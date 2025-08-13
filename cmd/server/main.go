@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/api"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfndi/celebrum-ai-go/internal/logging"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 )
@@ -22,51 +22,70 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
+
+	// Initialize standardized logger
+	logger := logging.NewStandardLogger(cfg.LogLevel, cfg.Environment)
+	appLogger := logger.WithService("celebrum-ai-go")
 
 	// Initialize database
 	db, err := database.NewPostgresConnection(&cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		appLogger.WithError(err).Fatal("Failed to connect to database")
 	}
 	defer db.Close()
 
 	// Initialize Redis
 	redis, err := database.NewRedisConnection(cfg.Redis)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		appLogger.WithError(err).Fatal("Failed to connect to Redis")
 	}
 	defer redis.Close()
 
 	// Initialize CCXT service
-	ccxtService := ccxt.NewService(&cfg.CCXT)
+	ccxtService := ccxt.NewService(&cfg.CCXT, logger.Logger)
+
+	// Initialize cache analytics service
+	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
+
+	// Start periodic reporting of cache stats
+	ctx := context.Background()
+	cacheAnalyticsService.StartPeriodicReporting(ctx, 5*time.Minute)
+
+	// Initialize and perform cache warming
+	cacheWarmingService := services.NewCacheWarmingService(redis.Client, ccxtService, db)
+	if err := cacheWarmingService.WarmCache(ctx); err != nil {
+		appLogger.WithError(err).Warn("Cache warming failed")
+		// Don't fail startup if cache warming fails, just log the warning
+	}
 
 	// Initialize collector service
-	collectorService := services.NewCollectorService(db, ccxtService, cfg)
+	collectorService := services.NewCollectorService(db, ccxtService, cfg, redis.Client)
 	if err := collectorService.Start(); err != nil {
-		log.Fatalf("Failed to start collector service: %v", err)
+		appLogger.WithError(err).Fatal("Failed to start collector service")
 	}
 	defer collectorService.Stop()
 
 	// Perform historical data backfill if needed
-	log.Println("Checking for historical data backfill requirements...")
+	appLogger.Info("Checking for historical data backfill requirements")
 	if err := collectorService.PerformBackfillIfNeeded(); err != nil {
-		log.Printf("Warning: Backfill failed: %v", err)
+		appLogger.WithError(err).Warn("Backfill failed")
 		// Don't fail startup if backfill fails, just log the warning
 	} else {
-		log.Println("Historical data backfill check completed successfully")
+		appLogger.Info("Historical data backfill check completed successfully")
 	}
 
 	// Initialize futures arbitrage service
-	futuresArbitrageService := services.NewFuturesArbitrageService(db, cfg)
+	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, nil, nil, nil)
 	if err := futuresArbitrageService.Start(); err != nil {
-		log.Fatalf("Failed to start futures arbitrage service: %v", err)
+		appLogger.WithError(err).Fatal("Failed to start futures arbitrage service")
 	}
 	defer futuresArbitrageService.Stop()
 
 	// Initialize cleanup service
-	cleanupService := services.NewCleanupService(db)
+	cleanupService := services.NewCleanupService(db, nil, nil, nil)
 
 	// Start cleanup service with configuration
 	cleanupConfig := services.CleanupConfig{
@@ -85,7 +104,7 @@ func main() {
 	router := gin.Default()
 
 	// Setup routes
-	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, &cfg.Telegram)
+	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, &cfg.Telegram)
 
 	// Create HTTP server with security timeouts
 	srv := &http.Server{
@@ -99,9 +118,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Server starting on port %d", cfg.Server.Port)
+		logger.LogStartup("celebrum-ai-go", "1.0.0", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			appLogger.WithError(err).Fatal("Failed to start server")
 		}
 	}()
 
@@ -109,15 +128,15 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	logger.LogShutdown("celebrum-ai-go", "signal received")
 
 	// Give outstanding requests a deadline for completion
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		appLogger.WithError(err).Fatal("Server forced to shutdown")
 	}
 
-	log.Println("Server exited")
+	appLogger.Info("Server exited gracefully")
 }

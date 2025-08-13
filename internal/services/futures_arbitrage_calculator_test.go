@@ -83,10 +83,17 @@ func TestCalculateFuturesArbitrage(t *testing.T) {
 				assert.True(t, opportunity.APY.GreaterThan(decimal.Zero), "APY should be positive for profitable arbitrage")
 			}
 
-			// Verify calculated fields are not zero
-			assert.False(t, opportunity.NetFundingRate.IsZero())
-			assert.False(t, opportunity.HourlyRate.IsZero())
-			assert.False(t, opportunity.DailyRate.IsZero())
+			// Verify calculated fields are not zero (except for zero funding rates case)
+			if !tt.input.LongFundingRate.IsZero() || !tt.input.ShortFundingRate.IsZero() {
+				assert.False(t, opportunity.NetFundingRate.IsZero())
+				assert.False(t, opportunity.HourlyRate.IsZero())
+				assert.False(t, opportunity.DailyRate.IsZero())
+			} else {
+				// For zero funding rates, these should be zero
+				assert.True(t, opportunity.NetFundingRate.IsZero())
+				assert.True(t, opportunity.HourlyRate.IsZero())
+				assert.True(t, opportunity.DailyRate.IsZero())
+			}
 		})
 	}
 }
@@ -245,7 +252,8 @@ func TestCalculateAPY(t *testing.T) {
 
 	assert.True(t, apy.GreaterThan(decimal.Zero))
 	// APY should be positive for positive funding rate
-	assert.True(t, apy.LessThan(decimal.NewFromFloat(1000))) // Reasonable upper bound
+	// 0.1% per hour compounded annually = very high APY, so use realistic upper bound
+	assert.True(t, apy.LessThan(decimal.NewFromFloat(100000))) // Reasonable upper bound for compound interest
 }
 
 func TestCalculateEstimatedProfits(t *testing.T) {

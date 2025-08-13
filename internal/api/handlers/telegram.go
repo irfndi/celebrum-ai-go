@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	userModels "github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -26,10 +28,11 @@ type TelegramHandler struct {
 	config           *config.TelegramConfig
 	bot              *bot.Bot
 	arbitrageHandler *ArbitrageHandler
+	redis            *redis.Client
 }
 
 // NewTelegramHandler creates a new Telegram handler
-func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler) *TelegramHandler {
+func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler, redisClient *redis.Client) *TelegramHandler {
 	// Return handler with nil bot if config is not provided
 	if cfg == nil {
 		return &TelegramHandler{
@@ -37,6 +40,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 			config:           nil,
 			bot:              nil,
 			arbitrageHandler: arbitrageHandler,
+			redis:            redisClient,
 		}
 	}
 
@@ -53,6 +57,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 			config:           cfg,
 			bot:              nil,
 			arbitrageHandler: arbitrageHandler,
+			redis:            redisClient,
 		}
 	}
 
@@ -61,6 +66,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 		config:           cfg,
 		bot:              b,
 		arbitrageHandler: arbitrageHandler,
+		redis:            redisClient,
 	}
 }
 
@@ -196,6 +202,16 @@ Use /help to see all available commands
 
 // handleOpportunitiesCommand handles the /opportunities command
 func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID, userID int64) error {
+	// Try to get cached opportunities first
+	cachedOpportunities, err := h.getCachedTelegramOpportunities(ctx)
+	if err == nil && cachedOpportunities != nil {
+		// Check if we have actual opportunities data
+		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) >= 0 {
+			log.Printf("Using cached opportunities for Telegram user %d", userID)
+			return h.sendOpportunitiesMessage(ctx, chatID, cachedOpportunities)
+		}
+	}
+
 	// Call the arbitrage handler's underlying function directly
 	minProfit := 1.0   // Minimum 1% profit
 	limit := 5         // Limit to top 5 opportunities for Telegram
@@ -207,36 +223,10 @@ func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID
 		return h.sendMessage(ctx, chatID, "❌ Error fetching arbitrage opportunities. Please try again later.")
 	}
 
-	// Format the message
-	if len(opportunities) == 0 {
-		msg := `📈 Current Arbitrage Opportunities:
+	// Cache the opportunities for future requests
+	h.cacheTelegramOpportunities(ctx, opportunities)
 
-🔍 No profitable opportunities found at the moment.
-
-💡 Opportunities appear when there are price differences ≥1% between exchanges.
-
-⚙️ Configure alerts: /settings
-🎯 Upgrade for more features: /upgrade`
-		return h.sendMessage(ctx, chatID, msg)
-	}
-
-	// Build opportunities message
-	msg := "📈 Current Arbitrage Opportunities:\n\n"
-	for i, opp := range opportunities {
-		if i >= 5 { // Limit to top 5 for readability
-			break
-		}
-		msg += fmt.Sprintf("💰 %s\n", opp.Symbol)
-		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", opp.ProfitPercent, opp.ProfitAmount)
-		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", opp.BuyExchange, opp.BuyPrice)
-		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
-		msg += "\n"
-	}
-
-	msg += "⚙️ Configure alerts: /settings\n"
-	msg += "🎯 Upgrade for more features: /upgrade"
-
-	return h.sendMessage(ctx, chatID, msg)
+	return h.sendOpportunitiesMessage(ctx, chatID, opportunities)
 }
 
 // handleSettingsCommand handles the /settings command
@@ -383,4 +373,105 @@ func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text st
 		return err
 	}
 	return nil
+}
+
+// cacheTelegramOpportunities stores opportunities in Redis for Telegram users
+func (h *TelegramHandler) cacheTelegramOpportunities(ctx context.Context, opportunities interface{}) {
+	if h.redis == nil {
+		return
+	}
+
+	cacheKey := "telegram:opportunities:latest"
+	oppsJSON, err := json.Marshal(opportunities)
+	if err != nil {
+		log.Printf("Failed to marshal opportunities for Telegram caching: %v", err)
+		return
+	}
+
+	// Cache for 30 seconds to balance freshness with performance
+	if err := h.redis.Set(ctx, cacheKey, string(oppsJSON), 30*time.Second); err != nil {
+		log.Printf("Failed to cache Telegram opportunities: %v", err)
+	} else {
+		log.Printf("Cached Telegram opportunities in Redis for 30 seconds")
+	}
+}
+
+// getCachedTelegramOpportunities retrieves cached opportunities from Redis
+func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) (interface{}, error) {
+	if h.redis == nil {
+		return nil, fmt.Errorf("redis not available")
+	}
+
+	cacheKey := "telegram:opportunities:latest"
+	cachedData, err := h.redis.Get(ctx, cacheKey).Result()
+	if err != nil || cachedData == "" {
+		return nil, fmt.Errorf("no cached Telegram opportunities found")
+	}
+
+	var opportunities interface{}
+	if err := json.Unmarshal([]byte(cachedData), &opportunities); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cached Telegram opportunities: %w", err)
+	}
+
+	log.Printf("Retrieved cached Telegram opportunities from Redis")
+	return opportunities, nil
+}
+
+// sendOpportunitiesMessage formats and sends opportunities message to Telegram
+func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities interface{}) error {
+	// Type assertion to get the actual opportunities slice
+	oppsSlice, ok := opportunities.([]interface{})
+	if !ok {
+		// Try direct type assertion for the expected type
+		// This will need to be adjusted based on the actual type from ArbitrageHandler
+		log.Printf("Unexpected opportunities type: %T", opportunities)
+		return h.sendMessage(ctx, chatID, "❌ Error processing opportunities data.")
+	}
+
+	// Format the message
+	if len(oppsSlice) == 0 {
+		msg := `📈 Current Arbitrage Opportunities:
+
+🔍 No profitable opportunities found at the moment.
+
+💡 Opportunities appear when there are price differences ≥1% between exchanges.
+
+⚙️ Configure alerts: /settings
+🎯 Upgrade for more features: /upgrade`
+		return h.sendMessage(ctx, chatID, msg)
+	}
+
+	// Build opportunities message
+	msg := "📈 Current Arbitrage Opportunities:\n\n"
+	for i, oppInterface := range oppsSlice {
+		if i >= 5 { // Limit to top 5 for readability
+			break
+		}
+
+		// Convert interface{} to map for field access
+		oppMap, ok := oppInterface.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Extract fields with safe type assertions
+		symbol, _ := oppMap["symbol"].(string)
+		profitPercent, _ := oppMap["profit_percent"].(float64)
+		profitAmount, _ := oppMap["profit_amount"].(float64)
+		buyExchange, _ := oppMap["buy_exchange"].(string)
+		buyPrice, _ := oppMap["buy_price"].(float64)
+		sellExchange, _ := oppMap["sell_exchange"].(string)
+		sellPrice, _ := oppMap["sell_price"].(float64)
+
+		msg += fmt.Sprintf("💰 %s\n", symbol)
+		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", profitPercent, profitAmount)
+		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", buyExchange, buyPrice)
+		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", sellExchange, sellPrice)
+		msg += "\n"
+	}
+
+	msg += "⚙️ Configure alerts: /settings\n"
+	msg += "🎯 Upgrade for more features: /upgrade"
+
+	return h.sendMessage(ctx, chatID, msg)
 }

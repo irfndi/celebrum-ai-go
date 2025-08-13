@@ -75,7 +75,7 @@ func createTestAggregator() (*SignalAggregator, *MockSignalQualityScorer) {
 	// Create mock quality scorer
 	mockScorer := &MockSignalQualityScorer{}
 	// Replace the real scorer with our mock (we'll need to modify the struct to allow this)
-	
+
 	return aggregator, mockScorer
 }
 
@@ -164,9 +164,9 @@ func TestGenerateSignalHash(t *testing.T) {
 
 	signal3 := &AggregatedSignal{
 		SignalType: SignalTypeTechnical,
-		Symbol:    "BTC/USDT",
-		Action:    "buy",
-		Exchanges: []string{"binance"},
+		Symbol:     "BTC/USDT",
+		Action:     "buy",
+		Exchanges:  []string{"binance"},
 	}
 
 	hash1 := aggregator.generateSignalHash(signal1)
@@ -245,13 +245,13 @@ func TestSignalQualityFiltering(t *testing.T) {
 	arbitrageInput := &ArbitrageSignalInput{
 		Opportunities: []models.ArbitrageOpportunity{
 			{
-				TradingPair: &models.TradingPair{Symbol: "BTC/USDT"},
-				BuyExchange:  &models.Exchange{Name: "binance"},
-				SellExchange: &models.Exchange{Name: "coinbase"},
-				BuyPrice:     decimal.NewFromFloat(45000),
-				SellPrice:    decimal.NewFromFloat(45500),
+				TradingPair:      &models.TradingPair{Symbol: "BTC/USDT"},
+				BuyExchange:      &models.Exchange{Name: "binance"},
+				SellExchange:     &models.Exchange{Name: "coinbase"},
+				BuyPrice:         decimal.NewFromFloat(45000),
+				SellPrice:        decimal.NewFromFloat(45500),
 				ProfitPercentage: decimal.NewFromFloat(1.1),
-				DetectedAt:   time.Now(),
+				DetectedAt:       time.Now(),
 			},
 		},
 		MinVolume:  decimal.NewFromFloat(50000),
@@ -289,13 +289,13 @@ func BenchmarkAggregateArbitrageSignals(b *testing.B) {
 	arbitrageInput := &ArbitrageSignalInput{
 		Opportunities: []models.ArbitrageOpportunity{
 			{
-				TradingPair: &models.TradingPair{Symbol: "BTC/USDT"},
-				BuyExchange:  &models.Exchange{Name: "binance"},
-				SellExchange: &models.Exchange{Name: "coinbase"},
-				BuyPrice:     decimal.NewFromFloat(45000),
-				SellPrice:    decimal.NewFromFloat(45500),
+				TradingPair:      &models.TradingPair{Symbol: "BTC/USDT"},
+				BuyExchange:      &models.Exchange{Name: "binance"},
+				SellExchange:     &models.Exchange{Name: "coinbase"},
+				BuyPrice:         decimal.NewFromFloat(45000),
+				SellPrice:        decimal.NewFromFloat(45500),
 				ProfitPercentage: decimal.NewFromFloat(1.1),
-				DetectedAt:   time.Now(),
+				DetectedAt:       time.Now(),
 			},
 		},
 		MinVolume:  decimal.NewFromFloat(50000),
@@ -332,20 +332,5 @@ func BenchmarkGenerateSignalHash(b *testing.B) {
 }
 
 // Helper functions for tests that don't need mocks
-func createSimpleTestAggregator() *SignalAggregator {
-	cfg := &config.Config{}
-	db := &database.PostgresDB{}
-	logger := logrus.New()
-	logger.SetLevel(logrus.WarnLevel) // Reduce log noise in tests
-
-	return NewSignalAggregator(cfg, db, logger)
-}
-
-func findSignalBySymbol(signals []*AggregatedSignal, symbol string) *AggregatedSignal {
-	for _, signal := range signals {
-		if signal.Symbol == symbol {
-			return signal
-		}
-	}
-	return nil
-}
+// Removed unused helper createSimpleTestAggregator to satisfy linter
+// Removed unused helper findSignalBySymbol to satisfy linter

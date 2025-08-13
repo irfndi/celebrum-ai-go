@@ -37,16 +37,16 @@ func TestEnhancedArbitrageSignalFormatting(t *testing.T) {
 				"min_percent": decimal.NewFromFloat(0.8),
 				"max_percent": decimal.NewFromFloat(1.4),
 				"avg_percent": decimal.NewFromFloat(1.2),
-				"min_dollar": decimal.NewFromFloat(160.00),
-				"max_dollar": decimal.NewFromFloat(280.00),
-				"avg_dollar": decimal.NewFromFloat(240.00),
+				"min_dollar":  decimal.NewFromFloat(160.00),
+				"max_dollar":  decimal.NewFromFloat(280.00),
+				"avg_dollar":  decimal.NewFromFloat(240.00),
 				"base_amount": decimal.NewFromFloat(20000.00),
 			},
-			"buy_exchanges": []string{"Binance", "Kraken", "OKX", "Bybit", "KuCoin"},
-			"sell_exchanges": []string{"Coinbase", "Gate.io", "MEXC"},
+			"buy_exchanges":     []string{"Binance", "Kraken", "OKX", "Bybit", "KuCoin"},
+			"sell_exchanges":    []string{"Coinbase", "Gate.io", "MEXC"},
 			"opportunity_count": 8,
-			"min_volume": decimal.NewFromFloat(10000.00),
-			"validity_minutes": 5,
+			"min_volume":        decimal.NewFromFloat(10000.00),
+			"validity_minutes":  5,
 		},
 	}
 
@@ -152,13 +152,13 @@ func TestArbitragePriceRangeCalculation(t *testing.T) {
 	fmt.Println("\n=== Price Range Calculations ===")
 	fmt.Printf("Buy Range: $%s - $%s (avg: $%s)\n", buyMin.String(), buyMax.String(), buyAvg.StringFixed(2))
 	fmt.Printf("Sell Range: $%s - $%s (avg: $%s)\n", sellMin.String(), sellMax.String(), sellAvg.StringFixed(2))
-	fmt.Printf("Profit Range: %s%% - %s%% (avg: %s%%)\n", 
-		minProfitPercent.StringFixed(1), 
-		maxProfitPercent.StringFixed(1), 
+	fmt.Printf("Profit Range: %s%% - %s%% (avg: %s%%)\n",
+		minProfitPercent.StringFixed(1),
+		maxProfitPercent.StringFixed(1),
 		avgProfitPercent.StringFixed(1))
-	fmt.Printf("Dollar Range: $%s - $%s (avg: $%s on $%s)\n", 
-		minProfitDollar.StringFixed(0), 
-		maxProfitDollar.StringFixed(0), 
+	fmt.Printf("Dollar Range: $%s - $%s (avg: $%s on $%s)\n",
+		minProfitDollar.StringFixed(0),
+		maxProfitDollar.StringFixed(0),
 		avgProfitDollar.StringFixed(0),
 		baseAmount.String())
 	fmt.Println("=================================")

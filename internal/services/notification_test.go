@@ -9,13 +9,13 @@ import (
 
 func TestNewNotificationService(t *testing.T) {
 	// Test with empty token
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 	assert.NotNil(t, ns)
 	assert.Nil(t, ns.bot)
 	assert.Nil(t, ns.db)
 
 	// Test with token - bot creation may fail with invalid token but service should still be created
-	ns2 := NewNotificationService(nil, "test-token")
+	ns2 := NewNotificationService(nil, nil, "test-token")
 	assert.NotNil(t, ns2)
 	assert.Nil(t, ns2.db)
 	// Bot may be nil if token is invalid, which is expected behavior
@@ -49,7 +49,7 @@ func TestArbitrageOpportunity_Struct(t *testing.T) {
 }
 
 func TestNotificationService_formatArbitrageMessage(t *testing.T) {
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 
 	// Test with empty opportunities
 	message := ns.formatArbitrageMessage([]ArbitrageOpportunity{})
@@ -208,7 +208,7 @@ func TestArbitrageOpportunity_EdgeCases(t *testing.T) {
 
 // Test formatArbitrageMessage with edge cases
 func TestNotificationService_formatArbitrageMessage_EdgeCases(t *testing.T) {
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 
 	// Test with nil slice
 	message := ns.formatArbitrageMessage(nil)
@@ -251,7 +251,7 @@ func TestNotificationService_formatArbitrageMessage_EdgeCases(t *testing.T) {
 
 // Test NotificationService struct fields
 func TestNotificationService_StructFields(t *testing.T) {
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 
 	// Test initial state
 	assert.NotNil(t, ns)
@@ -296,7 +296,7 @@ func TestArbitrageOpportunity_JSONStructure(t *testing.T) {
 
 // Test formatArbitrageMessage with exactly 3 opportunities
 func TestNotificationService_formatArbitrageMessage_ExactlyThree(t *testing.T) {
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 
 	// Test with exactly 3 opportunities
 	threeOpps := make([]ArbitrageOpportunity, 3)
@@ -319,7 +319,7 @@ func TestNotificationService_formatArbitrageMessage_ExactlyThree(t *testing.T) {
 
 // Test formatArbitrageMessage with 4 opportunities
 func TestNotificationService_formatArbitrageMessage_MoreThanThree(t *testing.T) {
-	ns := NewNotificationService(nil, "")
+	ns := NewNotificationService(nil, nil, "")
 
 	// Test with 4 opportunities
 	fourOpps := make([]ArbitrageOpportunity, 4)

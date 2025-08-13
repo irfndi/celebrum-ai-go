@@ -79,7 +79,7 @@ fmt: ## Format code across all languages
 	@if command -v goimports >/dev/null 2>&1; then \
 		goimports -w .; \
 	else \
-		echo "$(YELLOW)goinstalls not found, skipping Go imports formatting$(NC)"; \
+		echo "$(YELLOW)goimports not found, skipping Go imports formatting$(NC)"; \
 	fi
 	@# Format TypeScript/JavaScript - skip ccxt-service for now
 	@echo "$(GREEN)Skipping TypeScript formatting - ccxt-service has formatting issues$(NC)"
@@ -120,7 +120,7 @@ dev-down: ## Stop development environment
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
-	go install github.com/cosmtrek/air@latest
+	go install github.com/air-verse/air@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	@echo "$(GREEN)Tools installed!$(NC)"

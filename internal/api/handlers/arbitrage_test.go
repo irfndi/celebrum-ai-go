@@ -14,7 +14,7 @@ import (
 
 func TestNewArbitrageHandler(t *testing.T) {
 	t.Run("create handler with nil dependencies", func(t *testing.T) {
-		handler := NewArbitrageHandler(nil, nil, nil)
+		handler := NewArbitrageHandler(nil, nil, nil, nil)
 		assert.NotNil(t, handler)
 		assert.Nil(t, handler.db)
 		assert.Nil(t, handler.ccxtService)
@@ -23,7 +23,7 @@ func TestNewArbitrageHandler(t *testing.T) {
 
 	t.Run("create handler with mock dependencies", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 		assert.NotNil(t, handler)
 		assert.Nil(t, handler.db)
 		assert.Equal(t, mockCCXT, handler.ccxtService)
@@ -32,7 +32,7 @@ func TestNewArbitrageHandler(t *testing.T) {
 }
 
 func TestArbitrageHandler_GetArbitrageOpportunities_InvalidMinProfit(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -50,7 +50,7 @@ func TestArbitrageHandler_GetArbitrageOpportunities_InvalidMinProfit(t *testing.
 }
 
 func TestArbitrageHandler_GetArbitrageOpportunities_InvalidLimit(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -68,7 +68,7 @@ func TestArbitrageHandler_GetArbitrageOpportunities_InvalidLimit(t *testing.T) {
 }
 
 func TestArbitrageHandler_GetArbitrageHistory_InvalidPage(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -86,7 +86,7 @@ func TestArbitrageHandler_GetArbitrageHistory_InvalidPage(t *testing.T) {
 }
 
 func TestArbitrageHandler_GetArbitrageHistory_InvalidLimit(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -104,7 +104,7 @@ func TestArbitrageHandler_GetArbitrageHistory_InvalidLimit(t *testing.T) {
 }
 
 func TestArbitrageHandler_GetArbitrageHistory_LimitTooHigh(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -122,7 +122,7 @@ func TestArbitrageHandler_GetArbitrageHistory_LimitTooHigh(t *testing.T) {
 }
 
 func TestArbitrageHandler_GetArbitrageHistory_PageZero(t *testing.T) {
-	handler := NewArbitrageHandler(nil, nil, nil)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -248,7 +248,7 @@ func TestArbitrageHistoryResponse_Struct(t *testing.T) {
 func TestArbitrageHandler_sendArbitrageNotifications(t *testing.T) {
 	t.Run("nil notification service", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		// Should not panic with nil notification service
 		opportunities := []ArbitrageOpportunity{
@@ -259,7 +259,7 @@ func TestArbitrageHandler_sendArbitrageNotifications(t *testing.T) {
 
 	t.Run("low profit opportunities", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		// Low profit opportunities should not trigger notifications
 		opportunities := []ArbitrageOpportunity{
@@ -272,7 +272,7 @@ func TestArbitrageHandler_sendArbitrageNotifications(t *testing.T) {
 func TestGetArbitrageOpportunities(t *testing.T) {
 	t.Run("successful request with default parameters", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -292,7 +292,7 @@ func TestGetArbitrageOpportunities(t *testing.T) {
 
 	t.Run("request with custom parameters", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -313,7 +313,7 @@ func TestGetArbitrageOpportunities(t *testing.T) {
 
 	t.Run("invalid min_profit parameter", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -333,7 +333,7 @@ func TestGetArbitrageOpportunities(t *testing.T) {
 
 	t.Run("invalid limit parameter", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -355,7 +355,7 @@ func TestGetArbitrageOpportunities(t *testing.T) {
 func TestGetArbitrageHistory(t *testing.T) {
 	t.Run("successful request with default parameters", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -376,7 +376,7 @@ func TestGetArbitrageHistory(t *testing.T) {
 
 	t.Run("request with custom pagination", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -396,7 +396,7 @@ func TestGetArbitrageHistory(t *testing.T) {
 
 	t.Run("invalid page parameter", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -416,7 +416,7 @@ func TestGetArbitrageHistory(t *testing.T) {
 
 	t.Run("invalid limit parameter", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -436,7 +436,7 @@ func TestGetArbitrageHistory(t *testing.T) {
 
 	t.Run("limit too high", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -458,7 +458,7 @@ func TestGetArbitrageHistory(t *testing.T) {
 func TestArbitrageHandler_findCrossExchangeArbitrage(t *testing.T) {
 	t.Run("no opportunities", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		// Test with no market data
 		opportunities, err := handler.findCrossExchangeOpportunities(context.Background(), 1.0, "")
@@ -468,7 +468,7 @@ func TestArbitrageHandler_findCrossExchangeArbitrage(t *testing.T) {
 
 	t.Run("valid opportunity", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		// Test finding opportunities (would need proper mock setup)
 		opportunities, err := handler.findCrossExchangeOpportunities(context.Background(), 0.5, "BTC/USDT")
@@ -479,7 +479,7 @@ func TestArbitrageHandler_findCrossExchangeArbitrage(t *testing.T) {
 
 	t.Run("edge cases", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewArbitrageHandler(nil, mockCCXT, nil)
+		handler := NewArbitrageHandler(nil, mockCCXT, nil, nil)
 
 		// Test with very high minimum profit
 		opportunities, err := handler.findCrossExchangeOpportunities(context.Background(), 100.0, "")

@@ -17,7 +17,7 @@ type SignalQualityScorer struct {
 	config *config.Config
 	db     *database.PostgresDB
 	logger *logrus.Logger
-	
+
 	// Cached exchange reliability scores
 	exchangeReliabilityCache map[string]*ExchangeReliability
 	cacheExpiry              time.Time
@@ -25,79 +25,79 @@ type SignalQualityScorer struct {
 
 // ExchangeReliability represents reliability metrics for an exchange
 type ExchangeReliability struct {
-	ExchangeName     string            `json:"exchange_name"`
-	ReliabilityScore decimal.Decimal   `json:"reliability_score"` // 0.0 to 1.0
-	UptimeScore      decimal.Decimal   `json:"uptime_score"`      // 0.0 to 1.0
-	VolumeScore      decimal.Decimal   `json:"volume_score"`      // 0.0 to 1.0
-	LatencyScore     decimal.Decimal   `json:"latency_score"`     // 0.0 to 1.0
-	SpreadScore      decimal.Decimal   `json:"spread_score"`      // 0.0 to 1.0
-	DataQualityScore decimal.Decimal   `json:"data_quality_score"` // 0.0 to 1.0
-	LastUpdated      time.Time         `json:"last_updated"`
-	Metrics          *ExchangeMetrics  `json:"metrics"`
+	ExchangeName     string           `json:"exchange_name"`
+	ReliabilityScore decimal.Decimal  `json:"reliability_score"`  // 0.0 to 1.0
+	UptimeScore      decimal.Decimal  `json:"uptime_score"`       // 0.0 to 1.0
+	VolumeScore      decimal.Decimal  `json:"volume_score"`       // 0.0 to 1.0
+	LatencyScore     decimal.Decimal  `json:"latency_score"`      // 0.0 to 1.0
+	SpreadScore      decimal.Decimal  `json:"spread_score"`       // 0.0 to 1.0
+	DataQualityScore decimal.Decimal  `json:"data_quality_score"` // 0.0 to 1.0
+	LastUpdated      time.Time        `json:"last_updated"`
+	Metrics          *ExchangeMetrics `json:"metrics"`
 }
 
 // ExchangeMetrics contains detailed metrics for exchange assessment
 type ExchangeMetrics struct {
-	TotalTrades        int64           `json:"total_trades"`
-	AvgDailyVolume     decimal.Decimal `json:"avg_daily_volume"`
-	AvgSpread          decimal.Decimal `json:"avg_spread"`
-	AvgLatency         time.Duration   `json:"avg_latency"`
-	UptimePercentage   decimal.Decimal `json:"uptime_percentage"`
-	DataGaps           int             `json:"data_gaps"`
-	LastDataUpdate     time.Time       `json:"last_data_update"`
-	SupportedPairs     int             `json:"supported_pairs"`
-	APIResponseTime    time.Duration   `json:"api_response_time"`
-	ErrorRate          decimal.Decimal `json:"error_rate"`
+	TotalTrades      int64           `json:"total_trades"`
+	AvgDailyVolume   decimal.Decimal `json:"avg_daily_volume"`
+	AvgSpread        decimal.Decimal `json:"avg_spread"`
+	AvgLatency       time.Duration   `json:"avg_latency"`
+	UptimePercentage decimal.Decimal `json:"uptime_percentage"`
+	DataGaps         int             `json:"data_gaps"`
+	LastDataUpdate   time.Time       `json:"last_data_update"`
+	SupportedPairs   int             `json:"supported_pairs"`
+	APIResponseTime  time.Duration   `json:"api_response_time"`
+	ErrorRate        decimal.Decimal `json:"error_rate"`
 }
 
 // SignalQualityMetrics represents quality assessment for a signal
 type SignalQualityMetrics struct {
-	OverallScore        decimal.Decimal `json:"overall_score"`        // 0.0 to 1.0
-	ExchangeScore       decimal.Decimal `json:"exchange_score"`       // 0.0 to 1.0
-	VolumeScore         decimal.Decimal `json:"volume_score"`         // 0.0 to 1.0
-	LiquidityScore      decimal.Decimal `json:"liquidity_score"`      // 0.0 to 1.0
-	VolatilityScore     decimal.Decimal `json:"volatility_score"`     // 0.0 to 1.0
-	TimingScore         decimal.Decimal `json:"timing_score"`         // 0.0 to 1.0
-	ConfidenceScore     decimal.Decimal `json:"confidence_score"`     // 0.0 to 1.0
-	RiskScore           decimal.Decimal `json:"risk_score"`           // 0.0 to 1.0 (lower is better)
-	DataFreshnessScore  decimal.Decimal `json:"data_freshness_score"` // 0.0 to 1.0
+	OverallScore         decimal.Decimal `json:"overall_score"`          // 0.0 to 1.0
+	ExchangeScore        decimal.Decimal `json:"exchange_score"`         // 0.0 to 1.0
+	VolumeScore          decimal.Decimal `json:"volume_score"`           // 0.0 to 1.0
+	LiquidityScore       decimal.Decimal `json:"liquidity_score"`        // 0.0 to 1.0
+	VolatilityScore      decimal.Decimal `json:"volatility_score"`       // 0.0 to 1.0
+	TimingScore          decimal.Decimal `json:"timing_score"`           // 0.0 to 1.0
+	ConfidenceScore      decimal.Decimal `json:"confidence_score"`       // 0.0 to 1.0
+	RiskScore            decimal.Decimal `json:"risk_score"`             // 0.0 to 1.0 (lower is better)
+	DataFreshnessScore   decimal.Decimal `json:"data_freshness_score"`   // 0.0 to 1.0
 	MarketConditionScore decimal.Decimal `json:"market_condition_score"` // 0.0 to 1.0
 }
 
 // SignalQualityInput contains input data for quality assessment
 type SignalQualityInput struct {
-	SignalType      string            `json:"signal_type"`      // "arbitrage" or "technical"
-	Symbol          string            `json:"symbol"`
-	Exchanges       []string          `json:"exchanges"`
-	Volume          decimal.Decimal   `json:"volume"`
-	ProfitPotential decimal.Decimal   `json:"profit_potential"`
-	Confidence      decimal.Decimal   `json:"confidence"`
-	Timestamp       time.Time         `json:"timestamp"`
-	Indicators      map[string]interface{} `json:"indicators,omitempty"`
-	MarketData      *MarketDataSnapshot    `json:"market_data,omitempty"`
-	SignalComponents []string          `json:"signal_components,omitempty"` // List of individual signal indicators for aggregated signals
-	SignalCount     int               `json:"signal_count,omitempty"`      // Number of confirming signals
+	SignalType       string                 `json:"signal_type"` // "arbitrage" or "technical"
+	Symbol           string                 `json:"symbol"`
+	Exchanges        []string               `json:"exchanges"`
+	Volume           decimal.Decimal        `json:"volume"`
+	ProfitPotential  decimal.Decimal        `json:"profit_potential"`
+	Confidence       decimal.Decimal        `json:"confidence"`
+	Timestamp        time.Time              `json:"timestamp"`
+	Indicators       map[string]interface{} `json:"indicators,omitempty"`
+	MarketData       *MarketDataSnapshot    `json:"market_data,omitempty"`
+	SignalComponents []string               `json:"signal_components,omitempty"` // List of individual signal indicators for aggregated signals
+	SignalCount      int                    `json:"signal_count,omitempty"`      // Number of confirming signals
 }
 
 // MarketDataSnapshot represents current market conditions
 type MarketDataSnapshot struct {
-	Price           decimal.Decimal `json:"price"`
-	Volume24h       decimal.Decimal `json:"volume_24h"`
-	PriceChange24h  decimal.Decimal `json:"price_change_24h"`
-	Volatility      decimal.Decimal `json:"volatility"`
-	Spread          decimal.Decimal `json:"spread"`
-	OrderBookDepth  decimal.Decimal `json:"order_book_depth"`
-	LastTradeTime   time.Time       `json:"last_trade_time"`
+	Price          decimal.Decimal `json:"price"`
+	Volume24h      decimal.Decimal `json:"volume_24h"`
+	PriceChange24h decimal.Decimal `json:"price_change_24h"`
+	Volatility     decimal.Decimal `json:"volatility"`
+	Spread         decimal.Decimal `json:"spread"`
+	OrderBookDepth decimal.Decimal `json:"order_book_depth"`
+	LastTradeTime  time.Time       `json:"last_trade_time"`
 }
 
 // QualityThresholds defines minimum quality thresholds
 type QualityThresholds struct {
-	MinOverallScore     decimal.Decimal `json:"min_overall_score"`
-	MinExchangeScore    decimal.Decimal `json:"min_exchange_score"`
-	MinVolumeScore      decimal.Decimal `json:"min_volume_score"`
-	MinLiquidityScore   decimal.Decimal `json:"min_liquidity_score"`
-	MaxRiskScore        decimal.Decimal `json:"max_risk_score"`
-	MinDataFreshness    time.Duration   `json:"min_data_freshness"`
+	MinOverallScore   decimal.Decimal `json:"min_overall_score"`
+	MinExchangeScore  decimal.Decimal `json:"min_exchange_score"`
+	MinVolumeScore    decimal.Decimal `json:"min_volume_score"`
+	MinLiquidityScore decimal.Decimal `json:"min_liquidity_score"`
+	MaxRiskScore      decimal.Decimal `json:"max_risk_score"`
+	MinDataFreshness  time.Duration   `json:"min_data_freshness"`
 }
 
 // NewSignalQualityScorer creates a new signal quality scorer
@@ -152,16 +152,16 @@ func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *
 
 	// Calculate overall score using weighted average
 	overallScore := sqs.calculateOverallScore(map[string]decimal.Decimal{
-		"exchange":        exchangeScore,
-		"volume":          volumeScore,
-		"liquidity":       liquidityScore,
-		"volatility":      volatilityScore,
-		"timing":          timingScore,
-		"confidence":      confidenceScore,
-		"risk":            decimal.NewFromFloat(1.0).Sub(riskScore), // Invert risk score
-		"data_freshness":  dataFreshnessScore,
+		"exchange":         exchangeScore,
+		"volume":           volumeScore,
+		"liquidity":        liquidityScore,
+		"volatility":       volatilityScore,
+		"timing":           timingScore,
+		"confidence":       confidenceScore,
+		"risk":             decimal.NewFromFloat(1.0).Sub(riskScore), // Invert risk score
+		"data_freshness":   dataFreshnessScore,
 		"market_condition": marketConditionScore,
-		"multi_signal":    multiSignalScore,
+		"multi_signal":     multiSignalScore,
 	})
 
 	return &SignalQualityMetrics{
@@ -221,8 +221,8 @@ func (sqs *SignalQualityScorer) calculateVolumeScore(input *SignalQualityInput) 
 	}
 
 	// Define volume thresholds (these could be configurable)
-	minVolume := decimal.NewFromFloat(1000)   // $1,000
-	goodVolume := decimal.NewFromFloat(10000) // $10,000
+	minVolume := decimal.NewFromFloat(1000)         // $1,000
+	goodVolume := decimal.NewFromFloat(10000)       // $10,000
 	excellentVolume := decimal.NewFromFloat(100000) // $100,000
 
 	if input.Volume.LessThan(minVolume) {
@@ -463,8 +463,8 @@ func (sqs *SignalQualityScorer) calculateOverallScore(scores map[string]decimal.
 
 func (sqs *SignalQualityScorer) assessOrderBookDepth(depth decimal.Decimal) decimal.Decimal {
 	// Define depth thresholds
-	minDepth := decimal.NewFromFloat(10000)   // $10,000
-	goodDepth := decimal.NewFromFloat(100000) // $100,000
+	minDepth := decimal.NewFromFloat(10000)         // $10,000
+	goodDepth := decimal.NewFromFloat(100000)       // $100,000
 	excellentDepth := decimal.NewFromFloat(1000000) // $1,000,000
 
 	if depth.LessThan(minDepth) {
@@ -529,7 +529,7 @@ func (sqs *SignalQualityScorer) calculateExchangeRisk(exchanges []string) decima
 
 func (sqs *SignalQualityScorer) calculateVolatilityRisk(volatility decimal.Decimal) decimal.Decimal {
 	// Define volatility risk thresholds
-	lowRisk := decimal.NewFromFloat(0.05)   // 5%
+	lowRisk := decimal.NewFromFloat(0.05)    // 5%
 	mediumRisk := decimal.NewFromFloat(0.15) // 15%
 	highRisk := decimal.NewFromFloat(0.30)   // 30%
 
@@ -624,16 +624,16 @@ func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (ma
 func (sqs *SignalQualityScorer) calculateExchangeReliability(metrics *ExchangeMetrics) *ExchangeReliability {
 	// Calculate individual scores
 	uptimeScore := metrics.UptimePercentage
-	
+
 	// Volume score (normalized)
 	volumeScore := sqs.normalizeVolumeScore(metrics.AvgDailyVolume)
-	
+
 	// Latency score (lower latency = higher score)
 	latencyScore := sqs.normalizeLatencyScore(metrics.AvgLatency)
-	
+
 	// Spread score (lower spread = higher score)
 	spreadScore := sqs.normalizeSpreadScore(metrics.AvgSpread)
-	
+
 	// Data quality score
 	dataQualityScore := sqs.calculateDataQualityScore(metrics)
 
@@ -671,7 +671,7 @@ func (sqs *SignalQualityScorer) normalizeLatencyScore(latency time.Duration) dec
 	// Convert latency to score (lower is better)
 	latencyMs := float64(latency.Nanoseconds()) / 1000000 // Convert to milliseconds
 	maxLatency := 1000.0                                  // 1 second as max acceptable
-	
+
 	score := 1.0 - (latencyMs / maxLatency)
 	if score < 0 {
 		score = 0
@@ -682,7 +682,7 @@ func (sqs *SignalQualityScorer) normalizeLatencyScore(latency time.Duration) dec
 func (sqs *SignalQualityScorer) normalizeSpreadScore(spread decimal.Decimal) decimal.Decimal {
 	// Convert spread to score (lower is better)
 	maxSpread := decimal.NewFromFloat(0.01) // 1% as max acceptable
-	
+
 	score := decimal.NewFromFloat(1.0).Sub(spread.Div(maxSpread))
 	if score.LessThan(decimal.Zero) {
 		score = decimal.Zero
