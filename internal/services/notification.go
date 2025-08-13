@@ -704,8 +704,6 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 	return nil
 }
 
-
-
 // NotifyEnhancedArbitrageSignals sends notifications about enhanced arbitrage signals to eligible users
 func (ns *NotificationService) NotifyEnhancedArbitrageSignals(ctx context.Context, signals []*AggregatedSignal) error {
 	// Get eligible users (those with Telegram chat IDs and arbitrage alerts enabled)

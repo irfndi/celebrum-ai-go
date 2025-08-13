@@ -23,7 +23,9 @@ func setupTestRedis(t *testing.T) (*redis.Client, func()) {
 	})
 
 	cleanup := func() {
-		client.Close()
+		if err := client.Close(); err != nil {
+			t.Logf("Failed to close Redis client: %v", err)
+		}
 		s.Close()
 	}
 
@@ -174,7 +176,7 @@ func TestRedisSymbolCache_GetStats(t *testing.T) {
 
 	// Perform some operations
 	cache.Set("binance", []string{"BTC/USD"})
-	cache.Get("binance") // Hit
+	cache.Get("binance")     // Hit
 	cache.Get("nonexistent") // Miss
 
 	// Check updated stats

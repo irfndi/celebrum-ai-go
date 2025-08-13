@@ -134,10 +134,10 @@ func (l *StandardLogger) LogResourceStats(serviceName string, stats map[string]i
 // LogCacheOperation logs cache operations in a standardized format
 func (l *StandardLogger) LogCacheOperation(operation string, key string, hit bool, duration int64) {
 	l.WithFields(logrus.Fields{
-		"event":     "cache_operation",
-		"operation": operation,
-		"key":       key,
-		"hit":       hit,
+		"event":       "cache_operation",
+		"operation":   operation,
+		"key":         key,
+		"hit":         hit,
 		"duration_ms": duration,
 	}).Debug("Cache operation")
 }

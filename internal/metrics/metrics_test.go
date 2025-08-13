@@ -22,7 +22,7 @@ func TestMetricsCollector_RecordCounter(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	tags := map[string]string{"key": "value"}
 	collector.RecordCounter("test_counter", 1.0, tags)
@@ -41,7 +41,7 @@ func TestMetricsCollector_RecordGauge(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	tags := map[string]string{"key": "value"}
 	collector.RecordGauge("test_gauge", 10.5, "units", tags)
@@ -60,7 +60,7 @@ func TestMetricsCollector_RecordTiming(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	tags := map[string]string{"operation": "test"}
 	duration := 100 * time.Millisecond
@@ -80,7 +80,7 @@ func TestMetricsCollector_RecordHistogram(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	tags := map[string]string{"bucket": "test"}
 	collector.RecordHistogram("request_size", 1024, "bytes", tags)
@@ -99,7 +99,7 @@ func TestMetricsCollector_RecordBusinessMetric(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	tags := map[string]string{"exchange": "binance"}
 	fields := map[string]interface{}{
@@ -124,7 +124,7 @@ func TestMetricsCollector_RecordAPIRequestMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	duration := 150 * time.Millisecond
 	collector.RecordAPIRequestMetrics("GET", "/api/symbols", 200, duration, "user123")
@@ -143,7 +143,7 @@ func TestMetricsCollector_RecordDatabaseMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	duration := 50 * time.Millisecond
 	collector.RecordDatabaseMetrics("SELECT", "symbols", duration, 10, true)
@@ -162,7 +162,7 @@ func TestMetricsCollector_RecordCacheMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	duration := 5 * time.Millisecond
 	collector.RecordCacheMetrics("GET", "symbols:binance", true, duration)
@@ -181,7 +181,7 @@ func TestMetricsCollector_RecordExchangeMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	duration := 200 * time.Millisecond
 	collector.RecordExchangeMetrics("binance", "fetch_symbols", "BTCUSDT", duration, true)
@@ -200,7 +200,7 @@ func TestMetricsCollector_RecordArbitrageMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	collector.RecordArbitrageMetrics("BTCUSDT", 0.5, "binance", "coinbase")
 
@@ -217,7 +217,7 @@ func TestMetricsCollector_EmptyTags(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with nil tags
 	collector.RecordCounter("test_counter", 1.0, nil)
@@ -236,7 +236,7 @@ func TestMetricsCollector_ZeroValues(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with zero duration
 	collector.RecordTiming("zero_timing", 0, map[string]string{"test": "zero"})
@@ -255,7 +255,7 @@ func TestMetricsCollector_LargeValues(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with large values
 	collector.RecordCounter("large_counter", 1000000.0, map[string]string{"scale": "large"})
@@ -272,7 +272,7 @@ func TestMetricsCollector_SpecialCharacters(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with special characters in tags
 	tags := map[string]string{

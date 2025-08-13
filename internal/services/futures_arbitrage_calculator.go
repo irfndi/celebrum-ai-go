@@ -43,7 +43,7 @@ func (calc *FuturesArbitrageCalculator) CalculateFuturesArbitrage(
 	// Calculate time-based profit rates
 	hourlyRate := calc.calculateHourlyRate(netFundingRate, input.FundingInterval)
 	dailyRate := hourlyRate.Mul(decimal.NewFromInt(24))
-	apy := calc.calculateAPY(hourlyRate)
+	apy := calc.CalculateAPY(hourlyRate)
 
 	// Calculate estimated profits for different time periods
 	profit8h := calc.calculatePeriodProfit(input.BaseAmount, netFundingRate, 1) // 1 funding period
@@ -112,8 +112,8 @@ func (calc *FuturesArbitrageCalculator) calculateHourlyRate(netFundingRate decim
 	return netFundingRate.Div(decimal.NewFromInt(int64(fundingInterval)))
 }
 
-// calculateAPY calculates Annual Percentage Yield from hourly rate
-func (calc *FuturesArbitrageCalculator) calculateAPY(hourlyRate decimal.Decimal) decimal.Decimal {
+// CalculateAPY calculates Annual Percentage Yield from hourly rate
+func (calc *FuturesArbitrageCalculator) CalculateAPY(hourlyRate decimal.Decimal) decimal.Decimal {
 	// APY = (1 + hourly_rate)^(24*365) - 1
 	// Using compound interest formula
 

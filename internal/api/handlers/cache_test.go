@@ -110,9 +110,9 @@ func TestCacheHandler_GetCacheStats(t *testing.T) {
 
 func TestCacheHandler_GetCacheStatsByCategory(t *testing.T) {
 	tests := []struct {
-		name        string
-		category    string
-		expectError bool
+		name         string
+		category     string
+		expectError  bool
 		expectedCode int
 	}{
 		{

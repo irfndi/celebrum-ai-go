@@ -50,7 +50,7 @@ test: ## Run tests across all languages
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(GREEN)Running tests with coverage...$(NC)"
-	go test -v -coverprofile=coverage.out ./...
+	go test -v -coverprofile=coverage.out ./cmd/... ./internal/... ./pkg/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
 

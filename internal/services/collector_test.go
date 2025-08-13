@@ -180,13 +180,16 @@ func TestCollectorService_Start(t *testing.T) {
 
 	// Mock the Initialize and GetSupportedExchanges calls
 	mockCCXT.On("Initialize", mock.Anything).Return(nil)
-	mockCCXT.On("GetSupportedExchanges").Return([]string{}) // Return empty slice to avoid database operations
+	mockCCXT.On("GetSupportedExchanges").Return([]string{}) // Called once in initializeWorkersAsync
 
 	collector := NewCollectorService(nil, mockCCXT, config, nil)
 
 	// Test that the service can start without errors
 	err := collector.Start()
 	assert.NoError(t, err)
+
+	// Wait a bit for async initialization to start
+	time.Sleep(100 * time.Millisecond)
 
 	// Clean up: stop the collector to prevent it from running indefinitely
 	collector.Stop()

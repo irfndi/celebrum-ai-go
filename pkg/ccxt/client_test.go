@@ -719,7 +719,7 @@ func TestClient_FormatSymbolForExchange(t *testing.T) {
 	tests := []struct {
 		name     string
 		exchange string
-			symbol   string
+		symbol   string
 		expected string
 	}{
 		{"binance", "binance", "BTC/USDT", "/api/ticker/binance/BTCUSDT"},
@@ -736,7 +736,9 @@ func TestClient_FormatSymbolForExchange(t *testing.T) {
 				// The URL path will be decoded by the HTTP server, so BTC%2FUSDT becomes BTC/USDT
 				assert.Equal(t, tt.expected, r.URL.Path)
 				w.WriteHeader(http.StatusOK)
-				fmt.Fprint(w, `{"symbol":"BTC/USDT","price":50000}`)
+				if _, err := fmt.Fprint(w, `{"symbol":"BTC/USDT","price":50000}`); err != nil {
+					t.Errorf("Failed to write response: %v", err)
+				}
 			}))
 			defer server.Close()
 

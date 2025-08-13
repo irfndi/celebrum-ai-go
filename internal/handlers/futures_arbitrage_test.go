@@ -178,7 +178,7 @@ func TestGetFuturesArbitrageOpportunities(t *testing.T) {
 					mockOpportunities[0].LongFundingRate,
 					mockOpportunities[0].ShortFundingRate,
 					mockOpportunities[0].NetFundingRate,
-					8, // funding_interval
+					8,                                                        // funding_interval
 					decimal.NewFromFloat(50000), decimal.NewFromFloat(50100), // mark prices
 					decimal.NewFromFloat(100), decimal.NewFromFloat(0.2), // price difference
 					mockOpportunities[0].HourlyRate,
@@ -196,7 +196,7 @@ func TestGetFuturesArbitrageOpportunities(t *testing.T) {
 				)
 
 				mock.ExpectQuery("SELECT (.+) FROM futures_arbitrage_opportunities WHERE is_active = true AND expires_at > NOW\\(\\) ORDER BY apy DESC, risk_score ASC LIMIT \\$1 OFFSET \\$2").WithArgs(50, 0).WillReturnRows(rows)
-			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM futures_arbitrage_opportunities WHERE is_active = true AND expires_at > NOW\\(\\)").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
+				mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM futures_arbitrage_opportunities WHERE is_active = true AND expires_at > NOW\\(\\)").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
 			},
 		},
 		{

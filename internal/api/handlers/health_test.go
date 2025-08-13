@@ -42,8 +42,6 @@ func (m *MockRedisHealthClient) HealthCheck(ctx context.Context) error {
 	return args.Error(0)
 }
 
-
-
 func TestNewHealthHandler(t *testing.T) {
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
@@ -63,7 +61,7 @@ func TestHealthHandler_HealthCheck(t *testing.T) {
 	mockCCXTServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"ok"}`))
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		}
 	}))
 	defer mockCCXTServer.Close()

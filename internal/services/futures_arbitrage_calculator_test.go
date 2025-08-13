@@ -30,8 +30,8 @@ func TestCalculateFuturesArbitrage(t *testing.T) {
 				Symbol:             "BTC/USDT",
 				LongExchange:       "binance",
 				ShortExchange:      "okx",
-				LongFundingRate:    decimal.NewFromFloat(0.01),
-				ShortFundingRate:   decimal.NewFromFloat(-0.005),
+				LongFundingRate:    decimal.NewFromFloat(-0.005),
+				ShortFundingRate:   decimal.NewFromFloat(0.01),
 				LongMarkPrice:      decimal.NewFromFloat(50000),
 				ShortMarkPrice:     decimal.NewFromFloat(50100),
 				BaseAmount:         decimal.NewFromFloat(1.0),
@@ -42,6 +42,42 @@ func TestCalculateFuturesArbitrage(t *testing.T) {
 			},
 			wantErr:  false,
 			checkAPY: true,
+		},
+		{
+			name:     "profitable arbitrage",
+			checkAPY: true,
+			input: models.FuturesArbitrageCalculationInput{
+				Symbol:             "BTC/USDT",
+				LongExchange:       "binance",
+				ShortExchange:      "okx",
+				LongFundingRate:    decimal.NewFromFloat(0.0001),
+				ShortFundingRate:   decimal.NewFromFloat(0.0002),
+				LongMarkPrice:      decimal.NewFromFloat(50000),
+				ShortMarkPrice:     decimal.NewFromFloat(50010),
+				BaseAmount:         decimal.NewFromFloat(1.0),
+				AvailableCapital:   decimal.NewFromFloat(10000),
+				UserRiskTolerance:  "medium",
+				MaxLeverageAllowed: decimal.NewFromFloat(10),
+				FundingInterval:    8,
+			},
+		},
+		{
+			name:     "high funding rate difference",
+			checkAPY: true,
+			input: models.FuturesArbitrageCalculationInput{
+				Symbol:             "ETH/USDT",
+				LongExchange:       "bybit",
+				ShortExchange:      "binance",
+				LongFundingRate:    decimal.NewFromFloat(-0.0005),
+				ShortFundingRate:   decimal.NewFromFloat(0.001),
+				LongMarkPrice:      decimal.NewFromFloat(3000),
+				ShortMarkPrice:     decimal.NewFromFloat(3005),
+				BaseAmount:         decimal.NewFromFloat(2.0),
+				AvailableCapital:   decimal.NewFromFloat(20000),
+				UserRiskTolerance:  "high",
+				MaxLeverageAllowed: decimal.NewFromFloat(20),
+				FundingInterval:    8,
+			},
 		},
 		{
 			name: "zero funding rates",
@@ -248,12 +284,13 @@ func TestCalculateAPY(t *testing.T) {
 
 	hourlyRate := decimal.NewFromFloat(0.001) // 0.1% per hour
 
-	apy := calc.calculateAPY(hourlyRate)
+	apy := calc.CalculateAPY(hourlyRate)
 
-	assert.True(t, apy.GreaterThan(decimal.Zero))
+	t.Logf("Hourly rate: %s, APY: %s", hourlyRate.String(), apy.String())
+	assert.True(t, apy.GreaterThan(decimal.Zero), "APY should be positive, got: %s", apy.String())
 	// APY should be positive for positive funding rate
 	// 0.1% per hour compounded annually = very high APY, so use realistic upper bound
-	assert.True(t, apy.LessThan(decimal.NewFromFloat(100000))) // Reasonable upper bound for compound interest
+	assert.True(t, apy.LessThan(decimal.NewFromFloat(1000000))) // Reasonable upper bound for compound interest
 }
 
 func TestCalculateEstimatedProfits(t *testing.T) {

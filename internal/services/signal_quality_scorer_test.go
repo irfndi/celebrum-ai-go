@@ -15,7 +15,6 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 )
 
-
 func TestNewSignalQualityScorer(t *testing.T) {
 	cfg := &config.Config{}
 	db := &database.PostgresDB{}

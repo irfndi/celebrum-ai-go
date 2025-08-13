@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/redis/go-redis/v9"
 )
 
 // RedisInterface defines the interface for Redis operations used by ExchangeHandler

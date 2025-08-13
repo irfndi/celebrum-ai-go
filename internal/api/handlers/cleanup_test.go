@@ -74,8 +74,8 @@ func TestCleanupHandler_GetDataStats(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-				mockService := NewMockCleanupService()
-		handler := NewCleanupHandler(mockService)
+			mockService := NewMockCleanupService()
+			handler := NewCleanupHandler(mockService)
 
 			mockService.On("GetDataStats", mock.Anything).Return(tt.stats, tt.statsError)
 
@@ -177,8 +177,8 @@ func TestCleanupHandler_TriggerCleanup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-				mockService := NewMockCleanupService()
-		handler := NewCleanupHandler(mockService)
+			mockService := NewMockCleanupService()
+			handler := NewCleanupHandler(mockService)
 
 			// Setup expectations
 			if tt.cleanupError == nil {
@@ -259,7 +259,7 @@ func TestCleanupHandler_TriggerCleanup_ParameterParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockService := NewMockCleanupService()
-		handler := NewCleanupHandler(mockService)
+			handler := NewCleanupHandler(mockService)
 
 			// Setup expectations - we'll verify the config passed to RunCleanup
 			mockService.On("RunCleanup", mock.MatchedBy(func(config services.CleanupConfig) bool {

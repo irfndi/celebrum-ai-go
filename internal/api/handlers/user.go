@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -82,8 +82,8 @@ func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *Us
 		db = nil // This will force methods to handle nil database
 	}
 	return &UserHandler{
-		db:    db,
-		redis: redisClient,
+		db:      db,
+		redis:   redisClient,
 		querier: querier, // We need to add this field
 	}
 }

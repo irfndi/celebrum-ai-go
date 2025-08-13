@@ -245,6 +245,64 @@ func TestArbitrageHistoryResponse_Struct(t *testing.T) {
 	assert.Equal(t, 20, response.Limit)
 }
 
+func TestArbitrageHandler_GetArbitrageOpportunities_Success(t *testing.T) {
+	// Test with nil database (returns empty opportunities)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/arbitrage?min_profit=0.5&limit=10", nil)
+
+	handler.GetArbitrageOpportunities(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var response ArbitrageResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, response.Count) // Expect 0 opportunities with nil database
+	assert.Len(t, response.Opportunities, 0)
+	assert.NotZero(t, response.Timestamp)
+}
+
+func TestArbitrageHandler_GetArbitrageHistory_Success(t *testing.T) {
+	// Test with nil database (returns empty history)
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/arbitrage/history?page=1&limit=20", nil)
+
+	handler.GetArbitrageHistory(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var response ArbitrageHistoryResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, response.Count) // Expect 0 history items with nil database
+	assert.Equal(t, 1, response.Page)
+	assert.Equal(t, 20, response.Limit)
+	assert.Len(t, response.History, 0)
+}
+
+func TestArbitrageHandler_GetFundingRateArbitrage_InvalidMinProfit(t *testing.T) {
+	handler := NewArbitrageHandler(nil, nil, nil, nil)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/arbitrage/funding?min_profit=invalid", nil)
+
+	handler.GetFundingRateArbitrage(c)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Invalid min_profit parameter", response["error"])
+}
+
 func TestArbitrageHandler_sendArbitrageNotifications(t *testing.T) {
 	t.Run("nil notification service", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}

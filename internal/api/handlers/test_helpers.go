@@ -186,3 +186,8 @@ func (m *MockCollectorService) IsInitialized() bool {
 	args := m.Called()
 	return args.Bool(0)
 }
+
+func (m *MockCollectorService) GetStatus() map[string]interface{} {
+	args := m.Called()
+	return args.Get(0).(map[string]interface{})
+}

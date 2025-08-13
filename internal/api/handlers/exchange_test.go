@@ -30,10 +30,6 @@ func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}
 	return args.Get(0).(*redis.StatusCmd)
 }
 
-
-
-
-
 func TestNewExchangeHandler(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	mockCollector := &MockCollectorService{}
@@ -109,7 +105,7 @@ func TestExchangeHandler_AddExchangeToBlacklist(t *testing.T) {
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
-		Message: "Exchange added to blacklist successfully",
+		Message:   "Exchange added to blacklist successfully",
 		Timestamp: "2023-01-01T00:00:00Z",
 	}
 	mockCCXT.On("AddExchangeToBlacklist", mock.Anything, "binance").Return(mockResponse, nil)
@@ -141,7 +137,7 @@ func TestExchangeHandler_RemoveExchangeFromBlacklist(t *testing.T) {
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
-		Message: "Exchange removed from blacklist successfully",
+		Message:   "Exchange removed from blacklist successfully",
 		Timestamp: "2023-01-01T00:00:00Z",
 	}
 	mockCCXT.On("RemoveExchangeFromBlacklist", mock.Anything, "binance").Return(mockResponse, nil)
@@ -169,11 +165,11 @@ func TestExchangeHandler_RefreshExchanges(t *testing.T) {
 	handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
 
 	mockResponse := &ccxt.ExchangeManagementResponse{
-		Message: "Exchanges refreshed successfully",
+		Message:   "Exchanges refreshed successfully",
 		Timestamp: "2023-01-01T00:00:00Z",
 	}
 	mockCCXT.On("RefreshExchanges", mock.Anything).Return(mockResponse, nil)
-	
+
 	// Mock collector service methods
 	mockCollector.On("Stop").Return()
 	mockCollector.On("Start").Return(nil)
@@ -201,7 +197,7 @@ func TestExchangeHandler_AddExchange(t *testing.T) {
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
-		Message: "Exchange added successfully",
+		Message:   "Exchange added successfully",
 		Timestamp: "2023-01-01T00:00:00Z",
 	}
 	mockCCXT.On("AddExchange", mock.Anything, "binance").Return(mockResponse, nil)
@@ -252,7 +248,7 @@ func TestExchangeHandler_GetSupportedExchanges(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	
+
 	// Convert the interface{} slice to []string for comparison
 	exchanges, ok := response["exchanges"].([]interface{})
 	assert.True(t, ok)

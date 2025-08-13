@@ -345,8 +345,6 @@ func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*A
 	return uniqueSignals, nil
 }
 
-
-
 // createEnhancedArbitrageSignal creates an aggregated signal with price ranges from multiple opportunities
 func (sa *SignalAggregator) createEnhancedArbitrageSignal(opportunities []models.ArbitrageOpportunity, symbol string, minVolume, baseAmount decimal.Decimal) *AggregatedSignal {
 	if len(opportunities) == 0 {
@@ -637,8 +635,6 @@ func (sa *SignalAggregator) generateTechnicalSignals(symbol, exchange string, in
 
 	return aggregatedSignals
 }
-
-
 
 // createAggregatedTechnicalSignal creates an aggregated signal from multiple signal components
 func (sa *SignalAggregator) createAggregatedTechnicalSignal(symbol, exchange, action string, components []SignalComponent) *AggregatedSignal {

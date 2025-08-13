@@ -15,9 +15,9 @@ import (
 func setupTestLogger(level, env string) (*StandardLogger, *bytes.Buffer) {
 	logger := NewStandardLogger(level, env)
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 	// Disable colors for testing
-	logger.Logger.SetFormatter(&logrus.TextFormatter{ForceColors: false})
+	logger.SetFormatter(&logrus.TextFormatter{ForceColors: false})
 	return logger, &buf
 }
 
@@ -26,10 +26,10 @@ func TestNewStandardLogger_Development(t *testing.T) {
 
 	assert.NotNil(t, logger)
 	assert.NotNil(t, logger.Logger)
-	assert.Equal(t, logrus.InfoLevel, logger.Logger.Level)
+	assert.Equal(t, logrus.InfoLevel, logger.Level)
 
 	// Check that text formatter is used in development
-	_, ok := logger.Logger.Formatter.(*logrus.TextFormatter)
+	_, ok := logger.Formatter.(*logrus.TextFormatter)
 	assert.True(t, ok, "Expected TextFormatter for development environment")
 }
 
@@ -38,10 +38,10 @@ func TestNewStandardLogger_Production(t *testing.T) {
 
 	assert.NotNil(t, logger)
 	assert.NotNil(t, logger.Logger)
-	assert.Equal(t, logrus.InfoLevel, logger.Logger.Level)
+	assert.Equal(t, logrus.InfoLevel, logger.Level)
 
 	// Check that JSON formatter is used in production
-	_, ok := logger.Logger.Formatter.(*logrus.JSONFormatter)
+	_, ok := logger.Formatter.(*logrus.JSONFormatter)
 	assert.True(t, ok, "Expected JSONFormatter for production environment")
 }
 
@@ -50,7 +50,7 @@ func TestNewStandardLogger_UnknownEnvironment(t *testing.T) {
 
 	assert.NotNil(t, logger)
 	// Should default to text formatter for unknown environments
-	_, ok := logger.Logger.Formatter.(*logrus.TextFormatter)
+	_, ok := logger.Formatter.(*logrus.TextFormatter)
 	assert.True(t, ok, "Expected TextFormatter for unknown environment")
 }
 
@@ -69,7 +69,7 @@ func TestNewStandardLogger_LogLevels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.levelStr, func(t *testing.T) {
 			logger := NewStandardLogger(tt.levelStr, "development")
-			assert.Equal(t, tt.expected, logger.Logger.Level)
+			assert.Equal(t, tt.expected, logger.Level)
 		})
 	}
 }
@@ -301,7 +301,7 @@ func TestStandardLogger_EmptyValues(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with empty strings
 	logger.WithComponent("").Info("test message")
@@ -315,7 +315,7 @@ func TestStandardLogger_NilMetrics(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	// Test with nil metrics
 	logger.WithMetrics(nil).Info("test message")
@@ -329,7 +329,7 @@ func TestStandardLogger_JSONFormatter(t *testing.T) {
 
 	// Capture log output
 	var buf bytes.Buffer
-	logger.Logger.SetOutput(&buf)
+	logger.SetOutput(&buf)
 
 	logger.WithService("test-service").Info("test message")
 
