@@ -2,7 +2,6 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
@@ -52,6 +51,9 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
         REDIS_URL: redis://localhost:6379
+    
+    - name: Run Gemini CLI
+      uses: google-github-actions/run-gemini-cli@v0.1.11
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
