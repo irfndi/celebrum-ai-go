@@ -44,7 +44,7 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.4.0
-          args: --output-format=colored-line-number
+          args: --timeout=5m --output.text.path=stdout --output.text.colors=true
           
       - name: Build Go binary
         run: make build
