@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
@@ -166,7 +167,8 @@ func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.workers)
@@ -182,7 +184,8 @@ func TestCollectorService_Start(t *testing.T) {
 	mockCCXT.On("Initialize", mock.Anything).Return(nil)
 	mockCCXT.On("GetSupportedExchanges").Return([]string{}) // Called once in initializeWorkersAsync
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	// Test that the service can start without errors
 	err := collector.Start()
@@ -201,7 +204,8 @@ func TestCollectorService_Stop(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	// Test that the service can be stopped without errors
 	collector.Stop()
@@ -219,7 +223,8 @@ func TestCollectorService_GetWorkerStatus(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	// Get worker status (should be empty initially)
 	status := collector.GetWorkerStatus()
@@ -231,7 +236,8 @@ func TestCollectorService_IsHealthy(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	// Test with no workers (should be unhealthy)
 	assert.False(t, collector.IsHealthy())
@@ -265,7 +271,8 @@ func TestCollectorService_RestartWorker(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
 
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	// Test restarting non-existent worker
 	err := collector.RestartWorker("nonexistent")
@@ -421,7 +428,8 @@ func TestCollectorService_ValidateMarketData(t *testing.T) {
 func TestCollectorService_ParseSymbol(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	tests := []struct {
 		name          string
@@ -474,7 +482,8 @@ func TestCollectorService_ParseSymbol(t *testing.T) {
 func TestCollectorService_IsOptionsContract(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	tests := []struct {
 		name     string
@@ -515,7 +524,8 @@ func TestCollectorService_IsOptionsContract(t *testing.T) {
 func TestCollectorService_IsInvalidSymbolFormat(t *testing.T) {
 	mockCCXT := &MockCCXTService{}
 	config := &config.Config{}
-	collector := NewCollectorService(nil, mockCCXT, config, nil)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
 	tests := []struct {
 		name     string

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,8 @@ func TestNewService(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	require.NotNil(t, service)
 	assert.NotNil(t, service.client)
 	assert.NotNil(t, service.supportedExchanges)
@@ -34,7 +36,8 @@ func TestService_Initialize(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -52,7 +55,8 @@ func TestService_GetSupportedExchanges(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Before initialization, should return empty slice
 	exchanges := service.GetSupportedExchanges()
@@ -69,7 +73,8 @@ func TestService_FetchSingleTicker(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -96,7 +101,8 @@ func TestService_FetchMarketData(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

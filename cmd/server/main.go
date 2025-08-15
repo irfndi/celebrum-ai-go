@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/api"
+	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/logging"
@@ -44,8 +45,12 @@ func main() {
 	}
 	defer redis.Close()
 
-	// Initialize CCXT service
-	ccxtService := ccxt.NewService(&cfg.CCXT, logger.Logger)
+	// Initialize blacklist cache with database persistence
+	blacklistRepo := database.NewBlacklistRepository(db.Pool)
+	blacklistCache := cache.NewRedisBlacklistCache(redis.Client, blacklistRepo)
+
+	// Initialize CCXT service with blacklist cache
+	ccxtService := ccxt.NewService(&cfg.CCXT, logger.Logger, blacklistCache)
 
 	// Initialize cache analytics service
 	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
@@ -62,7 +67,7 @@ func main() {
 	}
 
 	// Initialize collector service
-	collectorService := services.NewCollectorService(db, ccxtService, cfg, redis.Client)
+	collectorService := services.NewCollectorService(db, ccxtService, cfg, redis.Client, blacklistCache)
 	if err := collectorService.Start(); err != nil {
 		appLogger.WithError(err).Fatal("Failed to start collector service")
 	}
@@ -77,15 +82,20 @@ func main() {
 		appLogger.Info("Historical data backfill check completed successfully")
 	}
 
+	// Initialize support services for futures arbitrage
+	resourceManager := services.NewResourceManager(logger.Logger)
+	errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
+	performanceMonitor := services.NewPerformanceMonitor(logger.Logger, redis.Client, ctx)
+
 	// Initialize futures arbitrage service
-	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, nil, nil, nil)
+	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, errorRecoveryManager, resourceManager, performanceMonitor)
 	if err := futuresArbitrageService.Start(); err != nil {
 		appLogger.WithError(err).Fatal("Failed to start futures arbitrage service")
 	}
 	defer futuresArbitrageService.Stop()
 
 	// Initialize cleanup service
-	cleanupService := services.NewCleanupService(db, nil, nil, nil)
+	cleanupService := services.NewCleanupService(db, errorRecoveryManager, resourceManager, performanceMonitor)
 
 	// Start cleanup service with configuration
 	cleanupConfig := services.CleanupConfig{

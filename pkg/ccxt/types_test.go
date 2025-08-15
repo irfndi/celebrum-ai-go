@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
@@ -19,7 +20,8 @@ func TestService_Struct(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Test initial state
 	assert.NotNil(t, service.client)
@@ -36,7 +38,8 @@ func TestService_GetSupportedExchanges_Empty(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	exchanges := service.GetSupportedExchanges()
 
 	assert.Empty(t, exchanges)
@@ -51,7 +54,8 @@ func TestService_GetSupportedExchanges_Populated(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Manually populate supported exchanges for testing
 	service.mu.Lock()
@@ -74,7 +78,8 @@ func TestService_GetExchangeInfo_Exists(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Manually populate supported exchanges for testing
 	binanceInfo := ExchangeInfo{
@@ -103,7 +108,8 @@ func TestService_GetExchangeInfo_NotExists(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	info, exists := service.GetExchangeInfo("nonexistent")
 
@@ -120,7 +126,8 @@ func TestService_FetchMarketData_EmptyExchanges(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx := context.Background()
 
 	// Test with empty exchanges
@@ -138,7 +145,8 @@ func TestService_FetchMarketData_EmptySymbols(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx := context.Background()
 
 	// Test with empty symbols
@@ -157,7 +165,8 @@ func TestService_CalculateArbitrageOpportunities_EmptyExchanges(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx := context.Background()
 	minProfit := decimal.NewFromFloat(1.0)
 
@@ -176,7 +185,8 @@ func TestService_CalculateArbitrageOpportunities_EmptySymbols(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx := context.Background()
 	minProfit := decimal.NewFromFloat(1.0)
 
@@ -196,7 +206,8 @@ func TestService_ConcurrentAccess(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Test concurrent read/write operations
 	done := make(chan bool, 2)
@@ -235,7 +246,8 @@ func TestService_LastUpdate(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Initially should be zero
 	assert.True(t, service.lastUpdate.IsZero())
@@ -290,7 +302,8 @@ func TestService_DifferentConfigs(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := logrus.New()
-			service := NewService(tc.config, logger)
+			blacklistCache := cache.NewInMemoryBlacklistCache()
+			service := NewService(tc.config, logger, blacklistCache)
 			assert.NotNil(t, service)
 			assert.NotNil(t, service.client)
 			assert.Equal(t, tc.expected, service != nil)
@@ -306,7 +319,8 @@ func TestService_SupportedExchangesOperations(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Test adding multiple exchanges
 	exchanges := map[string]ExchangeInfo{
@@ -346,7 +360,8 @@ func TestService_EdgeCases(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Test GetExchangeInfo with empty string
 	info, exists := service.GetExchangeInfo("")
@@ -370,7 +385,8 @@ func TestService_InitializationState(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 
 	// Test initial state
 	assert.NotNil(t, service.client)
@@ -397,7 +413,8 @@ func TestService_ParameterValidation(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	ctx := context.Background()
 
 	// Test FetchMarketData with context.TODO() (should not panic)
@@ -428,7 +445,8 @@ func TestService_ConcurrentSafety(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	service := NewService(cfg, logger)
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	service := NewService(cfg, logger, blacklistCache)
 	numGoroutines := 10
 	done := make(chan bool, numGoroutines*2)
 

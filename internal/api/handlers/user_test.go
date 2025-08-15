@@ -74,7 +74,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 		handler := NewUserHandler(nil, nil)
 
 		user := map[string]interface{}{
-			"password": "testpassword123",
+			"password": TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -145,7 +145,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := map[string]interface{}{
 			"email":    "invalid-email",
-			"password": "testpassword123",
+			"password": TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -184,7 +184,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -225,7 +225,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := RegisterRequest{
 			Email:    "existing@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -262,7 +262,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -304,7 +304,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -348,7 +348,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		user := RegisterRequest{
 			Email:          "test@example.com",
-			Password:       "testpassword123",
+			Password:       TestValidPassword,
 			TelegramChatID: &telegramChatID,
 		}
 
@@ -398,7 +398,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 		handler := NewUserHandler(nil, nil)
 
 		user := map[string]interface{}{
-			"password": "testpassword123",
+			"password": TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -459,7 +459,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -486,7 +486,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := map[string]interface{}{
 			"email":    "",
-			"password": "testpassword123",
+			"password": TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -536,7 +536,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 		defer mock.Close()
 
 		// Hash the password for comparison
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword123"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestValidPassword), bcrypt.DefaultCost)
 		userID := uuid.New()
 
 		// Mock getUserByEmail - user exists
@@ -553,7 +553,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -595,7 +595,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "nonexistent@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -624,7 +624,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 		defer mock.Close()
 
 		// Hash a different password
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("differentpassword"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestDifferentPassword), bcrypt.DefaultCost)
 		userID := uuid.New()
 
 		// Mock getUserByEmail - user exists but password doesn't match
@@ -641,7 +641,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "test@example.com",
-			Password: "wrongpassword",
+			Password: TestWrongPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -682,7 +682,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -711,7 +711,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 		defer mock.Close()
 
 		// Hash the password for comparison
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword123"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestValidPassword), bcrypt.DefaultCost)
 		userID := uuid.New()
 		telegramChatID := "123456789"
 
@@ -729,7 +729,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 
 		user := LoginRequest{
 			Email:    "test@example.com",
-			Password: "testpassword123",
+			Password: TestValidPassword,
 		}
 
 		jsonData, _ := json.Marshal(user)
@@ -894,12 +894,12 @@ func TestRegisterRequest_Struct(t *testing.T) {
 	chatID := "123456789"
 	req := RegisterRequest{
 		Email:          "test@example.com",
-		Password:       "password123",
+		Password:       TestPassword123,
 		TelegramChatID: &chatID,
 	}
 
 	assert.Equal(t, "test@example.com", req.Email)
-	assert.Equal(t, "password123", req.Password)
+	assert.Equal(t, TestPassword123, req.Password)
 	assert.NotNil(t, req.TelegramChatID)
 	assert.Equal(t, "123456789", *req.TelegramChatID)
 }
@@ -907,11 +907,11 @@ func TestRegisterRequest_Struct(t *testing.T) {
 func TestLoginRequest_Struct(t *testing.T) {
 	req := LoginRequest{
 		Email:    "test@example.com",
-		Password: "password123",
+		Password: TestPassword123,
 	}
 
 	assert.Equal(t, "test@example.com", req.Email)
-	assert.Equal(t, "password123", req.Password)
+	assert.Equal(t, TestPassword123, req.Password)
 }
 
 func TestUserResponse_Struct(t *testing.T) {
@@ -999,7 +999,7 @@ func TestUserHandler_RegisterUser_MissingEmail(t *testing.T) {
 
 	// Create request without email
 	reqBody := RegisterRequest{
-		Password: "password123",
+		Password: TestPassword123,
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
@@ -1038,7 +1038,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 
 		reqBody := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1065,7 +1065,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 
 		reqBody := RegisterRequest{
 			Email:    "existing@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1092,7 +1092,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 
 		reqBody := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1122,7 +1122,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 
 		reqBody := RegisterRequest{
 			Email:    "test@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1174,14 +1174,14 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 		handler := NewUserHandlerWithQuerier(mock, nil)
 
 		// Mock getUserByEmail query
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestPassword123), bcrypt.DefaultCost)
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).WithArgs("test@example.com").WillReturnRows(
 			pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 				AddRow("user-123", "test@example.com", string(hashedPassword), nil, "free", time.Now(), time.Now()))
 
 		reqBody := LoginRequest{
 			Email:    "test@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1208,7 +1208,7 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 
 		reqBody := LoginRequest{
 			Email:    "nonexistent@example.com",
-			Password: "password123",
+			Password: TestPassword123,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 
@@ -1231,14 +1231,14 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 		handler := NewUserHandlerWithQuerier(mock, nil)
 
 		// Mock getUserByEmail query with different password
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("differentpassword"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestDifferentPassword), bcrypt.DefaultCost)
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).WithArgs("test@example.com").WillReturnRows(
 			pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 				AddRow("user-123", "test@example.com", string(hashedPassword), nil, "free", time.Now(), time.Now()))
 
 		reqBody := LoginRequest{
 			Email:    "test@example.com",
-			Password: "wrongpassword",
+			Password: TestWrongPassword,
 		}
 		jsonBody, _ := json.Marshal(reqBody)
 

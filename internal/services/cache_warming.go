@@ -116,7 +116,7 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 	log.Println("Warming trading pairs cache...")
 
 	// Get all trading pairs from database
-	query := `SELECT id, symbol, base_asset, quote_asset FROM trading_pairs LIMIT 1000`
+	query := `SELECT id, symbol, base_currency, quote_currency FROM trading_pairs LIMIT 1000`
 	rows, err := c.db.Pool.Query(ctx, query)
 	if err != nil {
 		return err
@@ -126,18 +126,18 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 	count := 0
 	for rows.Next() {
 		var id int
-		var symbol, baseAsset, quoteAsset string
-		if err := rows.Scan(&id, &symbol, &baseAsset, &quoteAsset); err != nil {
+		var symbol, baseCurrency, quoteCurrency string
+		if err := rows.Scan(&id, &symbol, &baseCurrency, &quoteCurrency); err != nil {
 			continue
 		}
 
 		// Cache trading pair by symbol with 24 hour TTL
 		cacheKey := "trading_pair:" + symbol
 		pairData := map[string]interface{}{
-			"id":          id,
-			"symbol":      symbol,
-			"base_asset":  baseAsset,
-			"quote_asset": quoteAsset,
+			"id":             id,
+			"symbol":         symbol,
+			"base_currency":  baseCurrency,
+			"quote_currency": quoteCurrency,
 		}
 
 		pairJSON, err := json.Marshal(pairData)

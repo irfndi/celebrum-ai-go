@@ -5,6 +5,8 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { validator } from 'hono/validator';
 import ccxt from 'ccxt';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import type {
   HealthResponse,
   ExchangesResponse,
@@ -22,6 +24,7 @@ import type {
 
 // Load environment variables
 const PORT = process.env.PORT || 3001;
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'admin-secret-key-change-me';
 
 // Initialize Hono app
 const app = new Hono();
@@ -31,6 +34,25 @@ app.use('*', secureHeaders());
 app.use('*', cors());
 // app.use('*', compress()); // Removed due to CompressionStream not available in Bun
 app.use('*', logger());
+
+// Authentication middleware for admin endpoints
+const adminAuth = async (c: any, next: any) => {
+  const authHeader = c.req.header('Authorization');
+  const apiKey = c.req.header('X-API-Key');
+  
+  // Check for API key in Authorization header (Bearer token) or X-API-Key header
+  const providedKey = authHeader?.replace('Bearer ', '') || apiKey;
+  
+  if (!providedKey || providedKey !== ADMIN_API_KEY) {
+    return c.json({
+      error: 'Unauthorized',
+      message: 'Valid API key required for admin endpoints',
+      timestamp: new Date().toISOString()
+    }, 401);
+  }
+  
+  await next();
+};
 
 // Simple rate limiting can be implemented later if needed
 // For now, we rely on exchange-level rate limiting via CCXT
@@ -61,16 +83,54 @@ const exchangeConfigs: Record<string, any> = {
   }
 };
 
-// Blacklisted exchanges (known to have issues or require special handling)
-const blacklistedExchanges = new Set([
-  'test', 'mock', 'sandbox', 'demo', 'testnet',
-  'coinbaseprime', // Use coinbaseexchange instead
-  'ftx', 'ftxus', // Defunct exchanges
-  'liquid', 'quoine', // Defunct exchanges
-  'idex', 'ethfinex', // Deprecated exchanges
-  'yobit', 'livecoin', 'coinfloor', // Problematic exchanges
-  'southxchange', 'coinmate', 'lakebtc', // Often unreliable
-]);
+// Configuration file path
+const CONFIG_FILE_PATH = join(process.cwd(), 'exchange-config.json');
+
+// Default exchange configuration
+const defaultExchangeConfig = {
+  blacklistedExchanges: [
+    'test', 'mock', 'sandbox', 'demo', 'testnet',
+    'coinbaseprime', // Use coinbaseexchange instead
+    'ftx', 'ftxus', // Defunct exchanges
+    'liquid', 'quoine', // Defunct exchanges
+    'idex', 'ethfinex', // Deprecated exchanges
+    'yobit', 'livecoin', 'coinfloor', // Problematic exchanges
+    'southxchange', 'coinmate', 'lakebtc', // Often unreliable
+  ]
+};
+
+// Load configuration from file or use defaults
+function loadExchangeConfig() {
+  try {
+    if (existsSync(CONFIG_FILE_PATH)) {
+      const configData = readFileSync(CONFIG_FILE_PATH, 'utf8');
+      const config = JSON.parse(configData);
+      console.log('Loaded exchange configuration from file');
+      return config;
+    }
+  } catch (error) {
+    console.warn('Failed to load exchange configuration from file, using defaults:', error);
+  }
+  return { ...defaultExchangeConfig };
+}
+
+// Save configuration to file
+function saveExchangeConfig(config: any) {
+  try {
+    writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Saved exchange configuration to file');
+    return true;
+  } catch (error) {
+    console.error('Failed to save exchange configuration:', error);
+    return false;
+  }
+}
+
+// Load exchange configuration
+const exchangeConfig = loadExchangeConfig();
+
+// Convert to Set for faster lookups during initialization
+const blacklistedExchanges = new Set(exchangeConfig.blacklistedExchanges);
 
 // Priority exchanges (will be initialized first)
 const priorityExchanges = [
@@ -584,12 +644,19 @@ app.get('/api/funding-rate/:exchange/:symbol', async (c) => {
 // Exchange management endpoints
 
 // Add exchange to blacklist
-app.post('/api/admin/exchanges/blacklist/:exchange', async (c) => {
+app.post('/api/admin/exchanges/blacklist/:exchange', adminAuth, async (c) => {
   try {
     const exchange = c.req.param('exchange');
     
     if (!exchangeConfig.blacklistedExchanges.includes(exchange)) {
       exchangeConfig.blacklistedExchanges.push(exchange);
+      blacklistedExchanges.add(exchange);
+      
+      // Save configuration to file
+      const saved = saveExchangeConfig(exchangeConfig);
+      if (!saved) {
+        console.warn('Failed to persist blacklist changes to file');
+      }
       
       // Remove from active exchanges if it exists
       if (exchanges[exchange]) {
@@ -614,17 +681,24 @@ app.post('/api/admin/exchanges/blacklist/:exchange', async (c) => {
 });
 
 // Remove exchange from blacklist
-app.delete('/api/admin/exchanges/blacklist/:exchange', async (c) => {
+app.delete('/api/admin/exchanges/blacklist/:exchange', adminAuth, async (c) => {
   try {
     const exchange = c.req.param('exchange');
     
     const index = exchangeConfig.blacklistedExchanges.indexOf(exchange);
     if (index > -1) {
       exchangeConfig.blacklistedExchanges.splice(index, 1);
+      blacklistedExchanges.delete(exchange);
+      
+      // Save configuration to file
+      const saved = saveExchangeConfig(exchangeConfig);
+      if (!saved) {
+        console.warn('Failed to persist blacklist changes to file');
+      }
       
       // Try to initialize the exchange if it's available
       try {
-        await initializeExchange(exchange);
+        initializeExchange(exchange);
         console.log(`Exchange ${exchange} removed from blacklist and initialized`);
       } catch (error) {
         console.warn(`Failed to initialize ${exchange} after removing from blacklist:`, error);
@@ -647,7 +721,7 @@ app.delete('/api/admin/exchanges/blacklist/:exchange', async (c) => {
 });
 
 // Get exchange configuration
-app.get('/api/admin/exchanges/config', async (c) => {
+app.get('/api/admin/exchanges/config', adminAuth, async (c) => {
   return c.json({
     config: exchangeConfig,
     activeExchanges: Object.keys(exchanges),
@@ -657,13 +731,30 @@ app.get('/api/admin/exchanges/config', async (c) => {
 });
 
 // Refresh exchanges (re-initialize all non-blacklisted exchanges)
-app.post('/api/admin/exchanges/refresh', async (c) => {
+app.post('/api/admin/exchanges/refresh', adminAuth, async (c) => {
   try {
     // Clear current exchanges
     Object.keys(exchanges).forEach(key => delete exchanges[key]);
     
-    // Re-initialize exchanges
-    await initializeExchanges();
+    // Re-initialize priority exchanges first
+    let initializedCount = 0;
+    for (const exchangeId of priorityExchanges) {
+      if (initializeExchange(exchangeId)) {
+        initializedCount++;
+      }
+    }
+    
+    // Re-initialize remaining exchanges
+    const allExchanges = ccxt.exchanges;
+    for (const exchangeId of allExchanges) {
+      if (!exchanges[exchangeId] && !priorityExchanges.includes(exchangeId)) {
+        if (initializeExchange(exchangeId)) {
+          initializedCount++;
+        }
+      }
+    }
+    
+    console.log(`Refreshed and initialized ${initializedCount} exchanges`);
     
     return c.json({
       message: 'Exchanges refreshed successfully',
@@ -680,7 +771,7 @@ app.post('/api/admin/exchanges/refresh', async (c) => {
 });
 
 // Add new exchange dynamically
-app.post('/api/admin/exchanges/add/:exchange', async (c) => {
+app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
   try {
     const exchange = c.req.param('exchange');
     

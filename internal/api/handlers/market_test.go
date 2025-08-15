@@ -24,7 +24,7 @@ func TestMarketHandler_GetTicker(t *testing.T) {
 	mockCCXT := new(MockCCXTService)
 
 	// Create handler with nil database (we'll mock the CCXT service)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/ticker/:exchange/:symbol", handler.GetTicker)
@@ -71,7 +71,7 @@ func TestMarketHandler_GetWorkerStatus(t *testing.T) {
 
 	// For testing worker status, we'll pass nil for the collector service
 	// In a real scenario, this would be properly initialized
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/workers/status", handler.GetWorkerStatus)
@@ -99,7 +99,7 @@ func TestMarketHandler_GetTicker_MissingParams(t *testing.T) {
 
 	// Create mocks
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/ticker/:exchange/:symbol", handler.GetTicker)
@@ -120,7 +120,7 @@ func TestMarketHandler_GetOrderBook_FetchError(t *testing.T) {
 
 	// Create mocks
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
@@ -150,7 +150,7 @@ func TestMarketHandler_GetOrderBook(t *testing.T) {
 
 	// Create mocks
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
@@ -198,7 +198,7 @@ func TestMarketHandler_GetOrderBook_MissingParams(t *testing.T) {
 
 	// Create mocks
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
@@ -219,7 +219,7 @@ func TestMarketHandler_GetOrderBook_ServiceUnavailable(t *testing.T) {
 
 	// Create mocks
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/orderbook/:exchange/:symbol", handler.GetOrderBook)
@@ -290,7 +290,7 @@ func TestTickerResponse_Struct(t *testing.T) {
 
 func TestNewMarketHandler(t *testing.T) {
 	mockCCXT := new(MockCCXTService)
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, mockCCXT, handler.ccxtService)
@@ -311,7 +311,7 @@ func TestGetTicker(t *testing.T) {
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchSingleTicker", mock.Anything, "binance", "BTCUSDT").Return(expectedPrice, nil)
 
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Setup router with URL parameters
 		router := gin.New()
@@ -338,7 +338,7 @@ func TestGetTicker(t *testing.T) {
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchSingleTicker", mock.Anything, "binance", "BTCUSDT").Return(nil, assert.AnError)
 
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Setup router with URL parameters
 		router := gin.New()
@@ -368,7 +368,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchMarketData", mock.Anything, []string{"binance"}, []string{}).Return(expectedData, nil)
 
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		router := gin.New()
 		router.GET("/bulk-tickers/:exchange", handler.GetBulkTickers)
@@ -383,7 +383,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 
 	t.Run("missing exchange parameter", func(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		router := gin.New()
 		router.GET("/bulk-tickers/:exchange", handler.GetBulkTickers)
@@ -399,7 +399,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 		mockCCXT := &MockCCXTService{}
 		mockCCXT.On("IsHealthy", mock.Anything).Return(false)
 
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		router := gin.New()
 		router.GET("/bulk-tickers/:exchange", handler.GetBulkTickers)
@@ -417,7 +417,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchMarketData", mock.Anything, []string{"binance"}, []string{}).Return([]models.MarketPrice{}, assert.AnError)
 
-		handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		router := gin.New()
 		router.GET("/bulk-tickers/:exchange", handler.GetBulkTickers)
@@ -431,56 +431,8 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 	})
 }
 
-func TestMarketHandler_GetCacheStats(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
-
-	// Simulate some cache hits and misses
-	handler.cacheStats.Hits = 10
-	handler.cacheStats.Misses = 5
-
-	router := gin.New()
-	router.GET("/cache/stats", handler.GetCacheStats)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/cache/stats", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, float64(10), response["hits"])
-	assert.Equal(t, float64(5), response["misses"])
-	assert.Equal(t, float64(15), response["total"])
-	assert.Equal(t, "66.67%", response["hit_rate"])
-}
-
-func TestMarketHandler_ResetCacheStats(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
-
-	// Set some initial stats
-	handler.cacheStats.Hits = 10
-	handler.cacheStats.Misses = 5
-
-	router := gin.New()
-	router.POST("/cache/reset", handler.ResetCacheStats)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/cache/reset", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, int64(0), handler.cacheStats.Hits)
-	assert.Equal(t, int64(0), handler.cacheStats.Misses)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "Cache statistics reset successfully", response["message"])
-}
+// Note: GetCacheStats and ResetCacheStats tests have been removed
+// as these methods are now handled by CacheHandler for centralized cache analytics
 
 func TestMarketHandler_GetWorkerStatus_WithCollectorService(t *testing.T) {
 	// Setup
@@ -491,7 +443,7 @@ func TestMarketHandler_GetWorkerStatus_WithCollectorService(t *testing.T) {
 	mockCCXT := new(MockCCXTService)
 
 	// Create handler without collector service
-	handler := NewMarketHandler(nil, mockCCXT, nil, nil)
+	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
 	router.GET("/workers/status", handler.GetWorkerStatus)

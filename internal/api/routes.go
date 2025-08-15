@@ -10,6 +10,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	futuresHandlers "github.com/irfndi/celebrum-ai-go/internal/handlers"
+	"github.com/irfndi/celebrum-ai-go/internal/middleware"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 )
@@ -27,6 +28,9 @@ type Services struct {
 }
 
 func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, telegramConfig *config.TelegramConfig) {
+	// Initialize admin middleware
+	adminMiddleware := middleware.NewAdminMiddleware()
+
 	// Initialize health handler
 	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL(), cacheAnalyticsService)
 
@@ -40,7 +44,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	notificationService := services.NewNotificationService(db, redis, telegramConfig.BotToken)
 
 	// Initialize handlers
-	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis)
+	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, redis.Client)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
@@ -73,8 +77,6 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			market.GET("/tickers/:exchange", marketHandler.GetBulkTickers)
 			market.GET("/orderbook/:exchange/:symbol", marketHandler.GetOrderBook)
 			market.GET("/workers/status", marketHandler.GetWorkerStatus)
-			market.GET("/cache/stats", marketHandler.GetCacheStats)
-			market.POST("/cache/reset", marketHandler.ResetCacheStats)
 		}
 
 		// Arbitrage routes
@@ -142,14 +144,21 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		// Exchange management
 		exchanges := v1.Group("/exchanges")
 		{
+			// Public endpoints (no admin auth required)
 			exchanges.GET("/config", exchangeHandler.GetExchangeConfig)
 			exchanges.GET("/supported", exchangeHandler.GetSupportedExchanges)
 			exchanges.GET("/workers/status", exchangeHandler.GetWorkerStatus)
-			exchanges.POST("/refresh", exchangeHandler.RefreshExchanges)
-			exchanges.POST("/add/:exchange", exchangeHandler.AddExchange)
-			exchanges.POST("/blacklist/:exchange", exchangeHandler.AddExchangeToBlacklist)
-			exchanges.DELETE("/blacklist/:exchange", exchangeHandler.RemoveExchangeFromBlacklist)
-			exchanges.POST("/workers/:exchange/restart", exchangeHandler.RestartWorker)
+
+			// Admin-only endpoints (require admin authentication)
+			adminExchanges := exchanges.Group("/")
+			adminExchanges.Use(adminMiddleware.RequireAdminAuth())
+			{
+				adminExchanges.POST("/refresh", exchangeHandler.RefreshExchanges)
+				adminExchanges.POST("/add/:exchange", exchangeHandler.AddExchange)
+				adminExchanges.POST("/blacklist/:exchange", exchangeHandler.AddExchangeToBlacklist)
+				adminExchanges.DELETE("/blacklist/:exchange", exchangeHandler.RemoveExchangeFromBlacklist)
+				adminExchanges.POST("/workers/:exchange/restart", exchangeHandler.RestartWorker)
+			}
 		}
 
 		// Cache monitoring and analytics

@@ -18,6 +18,7 @@ type Config struct {
 	Backfill    BackfillConfig   `mapstructure:"backfill"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
+	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
 }
 
 type ServerConfig struct {
@@ -94,6 +95,14 @@ type ArbitrageConfig struct {
 	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
 	CheckInterval      string   `mapstructure:"check_interval"`
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
+}
+
+type BlacklistConfig struct {
+	TTL             string `mapstructure:"ttl"`               // Default TTL for blacklisted symbols (e.g., "24h")
+	ShortTTL        string `mapstructure:"short_ttl"`         // Short TTL for temporary issues (e.g., "1h")
+	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
+	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
+	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
 }
 
 func Load() (*Config, error) {
@@ -189,4 +198,11 @@ func setDefaults() {
 	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
 	viper.SetDefault("arbitrage.check_interval", "2m")
 	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
+
+	// Blacklist
+	viper.SetDefault("blacklist.ttl", "24h")
+	viper.SetDefault("blacklist.short_ttl", "1h")
+	viper.SetDefault("blacklist.long_ttl", "72h")
+	viper.SetDefault("blacklist.use_redis", true)
+	viper.SetDefault("blacklist.retry_after_clear", true)
 }

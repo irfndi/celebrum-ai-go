@@ -73,7 +73,7 @@ func TestUserAuthFlow_CompleteFlow(t *testing.T) {
 				}
 
 				// Simulate invalid credentials
-				if req.Password == "wrongpassword" {
+				if req.Password == TestWrongPassword {
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 					return
 				}
@@ -151,7 +151,7 @@ func TestUserAuthFlow_CompleteFlow(t *testing.T) {
 		// Step 1: Register user
 		registerReq := map[string]string{
 			"email":    "test@example.com",
-			"password": "password123",
+			"password": TestPassword123,
 			"name":     "Test User",
 		}
 		body, _ := json.Marshal(registerReq)
@@ -190,7 +190,7 @@ func TestUserAuthFlow_CompleteFlow(t *testing.T) {
 		// Step 1: Login
 		loginReq := map[string]string{
 			"email":    "user@example.com",
-			"password": "correctpassword",
+			"password": TestCorrectPassword,
 		}
 		body, _ := json.Marshal(loginReq)
 
@@ -235,7 +235,7 @@ func TestUserAuthFlow_CompleteFlow(t *testing.T) {
 
 		loginReq := map[string]string{
 			"email":    "user@example.com",
-			"password": "wrongpassword",
+			"password": TestWrongPassword,
 		}
 		body, _ := json.Marshal(loginReq)
 

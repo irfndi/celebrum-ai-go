@@ -23,6 +23,28 @@ services:
     networks:
       - celebrum-network
 
+  # Migration Service - Runs automatically to sync all environments
+  migrate:
+    image: postgres:17
+    container_name: celebrum-migrate
+    restart: "no"
+    environment:
+      PGPASSWORD: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: celebrum_ai
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    volumes:
+      - ./scripts:/scripts
+      - ./database/migrations:/database/migrations
+    command: ["bash", "/scripts/robust-migrate.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - celebrum-network
+
   # Redis for caching
   redis:
     image: redis:7-alpine
@@ -103,6 +125,8 @@ services:
         condition: service_healthy
       ccxt-service:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -128,11 +152,11 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "8443:443"
     volumes:
-      - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
-      - /etc/ssl/certs/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
-      - /etc/ssl/private/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+      - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
+      - ./configs/ssl/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
     depends_on:
       app:
         condition: service_healthy

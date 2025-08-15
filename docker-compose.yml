@@ -3,9 +3,11 @@ services:
     image: postgres:17
     container_name: celebrum-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: celebrum_ai
+      # SECURITY: Default passwords removed - must be set via environment variables
+      # Set POSTGRES_PASSWORD in your .env file for security
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
+      POSTGRES_DB: ${POSTGRES_DB:-celebrum_ai}
     ports:
       - "5432:5432"
     volumes:
@@ -16,18 +18,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - celebrum-network
 
   # Migration Service - Runs automatically to sync all environments
   migrate:
     image: postgres:17
     container_name: celebrum-migrate
     environment:
-      PGPASSWORD: postgres
+      # SECURITY: Database credentials must be provided via environment variables
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: celebrum_ai
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_NAME: ${POSTGRES_DB:-celebrum_ai}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
     volumes:
       - ./scripts:/scripts
       - ./database/migrations:/database/migrations
@@ -36,10 +41,14 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    networks:
+      - celebrum-network
 
   redis:
     image: redis:7-alpine
     container_name: celebrum-redis
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
       - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro
@@ -49,6 +58,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - celebrum-network
 
   # CCXT Service (Node.js)
   ccxt-service:
@@ -69,8 +80,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    profiles:
-      - ccxt
+    networks:
+      - celebrum-network
 
   # Main Go Application
   app:
@@ -87,9 +98,10 @@ services:
       - ENVIRONMENT=development
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
-      - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres
-      - DATABASE_DBNAME=celebrum_ai
+      - DATABASE_USER=${POSTGRES_USER:-postgres}
+      # SECURITY: Database password must be set via environment variables
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
+      - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_ai}
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -102,8 +114,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    profiles:
-      - app
+    networks:
+      - celebrum-network
 
   # Nginx reverse proxy (for production-like setup)
   nginx:
@@ -119,8 +131,8 @@ services:
     depends_on:
       - app
       - ccxt-service
-    profiles:
-      - nginx
+    networks:
+      - celebrum-network
 
 volumes:
   postgres_data:
@@ -129,5 +141,7 @@ volumes:
     driver: local
 
 networks:
+  celebrum-network:
+    driver: bridge
   default:
     name: celebrum-network

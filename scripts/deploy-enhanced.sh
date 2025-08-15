@@ -135,8 +135,8 @@ manual_deploy() {
     ssh ${SERVER_USER}@${SERVER_IP} "
         cd ${SERVER_PATH}
         source .env
-        docker-compose -f docker-compose.prod.yml down
-        docker-compose -f docker-compose.prod.yml up -d --build
+        docker-compose -f docker-compose.single-droplet.yml down
+        docker-compose -f docker-compose.single-droplet.yml up -d --build
     "
     
     success "Manual deployment completed"
@@ -148,8 +148,8 @@ zero_downtime_deploy() {
     
     # Build and test locally
     log "Running local build and tests..."
-    make ci-test
-    make ci-build
+    make test
+    make build
     
     # Create deployment directory
     ssh ${SERVER_USER}@${SERVER_IP} "
@@ -169,7 +169,7 @@ zero_downtime_deploy() {
         ln -sfn deployments/${TIMESTAMP} current
         cd current
         source .env
-        docker-compose -f docker-compose.prod.yml up -d --build
+        docker-compose -f docker-compose.single-droplet.yml up -d --build
     "
     
     # Verify deployment
@@ -198,7 +198,7 @@ verify_deployment() {
     # Check service logs
     ssh ${SERVER_USER}@${SERVER_IP} "
         cd ${SERVER_PATH}/current
-        docker-compose -f docker-compose.prod.yml logs --tail=50 | grep -i error || echo 'No errors found'
+        docker-compose -f docker-compose.single-droplet.yml logs --tail=50 | grep -i error || echo 'No errors found'
     "
     
     success "Deployment verification passed"
@@ -225,7 +225,7 @@ rollback_deployment() {
         ln -sfn deployments/${PREVIOUS_DEPLOYMENT} current
         cd current
         source .env
-        docker-compose -f docker-compose.prod.yml up -d --build
+        docker-compose -f docker-compose.single-droplet.yml up -d --build
     "
     
     # Verify rollback

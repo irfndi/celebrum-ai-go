@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,8 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// generateTestSecret creates a random secret for testing to avoid hardcoded secrets
+// This addresses GitGuardian security alerts about hardcoded secrets in tests
+func generateTestSecret() string {
+	bytes := make([]byte, 32)
+	_, _ = rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
 func TestNewAuthMiddleware(t *testing.T) {
-	secretKey := "test-secret-key"
+	// Generate a random secret key for testing to avoid hardcoded secrets
+	secretKey := generateTestSecret()
 	am := NewAuthMiddleware(secretKey)
 
 	assert.NotNil(t, am)
@@ -22,7 +33,8 @@ func TestNewAuthMiddleware(t *testing.T) {
 }
 
 func TestAuthMiddleware_GenerateToken(t *testing.T) {
-	am := NewAuthMiddleware("test-secret")
+	// Use dynamically generated secret for security
+	am := NewAuthMiddleware(generateTestSecret())
 	userID := "user123"
 	email := "test@example.com"
 	duration := time.Hour
@@ -41,7 +53,8 @@ func TestAuthMiddleware_GenerateToken(t *testing.T) {
 }
 
 func TestAuthMiddleware_ValidateToken(t *testing.T) {
-	am := NewAuthMiddleware("test-secret")
+	// Use dynamically generated secret for security
+	am := NewAuthMiddleware(generateTestSecret())
 
 	t.Run("valid token", func(t *testing.T) {
 		token, err := am.GenerateToken("user123", "test@example.com", time.Hour)
@@ -70,8 +83,8 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 	})
 
 	t.Run("token with wrong secret", func(t *testing.T) {
-		// Generate token with different middleware
-		otherAM := NewAuthMiddleware("different-secret")
+		// Generate token with different middleware using different secret
+		otherAM := NewAuthMiddleware(generateTestSecret())
 		token, err := otherAM.GenerateToken("user123", "test@example.com", time.Hour)
 		require.NoError(t, err)
 
@@ -84,7 +97,8 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 
 func TestAuthMiddleware_RequireAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	am := NewAuthMiddleware("test-secret")
+	// Use dynamically generated secret for security
+	am := NewAuthMiddleware(generateTestSecret())
 
 	// Helper function to create test router
 	createTestRouter := func() *gin.Engine {
@@ -206,20 +220,9 @@ func TestAuthMiddleware_RequireAuth(t *testing.T) {
 
 	t.Run("token with wrong signing method", func(t *testing.T) {
 		router := createTestRouter()
-		// Create token with wrong signing method
-		claims := &JWTClaims{
-			UserID: "user123",
-			Email:  "test@example.com",
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
-			},
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		tokenString, err := token.SignedString([]byte("wrong-key"))
-		// This will fail, but we'll use a malformed token instead
-		if err != nil {
-			tokenString = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.invalid.signature"
-		}
+		// Create an intentionally malformed token for testing
+		// Using a predictable but non-secret test token structure
+		tokenString := "invalid.jwt.token.for.testing.purposes.only"
 
 		req := httptest.NewRequest("GET", "/protected", nil)
 		req.Header.Set("Authorization", "Bearer "+tokenString)
@@ -230,7 +233,7 @@ func TestAuthMiddleware_RequireAuth(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		var response map[string]interface{}
-		err = json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, "Invalid token", response["error"])
 	})

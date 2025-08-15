@@ -19,11 +19,11 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/server/main.go
 
-# Final stage
-FROM alpine:latest
+# Production stage
+FROM alpine:latest AS production
 
-# Install ca-certificates, wget, and system monitoring tools
-RUN apk --no-cache add ca-certificates tzdata wget procps htop curl
+# Install only essential runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata wget curl
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
@@ -54,3 +54,12 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Run the application
 CMD ["./main"]
+
+# Debug stage (includes debugging tools)
+FROM production AS debug
+
+# Install debugging and monitoring tools for development/debugging
+RUN apk --no-cache add procps htop strace lsof tcpdump
+
+# Switch back to non-root user for debug stage
+USER appuser

@@ -62,26 +62,6 @@ type SymbolCache struct {
 }
 
 // BlacklistCacheEntry represents a cached entry for blacklisted symbols
-type BlacklistCacheEntry struct {
-	Reason    string
-	ExpiresAt time.Time
-}
-
-// BlacklistCacheStats tracks blacklist cache performance metrics
-type BlacklistCacheStats struct {
-	Hits      int64
-	Misses    int64
-	Additions int64
-	Skips     int64
-}
-
-// BlacklistCache manages cached blacklisted symbols that consistently fail
-type BlacklistCache struct {
-	cache map[string]*BlacklistCacheEntry // key: "exchange:symbol"
-	mu    sync.RWMutex
-	ttl   time.Duration
-	stats BlacklistCacheStats
-}
 
 // ExchangeCapabilityEntry represents cached exchange capability information
 type ExchangeCapabilityEntry struct {
@@ -170,14 +150,6 @@ func (sc *SymbolCache) LogStats() {
 		sc.stats.Hits, sc.stats.Misses, sc.stats.Sets, hitRate)
 }
 
-// NewBlacklistCache creates a new blacklist cache with specified TTL
-func NewBlacklistCache(ttl time.Duration) *BlacklistCache {
-	return &BlacklistCache{
-		cache: make(map[string]*BlacklistCacheEntry),
-		ttl:   ttl,
-	}
-}
-
 // NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL
 func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
 	return &ExchangeCapabilityCache{
@@ -215,67 +187,6 @@ func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, suppo
 		ExpiresAt:            time.Now().Add(ecc.ttl),
 	}
 	log.Printf("Exchange capability cached: %s supports funding rates: %v", exchange, supports)
-}
-
-// IsBlacklisted checks if a symbol is blacklisted for a specific exchange
-func (bc *BlacklistCache) IsBlacklisted(exchange, symbol string) (bool, string) {
-	bc.mu.RLock()
-	defer bc.mu.RUnlock()
-
-	key := fmt.Sprintf("%s:%s", exchange, symbol)
-	entry, exists := bc.cache[key]
-	if !exists {
-		bc.stats.Misses++
-		return false, ""
-	}
-
-	// Check if entry has expired
-	if time.Now().After(entry.ExpiresAt) {
-		// Remove expired entry
-		delete(bc.cache, key)
-		bc.stats.Misses++
-		return false, ""
-	}
-
-	bc.stats.Hits++
-	bc.stats.Skips++
-	return true, entry.Reason
-}
-
-// Add adds a symbol to the blacklist with a reason
-func (bc *BlacklistCache) Add(exchange, symbol, reason string) {
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
-
-	key := fmt.Sprintf("%s:%s", exchange, symbol)
-	bc.stats.Additions++
-	bc.cache[key] = &BlacklistCacheEntry{
-		Reason:    reason,
-		ExpiresAt: time.Now().Add(bc.ttl),
-	}
-	log.Printf("Blacklisted symbol %s (reason: %s, expires in %v)", key, reason, bc.ttl)
-}
-
-// GetStats returns current blacklist cache statistics
-func (bc *BlacklistCache) GetStats() BlacklistCacheStats {
-	bc.mu.RLock()
-	defer bc.mu.RUnlock()
-	return bc.stats
-}
-
-// LogStats logs current blacklist cache performance statistics
-func (bc *BlacklistCache) LogStats() {
-	bc.mu.RLock()
-	defer bc.mu.RUnlock()
-
-	total := bc.stats.Hits + bc.stats.Misses
-	hitRate := float64(0)
-	if total > 0 {
-		hitRate = float64(bc.stats.Hits) / float64(total) * 100
-	}
-
-	log.Printf("Blacklist Cache Stats - Hits: %d, Misses: %d, Additions: %d, Skips: %d, Hit Rate: %.2f%%",
-		bc.stats.Hits, bc.stats.Misses, bc.stats.Additions, bc.stats.Skips, hitRate)
 }
 
 // isBlacklistableError checks if an error indicates a symbol should be blacklisted
@@ -355,7 +266,7 @@ type CollectorService struct {
 	wg              sync.WaitGroup
 	// Caching and timing controls
 	symbolCache             SymbolCacheInterface
-	blacklistCache          *BlacklistCache
+	blacklistCache          cache.BlacklistCache
 	exchangeCapabilityCache *ExchangeCapabilityCache
 	redisClient             *redis.Client
 	lastSymbolRefresh       map[string]time.Time
@@ -402,7 +313,7 @@ func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
 }
 
 // NewCollectorService creates a new market data collector service
-func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, cfg *config.Config, redisClient *redis.Client) *CollectorService {
+func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, cfg *config.Config, redisClient *redis.Client, blacklistCache cache.BlacklistCache) *CollectorService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Parse collection interval from config
@@ -497,7 +408,7 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		cancel:          cancel,
 		// Initialize caching and timing controls
 		symbolCache:             initializeSymbolCache(redisClient),         // Redis or in-memory cache
-		blacklistCache:          NewBlacklistCache(24 * time.Hour),          // 24 hour TTL for blacklisted symbols
+		blacklistCache:          blacklistCache,                             // Use the provided blacklist cache with database persistence
 		exchangeCapabilityCache: NewExchangeCapabilityCache(24 * time.Hour), // 24 hour TTL for exchange capabilities
 		redisClient:             redisClient,
 		lastSymbolRefresh:       make(map[string]time.Time),
@@ -879,10 +790,11 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	// Filter out blacklisted symbols before making the bulk request
 	validSymbols := make([]string, 0, len(worker.Symbols))
 	for _, symbol := range worker.Symbols {
-		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(worker.Exchange, symbol); !isBlacklisted {
+		symbolKey := fmt.Sprintf("%s:%s", worker.Exchange, symbol)
+		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
 			validSymbols = append(validSymbols, symbol)
 		} else {
-			log.Printf("Skipping blacklisted symbol: %s:%s (reason: %s)", worker.Exchange, symbol, reason)
+			log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
 		}
 	}
 
@@ -921,7 +833,10 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to fetch bulk market data with circuit breaker: %w", err)
+		// If bulk fetch fails, fall back to individual symbol collection
+		// This allows us to identify and blacklist problematic symbols
+		log.Printf("Bulk fetch failed for %s, falling back to individual symbol collection: %v", worker.Exchange, err)
+		return c.collectTickerDataSequential(worker)
 	}
 
 	log.Printf("Fetched %d tickers for exchange %s", len(marketData), worker.Exchange)
@@ -974,7 +889,23 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 
 // collectTickerDataSequential collects ticker data sequentially (fallback method)
 func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
-	log.Printf("Collecting ticker data (sequential) for exchange %s (%d symbols)", worker.Exchange, len(worker.Symbols))
+	// Filter out blacklisted symbols before sequential processing
+	validSymbols := make([]string, 0, len(worker.Symbols))
+	for _, symbol := range worker.Symbols {
+		symbolKey := fmt.Sprintf("%s:%s", worker.Exchange, symbol)
+		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
+			validSymbols = append(validSymbols, symbol)
+		} else {
+			log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
+		}
+	}
+
+	if len(validSymbols) == 0 {
+		log.Printf("No valid symbols to fetch sequentially for exchange %s", worker.Exchange)
+		return nil
+	}
+
+	log.Printf("Collecting ticker data (sequential) for exchange %s (%d symbols)", worker.Exchange, len(validSymbols))
 
 	// Create timeout context for the entire sequential operation
 	operationID := fmt.Sprintf("sequential_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -995,9 +926,9 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		}
 	}()
 
-	// Collect ticker data for all symbols with rate limiting and error recovery
+	// Collect ticker data for all valid symbols with rate limiting and error recovery
 	successCount := 0
-	for i, symbol := range worker.Symbols {
+	for i, symbol := range validSymbols {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1022,12 +953,12 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		}
 
 		// Add rate limiting delay between requests (aggressive mode: 30ms)
-		if i < len(worker.Symbols)-1 {
+		if i < len(validSymbols)-1 {
 			time.Sleep(30 * time.Millisecond)
 		}
 	}
 
-	log.Printf("Sequential collection completed: %d/%d symbols successful for exchange %s", successCount, len(worker.Symbols), worker.Exchange)
+	log.Printf("Sequential collection completed: %d/%d symbols successful for exchange %s", successCount, len(validSymbols), worker.Exchange)
 	return nil
 }
 
@@ -1088,8 +1019,10 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	// Check if symbol should be blacklisted based on data quality
 	if shouldBlacklist, reason := c.shouldBlacklistTicker(ticker); shouldBlacklist {
-		c.blacklistCache.Add(ticker.ExchangeName, ticker.Symbol, reason)
-		log.Printf("Added symbol to blacklist: %s:%s (reason: %s)", ticker.ExchangeName, ticker.Symbol, reason)
+		symbolKey := fmt.Sprintf("%s:%s", ticker.ExchangeName, ticker.Symbol)
+		ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
+		c.blacklistCache.Add(symbolKey, reason, ttl)
+		log.Printf("Added symbol to blacklist: %s (reason: %s)", symbolKey, reason)
 		return nil
 	}
 
@@ -1152,8 +1085,9 @@ func (c *CollectorService) shouldBlacklistTicker(ticker models.MarketPrice) (boo
 // collectTickerDataDirect collects ticker data without checking symbol activity (for worker symbols)
 func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) error {
 	// Check if symbol is blacklisted before making API call
-	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(exchange, symbol); isBlacklisted {
-		log.Printf("Skipping blacklisted symbol: %s:%s (reason: %s)", exchange, symbol, reason)
+	symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
+	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
+		log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
 		return nil
 	}
 
@@ -1189,8 +1123,10 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	if err != nil {
 		// Check if the error indicates a symbol that should be blacklisted
 		if shouldBlacklist, reason := isBlacklistableError(err); shouldBlacklist {
-			c.blacklistCache.Add(exchange, symbol, reason)
-			log.Printf("Added symbol to blacklist: %s:%s (reason: %s) - %v", exchange, symbol, reason, err)
+			symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
+			ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
+			c.blacklistCache.Add(symbolKey, reason, ttl)
+			log.Printf("Added symbol to blacklist: %s (reason: %s) - %v", symbolKey, reason, err)
 			return nil
 		}
 		return fmt.Errorf("failed to fetch ticker data with circuit breaker: %w", err)
@@ -1505,12 +1441,12 @@ func (c *CollectorService) getOrCreateTradingPair(exchangeID int, symbol string)
 		return 0, fmt.Errorf("failed to parse symbol: %s", symbol)
 	}
 
-	// Insert new trading pair with exchange_id
+	// Insert new trading pair with exchange_id and conflict resolution
 	err = c.db.Pool.QueryRow(c.ctx,
-		"INSERT INTO trading_pairs (exchange_id, symbol, base_currency, quote_currency, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		"INSERT INTO trading_pairs (exchange_id, symbol, base_currency, quote_currency, is_active) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (exchange_id, symbol) DO UPDATE SET base_currency = EXCLUDED.base_currency, quote_currency = EXCLUDED.quote_currency, is_active = EXCLUDED.is_active RETURNING id",
 		exchangeID, symbol, baseCurrency, quoteCurrency, true).Scan(&tradingPairID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create trading pair: %w", err)
+		return 0, fmt.Errorf("failed to create or update trading pair: %w", err)
 	}
 
 	// Cache the newly created trading pair if Redis is available
@@ -2344,9 +2280,10 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	}
 
 	// Check if symbol is blacklisted
-	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(job.ExchangeID, job.Symbol); isBlacklisted {
-		log.Printf("Worker %d: Skipping blacklisted symbol %s:%s (reason: %s)",
-			workerID, job.ExchangeID, job.Symbol, reason)
+	symbolKey := fmt.Sprintf("%s:%s", job.ExchangeID, job.Symbol)
+	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
+		log.Printf("Worker %d: Skipping blacklisted symbol %s (reason: %s)",
+			workerID, symbolKey, reason)
 		result.Error = fmt.Errorf("symbol blacklisted: %s", reason)
 		return result
 	}

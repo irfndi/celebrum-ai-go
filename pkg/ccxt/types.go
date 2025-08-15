@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
@@ -16,23 +17,25 @@ import (
 type Service struct {
 	client             *Client
 	supportedExchanges map[string]ExchangeInfo
+	blacklistCache     cache.BlacklistCache
 	mu                 sync.RWMutex
 	lastUpdate         time.Time
 	logger             *logrus.Logger
 }
 
 // NewService creates a new CCXT service instance
-func NewService(cfg *config.CCXTConfig, logger *logrus.Logger) *Service {
+func NewService(cfg *config.CCXTConfig, logger *logrus.Logger, blacklistCache cache.BlacklistCache) *Service {
 	s := &Service{
 		client:             NewClient(cfg),
 		supportedExchanges: make(map[string]ExchangeInfo),
+		blacklistCache:     blacklistCache,
 		logger:             logger,
 	}
 
 	return s
 }
 
-// Initialize initializes the service by fetching supported exchanges
+// Initialize initializes the service by fetching supported exchanges and loading blacklist
 func (s *Service) Initialize(ctx context.Context) error {
 	exchangesResp, err := s.client.GetExchanges(ctx)
 	if err != nil {
@@ -42,10 +45,29 @@ func (s *Service) Initialize(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Clear existing exchanges
+	s.supportedExchanges = make(map[string]ExchangeInfo)
+
+	// Store exchanges with their info
 	for _, exchange := range exchangesResp.Exchanges {
-		s.supportedExchanges[exchange.ID] = exchange
+		s.supportedExchanges[exchange.ID] = ExchangeInfo{
+			ID:   exchange.ID,
+			Name: exchange.Name,
+		}
 	}
+
 	s.lastUpdate = time.Now()
+	s.logger.Infof("Initialized CCXT service with %d supported exchanges", len(s.supportedExchanges))
+
+	// Load existing blacklist from database if blacklist cache is available
+	if s.blacklistCache != nil {
+		if err := s.blacklistCache.LoadFromDatabase(ctx); err != nil {
+			s.logger.WithError(err).Warn("Failed to load blacklist from database")
+			// Don't fail initialization if blacklist loading fails
+		} else {
+			s.logger.Info("Successfully loaded blacklist from database")
+		}
+	}
 
 	return nil
 }
@@ -408,11 +430,19 @@ func (s *Service) GetExchangeConfig(ctx context.Context) (*ExchangeConfigRespons
 
 // AddExchangeToBlacklist adds an exchange to the blacklist
 func (s *Service) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	// Add to database-backed cache first (0 duration means no expiration)
+	s.blacklistCache.Add(exchange, "Manual blacklist via API", 0)
+
+	// Then call the TypeScript service to update the runtime blacklist
 	return s.client.AddExchangeToBlacklist(ctx, exchange)
 }
 
 // RemoveExchangeFromBlacklist removes an exchange from the blacklist
 func (s *Service) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
+	// Remove from database-backed cache first
+	s.blacklistCache.Remove(exchange)
+
+	// Then call the TypeScript service to update the runtime blacklist
 	return s.client.RemoveExchangeFromBlacklist(ctx, exchange)
 }
 

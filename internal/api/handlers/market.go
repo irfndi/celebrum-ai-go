@@ -21,22 +21,22 @@ type MarketHandler struct {
 	ccxtService      ccxt.CCXTService
 	collectorService *services.CollectorService
 	redis            *database.RedisClient
-	cacheStats       *CacheStats
+	cacheAnalytics   *services.CacheAnalyticsService
 }
 
-// CacheStats tracks cache hit/miss statistics
+// CacheStats tracks cache hit/miss statistics (deprecated - use CacheAnalyticsService)
 type CacheStats struct {
 	Hits   int64 `json:"hits"`
 	Misses int64 `json:"misses"`
 }
 
-func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, redis *database.RedisClient) *MarketHandler {
+func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, redis *database.RedisClient, cacheAnalytics *services.CacheAnalyticsService) *MarketHandler {
 	return &MarketHandler{
 		db:               db,
 		ccxtService:      ccxtService,
 		collectorService: collectorService,
 		redis:            redis,
-		cacheStats:       &CacheStats{},
+		cacheAnalytics:   cacheAnalytics,
 	}
 }
 
@@ -106,24 +106,32 @@ func (h *MarketHandler) CacheMarketPrices(ctx context.Context, cacheKey string, 
 // GetCachedMarketPrices retrieves cached market prices from Redis
 func (h *MarketHandler) GetCachedMarketPrices(ctx context.Context, cacheKey string) (*MarketPricesResponse, bool) {
 	if h.redis == nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("market_data")
+		}
 		return nil, false
 	}
 
 	cachedData, err := h.redis.Get(ctx, cacheKey)
 	if err != nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("market_data")
+		}
 		return nil, false
 	}
 
 	var data MarketPricesResponse
 	if err := json.Unmarshal([]byte(cachedData), &data); err != nil {
 		log.Printf("Failed to unmarshal cached market prices: %v", err)
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("market_data")
+		}
 		return nil, false
 	}
 
-	h.cacheStats.Hits++
+	if h.cacheAnalytics != nil {
+		h.cacheAnalytics.RecordHit("market_data")
+	}
 	log.Printf("Cache hit for market prices: %s", cacheKey)
 	return &data, true
 }
@@ -149,24 +157,32 @@ func (h *MarketHandler) CacheTicker(ctx context.Context, cacheKey string, data T
 // GetCachedTicker retrieves cached ticker from Redis
 func (h *MarketHandler) GetCachedTicker(ctx context.Context, cacheKey string) (*TickerResponse, bool) {
 	if h.redis == nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("tickers")
+		}
 		return nil, false
 	}
 
 	cachedData, err := h.redis.Get(ctx, cacheKey)
 	if err != nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("tickers")
+		}
 		return nil, false
 	}
 
 	var data TickerResponse
 	if err := json.Unmarshal([]byte(cachedData), &data); err != nil {
 		log.Printf("Failed to unmarshal cached ticker: %v", err)
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("tickers")
+		}
 		return nil, false
 	}
 
-	h.cacheStats.Hits++
+	if h.cacheAnalytics != nil {
+		h.cacheAnalytics.RecordHit("tickers")
+	}
 	log.Printf("Cache hit for ticker: %s", cacheKey)
 	return &data, true
 }
@@ -192,25 +208,33 @@ func (h *MarketHandler) CacheBulkTickers(ctx context.Context, cacheKey string, d
 // GetCachedBulkTickers retrieves cached bulk ticker data from Redis
 func (h *MarketHandler) GetCachedBulkTickers(ctx context.Context, cacheKey string) (*BulkTickerResponse, bool) {
 	if h.redis == nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("bulk_tickers")
+		}
 		return nil, false
 	}
 
 	cachedData, err := h.redis.Get(ctx, cacheKey)
 	if err != nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("bulk_tickers")
+		}
 		return nil, false
 	}
 
 	var data BulkTickerResponse
 	if err := json.Unmarshal([]byte(cachedData), &data); err != nil {
 		log.Printf("Failed to unmarshal cached bulk tickers: %v", err)
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("bulk_tickers")
+		}
 		return nil, false
 	}
 
 	data.Cached = true
-	h.cacheStats.Hits++
+	if h.cacheAnalytics != nil {
+		h.cacheAnalytics.RecordHit("bulk_tickers")
+	}
 	log.Printf("Cache hit for bulk tickers: %s", cacheKey)
 	return &data, true
 }
@@ -236,25 +260,33 @@ func (h *MarketHandler) CacheOrderBook(ctx context.Context, cacheKey string, dat
 // GetCachedOrderBook retrieves cached order book from Redis
 func (h *MarketHandler) GetCachedOrderBook(ctx context.Context, cacheKey string) (*OrderBookResponse, bool) {
 	if h.redis == nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("order_books")
+		}
 		return nil, false
 	}
 
 	cachedData, err := h.redis.Get(ctx, cacheKey)
 	if err != nil {
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("order_books")
+		}
 		return nil, false
 	}
 
 	var data OrderBookResponse
 	if err := json.Unmarshal([]byte(cachedData), &data); err != nil {
 		log.Printf("Failed to unmarshal cached order book: %v", err)
-		h.cacheStats.Misses++
+		if h.cacheAnalytics != nil {
+			h.cacheAnalytics.RecordMiss("order_books")
+		}
 		return nil, false
 	}
 
 	data.Cached = true
-	h.cacheStats.Hits++
+	if h.cacheAnalytics != nil {
+		h.cacheAnalytics.RecordHit("order_books")
+	}
 	log.Printf("Cache hit for order book: %s", cacheKey)
 	return &data, true
 }
@@ -587,33 +619,8 @@ func convertOrderBookEntries(entries []ccxt.OrderBookEntry) [][]float64 {
 	return result
 }
 
-// GetCacheStats returns cache hit/miss statistics
-func (h *MarketHandler) GetCacheStats(c *gin.Context) {
-	total := h.cacheStats.Hits + h.cacheStats.Misses
-	hitRate := float64(0)
-	if total > 0 {
-		hitRate = float64(h.cacheStats.Hits) / float64(total) * 100
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"hits":      h.cacheStats.Hits,
-		"misses":    h.cacheStats.Misses,
-		"total":     total,
-		"hit_rate":  fmt.Sprintf("%.2f%%", hitRate),
-		"timestamp": time.Now(),
-	})
-}
-
-// ResetCacheStats resets cache statistics
-func (h *MarketHandler) ResetCacheStats(c *gin.Context) {
-	h.cacheStats.Hits = 0
-	h.cacheStats.Misses = 0
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":   "Cache statistics reset successfully",
-		"timestamp": time.Now(),
-	})
-}
+// Note: GetCacheStats and ResetCacheStats methods have been moved to CacheHandler
+// to centralize cache analytics functionality
 
 // GetWorkerStatus returns the status of all collection workers
 func (h *MarketHandler) GetWorkerStatus(c *gin.Context) {
