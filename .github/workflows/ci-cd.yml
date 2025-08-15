@@ -38,9 +38,9 @@ jobs:
       run: go mod download
     
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
-        version: latest
+        version: v2.4.0
         args: --timeout=5m --out-format=colored-line-number
     
     - name: Check formatting
