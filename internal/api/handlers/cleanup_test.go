@@ -25,6 +25,9 @@ func NewMockCleanupService() *MockCleanupService {
 
 func (m *MockCleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(map[string]int64), args.Error(1)
 }
 

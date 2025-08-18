@@ -8,22 +8,40 @@ DO $$
 BEGIN
     -- Check if base_currency column exists, if not add it
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'trading_pairs' AND column_name = 'base_currency') THEN
+                   WHERE table_name = 'trading_pairs' AND column_name = 'base_currency' AND table_schema = 'public') THEN
         ALTER TABLE trading_pairs ADD COLUMN base_currency VARCHAR(20);
         -- Update existing rows with default values if needed
         UPDATE trading_pairs SET base_currency = 'UNKNOWN' WHERE base_currency IS NULL;
         -- Now add NOT NULL constraint
         ALTER TABLE trading_pairs ALTER COLUMN base_currency SET NOT NULL;
+    ELSE
+        -- Column exists, but ensure no NULL values before setting NOT NULL
+        UPDATE trading_pairs SET base_currency = 'UNKNOWN' WHERE base_currency IS NULL;
+        -- Only set NOT NULL if it's not already set
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'trading_pairs' AND column_name = 'base_currency' 
+                   AND table_schema = 'public' AND is_nullable = 'YES') THEN
+            ALTER TABLE trading_pairs ALTER COLUMN base_currency SET NOT NULL;
+        END IF;
     END IF;
     
     -- Check if quote_currency column exists, if not add it
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'trading_pairs' AND column_name = 'quote_currency') THEN
+                   WHERE table_name = 'trading_pairs' AND column_name = 'quote_currency' AND table_schema = 'public') THEN
         ALTER TABLE trading_pairs ADD COLUMN quote_currency VARCHAR(20);
         -- Update existing rows with default values if needed
         UPDATE trading_pairs SET quote_currency = 'UNKNOWN' WHERE quote_currency IS NULL;
         -- Now add NOT NULL constraint
         ALTER TABLE trading_pairs ALTER COLUMN quote_currency SET NOT NULL;
+    ELSE
+        -- Column exists, but ensure no NULL values before setting NOT NULL
+        UPDATE trading_pairs SET quote_currency = 'UNKNOWN' WHERE quote_currency IS NULL;
+        -- Only set NOT NULL if it's not already set
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'trading_pairs' AND column_name = 'quote_currency' 
+                   AND table_schema = 'public' AND is_nullable = 'YES') THEN
+            ALTER TABLE trading_pairs ALTER COLUMN quote_currency SET NOT NULL;
+        END IF;
     END IF;
     
     -- Add exchange_id column if it doesn't exist

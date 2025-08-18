@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Set POSTGRES_PASSWORD env var
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Set POSTGRES_PASSWORD env var
       POSTGRES_DB: celebrum_ai
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
@@ -31,12 +31,12 @@ services:
     container_name: celebrum-migrate
     restart: "no"
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: celebrum_ai
       DB_USER: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
       # Phase control
       STARTUP_PHASE: "1"
     volumes:
@@ -119,7 +119,7 @@ services:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
       - DATABASE_DBNAME=celebrum_ai
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis

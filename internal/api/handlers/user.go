@@ -409,10 +409,14 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 		cachedData, err := h.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
 			var user models.User
-			if err := json.Unmarshal([]byte(cachedData), &user); err == nil {
+			if unmarshalErr := json.Unmarshal([]byte(cachedData), &user); unmarshalErr == nil {
 				return &user, nil
+			} else {
+				log.Printf("Failed to unmarshal cached user %s: %v", userID, unmarshalErr)
 			}
-			log.Printf("Failed to unmarshal cached user %s: %v", userID, err)
+		} else if err != redis.Nil {
+			// Log non-cache-miss Redis errors
+			log.Printf("Redis error getting user %s: %v", userID, err)
 		}
 	}
 
@@ -525,10 +529,14 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 		cachedData, err := h.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
 			var user models.User
-			if err := json.Unmarshal([]byte(cachedData), &user); err == nil {
+			if unmarshalErr := json.Unmarshal([]byte(cachedData), &user); unmarshalErr == nil {
 				return &user, nil
+			} else {
+				log.Printf("Failed to unmarshal cached user for chat %s: %v", chatID, unmarshalErr)
 			}
-			log.Printf("Failed to unmarshal cached user for chat %s: %v", chatID, err)
+		} else if err != redis.Nil {
+			// Log non-cache-miss Redis errors
+			log.Printf("Redis error getting user for chat %s: %v", chatID, err)
 		}
 	}
 

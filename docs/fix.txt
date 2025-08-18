@@ -1,165 +1,94 @@
-In ccxt-service/index.ts around lines 643 to 647, the unblacklist flow currently
-calls saveExchangeConfig(exchangeConfig) and only logs a warning on failure;
-update it to mirror the blacklist path by checking the saved result and
-propagating the error to the client (e.g., return an error response or throw so
-the HTTP handler responds with 500 and an explanatory message) instead of
-silently warning, ensuring the API caller knows persistence failed.
-
-
-====
-
-Fix config shape mismatch or update CleanupConfig to nested structure
-
-The current config.yaml uses nested keys under cleanup (market_data.retention_hours, funding_rates.retention_hours, arbitrage_opportunities.retention_hours, interval_minutes), but CleanupConfig in internal/services/cleanup.go only binds flat YAML keys:
-
-market_data_retention_hours
-market_data_deletion_hours
-funding_rate_retention_hours
-funding_rate_deletion_hours
-arbitrage_retention_hours
-cleanup_interval_minutes
-enable_smart_cleanup
-As a result, none of your nested values will be loaded at runtime and will fall back to zero or defaults.
-
-Two paths forward:
-
-Quick compatibility patch (config.yaml)
-Add flat keys alongside your nested blocks until the Go struct is updated:
-cleanup:
-+  # Backward-compat keys (remove after refactoring Go struct)
-+  market_data_retention_hours: 36
-+  market_data_deletion_hours: 12
-+  funding_rate_retention_hours: 36
-+  funding_rate_deletion_hours: 12
-+  arbitrage_retention_hours: 72
-+  cleanup_interval_minutes: 60
-  market_data:
-    retention_hours: 36
-    deletion_hours: 12
-  funding_rates:
-    retention_hours: 36
-    deletion_hours: 12
-  arbitrage_opportunities:
-    retention_hours: 72
-  interval_minutes: 60
-  enable_smart_cleanup: true
-Refactor Go config to match nested YAML
-Update CleanupConfig (around line 10 in internal/services/cleanup.go) to:
-type CleanupConfig struct {
-  MarketData struct {
-    RetentionHours int `yaml:"retention_hours"`
-    DeletionHours  int `yaml:"deletion_hours"`
-  } `yaml:"market_data"`
-  FundingRates struct {
-    RetentionHours int `yaml:"retention_hours"`
-    DeletionHours  int `yaml:"deletion_hours"`
-  } `yaml:"funding_rates"`
-  ArbitrageOpportunities struct {
-    RetentionHours int `yaml:"retention_hours"`
-  } `yaml:"arbitrage_opportunities"`
-  IntervalMinutes     int  `yaml:"interval_minutes"`
-  EnableSmartCleanup  bool `yaml:"enable_smart_cleanup"`
-}
-Please address one of these immediately to ensure your cleanup settings actually load.
-
-
-
-====
-
-In database/migrations/045_fix_cache_warming_queries.sql around lines 96 to 101,
-the INSERT/UPSERT references a non-standard applied column that some
-runners/schema definitions lack; change the statement to only use filename and
-applied_at so it matches the minimal common schema: insert filename and set
-applied_at = CURRENT_TIMESTAMP, and on conflict (filename) do update set
-applied_at = CURRENT_TIMESTAMP (remove any mention of applied and avoid updating
-non-standard columns).
+In ccxt-service/index.ts around lines 734 to 744, the handler currently checks
+ccxt.exchanges using the raw request param and builds an error object that
+includes availableExchanges which is not defined on ErrorResponse and will fail
+type-checking; normalize the exchange id by converting c.req.param('exchange')
+to lower-case before checking ccxt.exchanges, and fix the error response shape
+by either removing availableExchanges from the ErrorResponse or returning a
+properly typed extended error (e.g., add an optional details or
+availableExchanges field to the ErrorResponse type and populate it), then return
+that correctly typed object with the 400 status.
 
 
 ===
 
-In database/migrations/048_create_exchange_blacklist_table.sql around lines
-107-112, the migration upsert uses a non-standard boolean column named
-"applied"; inspect the actual schema_migrations table definition used by your
-migration runner and update the INSERT/ON CONFLICT to use the canonical columns
-and types (e.g., use the repository's expected timestamp column like applied_at
-or version/dirty fields instead of a boolean, and set applied_at =
-CURRENT_TIMESTAMP on conflict), ensure the VALUES list matches the table column
-names exactly, and keep the ON CONFLICT DO UPDATE to only update the
-runner-supported columns.
+In database/migrations/045_fix_cache_warming_queries.sql around lines 10 to 17,
+the existing IF NOT EXISTS check can match same-named tables in other schemas
+and it also skips enforcing NOT NULL when the column exists but is nullable;
+update the information_schema query to filter on table_schema (e.g., 'public' or
+the configured schema) to avoid false positives, and add an additional branch
+that checks if the column exists but is nullable (column_name = 'base_currency'
+AND is_nullable = 'YES') — in that case backfill NULL values (e.g., UPDATE
+trading_pairs SET base_currency = 'UNKNOWN' WHERE base_currency IS NULL') and
+then ALTER TABLE ... ALTER COLUMN base_currency SET NOT NULL; ensure the
+migration covers both paths: create+set NOT NULL when missing, and backfill+set
+NOT NULL when present but nullable.
 
+===
 
-====
-
-In docker-compose.single-droplet.yml around lines 9 to 12, the Compose file
-enables insecure host trust auth and provides a weak default POSTGRES_PASSWORD;
-remove POSTGRES_HOST_AUTH_METHOD: trust and the initdb "--auth-host=trust" flag,
-require POSTGRES_PASSWORD to be supplied (do not provide a default fallback) and
-fail fast if it is missing, and configure initdb/auth to use SCRAM (e.g. set
-POSTGRES_INITDB_ARGS to use scram-sha-256 or the equivalent init parameter) so
-Postgres requires strong password authentication and secrets are supplied from a
-secret manager or environment without insecure defaults.
-
-
-====
-
-In docker-compose.single-droplet.yml around lines 64–66, the Redis service
-mounts a nonexistent host file `./configs/redis/redis-docker.conf`; change the
-volume entry to reference the actual file `./configs/redis/redis.conf` (keeping
-the same target `/etc/redis/redis.conf` and :ro flag) so the compose mount
-succeeds and Redis can start with the correct configuration.
-
-
-====
-
-In docker-compose.single-droplet.yml around lines 129 to 135, the JWT_SECRET
-environment entry currently uses an insecure hardcoded default; replace the
-fallback default with a required variable expansion so compose fails if
-JWT_SECRET is not set (e.g. use ${JWT_SECRET:?JWT_SECRET is required and must be
-set} or the equivalent in your compose version), and update any env/example or
-deployment docs to ensure developers set JWT_SECRET before running compose.
+In database/migrations/045_fix_cache_warming_queries.sql around lines 20 to 27,
+ensure the same safe pattern used elsewhere is applied to quote_currency: create
+the column only if it doesn't exist, add it with a safe default (e.g.
+VARCHAR(20) DEFAULT 'UNKNOWN' or add default immediately after creation),
+populate existing NULLs to 'UNKNOWN', then set the column NOT NULL, and finally
+remove the temporary DEFAULT if you don't want a permanent default; keep the IF
+NOT EXISTS guard and the explicit UPDATE before ALTER COLUMN ... SET NOT NULL to
+avoid failures on live data.
 
 
 ===
 
-In docs/environment-sync.md around lines 23-41 (and also apply same change at
-42-47 and 125-127), the env examples omit TELEGRAM_WEBHOOK_URL and
-REDIS_PASSWORD; add TELEGRAM_WEBHOOK_URL with a placeholder webhook URL and add
-REDIS_PASSWORD (with a comment that it’s required only if Redis AUTH is enabled)
-into the appropriate "Service URLs" / "Security Configuration" example blocks so
-the Troubleshooting references match the documented variables.
+Avoid documenting insecure defaults; require secrets in production
+
+This bullet recommends the ${POSTGRES_PASSWORD:-postgres} fallback, which is unsafe for production and contradicts the hardening posture elsewhere. Align guidance to fail fast in prod and make the “dev-only default” explicit.
+
+- - Updated Docker Compose files to use `${POSTGRES_PASSWORD:-postgres}` pattern
++ - Updated Docker Compose files to require `${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}` (production).
++   For local development only, you may temporarily use `${POSTGRES_PASSWORD:-postgres}` with caution.
 
 
 ===
 
-In docs/SECURITY_CREDENTIALS.md around lines 113-121, the current grep examples
-print potential secret values to stdout; update the guidance to recommend using
-a dedicated secret scanner (e.g., trufflehog or ggshield) and replace the unsafe
-grep examples with safer commands that do not expose secret values (for example,
-show only filenames/line numbers or redact matched values) and include the exact
-recommended installer/scan commands and a redaction pattern; ensure examples
-explicitly avoid printing raw secret contents and include a note to exclude .git
-and other sensitive paths.
+In internal/api/handlers/cleanup_test.go around lines 26 to 34, the mock's
+GetDataStats uses args.Get(0).(map[string]int64) which will panic if the test
+supplies an untyped nil; change the method to check args.Get(0) for nil before
+type-asserting and return (nil, args.Error(1)) when it is nil, otherwise perform
+the type assertion and return the asserted map with the error.
 
 
-====
+===
 
-In internal/api/handlers/user.go around lines 288 to 296, the code incorrectly
-treats TelegramChatID as an int64 and parses it with strconv which causes a
-compile error because models.User.TelegramChatID is *string; change the local
-variable to var newTelegramChatID *string, assign req.TelegramChatID directly
-(no strconv.ParseInt), pass that *string into h.invalidateUserCache, update any
-logging/formatting to use %s instead of %d, and remove the unused strconv
-import.
+In internal/services/cleanup.go (implementing CleanupService) add the two
+missing methods declared in internal/api/handlers/cleanup.go (lines 12-16):
+implement func (c *CleanupService) GetDataStats(ctx context.Context)
+(map[string]int64, error) to return the data statistics and possible error, and
+implement func (c *CleanupService) RunCleanup(config services.CleanupConfig)
+error to perform the cleanup logic and return an error; ensure both methods are
+receiver functions on *CleanupService, call into existing internal logic/helpers
+to collect stats and perform cleanup, propagate errors, and (optionally) change
+RunCleanup to accept a context.Context for cancellation by adding a new
+signature func (c *CleanupService) RunCleanup(ctx context.Context, config
+services.CleanupConfig) error and update callers accordingly.
 
 
-====
+===
 
-In internal/api/handlers/user.go around lines 463 to 496, the function
-invalidateUserCache uses %d and treats TelegramChatID as an integer but the
-field is a string pointer; update all fmt.Sprintf/Printf usages to use %s for
-string IDs, change the function signature and parameters to accept *string for
-newTelegramChatID (and ensure oldUser.TelegramChatID is treated as *string), and
-tighten guards to skip deletion when userID or telegram ID pointers are nil or
-point to empty strings so you don't create/attempt to delete empty keys; keep
-the same log messages but substitute %s and dereference safely after checking
-non-empty.
+In internal/api/handlers/user.go around lines 409 to 417, the code currently
+logs the wrong error variable when JSON unmarshal fails and ignores non-miss
+Redis GET errors; change the flow so that after calling h.redis.Get(ctx,
+cacheKey).Result() you: 1) if err == nil attempt json.Unmarshal and on failure
+log the unmarshal error (use the local unmarshal err variable in the log
+message), and 2) if err != nil and err is not a cache miss (redis.Nil) log the
+Redis GET error explicitly (include userID/cacheKey and err) so non-miss Redis
+errors are visible. Ensure log messages are clear and use the correct error
+variables.
+
+
+===
+
+In internal/api/handlers/user.go around lines 525-533: the current code swallows
+non-NIL Redis errors and logs the wrong identifier on JSON unmarshal failure
+(uses chatID). Update the Redis handling so that if h.redis.Get(...) returns an
+error and it is not redis.Nil you log that error (include context and the
+cacheKey or telegram ID), and when json.Unmarshal fails log the correct telegram
+ID (user's Telegram ID variable) instead of chatID; ensure you still return on
+successful unmarshal.

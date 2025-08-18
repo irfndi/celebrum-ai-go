@@ -731,7 +731,7 @@ app.post('/api/admin/exchanges/refresh', adminAuth, async (c) => {
 // Add new exchange dynamically
 app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
   try {
-    const exchange = c.req.param('exchange');
+    const exchange = c.req.param('exchange').toLowerCase();
     
     // Check if exchange is available in CCXT
     if (!ccxt.exchanges.includes(exchange)) {
