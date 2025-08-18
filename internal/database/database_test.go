@@ -67,10 +67,10 @@ func TestRedisClient_HealthCheck_NilClient(t *testing.T) {
 	client := &RedisClient{Client: nil}
 	ctx := context.Background()
 
-	// Should panic when trying to ping nil client
-	assert.Panics(t, func() {
-		_ = client.HealthCheck(ctx)
-	})
+	// Should return error when trying to ping nil client
+	err := client.HealthCheck(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
 }
 
 // Test RedisClient cache operations with nil client
@@ -78,40 +78,40 @@ func TestRedisClient_Set_NilClient(t *testing.T) {
 	client := &RedisClient{Client: nil}
 	ctx := context.Background()
 
-	// Should panic when trying to set with nil client
-	assert.Panics(t, func() {
-		_ = client.Set(ctx, "key", "value", time.Minute)
-	})
+	// Should return error when trying to set with nil client
+	err := client.Set(ctx, "key", "value", time.Minute)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
 }
 
 func TestRedisClient_Get_NilClient(t *testing.T) {
 	client := &RedisClient{Client: nil}
 	ctx := context.Background()
 
-	// Should panic when trying to get with nil client
-	assert.Panics(t, func() {
-		_, _ = client.Get(ctx, "key")
-	})
+	// Should return error when trying to get with nil client
+	_, err := client.Get(ctx, "key")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
 }
 
 func TestRedisClient_Delete_NilClient(t *testing.T) {
 	client := &RedisClient{Client: nil}
 	ctx := context.Background()
 
-	// Should panic when trying to delete with nil client
-	assert.Panics(t, func() {
-		_ = client.Delete(ctx, "key")
-	})
+	// Should return error when trying to delete with nil client
+	err := client.Delete(ctx, "key")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
 }
 
 func TestRedisClient_Exists_NilClient(t *testing.T) {
 	client := &RedisClient{Client: nil}
 	ctx := context.Background()
 
-	// Should panic when trying to check existence with nil client
-	assert.Panics(t, func() {
-		_, _ = client.Exists(ctx, "key")
-	})
+	// Should return error when trying to check existence with nil client
+	_, err := client.Exists(ctx, "key")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
 }
 
 // Test NewPostgresConnection with invalid config

@@ -38,8 +38,17 @@ func main() {
 	}
 	defer db.Close()
 
-	// Initialize Redis
-	redis, err := database.NewRedisConnection(cfg.Redis)
+	// Initialize error recovery manager for Redis connection
+	errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
+	
+	// Register retry policies for Redis operations
+	retryPolicies := services.DefaultRetryPolicies()
+	for name, policy := range retryPolicies {
+		errorRecoveryManager.RegisterRetryPolicy(name, policy)
+	}
+
+	// Initialize Redis with retry mechanism
+	redis, err := database.NewRedisConnectionWithRetry(cfg.Redis, errorRecoveryManager)
 	if err != nil {
 		appLogger.WithError(err).Fatal("Failed to connect to Redis")
 	}
@@ -75,8 +84,9 @@ func main() {
 
 	// Initialize support services for futures arbitrage and cleanup
 	resourceManager := services.NewResourceManager(logger.Logger)
-	errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
+	defer resourceManager.Shutdown()
 	performanceMonitor := services.NewPerformanceMonitor(logger.Logger, redis.Client, ctx)
+	defer performanceMonitor.Stop()
 
 	// Start historical data backfill in background if needed
 	go func() {

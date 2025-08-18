@@ -103,7 +103,7 @@ sudo systemctl restart docker
 3. **From Docker containers:**
    ```bash
    # Should connect successfully within Docker network
-   docker exec celebrum-app redis-cli -h redis ping
+   docker compose exec -T redis redis-cli ping
    # Expected output: PONG
    ```
 

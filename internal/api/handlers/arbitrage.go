@@ -804,8 +804,8 @@ func (h *ArbitrageHandler) getArbitrageHistory(ctx context.Context, limit, offse
 		args = append(args, symbolFilter)
 	}
 
-	query += " ORDER BY md.timestamp DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2)
-	args = append(args, limit, offset)
+	query += " ORDER BY md.timestamp DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2) // SAFE: using parameterized query
+    args = append(args, limit, offset)
 
 	rows, err := h.db.Pool.Query(ctx, query, args...)
 	if err != nil {

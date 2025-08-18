@@ -42,11 +42,11 @@ echo "3️⃣ Testing Docker Redis access..."
 if command -v docker &> /dev/null && docker ps | grep -q celebrum-redis; then
     echo "🐳 Docker Redis detected, testing container access..."
     
-    # Test from app container
-    if docker exec celebrum-app redis-cli -h redis ping &> /dev/null; then
-        echo "✅ Redis accessible from app container"
+    # Test from redis container directly
+    if docker compose exec -T redis redis-cli ping &> /dev/null; then
+        echo "✅ Redis accessible from redis container"
     else
-        echo "❌ Redis not accessible from app container"
+        echo "❌ Redis not accessible from redis container"
     fi
     
     # Test from ccxt-service container

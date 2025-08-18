@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -17,9 +18,20 @@ type AdminMiddleware struct {
 func NewAdminMiddleware() *AdminMiddleware {
 	// Get admin API key from environment variable
 	apiKey := os.Getenv("ADMIN_API_KEY")
+
+	// Validate API key configuration
 	if apiKey == "" {
-		// Use a default key for development (should be changed in production)
-		apiKey = "admin-dev-key-change-in-production"
+		log.Fatal("ADMIN_API_KEY environment variable must be set")
+	}
+
+	// Prevent use of default/example keys in any environment
+	if apiKey == "admin-dev-key-change-in-production" || apiKey == "admin-secret-key-change-me" {
+		log.Fatal("ADMIN_API_KEY cannot use default/example values. Please set a secure API key.")
+	}
+
+	// Ensure minimum security requirements
+	if len(apiKey) < 32 {
+		log.Fatal("ADMIN_API_KEY must be at least 32 characters long for security")
 	}
 
 	return &AdminMiddleware{
@@ -49,12 +61,8 @@ func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 			return
 		}
 
-		// Check for API key in query parameter (less secure, for development only)
-		apiKeyQuery := c.Query("api_key")
-		if apiKeyQuery == am.apiKey {
-			c.Next()
-			return
-		}
+		// Query parameter authentication removed for security reasons
+		// API keys should only be passed via headers
 
 		// No valid API key found
 		c.JSON(http.StatusUnauthorized, gin.H{

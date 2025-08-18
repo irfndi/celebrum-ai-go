@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/logging"
@@ -109,11 +110,13 @@ func (mc *MetricsCollector) RecordBusinessMetric(name string, value float64, uni
 
 // addServiceTag adds the service name to tags
 func (mc *MetricsCollector) addServiceTag(tags map[string]string) map[string]string {
-	if tags == nil {
-		tags = make(map[string]string)
+	// Create a copy of the input map to avoid modifying the original
+	result := make(map[string]string)
+	for k, v := range tags {
+		result[k] = v
 	}
-	tags["service"] = mc.serviceName
-	return tags
+	result["service"] = mc.serviceName
+	return result
 }
 
 // logMetric logs the metric using the standardized logger
@@ -131,7 +134,7 @@ func (mc *MetricsCollector) RecordAPIRequestMetrics(method, endpoint string, sta
 	tags := map[string]string{
 		"method":      method,
 		"endpoint":    endpoint,
-		"status_code": string(rune(statusCode)),
+		"status_code": strconv.Itoa(statusCode),
 	}
 	if userID != "" {
 		tags["user_id"] = userID

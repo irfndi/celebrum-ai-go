@@ -51,7 +51,10 @@ func (h *ExchangeHandler) GetExchangeConfig(c *gin.Context) {
 	cachedData, err := h.redisClient.Get(ctx, cacheKey).Result()
 	if err == nil {
 		var config interface{}
-		if err := json.Unmarshal([]byte(cachedData), &config); err == nil {
+		if err := json.Unmarshal([]byte(cachedData), &config); err != nil {
+			// Log the error but continue to fetch fresh data
+			c.Header("X-Cache-Error", "Failed to unmarshal cached data")
+		} else {
 			c.JSON(http.StatusOK, config)
 			return
 		}
@@ -206,7 +209,10 @@ func (h *ExchangeHandler) GetSupportedExchanges(c *gin.Context) {
 	cachedData, err := h.redisClient.Get(ctx, cacheKey).Result()
 	if err == nil {
 		var exchanges []string
-		if err := json.Unmarshal([]byte(cachedData), &exchanges); err == nil {
+		if err := json.Unmarshal([]byte(cachedData), &exchanges); err != nil {
+			// Log the error but continue to fetch fresh data
+			c.Header("X-Cache-Error", "Failed to unmarshal cached data")
+		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"exchanges": exchanges,
 				"count":     len(exchanges),

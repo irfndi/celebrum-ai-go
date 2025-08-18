@@ -4,10 +4,11 @@
 BEGIN;
 
 -- Add blacklist-related columns to the existing exchange_trading_pairs table
+-- Fixed: Use VARCHAR(20) for base_currency and quote_currency to match schema consistency
 ALTER TABLE exchange_trading_pairs 
     ADD COLUMN IF NOT EXISTS symbol VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS base_currency VARCHAR(10),
-    ADD COLUMN IF NOT EXISTS quote_currency VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS base_currency VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS quote_currency VARCHAR(20),
     ADD COLUMN IF NOT EXISTS is_blacklisted BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS blacklist_reason TEXT,
     ADD COLUMN IF NOT EXISTS blacklisted_at TIMESTAMP WITH TIME ZONE,
@@ -116,17 +117,38 @@ JOIN exchanges e ON etp.exchange_id = e.id
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_blacklisted = true;
 
+-- Create blacklist configuration table
+CREATE TABLE IF NOT EXISTS blacklist_config (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    error_threshold INTEGER DEFAULT 10,
+    blacklist_duration INTERVAL DEFAULT '1 hour',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT single_config_row CHECK (id = 1)
+);
+
+-- Insert default configuration
+INSERT INTO blacklist_config (id, error_threshold, blacklist_duration)
+VALUES (1, 10, '1 hour'::INTERVAL)
+ON CONFLICT (id) DO NOTHING;
+
 -- Function to automatically blacklist trading pairs with high error counts
 CREATE OR REPLACE FUNCTION auto_blacklist_high_error_pairs()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_error_threshold INTEGER;
+    v_blacklist_duration INTERVAL;
 BEGIN
-    -- Auto-blacklist if error count reaches 10 or more
-    IF NEW.error_count >= 10 AND OLD.is_blacklisted = false THEN
+    -- Get configurable thresholds
+    SELECT error_threshold, blacklist_duration
+    INTO v_error_threshold, v_blacklist_duration
+    FROM blacklist_config WHERE id = 1;
+    
+    -- Auto-blacklist if error count reaches threshold
+    IF NEW.error_count >= v_error_threshold AND OLD.is_blacklisted = false THEN
         NEW.is_blacklisted = true;
         NEW.blacklist_reason = 'Auto-blacklisted due to high error count (' || NEW.error_count || ')';
         NEW.blacklisted_at = NOW();
-        -- Blacklist for 1 hour
-        NEW.blacklisted_until = NOW() + INTERVAL '1 hour';
+        NEW.blacklisted_until = NOW() + v_blacklist_duration;
     END IF;
     
     -- Auto-unblacklist if blacklist period has expired

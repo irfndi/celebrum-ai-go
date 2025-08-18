@@ -156,6 +156,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
+        TEST_REDIS_ADDR: localhost:6379
           RUN_TESTS: true
           RUN_SECURITY_SCAN: true
           RUN_PERFORMANCE_TEST: false

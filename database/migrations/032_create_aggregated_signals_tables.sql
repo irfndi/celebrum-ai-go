@@ -196,7 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_aggregated_signals_metadata_gin ON aggregated_sig
 CREATE INDEX IF NOT EXISTS idx_aggregated_signals_exchanges_gin ON aggregated_signals USING GIN(exchanges);
 
 -- Create partial index for recent signals
-CREATE INDEX IF NOT EXISTS idx_aggregated_signals_recent ON aggregated_signals(created_at DESC, quality_score DESC) 
+CREATE INDEX IF NOT EXISTS idx_aggregated_signals_recent ON aggregated_signals(created_at DESC) 
     WHERE created_at >= NOW() - INTERVAL '1 hour';
 
 -- Create function for batch signal cleanup with logging

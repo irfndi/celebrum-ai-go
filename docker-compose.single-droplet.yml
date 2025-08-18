@@ -42,7 +42,7 @@ services:
     volumes:
       - ./scripts:/scripts
       - ./database/migrations:/database/migrations
-    command: ["bash", "/scripts/robust-migrate.sh"]
+    command: ["bash", "/scripts/simple-migrate.sh"]
     depends_on:
       postgres:
         condition: service_healthy

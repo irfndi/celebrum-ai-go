@@ -37,19 +37,22 @@ log_error() {
 migration_applied() {
     local migration_name="$1"
     
-    # Check if migrations table exists
-    if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q migrations; then
+    # Check if schema_migrations table exists
+    if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q schema_migrations; then
         return 1
     fi
     
     # Check if migration has been applied
-    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 FROM migrations WHERE filename = '$migration_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+        -c "SELECT 1 FROM schema_migrations WHERE filename = \$1 AND applied = true" \
+        -v migration_name="$migration_name" -t -A 2>/dev/null | grep -q 1
 }
 
 # Function to apply migration
 apply_migration() {
     local migration_file="$1"
-    local migration_name=$(basename "$migration_file")
+    local migration_name
+    migration_name=$(basename "$migration_file")
     
     if migration_applied "$migration_name"; then
         log_warn "Migration $migration_name already applied, skipping"
@@ -62,21 +65,20 @@ apply_migration() {
     if PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$migration_file"; then
         log "Successfully applied migration: $migration_name"
         
-        # Record migration in migrations table
-        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-            INSERT INTO migrations (filename, applied) VALUES ('$migration_name', true)
-            ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()
-        "
+        # Record migration in schema_migrations table
+        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+            -v migration_name="$migration_name" \
+            -c "INSERT INTO schema_migrations (filename, applied) VALUES (:'migration_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
     else
         log_error "Failed to apply migration: $migration_name"
         exit 1
     fi
 }
 
-# Function to create migrations table if it doesn't exist
+# Function to create schema_migrations table if it doesn't exist
 create_migrations_table() {
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-        CREATE TABLE IF NOT EXISTS migrations (
+        CREATE TABLE IF NOT EXISTS schema_migrations (
             id SERIAL PRIMARY KEY,
             filename VARCHAR(255) UNIQUE NOT NULL,
             applied BOOLEAN DEFAULT false,
@@ -89,7 +91,8 @@ create_migrations_table() {
 list_migrations() {
     log "Available migrations:"
     ls -1 "$MIGRATIONS_DIR"/*.sql | sort -V | while read -r file; do
-        local filename=$(basename "$file")
+        local filename
+        filename=$(basename "$file")
         if migration_applied "$filename"; then
             echo "  ✓ $filename (applied)"
         else
@@ -101,15 +104,15 @@ list_migrations() {
 # Function to show migration status
 show_status() {
     log "Migration status:"
-    if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q migrations; then
-        log_warn "Migrations table does not exist"
+    if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q schema_migrations; then
+        log_warn "Schema migrations table does not exist"
         list_migrations
         return
     fi
     
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         SELECT filename, applied, applied_at 
-        FROM migrations 
+        FROM schema_migrations 
         ORDER BY applied_at DESC, filename
     "
 }
@@ -117,12 +120,19 @@ show_status() {
 # Function to run specific migration
 run_specific_migration() {
     local migration_number="$1"
-    local migration_file="$MIGRATIONS_DIR/${migration_number}_*.sql"
+    local migration_files=("$MIGRATIONS_DIR"/${migration_number}_*.sql)
     
-    if [ ! -f "$migration_file" ]; then
-        log_error "Migration file not found: $migration_file"
+    if [ ${#migration_files[@]} -eq 0 ] || [ ! -f "${migration_files[0]}" ]; then
+        log_error "Migration file not found for number: $migration_number"
         exit 1
     fi
+    
+    if [ ${#migration_files[@]} -gt 1 ]; then
+        log_error "Multiple migration files found for number: $migration_number"
+        exit 1
+    fi
+    
+    local migration_file="${migration_files[0]}"
     
     create_migrations_table
     apply_migration "$migration_file"
@@ -143,13 +153,21 @@ run_all_migrations() {
 # Function to rollback migration
 rollback_migration() {
     local migration_number="$1"
-    local migration_file="$MIGRATIONS_DIR/${migration_number}_*.sql"
-    local migration_name=$(basename "$migration_file")
+    local migration_files=("$MIGRATIONS_DIR"/${migration_number}_*.sql)
     
-    if [ ! -f "$migration_file" ]; then
-        log_error "Migration file not found: $migration_file"
+    if [ ${#migration_files[@]} -eq 0 ] || [ ! -f "${migration_files[0]}" ]; then
+        log_error "Migration file not found for number: $migration_number"
         exit 1
     fi
+    
+    if [ ${#migration_files[@]} -gt 1 ]; then
+        log_error "Multiple migration files found for number: $migration_number"
+        exit 1
+    fi
+    
+    local migration_file="${migration_files[0]}"
+    local migration_name
+    migration_name=$(basename "$migration_file")
     
     log "Rolling back migration: $migration_name"
     
@@ -157,10 +175,10 @@ rollback_migration() {
     log_warn "Rollback functionality requires specific rollback scripts"
     log "Consider creating rollback scripts for complex migrations"
     
-    # Remove migration record
-    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-        DELETE FROM migrations WHERE filename = '$migration_name'
-    "
+    # Remove migration record (using parameterized query to prevent SQL injection)
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+        -c "DELETE FROM schema_migrations WHERE filename = \$1" \
+        "$migration_name"
     
     log "Migration record removed: $migration_name"
 }

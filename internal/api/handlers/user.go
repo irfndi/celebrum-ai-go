@@ -393,11 +393,6 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 		return &user, nil
 	}
 
-	// Return error if database is not available
-	if h.db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
-
 	cacheKey := fmt.Sprintf("user:id:%s", userID)
 
 	// Try to get from Redis cache first
@@ -412,7 +407,12 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 		}
 	}
 
-	// Cache miss or Redis unavailable, query database
+	// Cache miss or Redis unavailable, check database availability
+	if h.db == nil || h.db.Pool == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	// Query database
 	var user models.User
 	query := `
 		SELECT id, email, password_hash, telegram_chat_id, 
@@ -474,11 +474,6 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 		return &user, nil
 	}
 
-	// Return error if database is not available
-	if h.db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
-
 	cacheKey := fmt.Sprintf("user:telegram:%s", chatID)
 
 	// Try to get from Redis cache first
@@ -493,7 +488,12 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 		}
 	}
 
-	// Cache miss or Redis unavailable, query database
+	// Cache miss or Redis unavailable, check database availability
+	if h.db == nil || h.db.Pool == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	// Query database
 	var user models.User
 	query := `
 		SELECT id, email, password_hash, telegram_chat_id, 
@@ -554,7 +554,7 @@ func (h *UserHandler) CreateTelegramUser(ctx context.Context, chatID string, use
 		}
 	} else {
 		// Return error if database is not available
-		if h.db == nil {
+		if h.db == nil || h.db.Pool == nil {
 			return nil, fmt.Errorf("database not available")
 		}
 

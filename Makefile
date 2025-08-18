@@ -248,11 +248,8 @@ migrate-list: ## List available database migrations
 
 migrate-docker: ## Run migrations in Docker environment
 	@echo "$(GREEN)Running migrations in Docker...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) exec postgres psql -U celebrum_ai -d celebrum_ai -c "CREATE TABLE IF NOT EXISTS migrations (id SERIAL PRIMARY KEY, filename VARCHAR(255) UNIQUE NOT NULL, applied BOOLEAN DEFAULT false, applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW())"
-	@for file in $$(ls database/migrations/*.sql | sort -V); do \
-		echo "$(GREEN)Applying $$file...$(NC)"; \
-		docker compose -f $(DOCKER_COMPOSE_FILE) exec -T postgres psql -U celebrum_ai -d celebrum_ai -f "/database/migrations/$$(basename $$file)"; \
-	done
+	@echo "$(YELLOW)Using secure migration script...$(NC)"
+	docker compose -f $(DOCKER_COMPOSE_FILE) exec app ./scripts/migrate-optimized.sh migrate
 
 .PHONY: auto-migrate dev-up prod-up
 

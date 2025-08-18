@@ -24,7 +24,29 @@ import type {
 
 // Load environment variables
 const PORT = process.env.PORT || 3001;
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'admin-secret-key-change-me';
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+
+// SECURITY: Validate ADMIN_API_KEY is set and not using default insecure value
+if (!ADMIN_API_KEY) {
+  console.error('ADMIN_API_KEY environment variable must be set');
+  process.exit(1);
+}
+
+if (ADMIN_API_KEY === 'admin-secret-key-change-me' || ADMIN_API_KEY === 'admin-dev-key-change-in-production') {
+  console.error('ADMIN_API_KEY cannot use default/example values. Please set a secure API key.');
+  process.exit(1);
+}
+
+if (ADMIN_API_KEY.length < 32) {
+  console.error('ADMIN_API_KEY must be at least 32 characters long for security');
+  process.exit(1);
+}
+
+if (false) { // This condition will never be true, keeping original structure
+  console.error('ERROR: ADMIN_API_KEY environment variable must be set with a secure value');
+  console.error('Do not use the default value "admin-secret-key-change-me" in production');
+  process.exit(1);
+}
 
 // Initialize Hono app
 const app = new Hono();
@@ -571,75 +593,7 @@ app.get('/api/funding-rates/:exchange',
   }
 );
 
-// Get funding rate for a specific symbol on an exchange
-app.get('/api/funding-rate/:exchange/:symbol', async (c) => {
-  try {
-    const exchange = c.req.param('exchange');
-    const symbol = c.req.param('symbol');
-    
-    if (!exchanges[exchange]) {
-      const errorResponse: ErrorResponse = {
-        error: 'Exchange not supported',
-        timestamp: new Date().toISOString()
-      };
-      return c.json(errorResponse, 400);
-    }
 
-    // Check if exchange supports funding rates
-    if (!exchanges[exchange].has['fetchFundingRates'] && !exchanges[exchange].has['fetchFundingRate']) {
-      const errorResponse: ErrorResponse = {
-        error: 'Exchange does not support funding rates',
-        timestamp: new Date().toISOString()
-      };
-      return c.json(errorResponse, 400);
-    }
-
-    let fundingRate;
-    try {
-      if (exchanges[exchange].has['fetchFundingRate']) {
-        fundingRate = await exchanges[exchange].fetchFundingRate(symbol);
-      } else {
-        // Fallback to fetchFundingRates with single symbol
-        const rates = await exchanges[exchange].fetchFundingRates([symbol]);
-        fundingRate = rates[symbol];
-      }
-      
-      if (!fundingRate) {
-        const errorResponse: ErrorResponse = {
-          error: `No funding rate found for symbol ${symbol}`,
-          timestamp: new Date().toISOString()
-        };
-        return c.json(errorResponse, 404);
-      }
-
-      const response = {
-        exchange,
-        symbol: fundingRate.symbol || symbol,
-        fundingRate: fundingRate.fundingRate || 0,
-        fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
-        nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
-        markPrice: fundingRate.markPrice || 0,
-        indexPrice: fundingRate.indexPrice || 0,
-        timestamp: fundingRate.timestamp || Date.now()
-      };
-      
-      return c.json(response);
-    } catch (error) {
-      const errorResponse: ErrorResponse = {
-        error: `Failed to fetch funding rate for ${symbol} on ${exchange}`,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
-      };
-      return c.json(errorResponse, 500);
-    }
-  } catch (error) {
-    const errorResponse: ErrorResponse = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    };
-    return c.json(errorResponse, 500);
-  }
-});
 
 // Exchange management endpoints
 
@@ -725,7 +679,7 @@ app.get('/api/admin/exchanges/config', adminAuth, async (c) => {
   return c.json({
     config: exchangeConfig,
     activeExchanges: Object.keys(exchanges),
-    availableExchanges: Object.keys(ccxt.exchanges),
+    availableExchanges: ccxt.exchanges,
     timestamp: new Date().toISOString()
   });
 });
@@ -776,10 +730,10 @@ app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
     const exchange = c.req.param('exchange');
     
     // Check if exchange is available in CCXT
-    if (!ccxt.exchanges[exchange]) {
+    if (!ccxt.exchanges.includes(exchange)) {
       const errorResponse: ErrorResponse = {
         error: `Exchange ${exchange} is not available in CCXT library`,
-        availableExchanges: Object.keys(ccxt.exchanges),
+        availableExchanges: ccxt.exchanges,
         timestamp: new Date().toISOString()
       };
       return c.json(errorResponse, 400);
@@ -795,22 +749,20 @@ app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
     }
     
     // Try to initialize the exchange
-    try {
-      await initializeExchange(exchange);
-      
-      return c.json({
-        message: `Exchange ${exchange} added successfully`,
-        activeExchanges: Object.keys(exchanges),
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
+    const success = initializeExchange(exchange);
+    if (!success) {
       const errorResponse: ErrorResponse = {
         error: `Failed to initialize exchange ${exchange}`,
-        message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       };
       return c.json(errorResponse, 500);
     }
+    
+    return c.json({
+      message: `Exchange ${exchange} added successfully`,
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     const errorResponse: ErrorResponse = {
       error: error instanceof Error ? error.message : 'Unknown error',

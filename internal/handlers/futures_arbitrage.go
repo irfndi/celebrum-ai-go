@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/irfndi/celebrum-ai-go/internal/logging"
+	"github.com/irfndi/celebrum-ai-go/internal/metrics"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/internal/utils"
@@ -27,21 +29,32 @@ type DBQuerier interface {
 type FuturesArbitrageHandler struct {
 	db         DBQuerier
 	calculator *services.FuturesArbitrageCalculator
+	metrics    *metrics.MetricsCollector
 }
 
 // NewFuturesArbitrageHandler creates a new futures arbitrage handler
 func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
+	// Initialize logger and metrics collector
+	logger := logging.NewStandardLogger("info", "production")
+	metricsCollector := metrics.NewMetricsCollector(logger, "futures-arbitrage")
+	
 	return &FuturesArbitrageHandler{
 		db:         db,
 		calculator: services.NewFuturesArbitrageCalculator(),
+		metrics:    metricsCollector,
 	}
 }
 
 // NewFuturesArbitrageHandlerWithQuerier creates a new futures arbitrage handler with custom querier
 func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandler {
+	// Initialize logger and metrics collector
+	logger := logging.NewStandardLogger("info", "production")
+	metricsCollector := metrics.NewMetricsCollector(logger, "futures-arbitrage")
+	
 	return &FuturesArbitrageHandler{
 		db:         db,
 		calculator: services.NewFuturesArbitrageCalculator(),
+		metrics:    metricsCollector,
 	}
 }
 
@@ -315,31 +328,31 @@ func (h *FuturesArbitrageHandler) getFuturesOpportunitiesFromDB(req models.Futur
 	argIndex := 1
 
 	// Add filters
-	if len(req.Symbols) > 0 {
-		query += " AND symbol = ANY($" + strconv.Itoa(argIndex) + ")"
-		args = append(args, req.Symbols)
-		argIndex++
-	}
+    if len(req.Symbols) > 0 {
+        query += " AND symbol = ANY($" + strconv.Itoa(argIndex) + ")" // SAFE: using parameterized query
+        args = append(args, req.Symbols)
+        argIndex++
+    }
 
-	if !req.MinAPY.IsZero() {
-		query += " AND apy >= $" + strconv.Itoa(argIndex)
-		args = append(args, req.MinAPY)
-		argIndex++
-	}
+    if !req.MinAPY.IsZero() {
+        query += " AND apy >= $" + strconv.Itoa(argIndex) // SAFE: using parameterized query
+        args = append(args, req.MinAPY)
+        argIndex++
+    }
 
-	if !req.MaxRiskScore.IsZero() {
-		query += " AND risk_score <= $" + strconv.Itoa(argIndex)
-		args = append(args, req.MaxRiskScore)
-		argIndex++
-	}
+    if !req.MaxRiskScore.IsZero() {
+        query += " AND risk_score <= $" + strconv.Itoa(argIndex) // SAFE: using parameterized query
+        args = append(args, req.MaxRiskScore)
+        argIndex++
+    }
 
 	// Order by APY descending, risk score ascending
 	query += " ORDER BY apy DESC, risk_score ASC"
 
 	// Add pagination
-	offset := (req.Page - 1) * req.Limit
-	query += " LIMIT $" + strconv.Itoa(argIndex) + " OFFSET $" + strconv.Itoa(argIndex+1)
-	args = append(args, req.Limit, offset)
+    offset := (req.Page - 1) * req.Limit
+    query += " LIMIT $" + strconv.Itoa(argIndex) + " OFFSET $" + strconv.Itoa(argIndex+1) // SAFE: using parameterized query
+    args = append(args, req.Limit, offset)
 
 	// Execute query
 	rows, err := h.db.Query(context.Background(), query, args...)
@@ -454,8 +467,72 @@ func (h *FuturesArbitrageHandler) getFundingRateHistory(symbol, longExchange, sh
 }
 
 func (h *FuturesArbitrageHandler) storeFuturesOpportunity(opportunity *models.FuturesArbitrageOpportunity, riskMetrics *models.FuturesArbitrageRiskMetrics) error {
-	// Store opportunity in database
-	// This would be a full implementation with proper error handling
+	startTime := time.Now()
+	
+	// Insert opportunity into database
+	query := `
+		INSERT INTO futures_arbitrage_opportunities (
+			symbol, base_currency, quote_currency,
+			long_exchange, short_exchange, long_exchange_id, short_exchange_id,
+			long_funding_rate, short_funding_rate, net_funding_rate, funding_interval,
+			long_mark_price, short_mark_price, price_difference, price_difference_percentage,
+			hourly_rate, daily_rate, apy,
+			estimated_profit_8h, estimated_profit_daily, estimated_profit_weekly, estimated_profit_monthly,
+			risk_score, volatility_score, liquidity_score,
+			recommended_position_size, max_leverage, recommended_leverage, stop_loss_percentage,
+			min_position_size, max_position_size, optimal_position_size,
+			detected_at, expires_at, next_funding_time, time_to_next_funding, is_active,
+			market_trend, volume_24h, open_interest
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			$16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
+			$29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39
+		) RETURNING id`
+	
+	var opportunityID string
+	err := h.db.QueryRow(context.Background(), query,
+		opportunity.Symbol, opportunity.BaseCurrency, opportunity.QuoteCurrency,
+		opportunity.LongExchange, opportunity.ShortExchange, opportunity.LongExchangeID, opportunity.ShortExchangeID,
+		opportunity.LongFundingRate, opportunity.ShortFundingRate, opportunity.NetFundingRate, opportunity.FundingInterval,
+		opportunity.LongMarkPrice, opportunity.ShortMarkPrice, opportunity.PriceDifference, opportunity.PriceDifferencePercentage,
+		opportunity.HourlyRate, opportunity.DailyRate, opportunity.APY,
+		opportunity.EstimatedProfit8h, opportunity.EstimatedProfitDaily, opportunity.EstimatedProfitWeekly, opportunity.EstimatedProfitMonthly,
+		opportunity.RiskScore, opportunity.VolatilityScore, opportunity.LiquidityScore,
+		opportunity.RecommendedPositionSize, opportunity.MaxLeverage, opportunity.RecommendedLeverage, opportunity.StopLossPercentage,
+		opportunity.MinPositionSize, opportunity.MaxPositionSize, opportunity.OptimalPositionSize,
+		opportunity.DetectedAt, opportunity.ExpiresAt, opportunity.NextFundingTime, opportunity.TimeToNextFunding, opportunity.IsActive,
+		opportunity.MarketTrend, opportunity.Volume24h, opportunity.OpenInterest,
+	).Scan(&opportunityID)
+	
+	duration := time.Since(startTime)
+	
+	if err != nil {
+		// Record storage failure metrics as suggested in fix.txt
+		h.metrics.RecordCounter("storage_failures_total", 1, map[string]string{
+			"operation": "futures_opportunity",
+			"table":     "futures_arbitrage_opportunities",
+			"error_type": "insert_failed",
+		})
+		
+		// Record database operation metrics
+		h.metrics.RecordDatabaseMetrics("insert", "futures_arbitrage_opportunities", duration, 0, false)
+		
+		return err
+	}
+	
+	// Record successful storage metrics
+	h.metrics.RecordCounter("storage_operations_total", 1, map[string]string{
+		"operation": "futures_opportunity",
+		"table":     "futures_arbitrage_opportunities",
+		"status":    "success",
+	})
+	
+	// Record database operation metrics
+	h.metrics.RecordDatabaseMetrics("insert", "futures_arbitrage_opportunities", duration, 1, true)
+	
+	// Update opportunity ID
+	opportunity.ID = opportunityID
+	
 	return nil
 }
 

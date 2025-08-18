@@ -12,28 +12,23 @@ import (
 
 func TestNewAdminMiddleware(t *testing.T) {
 	t.Run("with environment variable", func(t *testing.T) {
-		// Set environment variable
-		_ = os.Setenv("ADMIN_API_KEY", "test-admin-key")
+		// Set environment variable with secure 32+ character key
+		_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
-		assert.Equal(t, "test-admin-key", am.apiKey)
+		assert.Equal(t, "test-admin-key-32-chars-minimum-length", am.apiKey)
 	})
 
-	t.Run("without environment variable", func(t *testing.T) {
-		// Ensure environment variable is not set
-		_ = os.Unsetenv("ADMIN_API_KEY")
-
-		am := NewAdminMiddleware()
-		assert.NotNil(t, am)
-		assert.Equal(t, "admin-dev-key-change-in-production", am.apiKey)
-	})
+	// Note: Removed test for missing environment variable since log.Fatal() 
+	// calls os.Exit() which cannot be tested with assert.Panics()
+	// In production, missing ADMIN_API_KEY will cause the application to exit
 }
 
 func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
-	// Set up test environment
-	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key")
+	// Set up test environment with secure 32+ character key
+	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 	defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
 
 	am := NewAdminMiddleware()
@@ -52,7 +47,7 @@ func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 	t.Run("valid API key in Authorization header", func(t *testing.T) {
 		router := createTestRouter()
 		req := httptest.NewRequest("GET", "/admin/test", nil)
-		req.Header.Set("Authorization", "Bearer test-admin-key")
+		req.Header.Set("Authorization", "Bearer test-admin-key-32-chars-minimum-length")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
@@ -64,7 +59,7 @@ func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 	t.Run("valid API key in X-API-Key header", func(t *testing.T) {
 		router := createTestRouter()
 		req := httptest.NewRequest("GET", "/admin/test", nil)
-		req.Header.Set("X-API-Key", "test-admin-key")
+		req.Header.Set("X-API-Key", "test-admin-key-32-chars-minimum-length")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
@@ -73,15 +68,16 @@ func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "admin access granted")
 	})
 
-	t.Run("valid API key in query parameter", func(t *testing.T) {
+	t.Run("API key in query parameter (should be rejected for security)", func(t *testing.T) {
 		router := createTestRouter()
-		req := httptest.NewRequest("GET", "/admin/test?api_key=test-admin-key", nil)
+		req := httptest.NewRequest("GET", "/admin/test?api_key=test-admin-key-32-chars-minimum-length", nil)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "admin access granted")
+		// Query parameter authentication is disabled for security
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "Unauthorized")
 	})
 
 	t.Run("missing API key", func(t *testing.T) {
@@ -141,26 +137,27 @@ func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "Unauthorized")
 	})
 
-	t.Run("invalid API key in query parameter", func(t *testing.T) {
+	t.Run("invalid API key in query parameter (should be rejected for security)", func(t *testing.T) {
 		router := createTestRouter()
 		req := httptest.NewRequest("GET", "/admin/test?api_key=invalid-key", nil)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
+		// Query parameter authentication is disabled for security
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.Contains(t, w.Body.String(), "Unauthorized")
 	})
 }
 
 func TestAdminMiddleware_ValidateAdminKey(t *testing.T) {
-	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key")
+	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 	defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
 
 	am := NewAdminMiddleware()
 
 	t.Run("valid key", func(t *testing.T) {
-		assert.True(t, am.ValidateAdminKey("test-admin-key"))
+		assert.True(t, am.ValidateAdminKey("test-admin-key-32-chars-minimum-length"))
 	})
 
 	t.Run("invalid key", func(t *testing.T) {

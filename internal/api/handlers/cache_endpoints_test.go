@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfndi/celebrum-ai-go/internal/testutil"
 )
 
 // TestCacheEndpointsIntegration tests the cache endpoints with real CacheAnalyticsService
 func TestCacheEndpointsIntegration(t *testing.T) {
 	// Setup
-	mockRedisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	mockRedisClient := testutil.GetTestRedisClient()
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
 	cacheHandler := NewCacheHandler(cacheAnalytics)
 
@@ -218,7 +218,7 @@ func TestCacheEndpointsIntegration(t *testing.T) {
 // TestCacheEndpointsWithRealData tests cache endpoints with actual market data operations
 func TestCacheEndpointsWithRealData(t *testing.T) {
 	// Setup
-	mockRedisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	mockRedisClient := testutil.GetTestRedisClient()
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
 	cacheHandler := NewCacheHandler(cacheAnalytics)
 

@@ -41,7 +41,7 @@ services:
     volumes:
       - ./scripts:/scripts
       - ./database/migrations:/database/migrations
-    command: ["bash", "/scripts/robust-migrate.sh"]
+    command: ["bash", "/scripts/simple-migrate.sh"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,8 +55,8 @@ services:
     image: redis:7-alpine
     container_name: celebrum-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # SECURITY: Removed host port mapping to prevent external Redis access
+    # Redis is only accessible within the Docker network
     volumes:
       - redis_data:/data
       - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro

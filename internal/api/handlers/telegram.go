@@ -206,7 +206,7 @@ func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID
 	cachedOpportunities, err := h.getCachedTelegramOpportunities(ctx)
 	if err == nil && cachedOpportunities != nil {
 		// Check if we have actual opportunities data
-		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) >= 0 {
+		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) > 0 {
 			log.Printf("Using cached opportunities for Telegram user %d", userID)
 			return h.sendOpportunitiesMessage(ctx, chatID, cachedOpportunities)
 		}

@@ -6,9 +6,9 @@
 -- Create futures arbitrage opportunities table
 CREATE TABLE IF NOT EXISTS futures_arbitrage_opportunities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    symbol VARCHAR(20) NOT NULL,
-    base_currency VARCHAR(10) NOT NULL,
-    quote_currency VARCHAR(10) NOT NULL,
+    symbol VARCHAR(50) NOT NULL,
+    base_currency VARCHAR(20) NOT NULL,
+    quote_currency VARCHAR(20) NOT NULL,
     
     -- Exchange information
     long_exchange VARCHAR(50) NOT NULL,
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS futures_arbitrage_strategies (
 -- Create funding rate history table for risk analysis
 CREATE TABLE IF NOT EXISTS funding_rate_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    symbol VARCHAR(20) NOT NULL,
+    symbol VARCHAR(50) NOT NULL,
     exchange VARCHAR(50) NOT NULL,
     funding_rate DECIMAL(10, 8) NOT NULL,
     funding_time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -339,5 +339,5 @@ ON CONFLICT (config_key) DO UPDATE SET
     updated_at = NOW();
 
 -- Migration completion
-INSERT INTO schema_migrations (filename, applied) VALUES ('035_create_futures_arbitrage_tables.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
+INSERT INTO schema_migrations (version, dirty) VALUES (43, false)
+ON CONFLICT (version) DO UPDATE SET dirty = false;

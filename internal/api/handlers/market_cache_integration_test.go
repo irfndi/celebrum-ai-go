@@ -7,14 +7,14 @@ import (
 
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/redis/go-redis/v9"
+	"github.com/irfndi/celebrum-ai-go/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheIntegrationProblem(t *testing.T) {
 	// Setup
 	mockCCXT := &MockCCXTService{}
-	mockRedisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	mockRedisClient := testutil.GetTestRedisClient()
 	mockRedis := &database.RedisClient{Client: mockRedisClient}
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
 
@@ -43,7 +43,7 @@ func TestCacheIntegrationProblem(t *testing.T) {
 func TestCacheAnalyticsIntegration(t *testing.T) {
 	// Setup
 	mockCCXT := &MockCCXTService{}
-	mockRedisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	mockRedisClient := testutil.GetTestRedisClient()
 	mockRedis := &database.RedisClient{Client: mockRedisClient}
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
 
@@ -108,7 +108,7 @@ func TestCacheAnalyticsIntegration(t *testing.T) {
 
 // TestCacheAnalyticsCategories tests that different cache categories are properly tracked
 func TestCacheAnalyticsCategories(t *testing.T) {
-	mockRedisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	mockRedisClient := testutil.GetTestRedisClient()
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
 
 	// Test different categories

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfndi/celebrum-ai-go/internal/testutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/redis/go-redis/v9"
@@ -25,11 +26,9 @@ import (
 // setupTestRedis creates a Redis client for testing
 func setupTestRedis(t *testing.T) *redis.Client {
 	// Use Redis database 15 for testing to avoid conflicts
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       15,
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 15 // Override to use test database
+	client := redis.NewClient(options)
 
 	// Test the connection
 	ctx := context.Background()

@@ -155,10 +155,14 @@ func (c *RedisSymbolCache) Clear() error {
 	ctx := context.Background()
 	pattern := c.prefix + "*"
 
-	// Get all keys matching the pattern
-	keys, err := c.redis.Keys(ctx, pattern).Result()
-	if err != nil {
-		return fmt.Errorf("error getting cache keys: %w", err)
+	// Get all keys matching the pattern using SCAN for better performance
+	var keys []string
+	iter := c.redis.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("error scanning cache keys: %w", err)
 	}
 
 	if len(keys) == 0 {
@@ -166,8 +170,7 @@ func (c *RedisSymbolCache) Clear() error {
 	}
 
 	// Delete all matching keys
-	err = c.redis.Del(ctx, keys...).Err()
-	if err != nil {
+	if err := c.redis.Del(ctx, keys...).Err(); err != nil {
 		return fmt.Errorf("error clearing cache: %w", err)
 	}
 
@@ -180,10 +183,14 @@ func (c *RedisSymbolCache) GetCachedExchanges() ([]string, error) {
 	ctx := context.Background()
 	pattern := c.prefix + "*"
 
-	// Get all keys matching the pattern
-	keys, err := c.redis.Keys(ctx, pattern).Result()
-	if err != nil {
-		return nil, fmt.Errorf("error getting cache keys: %w", err)
+	// Get all keys matching the pattern using SCAN for better performance
+	var keys []string
+	iter := c.redis.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("error scanning cache keys: %w", err)
 	}
 
 	// Extract exchange IDs from keys

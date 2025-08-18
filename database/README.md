@@ -67,7 +67,7 @@ To run migrations in Docker environment:
 docker-compose exec postgres psql -U celebrum_ai -d celebrum_ai -f /database/migrations/004_enhanced_initial_schema.sql
 
 # Using direct docker
-docker exec celebrum-postgres psql -U celebrum_ai -d celebrum_ai -f /database/migrations/004_enhanced_initial_schema.sql
+docker exec celebrum-migrate psql -U celebrum_ai -d celebrum_ai -f /database/migrations/004_enhanced_initial_schema.sql
 ```
 
 ## Creating New Migrations

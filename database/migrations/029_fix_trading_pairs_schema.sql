@@ -42,12 +42,13 @@ BEGIN
         ALTER TABLE technical_indicators DROP CONSTRAINT IF EXISTS technical_indicators_trading_pair_id_fkey;
         
         -- Create a new temporary table with the correct structure
+        -- Fixed: Use VARCHAR(20) for base_currency and quote_currency to match schema consistency
         CREATE TABLE trading_pairs_new (
             id SERIAL PRIMARY KEY,
             exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
             symbol VARCHAR(50) NOT NULL,
-            base_currency VARCHAR(10) NOT NULL,
-            quote_currency VARCHAR(10) NOT NULL,
+            base_currency VARCHAR(20) NOT NULL,
+            quote_currency VARCHAR(20) NOT NULL,
             is_active BOOLEAN DEFAULT true,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

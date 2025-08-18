@@ -97,16 +97,16 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 		return nil, false
 	}
 
-	sc.stats.Hits++
-
-	// During runtime, always return cached symbols even if expired to prevent API calls
-	// Only check expiration during startup phase
+	// Check if entry has expired
 	if time.Now().After(entry.ExpiresAt) {
-		// Log that cache is expired but still returning cached data
-		log.Printf("Cache HIT (expired) for %s but returning cached symbols to prevent runtime API calls (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
-	} else {
-		log.Printf("Cache HIT for %s (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
+		// Entry expired, treat as cache miss
+		sc.stats.Misses++
+		log.Printf("Cache MISS (expired) for %s (total hits: %d, misses: %d)", exchangeID, sc.stats.Hits, sc.stats.Misses)
+		return nil, false
 	}
+
+	sc.stats.Hits++
+	log.Printf("Cache HIT for %s (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
 
 	return entry.Symbols, true
 }
@@ -1508,6 +1508,7 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 }
 
 // parseSymbol parses a trading symbol into base and quote currencies
+// Improved version with more robust parsing logic to handle various symbol formats
 func (c *CollectorService) parseSymbol(symbol string) (string, string) {
 	// Handle common separators
 	if strings.Contains(symbol, "/") {
@@ -1519,17 +1520,43 @@ func (c *CollectorService) parseSymbol(symbol string) (string, string) {
 		}
 	}
 
+	// Handle symbols with underscores (some exchanges use this format)
+	if strings.Contains(symbol, "_") {
+		parts := strings.Split(symbol, "_")
+		if len(parts) >= 2 {
+			return parts[0], parts[1]
+		}
+	}
+
+	// Handle symbols with dashes (some exchanges use this format)
+	if strings.Contains(symbol, "-") && !c.isOptionsContract(symbol) {
+		parts := strings.Split(symbol, "-")
+		if len(parts) >= 2 {
+			return parts[0], parts[1]
+		}
+	}
+
 	// Handle symbols without separators (like BTCUSDT)
-	commonQuotes := []string{"USDT", "USDC", "BTC", "ETH", "BNB", "USD", "EUR", "GBP"}
+	// Order matters: longer quotes first to avoid incorrect parsing
+	commonQuotes := []string{
+		"USDT", "USDC", "BUSD", "TUSD", "FDUSD", // Stablecoins
+		"BTC", "ETH", "BNB", "ADA", "DOT", "SOL", // Major cryptos
+		"USD", "EUR", "GBP", "JPY", "AUD", "CAD", // Fiat currencies
+		"DOGE", "SHIB", "MATIC", "AVAX", "LINK", // Other popular cryptos
+	}
+	
 	for _, quote := range commonQuotes {
 		if strings.HasSuffix(symbol, quote) {
 			base := strings.TrimSuffix(symbol, quote)
-			if len(base) > 0 {
+			// Ensure base currency is not empty and reasonable length
+			if len(base) > 0 && len(base) <= 20 {
 				return base, quote
 			}
 		}
 	}
 
+	// Last resort: if no pattern matches, return empty strings
+	// This prevents incorrect parsing that could cause data corruption
 	return "", ""
 }
 
@@ -1564,8 +1591,9 @@ func (c *CollectorService) isOptionsContract(symbol string) bool {
 
 // isInvalidSymbolFormat checks for other invalid symbol formats
 func (c *CollectorService) isInvalidSymbolFormat(symbol string) bool {
-	// Skip symbols that are too long (likely derivatives)
-	if len(symbol) > 20 {
+	// Skip symbols that are too long (align with database VARCHAR(50) limit)
+	// Increased from 20 to 50 to match database schema and handle longer derivative symbols
+	if len(symbol) > 50 {
 		return true
 	}
 
@@ -1574,7 +1602,8 @@ func (c *CollectorService) isInvalidSymbolFormat(symbol string) bool {
 		return true
 	}
 
-	// Skip symbols with unusual characters that indicate derivatives
+	// Skip symbols with both underscores and dashes (likely complex derivatives)
+	// Note: We now handle single underscore or dash as valid separators
 	if strings.Contains(symbol, "_") && strings.Contains(symbol, "-") {
 		return true
 	}

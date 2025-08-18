@@ -539,7 +539,7 @@ func TestCollectorService_IsInvalidSymbolFormat(t *testing.T) {
 		},
 		{
 			name:     "too long symbol",
-			symbol:   "VERYLONGSYMBOLNAMETHATEXCEEDSLIMIT",
+			symbol:   "VERYLONGSYMBOLNAMETHATEXCEEDSLIMITANDISMORETHANFIFTYCHARACTERS",
 			expected: true,
 		},
 		{

@@ -353,8 +353,8 @@ func (h *MarketHandler) GetMarketPrices(c *gin.Context) {
 	}
 
 	// Add ordering and pagination
-	sqlQuery += " ORDER BY md.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2)
-	args = append(args, limit, offset)
+    sqlQuery += " ORDER BY md.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2) // SAFE: using parameterized query
+    args = append(args, limit, offset)
 
 	// Execute query
 	rows, err := h.db.Pool.Query(context.Background(), sqlQuery, args...)
@@ -533,6 +533,10 @@ func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 	orderBook, err := h.ccxtService.FetchOrderBook(c.Request.Context(), exchange, symbol, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order book data"})
+		return
+	}
+	if orderBook == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid order book data received"})
 		return
 	}
 

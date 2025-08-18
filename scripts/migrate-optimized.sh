@@ -355,6 +355,10 @@ apply_migration() {
         fi
     fi
     
+    # Escape variables to prevent SQL injection
+    local escaped_filename=$(printf '%s\n' "$filename" | sed "s/'/'''/g")
+    local escaped_checksum=$(printf '%s\n' "$checksum" | sed "s/'/'''/g")
+    
     # Start transaction and apply migration
     local transaction_sql="
 BEGIN;
@@ -364,7 +368,7 @@ BEGIN;
 
 -- Record migration
 INSERT INTO schema_migrations (filename, checksum, execution_time_ms) 
-VALUES ('$filename', '$checksum', 0);
+VALUES ('$escaped_filename', '$escaped_checksum', 0);
 
 COMMIT;
 "
@@ -373,8 +377,8 @@ COMMIT;
         local end_time=$(date +%s%3N)
         local execution_time=$((end_time - start_time))
         
-        # Update execution time
-        execute_sql "UPDATE schema_migrations SET execution_time_ms = $execution_time WHERE filename = '$filename';"
+        # Update execution time with escaped filename
+        execute_sql "UPDATE schema_migrations SET execution_time_ms = $execution_time WHERE filename = '$escaped_filename';"
         
         log_success "Migration applied successfully: $filename (${execution_time}ms)"
         return 0
@@ -596,7 +600,7 @@ verify_schema() {
     local missing_tables=()
     
     for table in "${critical_tables[@]}"; do
-        local exists=$(execute_sql "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '$table');" | grep -v "exists" | grep -v "^-" | grep -v "^(" | grep -v "^$" | head -1 || echo "f")
+        local exists=$(execute_sql "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = :'table_name')" -v table_name="$table" | grep -v "exists" | grep -v "^-" | grep -v "^(" | grep -v "^$" | head -1 || echo "f")
         
         if [ "$exists" != "t" ]; then
             missing_tables+=("$table")

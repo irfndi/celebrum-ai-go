@@ -219,7 +219,7 @@ make status-prod
 ssh root@your-server-ip
 
 # Navigate to your project directory
-cd /path/to/celebrum-ai-go
+cd /opt/celebrum-ai-go
 
 # Pull latest changes
 git pull origin main
@@ -231,14 +231,17 @@ git pull origin main
 #### Docker Deployment
 
 ```bash
-# Build Docker image
-make docker-build
+# Build and start all services
+docker compose up -d
 
-# Run with Docker
-make docker-run
+# Check service status
+docker compose ps
 
-# Push to registry
-make docker-push
+# View logs
+docker compose logs -f app
+
+# Stop services
+docker compose down
 ```
 
 ### Production Deployment Script

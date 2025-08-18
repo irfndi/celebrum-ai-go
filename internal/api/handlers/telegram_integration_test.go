@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-telegram/bot/models"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfndi/celebrum-ai-go/internal/testutil"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,10 +193,14 @@ func TestTelegramCacheIntegration(t *testing.T) {
 	}
 
 	// Create mock Redis client
-	mockRedis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1, // Use test database
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 1 // Use test database
+	mockRedis := redis.NewClient(options)
+	defer func() {
+		if err := mockRedis.Close(); err != nil {
+			t.Logf("Failed to close mock Redis: %v", err)
+		}
+	}()
 
 	// Test cache key generation
 	cacheKey := "telegram_opportunities"

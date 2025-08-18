@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -10,7 +11,16 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfndi/celebrum-ai-go/internal/testutil"
 )
+
+// getRedisAddr returns the Redis address from environment or default
+func getRedisAddr() string {
+	if addr := os.Getenv("TEST_REDIS_ADDR"); addr != "" {
+		return addr
+	}
+	return "localhost:6379" // fallback for local development
+}
 
 // BenchmarkCollectorService_ConcurrentSymbolFetching benchmarks the concurrent symbol fetching optimization
 func BenchmarkCollectorService_ConcurrentSymbolFetching(b *testing.B) {
@@ -19,10 +29,9 @@ func BenchmarkCollectorService_ConcurrentSymbolFetching(b *testing.B) {
 	logger.SetLevel(logrus.ErrorLevel) // Reduce noise during benchmarks
 
 	// Create mock Redis client
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1, // Use test database
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 1 // Use test database
+	rdb := redis.NewClient(options)
 
 	// Create test config
 	cfg := &config.Config{}
@@ -60,10 +69,9 @@ func BenchmarkCollectorService_BulkTickerCollection(b *testing.B) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 1
+	rdb := redis.NewClient(options)
 
 	cfg := &config.Config{}
 	collectorCfg := CollectorConfig{
@@ -101,10 +109,9 @@ func BenchmarkCollectorService_ConcurrentBackfill(b *testing.B) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 1
+	rdb := redis.NewClient(options)
 
 	cfg := &config.Config{}
 	collectorCfg := CollectorConfig{
@@ -132,10 +139,9 @@ func BenchmarkCollectorService_ConcurrentBackfill(b *testing.B) {
 
 // BenchmarkCollectorService_RedisOperations benchmarks Redis caching operations
 func BenchmarkCollectorService_RedisOperations(b *testing.B) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
+	options := testutil.GetTestRedisOptions()
+	options.DB = 1
+	rdb := redis.NewClient(options)
 
 	ctx := context.Background()
 	testData := map[string]interface{}{
@@ -265,7 +271,7 @@ func BenchmarkCollectorService_MemoryUsage(b *testing.B) {
 	logger.SetLevel(logrus.ErrorLevel)
 
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: getRedisAddr(),
 		DB:   1,
 	})
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -369,7 +370,7 @@ func TestUserAuthFlow_TokenValidation(t *testing.T) {
 		}
 
 		for i, token := range malformedTokens {
-			t.Run("malformed_"+string(rune(i+'1')), func(t *testing.T) {
+			t.Run("malformed_"+strconv.Itoa(i+1), func(t *testing.T) {
 				req := httptest.NewRequest("GET", "/protected", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
 				w := httptest.NewRecorder()

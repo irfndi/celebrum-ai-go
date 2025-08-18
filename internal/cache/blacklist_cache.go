@@ -14,10 +14,10 @@ import (
 
 // BlacklistCacheEntry represents a blacklisted symbol with metadata
 type BlacklistCacheEntry struct {
-	Symbol    string    `json:"symbol"`
-	Reason    string    `json:"reason"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	Symbol    string     `json:"symbol"`
+	Reason    string     `json:"reason"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"` // nil means no expiration
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // BlacklistCacheStats holds statistics about the blacklist cache
@@ -91,7 +91,7 @@ func (rbc *RedisBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
 	}
 
 	// Check if entry has expired
-	if time.Now().After(entry.ExpiresAt) {
+	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
 		// Remove expired entry
 		rbc.client.Del(rbc.ctx, key)
 		rbc.stats.ExpiredEntries++
@@ -111,14 +111,19 @@ func (rbc *RedisBlacklistCache) Add(symbol, reason string, ttl time.Duration) {
 	entry := BlacklistCacheEntry{
 		Symbol:    symbol,
 		Reason:    reason,
-		ExpiresAt: time.Now().Add(ttl),
 		CreatedAt: time.Now(),
+	}
+
+	// Set expiration time if TTL is provided
+	if ttl > 0 {
+		expiresAt := time.Now().Add(ttl)
+		entry.ExpiresAt = &expiresAt
 	}
 
 	// Persist to database first
 	if rbc.repo != nil {
 		ctx := context.Background()
-		_, err := rbc.repo.AddExchange(ctx, symbol, reason, &entry.ExpiresAt)
+		_, err := rbc.repo.AddExchange(ctx, symbol, reason, entry.ExpiresAt)
 		if err != nil {
 			log.Printf("Error persisting to database: %v", err)
 			// Continue with Redis cache even if database fails
@@ -181,9 +186,13 @@ func (rbc *RedisBlacklistCache) Clear() {
 	// TODO: Implement a safe clear operation in repository if needed
 
 	pattern := rbc.prefix + "*"
-	keys, err := rbc.client.Keys(rbc.ctx, pattern).Result()
-	if err != nil {
-		log.Printf("Failed to get blacklist keys: %v", err)
+	var keys []string
+	iter := rbc.client.Scan(rbc.ctx, 0, pattern, 0).Iterator()
+	for iter.Next(rbc.ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		log.Printf("Failed to scan blacklist keys: %v", err)
 		return
 	}
 
@@ -205,8 +214,12 @@ func (rbc *RedisBlacklistCache) GetStats() BlacklistCacheStats {
 
 	// Update total entries count from Redis
 	pattern := rbc.prefix + "*"
-	keys, err := rbc.client.Keys(rbc.ctx, pattern).Result()
-	if err == nil {
+	var keys []string
+	iter := rbc.client.Scan(rbc.ctx, 0, pattern, 0).Iterator()
+	for iter.Next(rbc.ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if iter.Err() == nil {
 		rbc.stats.TotalEntries = int64(len(keys))
 	}
 
@@ -252,11 +265,7 @@ func (rbc *RedisBlacklistCache) LoadFromDatabase(ctx context.Context) error {
 			Symbol:    entry.ExchangeName,
 			Reason:    entry.Reason,
 			CreatedAt: entry.CreatedAt,
-			ExpiresAt: time.Time{}, // Set to zero if no expiration
-		}
-
-		if entry.ExpiresAt != nil {
-			cacheEntry.ExpiresAt = *entry.ExpiresAt
+			ExpiresAt: entry.ExpiresAt, // Use the pointer directly
 		}
 
 		data, err := json.Marshal(cacheEntry)
@@ -293,9 +302,13 @@ func (rbc *RedisBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntry, 
 	defer rbc.mu.RUnlock()
 
 	pattern := rbc.prefix + "*"
-	keys, err := rbc.client.Keys(rbc.ctx, pattern).Result()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get blacklist keys: %w", err)
+	var keys []string
+	iter := rbc.client.Scan(rbc.ctx, 0, pattern, 0).Iterator()
+	for iter.Next(rbc.ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan blacklist keys: %w", err)
 	}
 
 	var entries []BlacklistCacheEntry
@@ -311,7 +324,7 @@ func (rbc *RedisBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntry, 
 		}
 
 		// Check if entry has expired
-		if time.Now().After(entry.ExpiresAt) {
+		if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
 			// Remove expired entry
 			rbc.client.Del(rbc.ctx, key)
 			continue
@@ -329,9 +342,13 @@ func (rbc *RedisBlacklistCache) CleanupExpired() int {
 	defer rbc.mu.Unlock()
 
 	pattern := rbc.prefix + "*"
-	keys, err := rbc.client.Keys(rbc.ctx, pattern).Result()
-	if err != nil {
-		log.Printf("Failed to get blacklist keys for cleanup: %v", err)
+	var keys []string
+	iter := rbc.client.Scan(rbc.ctx, 0, pattern, 0).Iterator()
+	for iter.Next(rbc.ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		log.Printf("Failed to scan blacklist keys for cleanup: %v", err)
 		return 0
 	}
 
@@ -348,7 +365,7 @@ func (rbc *RedisBlacklistCache) CleanupExpired() int {
 		}
 
 		// Check if entry has expired
-		if time.Now().After(entry.ExpiresAt) {
+		if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
 			rbc.client.Del(rbc.ctx, key)
 			expiredCount++
 		}
@@ -381,26 +398,39 @@ func NewInMemoryBlacklistCache() *InMemoryBlacklistCache {
 
 // IsBlacklisted checks if a symbol is blacklisted (in-memory implementation)
 func (ibc *InMemoryBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
+	// First, try with read lock for the common case
 	ibc.mu.RLock()
-	defer ibc.mu.RUnlock()
-
 	entry, exists := ibc.cache[symbol]
 	if !exists {
+		ibc.mu.RUnlock()
+		// Need write lock to update stats
+		ibc.mu.Lock()
 		ibc.stats.Misses++
+		ibc.mu.Unlock()
 		return false, ""
 	}
 
-	// Check if entry has expired (skip check for far future dates which indicate no expiration)
-	if entry.ExpiresAt.Year() < 9999 && time.Now().After(entry.ExpiresAt) {
-		// Remove expired entry
-		delete(ibc.cache, symbol)
-		ibc.stats.ExpiredEntries++
-		ibc.stats.TotalEntries--
+	// Check if entry has expired
+	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
+		ibc.mu.RUnlock()
+		// Need write lock to remove expired entry and update stats
+		ibc.mu.Lock()
+		// Double-check the entry still exists and is expired
+		if entry, exists := ibc.cache[symbol]; exists && entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
+			delete(ibc.cache, symbol)
+			ibc.stats.ExpiredEntries++
+			ibc.stats.TotalEntries--
+		}
 		ibc.stats.Misses++
+		ibc.mu.Unlock()
 		return false, ""
 	}
 
+	ibc.mu.RUnlock()
+	// Need write lock to update stats
+	ibc.mu.Lock()
 	ibc.stats.Hits++
+	ibc.mu.Unlock()
 	return true, entry.Reason
 }
 
@@ -409,20 +439,18 @@ func (ibc *InMemoryBlacklistCache) Add(symbol, reason string, ttl time.Duration)
 	ibc.mu.Lock()
 	defer ibc.mu.Unlock()
 
-	var expiresAt time.Time
-	if ttl > 0 {
-		expiresAt = time.Now().Add(ttl)
-	} else {
-		// TTL of 0 means no expiration - set to far future
-		expiresAt = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-	}
-
 	entry := &BlacklistCacheEntry{
 		Symbol:    symbol,
 		Reason:    reason,
-		ExpiresAt: expiresAt,
 		CreatedAt: time.Now(),
 	}
+
+	// Set expiration time if TTL is provided
+	if ttl > 0 {
+		expiresAt := time.Now().Add(ttl)
+		entry.ExpiresAt = &expiresAt
+	}
+	// If ttl <= 0, ExpiresAt remains nil (no expiration)
 
 	ibc.cache[symbol] = entry
 	ibc.stats.Adds++
@@ -485,8 +513,8 @@ func (ibc *InMemoryBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntr
 
 	var entries []BlacklistCacheEntry
 	for _, entry := range ibc.cache {
-		// Check if entry has expired (skip check for far future dates which indicate no expiration)
-		if entry.ExpiresAt.Year() < 9999 && time.Now().After(entry.ExpiresAt) {
+		// Check if entry has expired
+		if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
 			continue // Skip expired entries
 		}
 		entries = append(entries, *entry)
