@@ -105,8 +105,8 @@ COMMENT ON COLUMN exchange_blacklist.expires_at IS 'Optional expiration timestam
 COMMENT ON COLUMN exchange_blacklist.is_active IS 'Whether this blacklist entry is currently active';
 
 -- Record this migration
-INSERT INTO schema_migrations (filename, applied) 
-VALUES ('048_create_exchange_blacklist_table.sql', true)
+INSERT INTO schema_migrations (filename, checksum) 
+VALUES ('048_create_exchange_blacklist_table.sql', 'manual_migration')
 ON CONFLICT (filename) DO UPDATE SET 
-    applied = EXCLUDED.applied,
+    checksum = EXCLUDED.checksum,
     applied_at = CURRENT_TIMESTAMP;

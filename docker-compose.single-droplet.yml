@@ -6,10 +6,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Set POSTGRES_PASSWORD env var
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Set POSTGRES_PASSWORD env var
       POSTGRES_DB: celebrum_ai
-      POSTGRES_INITDB_ARGS: "--auth-host=trust"
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
       # Phase control
       STARTUP_PHASE: "1"
     volumes:
@@ -31,12 +31,12 @@ services:
     container_name: celebrum-migrate
     restart: "no"
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
+      PGPASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: celebrum_ai
       DB_USER: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
+      DB_PASSWORD: ${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
       # Phase control
       STARTUP_PHASE: "1"
     volumes:
@@ -61,7 +61,7 @@ services:
       - STARTUP_PHASE=1
     volumes:
       - redis_data:/data
-      - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro
+      - ./configs/redis/redis.conf:/etc/redis/redis.conf:ro
     command: redis-server /etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -119,14 +119,14 @@ services:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD} # REQUIRED: Use environment variable
       - DATABASE_DBNAME=celebrum_ai
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3001
       - CCXT_TIMEOUT=30
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
+      - JWT_SECRET=${JWT_SECRET} # REQUIRED: Set JWT_SECRET env var
       - SERVER_PORT=8080
       # Phase control - External connections disabled during warmup
       - STARTUP_PHASE=3

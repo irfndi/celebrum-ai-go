@@ -263,9 +263,9 @@ func TestCleanupHandler_TriggerCleanup_ParameterParsing(t *testing.T) {
 
 			// Setup expectations - we'll verify the config passed to RunCleanup
 			mockService.On("RunCleanup", mock.MatchedBy(func(config services.CleanupConfig) bool {
-				return config.MarketDataRetentionHours == tt.expectedMarketDataHours &&
-					config.FundingRateRetentionHours == tt.expectedFundingRateHours &&
-					config.ArbitrageRetentionHours == tt.expectedArbitrageHours
+				return config.MarketData.RetentionHours == tt.expectedMarketDataHours &&
+					config.FundingRates.RetentionHours == tt.expectedFundingRateHours &&
+					config.ArbitrageOpportunities.RetentionHours == tt.expectedArbitrageHours
 			})).Return(nil)
 
 			mockService.On("GetDataStats", mock.Anything).Return(map[string]int64{

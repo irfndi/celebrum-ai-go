@@ -110,14 +110,23 @@ cp .env.example .env
 
 To validate the security fixes:
 
-1. **Check for hardcoded credentials:**
+1. **Check for hardcoded credentials (safe scanning):**
    ```bash
-   grep -r "password.*=.*[a-zA-Z0-9]" --exclude-dir=.git .
+   # Use specialized tools for secret scanning
+   # Install gitleaks for comprehensive secret detection
+   gitleaks detect --source . --verbose
+   
+   # Alternative: Use truffleHog for historical scanning
+   truffleHog filesystem . --only-verified
+   
+   # Manual check for common patterns (without exposing values)
+   grep -r "password\s*=\s*['\"][^'\"]*['\"]" --exclude-dir=.git --exclude-dir=node_modules . | grep -v "your-" | grep -v "example" | grep -v "placeholder"
    ```
 
 2. **Verify environment variable usage:**
    ```bash
    grep -r "\${.*PASSWORD" docker-compose*.yml
+   grep -r "\$[A-Z_]*PASSWORD" --include="*.yml" --include="*.yaml" .
    ```
 
 3. **Test application startup:**
@@ -147,8 +156,16 @@ If credentials are accidentally committed:
 
 2. **Git History Cleanup:**
    ```bash
-   # Use git-filter-repo or BFG Repo-Cleaner
-   # Contact security team for assistance
+   # Use git-filter-repo (recommended)
+   pip install git-filter-repo
+   git filter-repo --strip-blobs-bigger-than 10M --force
+   
+   # Alternative: Use BFG Repo-Cleaner
+   # Download BFG from https://rtyley.github.io/bfg-repo-cleaner/
+   # java -jar bfg.jar --delete-files credentials.txt
+   
+   # IMPORTANT: Contact security team before running these commands
+   # These commands rewrite Git history and require force-push
    ```
 
 3. **Notification:**

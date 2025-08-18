@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -286,13 +285,7 @@ func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 	}
 
 	// Invalidate cache after successful update
-        var newTelegramChatID *int64
-        if req.TelegramChatID != nil {
-            if chatID, err := strconv.ParseInt(*req.TelegramChatID, 10, 64); err == nil {
-                newTelegramChatID = &chatID
-            }
-        }
-        h.invalidateUserCache(c.Request.Context(), userID, oldUser, newTelegramChatID)
+	h.invalidateUserCache(c.Request.Context(), userID, oldUser, req.TelegramChatID)
 
 	// Return updated user
 	updatedUser, err := h.getUserByID(c.Request.Context(), userID)
@@ -461,7 +454,7 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 }
 
 // invalidateUserCache removes cached user data after profile updates
-func (h *UserHandler) invalidateUserCache(ctx context.Context, userID string, oldUser *models.User, newTelegramChatID *int64) {
+func (h *UserHandler) invalidateUserCache(ctx context.Context, userID string, oldUser *models.User, newTelegramChatID *string) {
 	if h.redis == nil {
 		return
 	}
@@ -476,21 +469,21 @@ func (h *UserHandler) invalidateUserCache(ctx context.Context, userID string, ol
 
 	// Invalidate old telegram chat ID cache if it existed
 	if oldUser != nil && oldUser.TelegramChatID != nil {
-		oldTelegramKey := fmt.Sprintf("user:telegram:%d", *oldUser.TelegramChatID)
+		oldTelegramKey := fmt.Sprintf("user:telegram:%s", *oldUser.TelegramChatID)
 		if err := h.redis.Del(ctx, oldTelegramKey).Err(); err != nil {
-			log.Printf("Failed to invalidate old telegram cache for chat ID %d: %v", *oldUser.TelegramChatID, err)
+			log.Printf("Failed to invalidate old telegram cache for chat ID %s: %v", *oldUser.TelegramChatID, err)
 		} else {
-			log.Printf("Invalidated old telegram cache for chat ID %d", *oldUser.TelegramChatID)
+			log.Printf("Invalidated old telegram cache for chat ID %s", *oldUser.TelegramChatID)
 		}
 	}
 
 	// Invalidate new telegram chat ID cache if it's being set
 	if newTelegramChatID != nil {
-		newTelegramKey := fmt.Sprintf("user:telegram:%d", *newTelegramChatID)
+		newTelegramKey := fmt.Sprintf("user:telegram:%s", *newTelegramChatID)
 		if err := h.redis.Del(ctx, newTelegramKey).Err(); err != nil {
-			log.Printf("Failed to invalidate new telegram cache for chat ID %d: %v", *newTelegramChatID, err)
+			log.Printf("Failed to invalidate new telegram cache for chat ID %s: %v", *newTelegramChatID, err)
 		} else {
-			log.Printf("Invalidated new telegram cache for chat ID %d", *newTelegramChatID)
+			log.Printf("Invalidated new telegram cache for chat ID %s", *newTelegramChatID)
 		}
 	}
 }

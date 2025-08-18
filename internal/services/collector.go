@@ -1544,7 +1544,7 @@ func (c *CollectorService) parseSymbol(symbol string) (string, string) {
 		"USD", "EUR", "GBP", "JPY", "AUD", "CAD", // Fiat currencies
 		"DOGE", "SHIB", "MATIC", "AVAX", "LINK", // Other popular cryptos
 	}
-	
+
 	for _, quote := range commonQuotes {
 		if strings.HasSuffix(symbol, quote) {
 			base := strings.TrimSuffix(symbol, quote)

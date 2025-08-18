@@ -25,10 +25,12 @@ DATABASE_SSLMODE=require  # Use 'require' for production
 # Local development
 CCXT_SERVICE_URL=http://localhost:3001
 REDIS_HOST=localhost
+REDIS_PASSWORD=  # Optional for local development
 
 # Remote deployment (Docker Compose)
 CCXT_SERVICE_URL=http://ccxt-service:3001
 REDIS_HOST=redis
+REDIS_PASSWORD=your-secure-redis-password
 ```
 
 ### Security Configuration
@@ -42,6 +44,7 @@ TELEGRAM_WEBHOOK_SECRET=your-webhook-secret
 ### External API Keys
 ```bash
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/telegram/webhook
 COINMARKETCAP_API_KEY=your_coinmarketcap_api_key
 ```
 
@@ -73,6 +76,8 @@ ENVIRONMENT=development
 DATABASE_HOST=localhost
 CCXT_SERVICE_URL=http://localhost:3001
 REDIS_HOST=localhost
+REDIS_PASSWORD=  # Optional for local development
+TELEGRAM_WEBHOOK_URL=https://your-ngrok-url.ngrok.io/api/telegram/webhook
 DATABASE_SSLMODE=disable
 ```
 
@@ -82,6 +87,8 @@ ENVIRONMENT=production
 DATABASE_URL=postgresql://user:pass@host:port/db?sslmode=require
 CCXT_SERVICE_URL=http://ccxt-service:3001
 REDIS_HOST=redis
+REDIS_PASSWORD=your-secure-redis-password
+TELEGRAM_WEBHOOK_URL=https://your-production-domain.com/api/telegram/webhook
 DATABASE_SSLMODE=require
 ```
 
@@ -91,6 +98,8 @@ DATABASE_SSLMODE=require
 |----------|-------|--------|
 | `CCXT_SERVICE_URL` | `http://localhost:3001` | `http://ccxt-service:3001` |
 | `REDIS_HOST` | `localhost` | `redis` |
+| `REDIS_PASSWORD` | Optional/empty | `your-secure-redis-password` |
+| `TELEGRAM_WEBHOOK_URL` | `https://ngrok-url.ngrok.io/api/telegram/webhook` | `https://domain.com/api/telegram/webhook` |
 | `DATABASE_HOST` | `localhost` | Use `DATABASE_URL` instead |
 | `DATABASE_SSLMODE` | `disable` | `require` |
 | `ENVIRONMENT` | `development` | `production` |
@@ -103,6 +112,8 @@ DATABASE_SSLMODE=require
 - [ ] Database SSL mode is appropriate for environment
 - [ ] Security secrets are properly configured
 - [ ] External API keys are valid
+- [ ] TELEGRAM_WEBHOOK_URL points to correct domain
+- [ ] REDIS_PASSWORD is set for production
 - [ ] Feature flags are set correctly
 
 ## Troubleshooting

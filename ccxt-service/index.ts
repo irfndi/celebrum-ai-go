@@ -643,16 +643,24 @@ app.delete('/api/admin/exchanges/blacklist/:exchange', adminAuth, async (c) => {
       // Save configuration to file
       const saved = saveExchangeConfig(exchangeConfig);
       if (!saved) {
-        console.warn('Failed to persist blacklist changes to file');
+        const errorResponse: ErrorResponse = {
+          error: 'Failed to persist blacklist changes to file',
+          timestamp: new Date().toISOString()
+        };
+        return c.json(errorResponse, 500);
       }
       
       // Try to initialize the exchange if it's available
-      try {
-        initializeExchange(exchange);
-        console.log(`Exchange ${exchange} removed from blacklist and initialized`);
-      } catch (error) {
-        console.warn(`Failed to initialize ${exchange} after removing from blacklist:`, error);
+      const initialized = initializeExchange(exchange);
+      if (!initialized) {
+        const errorResponse: ErrorResponse = {
+          error: `Failed to initialize ${exchange} after removing from blacklist`,
+          timestamp: new Date().toISOString()
+        };
+        return c.json(errorResponse, 500);
       }
+      
+      console.log(`Exchange ${exchange} removed from blacklist and initialized`);
     }
     
     return c.json({

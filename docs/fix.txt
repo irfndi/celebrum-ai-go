@@ -1,440 +1,165 @@
-.github/workflows/build-and-test.yml around lines 42 to 45: the golangci-lint
-action version is set to the invalid "v2.4.0" which will fail to download;
-update the with.version field to a real release (e.g., pin to a stable
-reproducible tag like "v1.60.0" or another valid v1.x.y release) or use the
-action's latest tag (e.g., "latest") if you prefer floating updates; prefer
-pinning to a specific valid version for reproducibility and ensure the chosen
-tag exists on the golangci/golangci-lint-action repo.
-
-===
-
-.github/workflows/ci-cd.yml around lines 155 to 167: the env block is
-mis-indented so TEST_REDIS_ADDR and subsequent keys are outside the env mapping
-causing a YAML parse error; fix by moving TEST_REDIS_ADDR, RUN_TESTS,
-RUN_SECURITY_SCAN, RUN_PERFORMANCE_TEST, and CI_ENVIRONMENT to the same
-indentation level as DATABASE_URL and REDIS_URL (i.e., nested under env), ensure
-no stray colons or incorrect spacing exist, and verify the final env block is a
-single mapping containing all environment variables before the run: section.
-
-===
-
-.github/workflows/ci-cd.yml around lines 186 to 193: the workflow currently
-references the Trivy action with uses: aquasecurity/trivy-action@master which
-can pull breaking changes; update the uses value to a specific released tag or
-commit SHA (for example aquasecurity/trivy-action@v0.35.0 or the current latest
-tag in your environment) so the action is pinned, and verify the tag supports
-the existing inputs (scan-type, scan-ref, format, output); replace the @master
-with the chosen tag/sha and run the workflow to confirm compatibility.
-
-===
-
-In ccxt-service/index.ts around lines 45-49, remove the dead if (false) { ... }
-block entirely (the three console.error calls and process.exit(1)); if you still
-need runtime validation, replace it with a real environment check like verifying
-process.env.ADMIN_API_KEY and logging/exiting only when the value is missing or
-insecure, otherwise just delete the constant-condition block.
-
-===
-
-In ccxt-service/index.ts around lines 83 to 106, the exchangeConfigs map uses
-incorrect CCXT IDs: rename the coinbaseexchange key to coinbase so CCXT will
-pick up the override, and add a huobi key (if you need a custom Huobi/HTX
-config) instead of any legacy alias; leave the default entry for all others.
-Ensure each key matches the exact IDs from ccxt.exchanges and keep the same
-config object shape (enableRateLimit/timeout/rateLimit/options) when
-moving/adding entries.
-
-===
-
-In configs/nginx.single-droplet.conf around lines 57 to 61, the redirect
-currently uses $server_name which is set to "_" and yields an invalid URL;
-replace $server_name with $host and then decide the TLS port: if external TLS
-listens on 8443 keep :8443 in the redirect, otherwise (standard 443) remove the
-explicit port so the redirect is to https://$host$request_uri; ensure the return
-uses the chosen host/port consistently.
+In ccxt-service/index.ts around lines 643 to 647, the unblacklist flow currently
+calls saveExchangeConfig(exchangeConfig) and only logs a warning on failure;
+update it to mirror the blacklist path by checking the saved result and
+propagating the error to the client (e.g., return an error response or throw so
+the HTTP handler responds with 500 and an explanatory message) instead of
+silently warning, ensuring the API caller knows persistence failed.
 
 
 ====
 
-In database/migrate.sh around lines 36 to 49, migration_applied always returns
-false because the SQL uses $1 (psql positional) while the script sets -v
-migration_name which isn’t referenced; also psql errors are masked by the
-pipeline. Change the query to use a psql variable reference (e.g.
-:'migration_name') and pass -v migration_name="..." before -c so the binding is
-applied, and ensure the -c string uses the :'migration_name' placeholder;
-additionally enable pipefail (or at least check psql exit status) so any psql
-errors surface instead of being swallowed by grep.
+Fix config shape mismatch or update CleanupConfig to nested structure
 
+The current config.yaml uses nested keys under cleanup (market_data.retention_hours, funding_rates.retention_hours, arbitrage_opportunities.retention_hours, interval_minutes), but CleanupConfig in internal/services/cleanup.go only binds flat YAML keys:
 
-====
+market_data_retention_hours
+market_data_deletion_hours
+funding_rate_retention_hours
+funding_rate_deletion_hours
+arbitrage_retention_hours
+cleanup_interval_minutes
+enable_smart_cleanup
+As a result, none of your nested values will be loaded at runtime and will fall back to zero or defaults.
 
-In database/migrate.sh around lines 178 to 184, the psql call is attempting to
-use a shell-style $1 parameter which psql does not bind (the extra argument is
-ignored), so the DELETE will not match the migration filename; change the call
-to pass the filename as a psql variable (using -v
-migration_name="$migration_name") and reference it inside the SQL as
-:'migration_name' (or use format('%L', :'migration_name') if needed for literal
-quoting) so the filename is correctly bound and the migration record is removed;
-update the -c invocation accordingly and keep the log line as-is.
+Two paths forward:
 
+Quick compatibility patch (config.yaml)
+Add flat keys alongside your nested blocks until the Go struct is updated:
+cleanup:
++  # Backward-compat keys (remove after refactoring Go struct)
++  market_data_retention_hours: 36
++  market_data_deletion_hours: 12
++  funding_rate_retention_hours: 36
++  funding_rate_deletion_hours: 12
++  arbitrage_retention_hours: 72
++  cleanup_interval_minutes: 60
+  market_data:
+    retention_hours: 36
+    deletion_hours: 12
+  funding_rates:
+    retention_hours: 36
+    deletion_hours: 12
+  arbitrage_opportunities:
+    retention_hours: 72
+  interval_minutes: 60
+  enable_smart_cleanup: true
+Refactor Go config to match nested YAML
+Update CleanupConfig (around line 10 in internal/services/cleanup.go) to:
+type CleanupConfig struct {
+  MarketData struct {
+    RetentionHours int `yaml:"retention_hours"`
+    DeletionHours  int `yaml:"deletion_hours"`
+  } `yaml:"market_data"`
+  FundingRates struct {
+    RetentionHours int `yaml:"retention_hours"`
+    DeletionHours  int `yaml:"deletion_hours"`
+  } `yaml:"funding_rates"`
+  ArbitrageOpportunities struct {
+    RetentionHours int `yaml:"retention_hours"`
+  } `yaml:"arbitrage_opportunities"`
+  IntervalMinutes     int  `yaml:"interval_minutes"`
+  EnableSmartCleanup  bool `yaml:"enable_smart_cleanup"`
+}
+Please address one of these immediately to ensure your cleanup settings actually load.
 
-===
-
-In database/migrations/031_create_exchange_trading_pairs_table.sql around lines
-174-179, the migration ends with an INSERT that targets (version, filename,
-description) and a COMMIT which conflicts with the runner’s schema_migrations
-structure and will fail; remove the entire recording block (the INSERT...ON
-CONFLICT and COMMIT) so the bash runner handles schema_migrations, or if you
-must keep in-SQL bookkeeping, replace the block with an INSERT that matches the
-runner’s columns (e.g. insert filename and applied, updating applied/applied_at
-on conflict) and avoid duplicating the runner’s recording logic.
-
-
-===
-
-In database/migrations/035_create_futures_arbitrage_tables.sql around lines 247
-to 259, the calculate_futures_arbitrage_apy function performs a division by
-funding_interval without validating it; add a guard at the start of the function
-that checks if funding_interval IS NULL OR funding_interval <= 0 and RAISE
-EXCEPTION with a clear message (e.g., 'invalid funding_interval: must be > 0'),
-so the function fails fast instead of dividing by zero or negative values; keep
-the rest of the APY calculation unchanged and ensure the function remains
-IMMUTABLE and returns DECIMAL.
-
-
-===
-
-In database/migrations/035_create_futures_arbitrage_tables.sql around lines
-260-287, the calculation leverage_factor := LEAST(max_leverage, 3.0) will return
-NULL if max_leverage is NULL; change the assignment to coalesce max_leverage
-first (e.g., leverage_factor := LEAST(COALESCE(max_leverage, 1.0), 3.0)) so
-NULLs don't propagate and position size remains calculable.
-
-
-===
-
-In database/migrations/035_create_futures_arbitrage_tables.sql around lines
-342-343, the INSERT uses non-existent columns (filename, applied); change it to
-match the project's schema_migrations shape which uses (version, dirty): insert
-the migration identifier into version (use the project convention, e.g. '035' or
-'035_create_futures_arbitrage_tables' as other records do) and set dirty =
-false, and update the ON CONFLICT clause to target the version key and set dirty
-= false and applied_at = NOW() (or whatever timestamp column the schema uses).
-
-
-===
-
-Missing view recreations in migration 040_fix_trading_pairs_column_sizes.sql – breaking dependent queries
-
-You drop five views but only recreate active_funding_arbitrage_opportunities. The other views will be gone after this migration, causing failures in any code or downstream migrations that reference them.
-
-Locations to fix:
-
-File: database/migrations/040_fix_trading_pairs_column_sizes.sql
-• Lines 7–12: the five DROP VIEW IF EXISTS … CASCADE statements
-• Lines 41–48: only CREATE VIEW active_funding_arbitrage_opportunities appears
-Two possible remedies (pick one):
-
-Recreate all dropped views in the same transaction, after the ALTERs.
-• Pull the definitions for:
-– active_futures_arbitrage_opportunities
-– futures_arbitrage_market_summary
-– active_exchange_trading_pairs
-– blacklisted_exchange_trading_pairs
-from migration 031 (or the current database) and add their CREATE VIEW statements below the ALTERs, before COMMIT.
-
-Only drop/recreate views that truly depend on the altered columns. Widening a VARCHAR rarely invalidates views. If the two exchange_* views don’t reference the changed columns, remove their drop lines here and handle futures-* views in their defining migrations:
-
--DROP VIEW IF EXISTS active_exchange_trading_pairs CASCADE;
--DROP VIEW IF EXISTS blacklisted_exchange_trading_pairs CASCADE;
-Let me know if you’d like me to generate the CREATE VIEW statements for the exchange_* views to keep this migration self-contained.
 
 
 ====
 
-Use ALTER TABLE for schema updates in migration 043
-Because migration 035_create_futures_arbitrage_tables.sql already created these tables, the CREATE TABLE IF NOT EXISTS blocks in 043 are no-ops. All intended changes (widening column sizes, adding new columns/indexes/views) won’t be applied.
+In database/migrations/045_fix_cache_warming_queries.sql around lines 96 to 101,
+the INSERT/UPSERT references a non-standard applied column that some
+runners/schema definitions lack; change the statement to only use filename and
+applied_at so it matches the minimal common schema: insert filename and set
+applied_at = CURRENT_TIMESTAMP, and on conflict (filename) do update set
+applied_at = CURRENT_TIMESTAMP (remove any mention of applied and avoid updating
+non-standard columns).
 
-Please refactor database/migrations/043_create_futures_arbitrage_tables.sql:
 
-• Lines 6–78 (futures_arbitrage_opportunities): replace the CREATE TABLE IF NOT EXISTS block with ALTER TABLE statements to
-– ALTER COLUMN symbol TYPE VARCHAR(50)
-– ALTER COLUMN base_currency TYPE VARCHAR(20)
-– ALTER COLUMN quote_currency TYPE VARCHAR(20)
-– ADD any new columns not in 035
+===
 
-• Lines 80–125 (futures_arbitrage_strategies): use ALTER TABLE … ADD COLUMN … for any new fields
-
-• Lines 126–144 (funding_rate_history): apply ALTER TABLE to add or modify columns and constraints
-
-• Lines 145–176 (futures_arbitrage_executions): convert table creation to ALTER TABLE … ADD COLUMN …
-
-Example snippet:
-
-ALTER TABLE futures_arbitrage_opportunities
-  ALTER COLUMN symbol TYPE VARCHAR(50),
-  ALTER COLUMN base_currency TYPE VARCHAR(20),
-  ALTER COLUMN quote_currency TYPE VARCHAR(20);
-
--- then for each new column:
-ALTER TABLE futures_arbitrage_opportunities
-  ADD COLUMN next_funding_time TIMESTAMPTZ,
-  ADD COLUMN time_to_next_funding INTEGER;
-Confirm the exact differences between 035 and 043 (column sizes, added columns/indexes/views) and replace each CREATE block with the corresponding ALTER statements so the schema evolves as intended.
+In database/migrations/048_create_exchange_blacklist_table.sql around lines
+107-112, the migration upsert uses a non-standard boolean column named
+"applied"; inspect the actual schema_migrations table definition used by your
+migration runner and update the INSERT/ON CONFLICT to use the canonical columns
+and types (e.g., use the repository's expected timestamp column like applied_at
+or version/dirty fields instead of a boolean, and set applied_at =
+CURRENT_TIMESTAMP on conflict), ensure the VALUES list matches the table column
+names exactly, and keep the ON CONFLICT DO UPDATE to only update the
+runner-supported columns.
 
 
 ====
 
-In database/migrations/043_create_futures_arbitrage_tables.sql around line 8 the
-migration uses DEFAULT gen_random_uuid() but the pgcrypto extension is not
-enabled; add a migration that runs before 043 to enable pgcrypto (either update
-database/migrations/006_minimal_schema.sql to include a CREATE EXTENSION IF NOT
-EXISTS pgcrypto; statement or add a new migration named something like
-006a_enable_pgcrypto.sql with that single-step to ensure gen_random_uuid() is
-available at runtime).
+In docker-compose.single-droplet.yml around lines 9 to 12, the Compose file
+enables insecure host trust auth and provides a weak default POSTGRES_PASSWORD;
+remove POSTGRES_HOST_AUTH_METHOD: trust and the initdb "--auth-host=trust" flag,
+require POSTGRES_PASSWORD to be supplied (do not provide a default fallback) and
+fail fast if it is missing, and configure initdb/auth to use SCRAM (e.g. set
+POSTGRES_INITDB_ARGS to use scram-sha-256 or the equivalent init parameter) so
+Postgres requires strong password authentication and secrets are supplied from a
+secret manager or environment without insecure defaults.
 
 
 ====
 
-In database/migrations/043_create_futures_arbitrage_tables.sql around lines 247
-to 259, the calculate_futures_arbitrage_apy function must guard against
-funding_interval <= 0 and return a fixed-precision numeric: change the function
-to validate funding_interval > 0 at the start (RAISE EXCEPTION with a clear
-message if invalid), convert inputs to NUMERIC as needed, compute the APY using
-numeric math, and change the return type to a NUMERIC with a defined
-precision/scale (e.g., NUMERIC(12,6)) so the function always returns a
-consistent fixed-precision result.
+In docker-compose.single-droplet.yml around lines 64–66, the Redis service
+mounts a nonexistent host file `./configs/redis/redis-docker.conf`; change the
+volume entry to reference the actual file `./configs/redis/redis.conf` (keeping
+the same target `/etc/redis/redis.conf` and :ro flag) so the compose mount
+succeeds and Redis can start with the correct configuration.
 
 
 ====
 
-In database/migrations/043_create_futures_arbitrage_tables.sql around lines 260
-to 287, the function currently uses LEAST(max_leverage, 3.0) which yields NULL
-if max_leverage is NULL and risk_score can be negative/unbounded; change to
-coalesce and clamp inputs before use (e.g., risk_score :=
-GREATEST(LEAST(COALESCE(risk_score, 50), 100), 0); and set leverage_factor :=
-LEAST(COALESCE(max_leverage, 1.0), 3.0) or another sensible default) and ensure
-these clamped values are used when computing and returning the position size so
-the function never returns NULL or produces out-of-range results.
+In docker-compose.single-droplet.yml around lines 129 to 135, the JWT_SECRET
+environment entry currently uses an insecure hardcoded default; replace the
+fallback default with a required variable expansion so compose fails if
+JWT_SECRET is not set (e.g. use ${JWT_SECRET:?JWT_SECRET is required and must be
+set} or the equivalent in your compose version), and update any env/example or
+deployment docs to ensure developers set JWT_SECRET before running compose.
+
+
+===
+
+In docs/environment-sync.md around lines 23-41 (and also apply same change at
+42-47 and 125-127), the env examples omit TELEGRAM_WEBHOOK_URL and
+REDIS_PASSWORD; add TELEGRAM_WEBHOOK_URL with a placeholder webhook URL and add
+REDIS_PASSWORD (with a comment that it’s required only if Redis AUTH is enabled)
+into the appropriate "Service URLs" / "Security Configuration" example blocks so
+the Troubleshooting references match the documented variables.
+
+
+===
+
+In docs/SECURITY_CREDENTIALS.md around lines 113-121, the current grep examples
+print potential secret values to stdout; update the guidance to recommend using
+a dedicated secret scanner (e.g., trufflehog or ggshield) and replace the unsafe
+grep examples with safer commands that do not expose secret values (for example,
+show only filenames/line numbers or redact matched values) and include the exact
+recommended installer/scan commands and a redaction pattern; ensure examples
+explicitly avoid printing raw secret contents and include a note to exclude .git
+and other sensitive paths.
 
 
 ====
 
-In database/migrations/043_create_futures_arbitrage_tables.sql around lines
-342-343, the INSERT into schema_migrations uses a `dirty` column that doesn't
-exist in the original schema_migrations table (defined in migration 006); add an
-early migration (immediately after 006) that ALTERs schema_migrations to ADD
-COLUMN IF NOT EXISTS applied BOOLEAN DEFAULT true, ADD COLUMN IF NOT EXISTS
-applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), and ADD COLUMN IF NOT EXISTS
-dirty BOOLEAN DEFAULT false so subsequent migrations can reference those
-columns, or alternatively change migrations 035 and 043 to only insert the
-existing columns (version, filename, description) and use ON CONFLICT DO NOTHING
-to avoid relying on new columns.
+In internal/api/handlers/user.go around lines 288 to 296, the code incorrectly
+treats TelegramChatID as an int64 and parses it with strconv which causes a
+compile error because models.User.TelegramChatID is *string; change the local
+variable to var newTelegramChatID *string, assign req.TelegramChatID directly
+(no strconv.ParseInt), pass that *string into h.invalidateUserCache, update any
+logging/formatting to use %s instead of %d, and remove the unused strconv
+import.
 
 
 ====
 
-In database/migrations/045_fix_cache_warming_queries.sql around lines 10 to 19,
-the migration currently adds base_currency and quote_currency as NOT NULL which
-will fail on non-empty trading_pairs tables; change these ALTER TABLE statements
-to add the columns as NULLABLE (remove NOT NULL), then perform a separate
-backfill step (outside this file) to populate base_currency/quote_currency for
-existing rows, and create a follow-up migration that adds the NOT NULL
-constraints after backfill completes.
-
-
-====
-
-In database/migrations/045_fix_cache_warming_queries.sql around lines 69 to 86,
-the CREATE OR REPLACE VIEW v_trading_pairs_debug unconditionally LEFT JOINs the
-exchanges table and will fail if that table doesn't exist; change the migration
-to create the view conditionally: check for the existence of the exchanges table
-and, if present, CREATE OR REPLACE VIEW with the LEFT JOIN to include
-exchange_name, otherwise CREATE OR REPLACE VIEW with a fallback SELECT that
-supplies NULL or a placeholder for exchange_name (or skip creating the view
-entirely), implementing the conditional creation using a simple IF EXISTS query
-or a DO block that runs the appropriate CREATE VIEW statement.
-
-
-===
-
-In database/migrations/047_create_exchange_blacklist_table.sql lines 1-105 you
-have a duplicate migration that repeats the same table, indexes, trigger and
-comments from 039_create_exchange_blacklist_table.sql; remove this duplicate
-file (or merge its unique changes into the canonical migration 039) so only one
-migration creates/owns exchange_blacklist, consolidate any differing
-indexes/triggers/comments into that single file, update migration
-ordering/filenames if needed, and run migration checks (or dry-run in each
-environment) to verify the migration sequence remains correct.
-
-
-===
-
-In docs/environment-sync.md around lines 131–137, improve DB/Redis validation by
-preferring DATABASE_URL for pg_isready when set and quoting all variables, and
-by making Redis auth conditional: if DATABASE_URL is present call pg_isready
-with the connection string (e.g. pg_isready -d "$DATABASE_URL"), otherwise call
-pg_isready with quoted host/port; for Redis call redis-cli with quoted host and,
-only if REDIS_PASSWORD is set, include the auth flag (e.g. -a "$REDIS_PASSWORD")
-before running PING so unauthenticated setups still work and quoted variables
-are used throughout.
-
-
-====
-
-In docs/REDIS_SECURITY.md around lines 11 to 15, the doc references a host file
-path of configs/redis/redis-docker.conf that does not exist in the repo (only
-configs/redis/redis.conf exists) and the docker-compose mounts
-./configs/redis/redis-docker.conf → /etc/redis/redis.conf; fix by choosing the
-canonical filename and making both the docs and docker-compose consistent:
-either rename the file in the repo to configs/redis/redis-docker.conf or update
-the docker-compose mount and this doc to reference configs/redis/redis.conf, and
-update the snippet text to explicitly state the final path used (host path →
-/etc/redis/redis.conf).
-
-
-===
-
-Don’t set Docker "iptables": false (breaks networking and is unsafe). Use DOCKER-USER or UFW rules instead.
-
-Disabling Docker’s iptables management will likely break container networking/published ports and shifts packet filtering fully to host-level tools, which is not recommended. The safer pattern: leave Docker iptables enabled and enforce host policies in the DOCKER-USER chain or with UFW’s before rules.
-
-Replace this section with a DOCKER-USER example:
-
--#### Docker and UFW Integration
--
--Docker bypasses UFW by default. To ensure UFW rules apply to Docker:
--
--```bash
--# Edit Docker daemon configuration
--sudo nano /etc/docker/daemon.json
--
--# Add the following content:
--{
--  "iptables": false
--}
--
--# Restart Docker
--sudo systemctl restart docker
--```
-+#### Docker and Host Firewall Integration
-+
-+Docker programs iptables directly. Keep it enabled and enforce host policy using the DOCKER-USER chain (applies before Docker's rules):
-+
-+```bash
-+# Block external access to Redis on the host (no effect inside the bridge)
-+sudo iptables -I DOCKER-USER -p tcp --dport 6379 -j DROP
-+# Allow from specific trusted subnets if needed:
-+# sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -p tcp --dport 6379 -j ACCEPT
-+
-+# Persist rules with your distro's mechanisms (e.g., netfilter-persistent)
-+```
-+
-+If you prefer UFW, add rules in `/etc/ufw/before.rules` to filter before Docker's chains, or rely on a cloud firewall (recommended) plus not publishing Redis ports.
-
-===
-
-In internal/api/handlers/arbitrage.go around lines 22 to 27, the
-ArbitrageHandler struct expects a *redis.Client instance but the routes call is
-passing the type name instead of the actual client variable; update the call in
-internal/api/routes.go at line 48 to pass the instantiated redis client variable
-(e.g., redisClient or whatever variable holds *redis.Client) not the
-redis.Client type, and ensure the variable is in scope and its type matches
-*redis.Client so the handler receives the real Redis connection.
-
-
-===
-
-In internal/api/handlers/telegram.go around lines 205-213 (and also apply the
-same change at 226-230 and 399-418), the code stores and reads cached
-opportunities as interface{} and performs runtime type assertions; change the
-cache type to store and retrieve []ArbitrageOpportunity (concrete slice) so you
-can avoid interface{} gymnastics: update the cache put to save
-[]ArbitrageOpportunity, change getCachedTelegramOpportunities to return
-([]ArbitrageOpportunity, error) instead of (interface{}, error), update callers
-to check for nil/len on the typed slice and pass the typed slice into
-sendOpportunitiesMessage (adjust that function signature if needed), and update
-any helper functions and tests to use the concrete type accordingly.
-
-
-===
-
-sendOpportunitiesMessage type assertion will always fail with fresh data
-
-handleOpportunitiesCommand passes []ArbitrageOpportunity, but sendOpportunitiesMessage asserts []interface{}, causing the function to send an error message instead of real opportunities. Switch to strongly typed flow end-to-end.
-
-Apply these changes:
-
--	return h.sendOpportunitiesMessage(ctx, chatID, opportunities)
-+	return h.sendOpportunitiesMessage(ctx, chatID, opportunities)
--func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities interface{}) error {
--	// Type assertion to get the actual opportunities slice
--	oppsSlice, ok := opportunities.([]interface{})
--	if !ok {
--		// Try direct type assertion for the expected type
--		// This will need to be adjusted based on the actual type from ArbitrageHandler
--		log.Printf("Unexpected opportunities type: %T", opportunities)
--		return h.sendMessage(ctx, chatID, "❌ Error processing opportunities data.")
--	}
-+func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities []ArbitrageOpportunity) error {
-+	oppsSlice := opportunities
--	for i, oppInterface := range oppsSlice {
-+	for i, opp := range oppsSlice {
- 		if i >= 5 { // Limit to top 5 for readability
- 			break
- 		}
--
--		// Convert interface{} to map for field access
--		oppMap, ok := oppInterface.(map[string]interface{})
--		if !ok {
--			continue
--		}
--
--		// Extract fields with safe type assertions
--		symbol, _ := oppMap["symbol"].(string)
--		profitPercent, _ := oppMap["profit_percent"].(float64)
--		profitAmount, _ := oppMap["profit_amount"].(float64)
--		buyExchange, _ := oppMap["buy_exchange"].(string)
--		buyPrice, _ := oppMap["buy_price"].(float64)
--		sellExchange, _ := oppMap["sell_exchange"].(string)
--		sellPrice, _ := oppMap["sell_price"].(float64)
--
--		msg += fmt.Sprintf("💰 %s\n", symbol)
--		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", profitPercent, profitAmount)
--		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", buyExchange, buyPrice)
--		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", sellExchange, sellPrice)
-+		msg += fmt.Sprintf("💰 %s\n", opp.Symbol)
-+		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", opp.ProfitPercent, opp.ProfitAmount)
-+		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", opp.BuyExchange, opp.BuyPrice)
-+		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
- 		msg += "\n"
- 	}
-Also applies to: 420-429, 431-477
-
-===
-
-In internal/api/handlers/telegram.go around lines 391 to 397, the code treats
-h.redis.Set(...) as if it returns an error but Set returns a *StatusCmd; change
-it to capture the returned command (cmd := h.redis.Set(ctx, cacheKey,
-string(oppsJSON), 30*time.Second)) and then check cmd.Err() (if err :=
-cmd.Err(); err != nil { log.Printf("Failed to cache Telegram opportunities: %v",
-err) } else { log.Printf("Cached Telegram opportunities in Redis for 30
-seconds") }) so the success branch can run correctly.
-
-
-===
-
-In internal/api/handlers/user.go around lines 263 to 274, the DB branch only
-checks h.db != nil which can cause a nil-deref on h.db.Pool, and the handler
-does not evict caches after updating a profile causing stale reads; change the
-DB guard to ensure h.db != nil && h.db.Pool != nil (use that pool to Exec), and
-immediately after a successful Exec (before calling getUserByID) perform
-best-effort cache invalidation: if h.redis != nil delete the user:id:<id> key
-and delete user:telegram:<oldChatID> and user:telegram:<newChatID> (you can
-obtain oldChatID by a prior read or getUserByID, ignoring errors), or implement
-and call a small helper invalidateUserCache(id, oldChatID, newChatID) to
-centralize the logic.
-
-
-===
-
+In internal/api/handlers/user.go around lines 463 to 496, the function
+invalidateUserCache uses %d and treats TelegramChatID as an integer but the
+field is a string pointer; update all fmt.Sprintf/Printf usages to use %s for
+string IDs, change the function signature and parameters to accept *string for
+newTelegramChatID (and ensure oldUser.TelegramChatID is treated as *string), and
+tighten guards to skip deletion when userID or telegram ID pointers are nil or
+point to empty strings so you don't create/attempt to delete empty keys; keep
+the same log messages but substitute %s and dereference safely after checking
+non-empty.

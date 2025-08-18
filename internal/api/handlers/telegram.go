@@ -380,7 +380,7 @@ func (h *TelegramHandler) cacheTelegramOpportunities(ctx context.Context, opport
 
 	// Convert the opportunities to our typed structure
 	var typedOpportunities []ArbitrageOpportunity
-	
+
 	// Handle different input types from the arbitrage handler
 	switch opps := opportunities.(type) {
 	case []ArbitrageOpportunity:
@@ -436,8 +436,6 @@ func getFloat64(m map[string]interface{}, key string) float64 {
 	}
 	return 0.0
 }
-
-
 
 // getCachedTelegramOpportunities retrieves cached opportunities from Redis
 func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) ([]ArbitrageOpportunity, error) {

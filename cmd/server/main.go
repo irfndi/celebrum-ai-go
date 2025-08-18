@@ -40,7 +40,7 @@ func main() {
 
 	// Initialize error recovery manager for Redis connection
 	errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
-	
+
 	// Register retry policies for Redis operations
 	retryPolicies := services.DefaultRetryPolicies()
 	for name, policy := range retryPolicies {
@@ -110,13 +110,27 @@ func main() {
 
 	// Start cleanup service with configuration
 	cleanupConfig := services.CleanupConfig{
-		MarketDataRetentionHours:  cfg.Cleanup.MarketData.RetentionHours,
-		MarketDataDeletionHours:   cfg.Cleanup.MarketData.DeletionHours,
-		FundingRateRetentionHours: cfg.Cleanup.FundingRates.RetentionHours,
-		FundingRateDeletionHours:  cfg.Cleanup.FundingRates.DeletionHours,
-		ArbitrageRetentionHours:   cfg.Cleanup.ArbitrageOpportunities.RetentionHours,
-		CleanupIntervalMinutes:    cfg.Cleanup.IntervalMinutes,
-		EnableSmartCleanup:        cfg.Cleanup.EnableSmartCleanup,
+		MarketData: struct {
+			RetentionHours int `yaml:"retention_hours" default:"36"`
+			DeletionHours  int `yaml:"deletion_hours" default:"12"`
+		}{
+			RetentionHours: cfg.Cleanup.MarketData.RetentionHours,
+			DeletionHours:  cfg.Cleanup.MarketData.DeletionHours,
+		},
+		FundingRates: struct {
+			RetentionHours int `yaml:"retention_hours" default:"36"`
+			DeletionHours  int `yaml:"deletion_hours" default:"12"`
+		}{
+			RetentionHours: cfg.Cleanup.FundingRates.RetentionHours,
+			DeletionHours:  cfg.Cleanup.FundingRates.DeletionHours,
+		},
+		ArbitrageOpportunities: struct {
+			RetentionHours int `yaml:"retention_hours" default:"72"`
+		}{
+			RetentionHours: cfg.Cleanup.ArbitrageOpportunities.RetentionHours,
+		},
+		IntervalMinutes:    cfg.Cleanup.IntervalMinutes,
+		EnableSmartCleanup: cfg.Cleanup.EnableSmartCleanup,
 	}
 	go cleanupService.Start(cleanupConfig)
 	defer cleanupService.Stop()

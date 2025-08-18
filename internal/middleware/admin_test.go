@@ -21,7 +21,7 @@ func TestNewAdminMiddleware(t *testing.T) {
 		assert.Equal(t, "test-admin-key-32-chars-minimum-length", am.apiKey)
 	})
 
-	// Note: Removed test for missing environment variable since log.Fatal() 
+	// Note: Removed test for missing environment variable since log.Fatal()
 	// calls os.Exit() which cannot be tested with assert.Panics()
 	// In production, missing ADMIN_API_KEY will cause the application to exit
 }

@@ -26,7 +26,7 @@ func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 
 func NewRedisConnectionWithRetry(cfg config.RedisConfig, errorRecoveryManager ErrorRecoveryManager) (*RedisClient, error) {
 	logger := logrus.New()
-	
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password: cfg.Password,

@@ -90,9 +90,27 @@ func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 
 	// Create cleanup config for manual trigger
 	config := services.CleanupConfig{
-		MarketDataRetentionHours:  marketDataHours,
-		FundingRateRetentionHours: fundingRateHours,
-		ArbitrageRetentionHours:   arbitrageHours,
+		MarketData: struct {
+			RetentionHours int `yaml:"retention_hours" default:"36"`
+			DeletionHours  int `yaml:"deletion_hours" default:"12"`
+		}{
+			RetentionHours: marketDataHours,
+			DeletionHours:  12, // Default deletion hours
+		},
+		FundingRates: struct {
+			RetentionHours int `yaml:"retention_hours" default:"36"`
+			DeletionHours  int `yaml:"deletion_hours" default:"12"`
+		}{
+			RetentionHours: fundingRateHours,
+			DeletionHours:  12, // Default deletion hours
+		},
+		ArbitrageOpportunities: struct {
+			RetentionHours int `yaml:"retention_hours" default:"72"`
+		}{
+			RetentionHours: arbitrageHours,
+		},
+		IntervalMinutes:    60,   // Default interval
+		EnableSmartCleanup: true, // Enable smart cleanup by default
 	}
 
 	// Trigger cleanup (this will run synchronously)

@@ -353,8 +353,8 @@ func (h *MarketHandler) GetMarketPrices(c *gin.Context) {
 	}
 
 	// Add ordering and pagination
-    sqlQuery += " ORDER BY md.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2) // SAFE: using parameterized query
-    args = append(args, limit, offset)
+	sqlQuery += " ORDER BY md.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2) // SAFE: using parameterized query
+	args = append(args, limit, offset)
 
 	// Execute query
 	rows, err := h.db.Pool.Query(context.Background(), sqlQuery, args...)
