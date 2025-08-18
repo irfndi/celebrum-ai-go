@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -260,23 +261,38 @@ func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 		WHERE id = $1
 	`
 
-	var err error
+	// Get the old user data for cache invalidation
+	oldUser, err := h.getUserByID(c.Request.Context(), userID)
+	if err != nil {
+		log.Printf("Warning: Could not get old user data for cache invalidation: %v", err)
+	}
+
+	var execErr error
 	// Use querier if available (for testing), otherwise use database
 	if h.querier != nil {
-		_, err = h.querier.Exec(c.Request.Context(), query,
+		_, execErr = h.querier.Exec(c.Request.Context(), query,
 			userID, req.TelegramChatID, time.Now())
-	} else if h.db != nil {
-		_, err = h.db.Pool.Exec(c.Request.Context(), query,
+	} else if h.db != nil && h.db.Pool != nil {
+		_, execErr = h.db.Pool.Exec(c.Request.Context(), query,
 			userID, req.TelegramChatID, time.Now())
 	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not available"})
 		return
 	}
 
-	if err != nil {
+	if execErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
 		return
 	}
+
+	// Invalidate cache after successful update
+        var newTelegramChatID *int64
+        if req.TelegramChatID != nil {
+            if chatID, err := strconv.ParseInt(*req.TelegramChatID, 10, 64); err == nil {
+                newTelegramChatID = &chatID
+            }
+        }
+        h.invalidateUserCache(c.Request.Context(), userID, oldUser, newTelegramChatID)
 
 	// Return updated user
 	updatedUser, err := h.getUserByID(c.Request.Context(), userID)
@@ -442,6 +458,41 @@ func (h *UserHandler) getUserByID(ctx context.Context, userID string) (*models.U
 	}
 
 	return &user, nil
+}
+
+// invalidateUserCache removes cached user data after profile updates
+func (h *UserHandler) invalidateUserCache(ctx context.Context, userID string, oldUser *models.User, newTelegramChatID *int64) {
+	if h.redis == nil {
+		return
+	}
+
+	// Invalidate user ID cache
+	userCacheKey := fmt.Sprintf("user:id:%s", userID)
+	if err := h.redis.Del(ctx, userCacheKey).Err(); err != nil {
+		log.Printf("Failed to invalidate user cache for ID %s: %v", userID, err)
+	} else {
+		log.Printf("Invalidated user cache for ID %s", userID)
+	}
+
+	// Invalidate old telegram chat ID cache if it existed
+	if oldUser != nil && oldUser.TelegramChatID != nil {
+		oldTelegramKey := fmt.Sprintf("user:telegram:%d", *oldUser.TelegramChatID)
+		if err := h.redis.Del(ctx, oldTelegramKey).Err(); err != nil {
+			log.Printf("Failed to invalidate old telegram cache for chat ID %d: %v", *oldUser.TelegramChatID, err)
+		} else {
+			log.Printf("Invalidated old telegram cache for chat ID %d", *oldUser.TelegramChatID)
+		}
+	}
+
+	// Invalidate new telegram chat ID cache if it's being set
+	if newTelegramChatID != nil {
+		newTelegramKey := fmt.Sprintf("user:telegram:%d", *newTelegramChatID)
+		if err := h.redis.Del(ctx, newTelegramKey).Err(); err != nil {
+			log.Printf("Failed to invalidate new telegram cache for chat ID %d: %v", *newTelegramChatID, err)
+		} else {
+			log.Printf("Invalidated new telegram cache for chat ID %d", *newTelegramChatID)
+		}
+	}
 }
 
 // generateSimpleToken creates a simple token (in production, use proper JWT)

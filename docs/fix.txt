@@ -1,610 +1,372 @@
-There are two migration files with the same version number 009. Migration scripts must have unique, sequential version numbers to ensure they are applied in the correct and predictable order. While sort -V might handle this case lexicographically, it's fragile and considered bad practice.
-
-Please renumber this migration and all subsequent ones to maintain a unique and sequential order. For example, this could become 009_create_funding_arbitrage_opportunities.sql and the other file could become 010_remove_symbol_column.sql, with all following migrations adjusted accordingly.
-
-===
-
-The logic to update the blacklist in memory and then save it to a file is good, but there's a potential issue if saving to the file fails. Currently, you log a warning but the API call still returns a success message. This can lead to an inconsistent state where the in-memory blacklist is different from the persisted one, and the change will be lost on the next service restart.
-
-To make this more robust, you should handle the error from saveExchangeConfig and return an appropriate error response (e.g., HTTP 500) to the client. This ensures that the caller is aware that the configuration change was not successfully persisted.
+.github/workflows/build-and-test.yml around lines 42 to 45: the golangci-lint
+action version is set to the invalid "v2.4.0" which will fail to download;
+update the with.version field to a real release (e.g., pin to a stable
+reproducible tag like "v1.60.0" or another valid v1.x.y release) or use the
+action's latest tag (e.g., "latest") if you prefer floating updates; prefer
+pinning to a specific valid version for reproducibility and ensure the chosen
+tag exists on the golangci/golangci-lint-action repo.
 
 ===
 
-Update deprecated action versions.
-
-Static analysis correctly identifies that actions/checkout@v3 is deprecated. The workflow should use actions/checkout@v4 for better compatibility with current GitHub Actions runners.
-
--      - uses: actions/checkout@v3
-+      - uses: actions/checkout@v4
-Apply this change to all four occurrences in the file.
-
-Also applies to: 56-56, 76-76, 116-116
+.github/workflows/ci-cd.yml around lines 155 to 167: the env block is
+mis-indented so TEST_REDIS_ADDR and subsequent keys are outside the env mapping
+causing a YAML parse error; fix by moving TEST_REDIS_ADDR, RUN_TESTS,
+RUN_SECURITY_SCAN, RUN_PERFORMANCE_TEST, and CI_ENVIRONMENT to the same
+indentation level as DATABASE_URL and REDIS_URL (i.e., nested under env), ensure
+no stray colons or incorrect spacing exist, and verify the final env block is a
+single mapping containing all environment variables before the run: section.
 
 ===
 
-Update to latest checkout action version.
-
-The actions/checkout@v3 is outdated and may have compatibility issues with newer GitHub Actions runners.
-
--    - uses: actions/checkout@v3
-+    - uses: actions/checkout@v4
-
-
-===
-
-
-Update to latest checkout action version.
-
-Same issue as Line 22 - the actions/checkout@v3 should be updated to v4.
-
--      uses: actions/checkout@v3
-+      uses: actions/checkout@v4
-
+.github/workflows/ci-cd.yml around lines 186 to 193: the workflow currently
+references the Trivy action with uses: aquasecurity/trivy-action@master which
+can pull breaking changes; update the uses value to a specific released tag or
+commit SHA (for example aquasecurity/trivy-action@v0.35.0 or the current latest
+tag in your environment) so the action is pinned, and verify the tag supports
+the existing inputs (scan-type, scan-ref, format, output); replace the @master
+with the chosen tag/sha and run the workflow to confirm compatibility.
 
 ===
 
-Update to latest checkout action version.
-
-Same issue as previous checkout actions - should be updated to v4.
-
--      uses: actions/checkout@v3
-+      uses: actions/checkout@v4
-
-===
-
-Remove trailing space in .github/workflows/lint.yml — Go 1.25.0 is correct
-
-Go 1.25.0 is the latest stable release (go.dev/VERSION). Remove the trailing space on line 21.
-
-File: .github/workflows/lint.yml — line 21: remove trailing space after "1.25.0"
-     - name: Set up Go
-       uses: actions/setup-go@v5
-       with:
--        go-version: '1.25.0' [trailing space]
-+        go-version: '1.25.0'
+In ccxt-service/index.ts around lines 45-49, remove the dead if (false) { ... }
+block entirely (the three console.error calls and process.exit(1)); if you still
+need runtime validation, replace it with a real environment check like verifying
+process.env.ADMIN_API_KEY and logging/exiting only when the value is missing or
+insecure, otherwise just delete the constant-condition block.
 
 ===
 
-Update TODO: mark health checks and graceful shutdown as implemented and reprioritize remaining items
-
-Confirmed: /health endpoints and graceful shutdown are already implemented. Please update .trae/TODO.md to avoid duplicate work.
-
-Evidence (select files):
-
-.trae/TODO.md — lines 31–35 (update here)
-internal/api/routes.go — router.GET("/health"), HEAD("/health"), GET("/ready"), GET("/live") (routes)
-cmd/server/main.go — signal.Notify(... SIGINT, SIGTERM) and srv.Shutdown(ctx) (graceful shutdown)
-internal/api/handlers/health.go, pkg/ccxt/client.go and tests (health checks exercised)
-Multiple services use context.WithCancel (e.g., internal/services/resource_manager.go, futures_arbitrage_service.go) indicating coordinated shutdown handling
-Proposed updated snippet for .trae/TODO.md:
-
- Add more comprehensive logging
- Implement graceful shutdown handling
- Add health check endpoints
- Consider implementing circuit breaker pattern for external API calls
- Run Make fmt, lint, test. etc (all language)
-
- ===
-
- Prefer CCXT_ADMIN_API_KEY (fallback to ADMIN_API_KEY) and remove hard-coded defaults
-
-Short: rg shows ADMIN_API_KEY is read by multiple places and ccxt-service currently falls back to a hard-coded default. Please namespace the ccxt service variable (CCXT_ADMIN_API_KEY), allow fallback to ADMIN_API_KEY, and remove hard-coded production defaults.
-
-Files to change
-
-ccxt-service/.env.example — replace ADMIN_API_KEY with CCXT_ADMIN_API_KEY (example value).
-(current snippet lines ~9-11)
-ccxt-service/index.ts — prefer process.env.CCXT_ADMIN_API_KEY, fallback to process.env.ADMIN_API_KEY; remove the hard-coded 'admin-secret-key-change-me' default and fail/alert in production.
-(found at index.ts:27)
-internal/middleware/admin.go — currently sets a dev default ("admin-dev-key-change-in-production"); gate any defaults to non-production or require env in production.
-(found at internal/middleware/admin.go:19-22)
-docs/SECURITY.md — update guidance if you adopt per-service namespacing (or note that CCXT_ADMIN_API_KEY is supported).
-Suggested minimal diffs
-
-ccxt-service/.env.example
-
--# Admin API Key for securing admin endpoints
--# IMPORTANT: Change this in production!
--ADMIN_API_KEY=admin-secret-key-change-me
-+# Admin API Key for securing ccxt-service admin endpoints
-+# IMPORTANT: Change this in production!
-+CCXT_ADMIN_API_KEY=ccxt-admin-secret-key-change-me
-ccxt-service/index.ts
-
--const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'admin-secret-key-change-me';
-+// prefer per-service key, fall back to the generic ADMIN_API_KEY
-+const ADMIN_API_KEY = process.env.CCXT_ADMIN_API_KEY || process.env.ADMIN_API_KEY;
-+if (!ADMIN_API_KEY && process.env.NODE_ENV === 'production') {
-+  throw new Error('CCXT_ADMIN_API_KEY or ADMIN_API_KEY must be set in production');
-+}
-Tests and docs: tests set ADMIN_API_KEY (internal/middleware/admin_test.go) — update tests if you change runtime expectations, and update docs/SECURITY.md if you want to advertise the per-service variable.
-
+In ccxt-service/index.ts around lines 83 to 106, the exchangeConfigs map uses
+incorrect CCXT IDs: rename the coinbaseexchange key to coinbase so CCXT will
+pick up the override, and add a huobi key (if you need a custom Huobi/HTX
+config) instead of any legacy alias; leave the default entry for all others.
+Ensure each key matches the exact IDs from ccxt.exchanges and keep the same
+config object shape (enableRateLimit/timeout/rateLimit/options) when
+moving/adding entries.
 
 ===
 
-Redis is exposed on the host — please remove or restrict the published port (ports: "6379:6379" found in docker-compose.yml).
-
-Short: configs/redis/redis-docker.conf binds 0.0.0.0 with protected-mode no (lines 6–8) and docker-compose.yml publishes container port 6379 to the host, which exposes Redis in production.
-
-Files to address:
-
-configs/redis/redis-docker.conf (lines 6–8)
-bind 0.0.0.0
-port 6379
-protected-mode no
-docker-compose.yml
-ports:
-  - "6379:6379"
-Suggested fixes:
-
-Remove the host port mapping in production (delete the - "6379:6379" entry).
-Or restrict host binding to localhost if host access is needed:
-"127.0.0.1:6379:6379"
-If you must expose Redis externally, enforce authentication/ACLs and TLS (do not rely on protected-mode no), and protect with firewall rules.
-
-
-===
-
-Security concern: SQL injection vulnerability in migration check.
-
-The migration_applied function directly interpolates $migration_name into the SQL query without proper escaping, creating a SQL injection vulnerability.
-
-Use proper parameterization or escape the value:
-
--    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 FROM migrations WHERE filename = '$migration_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
-+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-+        -v migration_name="$migration_name" \
-+        -c "SELECT 1 FROM migrations WHERE filename = :'migration_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
-
-
-===
-
-Fix shellcheck warning: declare and assign separately.
-
-As flagged by shellcheck, declaring and assigning in the same statement can mask return values.
-
--    local migration_name=$(basename "$migration_file")
-+    local migration_name
-+    migration_name=$(basename "$migration_file")
-
-
-===
-
-SQL injection vulnerability in migration recording.
-
-Similar to the previous issue, the INSERT statement is vulnerable to SQL injection through $migration_name.
-
--        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
--            INSERT INTO migrations (filename, applied) VALUES ('$migration_name', true)
--            ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()
--        "
-+        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-+            -v migration_name="$migration_name" \
-+            -c "INSERT INTO migrations (filename, applied) VALUES (:'migration_name', true)
-+                ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
-
-
-===
-
-Fix shellcheck warnings for variable declarations.
-
-Multiple instances where variables should be declared and assigned separately.
-
-For line 92:
-
--        local filename=$(basename "$file")
-+        local filename
-+        filename=$(basename "$file")
-For line 147:
-
--    local migration_name=$(basename "$migration_file")
-+    local migration_name
-+    migration_name=$(basename "$migration_file")
-
-
-===
-
-Potential glob expansion issue in run_specific_migration.
-
-The glob pattern $MIGRATIONS_DIR/${migration_number}_*.sql could match multiple files if there are migrations with the same number prefix. This would cause the -f test to fail.
-
- run_specific_migration() {
-     local migration_number="$1"
--    local migration_file="$MIGRATIONS_DIR/${migration_number}_*.sql"
-+    local migration_files=("$MIGRATIONS_DIR"/${migration_number}_*.sql)
-     
--    if [ ! -f "$migration_file" ]; then
--        log_error "Migration file not found: $migration_file"
-+    if [ ${#migration_files[@]} -eq 0 ] || [ ! -f "${migration_files[0]}" ]; then
-+        log_error "Migration file not found for number: $migration_number"
-+        exit 1
-+    fi
-+    
-+    if [ ${#migration_files[@]} -gt 1 ]; then
-+        log_error "Multiple migration files found for number: $migration_number"
-         exit 1
-     fi
-     
-+    local migration_file="${migration_files[0]}"
-     create_migrations_table
-     apply_migration "$migration_file"
- }
-
-
-===
-
-SQL injection vulnerability in rollback function.
-
-The DELETE statement is vulnerable to SQL injection through $migration_name.
-
--    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
--        DELETE FROM migrations WHERE filename = '$migration_name'
--    "
-+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-+        -v migration_name="$migration_name" \
-+        -c "DELETE FROM migrations WHERE filename = :'migration_name'"
-
-
-===
-
-Critical: Symbol parsing logic is fragile and may produce incorrect results
-
-The get_or_create_trading_pair_id function's symbol parsing logic has several issues:
-
-The parsing for symbols without / assumes fixed-length quote currencies (3-4 chars), which will fail for pairs like SHIBUSDT (base: SHIB, quote: USDT) - it would incorrectly parse as base: SHIBUSD, quote: T.
-
-The fallback logic at lines 54-55 blindly takes the first 3 characters as base and the rest as quote, which is incorrect for many symbols.
-
-The function doesn't handle edge cases like symbols with underscores, dots, or other delimiters that some exchanges use.
-
-Consider using a more robust approach:
-
--    -- Parse symbol to extract base and quote currencies
--    -- Handle common formats: BTC/USDT, BTC/USDT:USDT, BTCUSDT
--    IF p_symbol LIKE '%/%' THEN
--        -- Format: BTC/USDT or BTC/USDT:USDT
--        v_base_currency := SPLIT_PART(SPLIT_PART(p_symbol, ':', 1), '/', 1);
--        v_quote_currency := SPLIT_PART(SPLIT_PART(p_symbol, ':', 1), '/', 2);
--    ELSE
--        -- Assume format like BTCUSDT - try to extract common quote currencies
--        IF p_symbol LIKE '%USDT' THEN
--            v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - 4);
--            v_quote_currency := 'USDT';
--        ELSIF p_symbol LIKE '%USD' THEN
--            v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - 3);
--            v_quote_currency := 'USD';
--        ELSIF p_symbol LIKE '%BTC' THEN
--            v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - 3);
--            v_quote_currency := 'BTC';
--        ELSIF p_symbol LIKE '%ETH' THEN
--            v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - 3);
--            v_quote_currency := 'ETH';
--        ELSE
--            -- Default fallback
--            v_base_currency := SUBSTRING(p_symbol FROM 1 FOR 3);
--            v_quote_currency := SUBSTRING(p_symbol FROM 4);
--        END IF;
--    END IF;
-+    -- Parse symbol to extract base and quote currencies
-+    -- Handle common formats: BTC/USDT, BTC/USDT:USDT, BTCUSDT
-+    IF p_symbol LIKE '%/%' THEN
-+        -- Format: BTC/USDT or BTC/USDT:USDT
-+        v_base_currency := SPLIT_PART(SPLIT_PART(p_symbol, ':', 1), '/', 1);
-+        v_quote_currency := SPLIT_PART(SPLIT_PART(p_symbol, ':', 1), '/', 2);
-+    ELSE
-+        -- Try to match known quote currencies from longest to shortest
-+        -- This handles both 4-char (USDT, BUSD) and 3-char (USD, BTC, ETH) quotes
-+        CASE 
-+            WHEN p_symbol ~ '(USDT|BUSD|TUSD|USDC|USDP|GUSD)$' THEN
-+                v_quote_currency := SUBSTRING(p_symbol FROM '(USDT|BUSD|TUSD|USDC|USDP|GUSD)$');
-+                v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - LENGTH(v_quote_currency));
-+            WHEN p_symbol ~ '(USD|BTC|ETH|BNB|EUR|GBP|JPY|AUD|CAD)$' THEN
-+                v_quote_currency := SUBSTRING(p_symbol FROM '(USD|BTC|ETH|BNB|EUR|GBP|JPY|AUD|CAD)$');
-+                v_base_currency := SUBSTRING(p_symbol FROM 1 FOR LENGTH(p_symbol) - LENGTH(v_quote_currency));
-+            ELSE
-+                -- Last resort: store the symbol as-is with unknown parsing
-+                -- This should be logged for manual review
-+                v_base_currency := 'UNKNOWN';
-+                v_quote_currency := 'UNKNOWN';
-+                RAISE WARNING 'Could not parse symbol: %, storing with UNKNOWN base/quote', p_symbol;
-+        END CASE;
-+    END IF;
-
-===
-
-Add ON CONFLICT handling to prevent duplicate key errors
-
-The INSERT statement at line 60-61 lacks ON CONFLICT handling. If concurrent processes try to create the same trading pair, this could result in duplicate key constraint violations.
-
-    -- Create new trading pair
-    INSERT INTO trading_pairs (exchange_id, symbol, base_currency, quote_currency, is_active)
-    VALUES (p_exchange_id, p_symbol, v_base_currency, v_quote_currency, true)
-+   ON CONFLICT (exchange_id, symbol) DO UPDATE SET
-+       base_currency = EXCLUDED.base_currency,
-+       quote_currency = EXCLUDED.quote_currency,
-+       updated_at = CURRENT_TIMESTAMP
-    RETURNING id INTO v_trading_pair_id;
-
-===
-
-Consider batching updates for better performance
-
-The UPDATE statement populates all NULL trading_pair_id values in a single pass. For large datasets, this could lock the table for an extended period and potentially fail due to transaction size limits.
-
-Consider processing updates in batches:
-
---- Update existing funding_rates records to populate trading_pair_id
--UPDATE funding_rates 
--SET trading_pair_id = get_or_create_trading_pair_id(symbol, exchange_id)
--WHERE trading_pair_id IS NULL;
-+-- Update existing funding_rates records to populate trading_pair_id in batches
-+DO $$
-+DECLARE
-+    batch_size INTEGER := 1000;
-+    rows_updated INTEGER;
-+BEGIN
-+    LOOP
-+        UPDATE funding_rates 
-+        SET trading_pair_id = get_or_create_trading_pair_id(symbol, exchange_id)
-+        WHERE trading_pair_id IS NULL
-+        AND id IN (
-+            SELECT id FROM funding_rates 
-+            WHERE trading_pair_id IS NULL 
-+            LIMIT batch_size
-+        );
-+        
-+        GET DIAGNOSTICS rows_updated = ROW_COUNT;
-+        EXIT WHEN rows_updated = 0;
-+        
-+        -- Optional: Add a small delay to reduce load
-+        PERFORM pg_sleep(0.1);
-+        COMMIT;
-+    END LOOP;
-+END $$;
-
-
-===
-
-
-Function parameters order doesn't match the function definition
-
-The DROP FUNCTION statement has parameters in the wrong order compared to the CREATE FUNCTION definition at line 16.
-
--- Drop the helper function as it's no longer needed
--DROP FUNCTION IF EXISTS get_or_create_trading_pair_id(VARCHAR(50), INTEGER);
-+DROP FUNCTION IF EXISTS get_or_create_trading_pair_id(p_symbol VARCHAR(50), p_exchange_id INTEGER);
-
-
-===
-
-Fix required: migration 029 must safely convert ALL foreign refs and use type-safe migration + validation
-
-The migration currently updates only market_data and technical_indicators (lines ~80–88) and uses text casts (old_id::text = trading_pair_id::text). Repository search shows many other tables reference trading_pairs(id) — those must be migrated too, and the current approach is brittle and can fail depending on column types and unmapped rows.
-
-Actionable points (files/locations to fix)
-
-database/migrations/029_fix_trading_pairs_schema.sql — the update block around lines 80–88 (currently only updates market_data and technical_indicators).
-Other places that reference trading_pairs(id) and must be handled/validated:
-database/migrations/005_add_funding_rate_support.sql (funding_rates)
-database/migrations/009_create_funding_arbitrage_opportunities.sql (funding_arbitrage_opportunities)
-database/migrations/031_create_exchange_trading_pairs_table.sql (exchange_trading_pairs)
-database/migrations/004_enhanced_initial_schema.sql, 006_minimal_schema.sql, 001_initial_schema.sql (order_book_data, ohlcv_data, arbitrage_opportunities, user_alerts, market_data, technical_indicators)
-database/migrations/032_fix_trading_pairs_column_sizes.sql (views that JOIN trading_pairs)
-internal/models/* and internal/services/* (application code expects integer trading_pair_id — ensure migration results match code)
-Recommended fixes (concise)
-
-For every table with trading_pair_id:
-Add a new integer column (trading_pair_id_new INTEGER).
-Populate it via id_mapping (join on id_mapping.old_id), using type-safe comparisons (e.g., WHERE table.trading_pair_id::text = id_mapping.old_id::text OR WHERE table.trading_pair_id = id_mapping.old_id::uuid depending on the actual column type).
-Validate no unmapped rows: abort (RAISE EXCEPTION) if any rows remain with trading_pair_id not converted.
-DROP old column and RENAME trading_pair_id_new → trading_pair_id, then recreate FK constraints.
-Avoid assigning integer new_id directly into uuid-typed columns; explicitly change column types via the safe add-populate-swap pattern above.
-Add pre-drop validation checks:
-Ensure id_mapping covers all distinct old IDs from trading_pairs.
-Ensure every dependent table has zero rows with trading_pair_id not present in id_mapping before dropping the old trading_pairs table.
-Update views/functions that JOIN trading_pairs to ensure they reference the new integer ids.
-Example pattern (replace current single UPDATEs)
-
-Add column:
-ALTER TABLE funding_rates ADD COLUMN trading_pair_id_new INTEGER;
-Populate:
-UPDATE funding_rates f SET trading_pair_id_new = im.new_id
-FROM id_mapping im
-WHERE f.trading_pair_id::text = im.old_id::text;
-Validate:
-SELECT COUNT(*) FROM funding_rates WHERE trading_pair_id IS NOT NULL AND trading_pair_id_new IS NULL; -- abort if > 0
-Swap columns and recreate FK.
-Summary: extend the migration to handle every dependent table, use the add-populate-validate-swap pattern per table (type-safe joins, not brittle text-only casts), and add explicit validation before dropping the old trading_pairs table to avoid orphaned or mismatched foreign keys.
+In configs/nginx.single-droplet.conf around lines 57 to 61, the redirect
+currently uses $server_name which is set to "_" and yields an invalid URL;
+replace $server_name with $host and then decide the TLS port: if external TLS
+listens on 8443 keep :8443 in the redirect, otherwise (standard 443) remove the
+explicit port so the redirect is to https://$host$request_uri; ensure the return
+uses the chosen host/port consistently.
 
 
 ====
 
-Fix README Docker examples: they reference the wrong container/path
-
-Short: postgres (celebrum-postgres) does NOT mount ./database/migrations; the migrate service (celebrum-migrate) does. The README commands will fail as written.
-
-Files to change:
-
-database/README.md (lines ~66-71) — update the example commands.
-docker-compose.yml — note: migrate service mounts ./database/migrations:/database/migrations and has container_name celebrum-migrate; postgres does not.
-Suggested replacement snippet for database/README.md:
-
-# Using docker-compose (use the migrate service which mounts the migrations)
-docker-compose exec migrate psql -h postgres -U celebrum_ai -d celebrum_ai -f /database/migrations/004_enhanced_initial_schema.sql
-
-# Using direct docker (exec into the migrate container)
-docker exec celebrum-migrate psql -h postgres -U celebrum_ai -d celebrum_ai -f /database/migrations/004_enhanced_initial_schema.sql
-Alternative: if you prefer running migrations from the postgres container, add the migration mount to the postgres service in docker-compose.yml (./database/migrations:/database/migrations).
-
-
-
-===
-
-Missing SSL files — docker-compose mounts certs that aren't present
-
-I checked the repo: configs/nginx/nginx.conf exists, but configs/ssl/ is missing, so the mounted certificate files will not be available at runtime.
-
-Files/locations to address:
-
-docker-compose.single-droplet.yml — lines ~157–159:
-      - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./configs/ssl/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
-      - ./configs/ssl/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
-Present: configs/nginx/nginx.conf (found)
-Missing: configs/ssl/nginx-selfsigned.crt, configs/ssl/nginx-selfsigned.key (configs/ssl/ directory not found)
-Recommended fixes (pick one):
-
-Add the cert/key files under configs/ssl/, or
-Update the compose mounts to the correct paths, or
-Generate certificates at startup (e.g., Let's Encrypt or a self-signed generation step).
-
-
-===
-
-
-Docs update required — Symbol cache can be Redis-backed or in-memory (docs are inaccurate)
-
-Short: docs/CACHE_ANALYSIS.md currently states the symbol cache is in-memory only and "Not used by the CollectorService". Verification shows both implementations exist and CollectorService selects Redis when a redis client is provided.
-
-Files to update:
-
-docs/CACHE_ANALYSIS.md — update "Cache Type" and "Redis Usage" sections.
-Reference these code locations to explain behavior:
-internal/services/collector.go — in-memory SymbolCache + SymbolCacheInterface and initializeSymbolCache(redisClient) (returns NewSymbolCache or Redis implementation).
-internal/cache/symbol_cache.go — RedisSymbolCache and NewRedisSymbolCache (Redis-backed implementation) and tests in internal/cache/symbol_cache_test.go.
-Replace original doc snippet with (suggested):
-
-- **Location**: `internal/services/collector.go` (in-memory SymbolCache) and `internal/cache/symbol_cache.go` (RedisSymbolCache)
-- **Storage**: In-memory map with TTL when Redis is not provided; Redis-backed JSON entries when a redis client is available.
-- **Purpose**: Caches exchange symbols to reduce API calls to the CCXT service.
-- **TTL / Defaults**: Default TTL currently set to 1 hour for both in-memory and Redis-backed caches (configurable where applicable).
-- **Selection**: CollectorService uses initializeSymbolCache(redisClient) — if redisClient != nil it returns `NewRedisSymbolCache`, otherwise `NewSymbolCache`.
-Reason: docs claim "Not used by the CollectorService" is incorrect — CollectorService will use RedisSymbolCache when constructed with a Redis client. Please update docs/CACHE_ANALYSIS.md accordingly.
-
-
-===
-
-
-Action: align Docker/Makefile with go.mod & workflows (upgrade to Go 1.25.0)
-
-CI workflows already use Go 1.25.0, but the repository still references Go 1.24 in the Makefile and Dockerfile — update these to avoid toolchain drift.
-
-Files to update:
-
-Makefile (line ~5): GO_VERSION=1.24 → update to 1.25.0
-Dockerfile (line ~2): FROM golang:1.24-alpine AS builder → FROM golang:1.25-alpine AS builder
-Optional: docs/DEPLOYMENT_BEST_PRACTICES.md contains older example (actions/setup-go@v4 + go-version: '1.21') — update examples to avoid confusion.
-Suggested diffs:
-
-Makefile
-
--GO_VERSION=1.24
-+GO_VERSION=1.25.0
-Dockerfile
-
--FROM golang:1.24-alpine AS builder
-+FROM golang:1.25-alpine AS builder
+In database/migrate.sh around lines 36 to 49, migration_applied always returns
+false because the SQL uses $1 (psql positional) while the script sets -v
+migration_name which isn’t referenced; also psql errors are masked by the
+pipeline. Change the query to use a psql variable reference (e.g.
+:'migration_name') and pass -v migration_name="..." before -c so the binding is
+applied, and ensure the -c string uses the :'migration_name' placeholder;
+additionally enable pipefail (or at least check psql exit status) so any psql
+errors surface instead of being swallowed by grep.
 
 
 ====
 
-Action: run go mod tidy and remove/confirm unused direct require github.com/alicebob/miniredis/v2
-
-The script output shows: "No import found for direct require: github.com/alicebob/miniredis/v2".
-
-go.mod — remove the direct require for github.com/alicebob/miniredis/v2 (or run go mod tidy to clean up).
-Before removing, verify test/build-tag usage: rg -n 'miniredis' and run CI/tests to ensure it isn't test-only or used by generated code.
-
-
-===
-
-Validate count parameter has an upper bound
-
-The RecordCacheHit function accepts a count parameter but doesn't enforce an upper limit. A malicious or erroneous request with a very large count could cause performance issues.
-
-    count := 1
-    if countStr := c.Query("count"); countStr != "" {
-        if parsedCount, err := strconv.Atoi(countStr); err == nil && parsedCount > 0 {
-+           // Cap the count to prevent abuse
-+           if parsedCount > 1000 {
-+               parsedCount = 1000
-+           }
-            count = parsedCount
-        }
-    }
+In database/migrate.sh around lines 178 to 184, the psql call is attempting to
+use a shell-style $1 parameter which psql does not bind (the extra argument is
+ignored), so the DELETE will not match the migration filename; change the call
+to pass the filename as a psql variable (using -v
+migration_name="$migration_name") and reference it inside the SQL as
+:'migration_name' (or use format('%L', :'migration_name') if needed for literal
+quoting) so the filename is correctly bound and the migration record is removed;
+update the -c invocation accordingly and keep the log line as-is.
 
 
 ===
 
-Fix potential nil pointer dereference in mock setup.
-
-The test creates a redis.StringCmd without proper initialization, which could cause issues. Consider using the redis package's constructor methods.
-
- 	// Setup mock expectations
--	mockRedis.On("Get", mock.Anything, "exchange:supported").Return(&redis.StringCmd{})
-+	redisGetCmd := redis.NewStringResult("", redis.Nil)
-+	mockRedis.On("Get", mock.Anything, "exchange:supported").Return(redisGetCmd)
-
-
-===
-
-Fix potential nil pointer dereference in Redis mock.
-
-Similar to the previous issue, the StatusCmd should be properly initialized.
-
--	mockRedis.On("Set", mock.Anything, "exchange:supported", mock.Anything, 30*time.Minute).Return(&redis.StatusCmd{})
-+	redisSetCmd := redis.NewStatusResult("OK", nil)
-+	mockRedis.On("Set", mock.Anything, "exchange:supported", mock.Anything, 30*time.Minute).Return(redisSetCmd)
+In database/migrations/031_create_exchange_trading_pairs_table.sql around lines
+174-179, the migration ends with an INSERT that targets (version, filename,
+description) and a COMMIT which conflicts with the runner’s schema_migrations
+structure and will fail; remove the entire recording block (the INSERT...ON
+CONFLICT and COMMIT) so the bash runner handles schema_migrations, or if you
+must keep in-SQL bookkeeping, replace the block with an INSERT that matches the
+runner’s columns (e.g. insert filename and applied, updating applied/applied_at
+on conflict) and avoid duplicating the runner’s recording logic.
 
 
 ===
 
-Remove redundant test-only interfaces
+In database/migrations/035_create_futures_arbitrage_tables.sql around lines 247
+to 259, the calculate_futures_arbitrage_apy function performs a division by
+funding_interval without validating it; add a guard at the start of the function
+that checks if funding_interval IS NULL OR funding_interval <= 0 and RAISE
+EXCEPTION with a clear message (e.g., 'invalid funding_interval: must be > 0'),
+so the function fails fast instead of dividing by zero or negative values; keep
+the rest of the APY calculation unchanged and ensure the function remains
+IMMUTABLE and returns DECIMAL.
 
-These interfaces duplicate existing interfaces from the health.go file. Since you're already importing the handlers package, you should use the existing DatabaseHealthChecker and RedisHealthChecker interfaces instead of redefining them here.
 
--// DatabaseInterface for mocking database operations
--type DatabaseInterface interface {
--	HealthCheck(ctx context.Context) error
+===
+
+In database/migrations/035_create_futures_arbitrage_tables.sql around lines
+260-287, the calculation leverage_factor := LEAST(max_leverage, 3.0) will return
+NULL if max_leverage is NULL; change the assignment to coalesce max_leverage
+first (e.g., leverage_factor := LEAST(COALESCE(max_leverage, 1.0), 3.0)) so
+NULLs don't propagate and position size remains calculable.
+
+
+===
+
+In database/migrations/035_create_futures_arbitrage_tables.sql around lines
+342-343, the INSERT uses non-existent columns (filename, applied); change it to
+match the project's schema_migrations shape which uses (version, dirty): insert
+the migration identifier into version (use the project convention, e.g. '035' or
+'035_create_futures_arbitrage_tables' as other records do) and set dirty =
+false, and update the ON CONFLICT clause to target the version key and set dirty
+= false and applied_at = NOW() (or whatever timestamp column the schema uses).
+
+
+===
+
+Missing view recreations in migration 040_fix_trading_pairs_column_sizes.sql – breaking dependent queries
+
+You drop five views but only recreate active_funding_arbitrage_opportunities. The other views will be gone after this migration, causing failures in any code or downstream migrations that reference them.
+
+Locations to fix:
+
+File: database/migrations/040_fix_trading_pairs_column_sizes.sql
+• Lines 7–12: the five DROP VIEW IF EXISTS … CASCADE statements
+• Lines 41–48: only CREATE VIEW active_funding_arbitrage_opportunities appears
+Two possible remedies (pick one):
+
+Recreate all dropped views in the same transaction, after the ALTERs.
+• Pull the definitions for:
+– active_futures_arbitrage_opportunities
+– futures_arbitrage_market_summary
+– active_exchange_trading_pairs
+– blacklisted_exchange_trading_pairs
+from migration 031 (or the current database) and add their CREATE VIEW statements below the ALTERs, before COMMIT.
+
+Only drop/recreate views that truly depend on the altered columns. Widening a VARCHAR rarely invalidates views. If the two exchange_* views don’t reference the changed columns, remove their drop lines here and handle futures-* views in their defining migrations:
+
+-DROP VIEW IF EXISTS active_exchange_trading_pairs CASCADE;
+-DROP VIEW IF EXISTS blacklisted_exchange_trading_pairs CASCADE;
+Let me know if you’d like me to generate the CREATE VIEW statements for the exchange_* views to keep this migration self-contained.
+
+
+====
+
+Use ALTER TABLE for schema updates in migration 043
+Because migration 035_create_futures_arbitrage_tables.sql already created these tables, the CREATE TABLE IF NOT EXISTS blocks in 043 are no-ops. All intended changes (widening column sizes, adding new columns/indexes/views) won’t be applied.
+
+Please refactor database/migrations/043_create_futures_arbitrage_tables.sql:
+
+• Lines 6–78 (futures_arbitrage_opportunities): replace the CREATE TABLE IF NOT EXISTS block with ALTER TABLE statements to
+– ALTER COLUMN symbol TYPE VARCHAR(50)
+– ALTER COLUMN base_currency TYPE VARCHAR(20)
+– ALTER COLUMN quote_currency TYPE VARCHAR(20)
+– ADD any new columns not in 035
+
+• Lines 80–125 (futures_arbitrage_strategies): use ALTER TABLE … ADD COLUMN … for any new fields
+
+• Lines 126–144 (funding_rate_history): apply ALTER TABLE to add or modify columns and constraints
+
+• Lines 145–176 (futures_arbitrage_executions): convert table creation to ALTER TABLE … ADD COLUMN …
+
+Example snippet:
+
+ALTER TABLE futures_arbitrage_opportunities
+  ALTER COLUMN symbol TYPE VARCHAR(50),
+  ALTER COLUMN base_currency TYPE VARCHAR(20),
+  ALTER COLUMN quote_currency TYPE VARCHAR(20);
+
+-- then for each new column:
+ALTER TABLE futures_arbitrage_opportunities
+  ADD COLUMN next_funding_time TIMESTAMPTZ,
+  ADD COLUMN time_to_next_funding INTEGER;
+Confirm the exact differences between 035 and 043 (column sizes, added columns/indexes/views) and replace each CREATE block with the corresponding ALTER statements so the schema evolves as intended.
+
+
+====
+
+In database/migrations/043_create_futures_arbitrage_tables.sql around line 8 the
+migration uses DEFAULT gen_random_uuid() but the pgcrypto extension is not
+enabled; add a migration that runs before 043 to enable pgcrypto (either update
+database/migrations/006_minimal_schema.sql to include a CREATE EXTENSION IF NOT
+EXISTS pgcrypto; statement or add a new migration named something like
+006a_enable_pgcrypto.sql with that single-step to ensure gen_random_uuid() is
+available at runtime).
+
+
+====
+
+In database/migrations/043_create_futures_arbitrage_tables.sql around lines 247
+to 259, the calculate_futures_arbitrage_apy function must guard against
+funding_interval <= 0 and return a fixed-precision numeric: change the function
+to validate funding_interval > 0 at the start (RAISE EXCEPTION with a clear
+message if invalid), convert inputs to NUMERIC as needed, compute the APY using
+numeric math, and change the return type to a NUMERIC with a defined
+precision/scale (e.g., NUMERIC(12,6)) so the function always returns a
+consistent fixed-precision result.
+
+
+====
+
+In database/migrations/043_create_futures_arbitrage_tables.sql around lines 260
+to 287, the function currently uses LEAST(max_leverage, 3.0) which yields NULL
+if max_leverage is NULL and risk_score can be negative/unbounded; change to
+coalesce and clamp inputs before use (e.g., risk_score :=
+GREATEST(LEAST(COALESCE(risk_score, 50), 100), 0); and set leverage_factor :=
+LEAST(COALESCE(max_leverage, 1.0), 3.0) or another sensible default) and ensure
+these clamped values are used when computing and returning the position size so
+the function never returns NULL or produces out-of-range results.
+
+
+====
+
+In database/migrations/043_create_futures_arbitrage_tables.sql around lines
+342-343, the INSERT into schema_migrations uses a `dirty` column that doesn't
+exist in the original schema_migrations table (defined in migration 006); add an
+early migration (immediately after 006) that ALTERs schema_migrations to ADD
+COLUMN IF NOT EXISTS applied BOOLEAN DEFAULT true, ADD COLUMN IF NOT EXISTS
+applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), and ADD COLUMN IF NOT EXISTS
+dirty BOOLEAN DEFAULT false so subsequent migrations can reference those
+columns, or alternatively change migrations 035 and 043 to only insert the
+existing columns (version, filename, description) and use ON CONFLICT DO NOTHING
+to avoid relying on new columns.
+
+
+====
+
+In database/migrations/045_fix_cache_warming_queries.sql around lines 10 to 19,
+the migration currently adds base_currency and quote_currency as NOT NULL which
+will fail on non-empty trading_pairs tables; change these ALTER TABLE statements
+to add the columns as NULLABLE (remove NOT NULL), then perform a separate
+backfill step (outside this file) to populate base_currency/quote_currency for
+existing rows, and create a follow-up migration that adds the NOT NULL
+constraints after backfill completes.
+
+
+====
+
+In database/migrations/045_fix_cache_warming_queries.sql around lines 69 to 86,
+the CREATE OR REPLACE VIEW v_trading_pairs_debug unconditionally LEFT JOINs the
+exchanges table and will fail if that table doesn't exist; change the migration
+to create the view conditionally: check for the existence of the exchanges table
+and, if present, CREATE OR REPLACE VIEW with the LEFT JOIN to include
+exchange_name, otherwise CREATE OR REPLACE VIEW with a fallback SELECT that
+supplies NULL or a placeholder for exchange_name (or skip creating the view
+entirely), implementing the conditional creation using a simple IF EXISTS query
+or a DO block that runs the appropriate CREATE VIEW statement.
+
+
+===
+
+In database/migrations/047_create_exchange_blacklist_table.sql lines 1-105 you
+have a duplicate migration that repeats the same table, indexes, trigger and
+comments from 039_create_exchange_blacklist_table.sql; remove this duplicate
+file (or merge its unique changes into the canonical migration 039) so only one
+migration creates/owns exchange_blacklist, consolidate any differing
+indexes/triggers/comments into that single file, update migration
+ordering/filenames if needed, and run migration checks (or dry-run in each
+environment) to verify the migration sequence remains correct.
+
+
+===
+
+In docs/environment-sync.md around lines 131–137, improve DB/Redis validation by
+preferring DATABASE_URL for pg_isready when set and quoting all variables, and
+by making Redis auth conditional: if DATABASE_URL is present call pg_isready
+with the connection string (e.g. pg_isready -d "$DATABASE_URL"), otherwise call
+pg_isready with quoted host/port; for Redis call redis-cli with quoted host and,
+only if REDIS_PASSWORD is set, include the auth flag (e.g. -a "$REDIS_PASSWORD")
+before running PING so unauthenticated setups still work and quoted variables
+are used throughout.
+
+
+====
+
+In docs/REDIS_SECURITY.md around lines 11 to 15, the doc references a host file
+path of configs/redis/redis-docker.conf that does not exist in the repo (only
+configs/redis/redis.conf exists) and the docker-compose mounts
+./configs/redis/redis-docker.conf → /etc/redis/redis.conf; fix by choosing the
+canonical filename and making both the docs and docker-compose consistent:
+either rename the file in the repo to configs/redis/redis-docker.conf or update
+the docker-compose mount and this doc to reference configs/redis/redis.conf, and
+update the snippet text to explicitly state the final path used (host path →
+/etc/redis/redis.conf).
+
+
+===
+
+Don’t set Docker "iptables": false (breaks networking and is unsafe). Use DOCKER-USER or UFW rules instead.
+
+Disabling Docker’s iptables management will likely break container networking/published ports and shifts packet filtering fully to host-level tools, which is not recommended. The safer pattern: leave Docker iptables enabled and enforce host policies in the DOCKER-USER chain or with UFW’s before rules.
+
+Replace this section with a DOCKER-USER example:
+
+-#### Docker and UFW Integration
+-
+-Docker bypasses UFW by default. To ensure UFW rules apply to Docker:
+-
+-```bash
+-# Edit Docker daemon configuration
+-sudo nano /etc/docker/daemon.json
+-
+-# Add the following content:
+-{
+-  "iptables": false
 -}
 -
--// RedisHealthInterface for mocking Redis health operations
--type RedisHealthInterface interface {
--	HealthCheck(ctx context.Context) error
--}
-The MockDatabase and MockRedisHealthClient types should implement the interfaces from the health.go file directly.
+-# Restart Docker
+-sudo systemctl restart docker
+-```
++#### Docker and Host Firewall Integration
++
++Docker programs iptables directly. Keep it enabled and enforce host policy using the DOCKER-USER chain (applies before Docker's rules):
++
++```bash
++# Block external access to Redis on the host (no effect inside the bridge)
++sudo iptables -I DOCKER-USER -p tcp --dport 6379 -j DROP
++# Allow from specific trusted subnets if needed:
++# sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -p tcp --dport 6379 -j ACCEPT
++
++# Persist rules with your distro's mechanisms (e.g., netfilter-persistent)
++```
++
++If you prefer UFW, add rules in `/etc/ufw/before.rules` to filter before Docker's chains, or rely on a cloud firewall (recommended) plus not publishing Redis ports.
+
+===
+
+In internal/api/handlers/arbitrage.go around lines 22 to 27, the
+ArbitrageHandler struct expects a *redis.Client instance but the routes call is
+passing the type name instead of the actual client variable; update the call in
+internal/api/routes.go at line 48 to pass the instantiated redis client variable
+(e.g., redisClient or whatever variable holds *redis.Client) not the
+redis.Client type, and ensure the variable is in scope and its type matches
+*redis.Client so the handler receives the real Redis connection.
 
 
 ===
 
-Test doesn't clean up Redis connection
+In internal/api/handlers/telegram.go around lines 205-213 (and also apply the
+same change at 226-230 and 399-418), the code stores and reads cached
+opportunities as interface{} and performs runtime type assertions; change the
+cache type to store and retrieve []ArbitrageOpportunity (concrete slice) so you
+can avoid interface{} gymnastics: update the cache put to save
+[]ArbitrageOpportunity, change getCachedTelegramOpportunities to return
+([]ArbitrageOpportunity, error) instead of (interface{}, error), update callers
+to check for nil/len on the typed slice and pass the typed slice into
+sendOpportunitiesMessage (adjust that function signature if needed), and update
+any helper functions and tests to use the concrete type accordingly.
 
-The test skips if Redis is unavailable but doesn't close the Redis client connection when the test completes successfully.
-
-    ctx := context.Background()
-    _, err := mockRedis.Ping(ctx).Result()
-    if err != nil {
-        t.Skipf("Redis not available for testing: %v", err)
-    }
-+   defer mockRedis.Close()
-
-===
-
-ix incorrect cache hit condition
-
-The condition len(oppsSlice) >= 0 is always true. It should check for len(oppsSlice) > 0 to verify that there are actual opportunities in the cache.
-
--		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) >= 0 {
-+		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) > 0 {
 
 ===
 
-Improve type safety in message formatting
+sendOpportunitiesMessage type assertion will always fail with fresh data
 
-The current implementation uses multiple type assertions with maps and interfaces, making the code fragile and prone to runtime errors. Consider using concrete types for better safety and maintainability.
+handleOpportunitiesCommand passes []ArbitrageOpportunity, but sendOpportunitiesMessage asserts []interface{}, causing the function to send an error message instead of real opportunities. Switch to strongly typed flow end-to-end.
 
-Instead of working with interface{} and maps, pass the concrete []ArbitrageOpportunity type:
+Apply these changes:
 
+-	return h.sendOpportunitiesMessage(ctx, chatID, opportunities)
++	return h.sendOpportunitiesMessage(ctx, chatID, opportunities)
 -func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities interface{}) error {
 -	// Type assertion to get the actual opportunities slice
 -	oppsSlice, ok := opportunities.([]interface{})
@@ -615,29 +377,13 @@ Instead of working with interface{} and maps, pass the concrete []ArbitrageOppor
 -		return h.sendMessage(ctx, chatID, "❌ Error processing opportunities data.")
 -	}
 +func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities []ArbitrageOpportunity) error {
- 
- 	// Format the message
--	if len(oppsSlice) == 0 {
-+	if len(opportunities) == 0 {
- 		msg := `📈 Current Arbitrage Opportunities:
- 
- 🔍 No profitable opportunities found at the moment.
- 
- 💡 Opportunities appear when there are price differences ≥1% between exchanges.
- 
- ⚙️ Configure alerts: /settings
- 🎯 Upgrade for more features: /upgrade`
- 		return h.sendMessage(ctx, chatID, msg)
- 	}
- 
- 	// Build opportunities message
- 	msg := "📈 Current Arbitrage Opportunities:\n\n"
++	oppsSlice := opportunities
 -	for i, oppInterface := range oppsSlice {
-+	for i, opp := range opportunities {
++	for i, opp := range oppsSlice {
  		if i >= 5 { // Limit to top 5 for readability
  			break
  		}
- 
+-
 -		// Convert interface{} to map for field access
 -		oppMap, ok := oppInterface.(map[string]interface{})
 -		if !ok {
@@ -663,968 +409,32 @@ Instead of working with interface{} and maps, pass the concrete []ArbitrageOppor
 +		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
  		msg += "\n"
  	}
-This requires updating the caching functions to work with concrete types rather than interface{}.
+Also applies to: 420-429, 431-477
 
 ===
 
-Complex test setup logic with potential nil dereference.
-
-The NewUserHandlerWithQuerier function has several issues:
-
-The logic is convoluted - it tries to type-assert the querier to a pool, but if it fails, it sets db to nil
-Setting db = nil on line 82 will cause nil pointer dereferences in methods that check h.db != nil later
-The comment on line 75-76 suggests this approach needs rework
-Consider simplifying this constructor:
-
- func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *UserHandler {
--	// For testing, we create a special database wrapper that uses the querier directly
--	db := &database.PostgresDB{}
--	// We'll need to modify the methods to use the querier interface instead of Pool
--	// For now, let's try a different approach
--	if pool, ok := querier.(*pgxpool.Pool); ok {
--		db.Pool = pool
--	} else {
--		// For mock testing, we'll handle this differently
--		// We need to store the querier somewhere accessible
--		db = nil // This will force methods to handle nil database
--	}
- 	return &UserHandler{
--		db:      db,
-+		db:      nil, // For test handlers, db is not used
- 		redis:   redisClient,
--		querier: querier, // We need to add this field
-+		querier: querier,
- 	}
- }
+In internal/api/handlers/telegram.go around lines 391 to 397, the code treats
+h.redis.Set(...) as if it returns an error but Set returns a *StatusCmd; change
+it to capture the returned command (cmd := h.redis.Set(ctx, cacheKey,
+string(oppsJSON), 30*time.Second)) and then check cmd.Err() (if err :=
+cmd.Err(); err != nil { log.Printf("Failed to cache Telegram opportunities: %v",
+err) } else { log.Printf("Cached Telegram opportunities in Redis for 30
+seconds") }) so the success branch can run correctly.
 
 
 ===
 
-Inconsistent error variable handling.
-
-The code creates err2 unnecessarily and then reassigns it to err. This pattern makes the code harder to read and maintain.
-
--	var err2 error
- 	if h.querier != nil {
--		_, err2 = h.querier.Exec(c.Request.Context(), query,
-+		_, err = h.querier.Exec(c.Request.Context(), query,
- 			userID, req.Email, string(hashedPassword), req.TelegramChatID, "free")
- 	} else if h.db != nil {
--		_, err2 = h.db.Pool.Exec(c.Request.Context(), query,
-+		_, err = h.db.Pool.Exec(c.Request.Context(), query,
- 			userID, req.Email, string(hashedPassword), req.TelegramChatID, "free")
- 	} else {
- 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not available"})
- 		return
- 	}
--	err = err2
+In internal/api/handlers/user.go around lines 263 to 274, the DB branch only
+checks h.db != nil which can cause a nil-deref on h.db.Pool, and the handler
+does not evict caches after updating a profile causing stale reads; change the
+DB guard to ensure h.db != nil && h.db.Pool != nil (use that pool to Exec), and
+immediately after a successful Exec (before calling getUserByID) perform
+best-effort cache invalidation: if h.redis != nil delete the user:id:<id> key
+and delete user:telegram:<oldChatID> and user:telegram:<newChatID> (you can
+obtain oldChatID by a prior read or getUserByID, ignoring errors), or implement
+and call a small helper invalidateUserCache(id, oldChatID, newChatID) to
+centralize the logic.
 
 
 ===
-
-The PostgreSQL query correction logic needs improvement.
-
-The test cases verify string modifications but the actual correctPostgreSQLQuery implementation (lines 418-425) doesn't perform the transformations described in the test cases. This will cause test failures.
-
-The correctPostgreSQLQuery function should implement the actual transformations:
-
- func correctPostgreSQLQuery(query string) string {
--	// This is a simplified version - in practice, this would be more sophisticated
--	if query != "" {
--		// Add schema specification for PostgreSQL
--		return query + " -- corrected for PostgreSQL with public schema"
--	}
--	return query
-+	corrected := query
-+	
-+	// Fix referenced_table_name to include schema
-+	if strings.Contains(query, "referenced_table_name") && !strings.Contains(query, "referenced_table_schema") {
-+		corrected = strings.Replace(corrected, 
-+			"WHERE referenced_table_name", 
-+			"WHERE referenced_table_schema = 'public' AND referenced_table_name", 
-+			-1)
-+	}
-+	
-+	// Add COALESCE for potentially NULL columns in GROUP BY
-+	if strings.Contains(query, "GROUP BY exchange_id") && !strings.Contains(query, "COALESCE") {
-+		corrected = strings.Replace(corrected,
-+			"exchange_id,",
-+			"COALESCE(exchange_id, 0) as exchange_id,",
-+			1)
-+	}
-+	
-+	return corrected
- }
-Also add the missing import at the top of the file:
-
- import (
- 	"fmt"
-+	"strings"
- 	"testing"
- 	"time"
-
-
-===
-
-Use a generic logger interface to avoid tight coupling and nil panics.
-
-Storing a concrete *logrus.Logger makes testing and DI harder and risks nil deref in code paths that construct RedisClient directly. Prefer logrus.FieldLogger.
-
-Apply this diff:
-
- type RedisClient struct {
-   Client *redis.Client
--  logger *logrus.Logger
-+  logger logrus.FieldLogger
- }
-
-
-===
-
-Guard against nil logger in Close() to prevent potential panics.
-
-If a RedisClient is instantiated without NewRedisConnection (e.g., in tests or mocks) and Client is non-nil, r.logger could be nil and cause a panic. Add a fallback to the standard logger.
-
-Apply this diff:
-
- func (r *RedisClient) Close() {
-   if r.Client != nil {
-     if err := r.Client.Close(); err != nil {
-       // Log error but don't return it since this is a cleanup function
--      r.logger.Errorf("Error closing Redis client: %v", err)
-+      if r.logger != nil {
-+        r.logger.Errorf("Error closing Redis client: %v", err)
-+      } else {
-+        logrus.Errorf("Error closing Redis client: %v", err)
-+      }
-     }
--    r.logger.Info("Redis connection closed")
-+    if r.logger != nil {
-+      r.logger.Info("Redis connection closed")
-+    } else {
-+      logrus.Info("Redis connection closed")
-+    }
-   }
- }
-
-
-===
-
-Security concern: Development key fallback could be exposed in production.
-
-The hardcoded development key could accidentally remain in production environments if the ADMIN_API_KEY environment variable is not set. This creates a significant security vulnerability.
-
-Consider failing fast when no API key is provided in production:
-
- func NewAdminMiddleware() *AdminMiddleware {
- 	// Get admin API key from environment variable
- 	apiKey := os.Getenv("ADMIN_API_KEY")
- 	if apiKey == "" {
--		// Use a default key for development (should be changed in production)
--		apiKey = "admin-dev-key-change-in-production"
-+		// Check if we're in production
-+		if os.Getenv("GO_ENV") == "production" || os.Getenv("ENV") == "production" {
-+			panic("ADMIN_API_KEY environment variable is required in production")
-+		}
-+		// Use a default key for development only
-+		apiKey = "admin-dev-key-change-in-production"
- 	}
-
-
-===
-
-Remove insecure query parameter authentication method.
-
-Allowing API keys in query parameters is insecure as they can be logged in access logs, browser history, and referrer headers. This should be removed or at least restricted to development environments only.
-
-Apply this diff to remove or restrict query parameter authentication:
-
--		// Check for API key in query parameter (less secure, for development only)
--		apiKeyQuery := c.Query("api_key")
--		if apiKeyQuery == am.apiKey {
--			c.Next()
--			return
--		}
-+		// Check for API key in query parameter (development only)
-+		if os.Getenv("GO_ENV") != "production" && os.Getenv("ENV") != "production" {
-+			apiKeyQuery := c.Query("api_key")
-+			if apiKeyQuery == am.apiKey {
-+				c.Next()
-+				return
-+			}
-+		}
-
-
-====
-
-Security concern: Replace default admin API key
-
-Using a hardcoded default API key in production code is a security vulnerability. The default value should either be empty (forcing configuration) or the application should fail to start without a proper key.
-
--const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'admin-secret-key-change-me';
-+const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
-+if (!ADMIN_API_KEY || ADMIN_API_KEY === 'admin-secret-key-change-me') {
-+  console.error('ERROR: ADMIN_API_KEY environment variable must be set with a secure value');
-+  process.exit(1);
-+}
-
-
-====
-
-Potential KEYS command performance issue
-
-Using KEYS command in Redis can be very slow on large datasets and block other operations. Consider using SCAN instead for production environments.
-
- // Clear removes all cached symbols (useful for testing or cache invalidation)
- func (c *RedisSymbolCache) Clear() error {
-   ctx := context.Background()
-   pattern := c.prefix + "*"
-
--  // Get all keys matching the pattern
--  keys, err := c.redis.Keys(ctx, pattern).Result()
--  if err != nil {
--    return fmt.Errorf("error getting cache keys: %w", err)
--  }
-+  // Use SCAN instead of KEYS for better performance
-+  var cursor uint64
-+  var keys []string
-+  for {
-+    var batch []string
-+    var err error
-+    batch, cursor, err = c.redis.Scan(ctx, cursor, pattern, 100).Result()
-+    if err != nil {
-+      return fmt.Errorf("error scanning cache keys: %w", err)
-+    }
-+    keys = append(keys, batch...)
-+    if cursor == 0 {
-+      break
-+    }
-+  }
-
-
-===
-
-Remove duplicate route definition
-
-There's a duplicate definition of the /api/funding-rate/:exchange/:symbol route. The second definition (lines 574-642) should be removed as it creates ambiguity in route matching.
-
--// Get funding rate for a specific symbol on an exchange
--app.get('/api/funding-rate/:exchange/:symbol', async (c) => {
--  try {
--    const exchange = c.req.param('exchange');
--    const symbol = c.req.param('symbol');
--    
--    if (!exchanges[exchange]) {
--      const errorResponse: ErrorResponse = {
--        error: 'Exchange not supported',
--        timestamp: new Date().toISOString()
--      };
--      return c.json(errorResponse, 400);
--    }
--
--    // Check if exchange supports funding rates
--    if (!exchanges[exchange].has['fetchFundingRates'] && !exchanges[exchange].has['fetchFundingRate']) {
--      const errorResponse: ErrorResponse = {
--        error: 'Exchange does not support funding rates',
--        timestamp: new Date().toISOString()
--      };
--      return c.json(errorResponse, 400);
--    }
--
--    let fundingRate;
--    try {
--      if (exchanges[exchange].has['fetchFundingRate']) {
--        fundingRate = await exchanges[exchange].fetchFundingRate(symbol);
--      } else {
--        // Fallback to fetchFundingRates with single symbol
--        const rates = await exchanges[exchange].fetchFundingRates([symbol]);
--        fundingRate = rates[symbol];
--      }
--      
--      if (!fundingRate) {
--        const errorResponse: ErrorResponse = {
--          error: `No funding rate found for symbol ${symbol}`,
--          timestamp: new Date().toISOString()
--        };
--        return c.json(errorResponse, 404);
--      }
--
--      const response = {
--        exchange,
--        symbol: fundingRate.symbol || symbol,
--        fundingRate: fundingRate.fundingRate || 0,
--        fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
--        nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
--        markPrice: fundingRate.markPrice || 0,
--        indexPrice: fundingRate.indexPrice || 0,
--        timestamp: fundingRate.timestamp || Date.now()
--      };
--      
--      return c.json(response);
--    } catch (error) {
--      const errorResponse: ErrorResponse = {
--        error: `Failed to fetch funding rate for ${symbol} on ${exchange}`,
--        message: error instanceof Error ? error.message : 'Unknown error',
--        timestamp: new Date().toISOString()
--      };
--      return c.json(errorResponse, 500);
--    }
--  } catch (error) {
--    const errorResponse: ErrorResponse = {
--      error: error instanceof Error ? error.message : 'Unknown error',
--      timestamp: new Date().toISOString()
--    };
--    return c.json(errorResponse, 500);
--  }
--});
--
-
-===
-
-Fix incorrect array access in exchange validation
-
-On line 779, ccxt.exchanges is accessed as an object when it should be an array. This will cause a runtime error.
-
- // Add new exchange dynamically
- app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
-   try {
-     const exchange = c.req.param('exchange');
-     
-     // Check if exchange is available in CCXT
--    if (!ccxt.exchanges[exchange]) {
-+    if (!ccxt.exchanges.includes(exchange)) {
-       const errorResponse: ErrorResponse = {
-         error: `Exchange ${exchange} is not available in CCXT library`,
--        availableExchanges: Object.keys(ccxt.exchanges),
-+        availableExchanges: ccxt.exchanges,
-         timestamp: new Date().toISOString()
-       };
-       return c.json(errorResponse, 400);
-     }
-
-
-===
-
-Async function usage inconsistency
-
-The initializeExchange function is synchronous but is being awaited here. Either make initializeExchange async or remove the await.
-
-     // Try to initialize the exchange
-     try {
--      await initializeExchange(exchange);
-+      if (!initializeExchange(exchange)) {
-+        throw new Error(`Failed to initialize exchange ${exchange}`);
-+      }
-       
-       return c.json({
-         message: `Exchange ${exchange} added successfully`,
-         activeExchanges: Object.keys(exchanges),
-         timestamp: new Date().toISOString()
-       });
-
-
-
-====
-
-Resource cleanup for support services is missing.
-
-The ResourceManager, ErrorRecoveryManager, and PerformanceMonitor are initialized but never explicitly stopped. This could lead to goroutine leaks or incomplete metric flushing on shutdown.
-
-Add defer statements to ensure proper cleanup:
-
- resourceManager := services.NewResourceManager(logger.Logger)
-+defer resourceManager.Stop()
- errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
-+defer errorRecoveryManager.Stop()
- performanceMonitor := services.NewPerformanceMonitor(logger.Logger, redis.Client, ctx)
-+defer performanceMonitor.Stop()
-
-
-====
-
-Sizes inconsistent — please align DB, models, and symbol validation
-
-Brief: I verified the repository — symbol is allowed up to VARCHAR(50) in migrations, but base/quote were VARCHAR(10) in migration 031 and the code/validation still assumes shorter lengths. This needs fixes to avoid runtime/model mismatches.
-
-Actions / locations to fix:
-
-database/migrations/031_create_exchange_trading_pairs_table.sql (lines ~8-19)
-Current: base_currency/quote_currency VARCHAR(10). Recommend making them VARCHAR(20) (migration 032 already does this, but keeping 031 consistent avoids confusion).
-Suggested snippet:
-ADD COLUMN IF NOT EXISTS symbol VARCHAR(50),
-ADD COLUMN IF NOT EXISTS base_currency VARCHAR(20),
-ADD COLUMN IF NOT EXISTS quote_currency VARCHAR(20),
-ADD COLUMN IF NOT EXISTS is_blacklisted BOOLEAN DEFAULT false,
-...
-database/migrations/032_fix_trading_pairs_column_sizes.sql
-Exists and already increases trading_pairs.symbol -> VARCHAR(50) and base_currency/quote_currency -> VARCHAR(20) and updates exchange_trading_pairs. Good — keep this migration.
-internal/models/trading_pair.go
-Update GORM tags for BaseCurrency / QuoteCurrency from gorm:"size:10" -> gorm:"size:20" to match DB.
-internal/services/collector.go (isInvalidSymbolFormat)
-Current code treats symbols with len > 20 as invalid (skips derivatives). Either increase the threshold (e.g., to 50) or make the check configurable/explicit about skipping derivatives vs accepted long symbols.
-Update internal/services/collector_test.go accordingly.
-Reasoning: leaving model/validation limits at 10/20 while DB allows 20/50 will cause silent truncation, validation errors, or skipped symbols. Align DB schema, ORM tags, and symbol validation to the same maximums.
-
-
-===
-
-Consider configurable thresholds for auto-blacklisting
-
-The auto-blacklist trigger hardcodes an error threshold of 10 and a blacklist duration of 1 hour. These should ideally be configurable through the application config.
-
-Consider creating a configuration table or using function parameters:
-
--- Create a configuration table for auto-blacklist settings
-CREATE TABLE IF NOT EXISTS blacklist_config (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    error_threshold INTEGER DEFAULT 10,
-    blacklist_duration INTERVAL DEFAULT '1 hour'
-);
-
--- Insert default values
-INSERT INTO blacklist_config (id, error_threshold, blacklist_duration) 
-VALUES (1, 10, '1 hour') 
-ON CONFLICT (id) DO NOTHING;
-
--- Modified trigger function to use config
-CREATE OR REPLACE FUNCTION auto_blacklist_high_error_pairs()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_error_threshold INTEGER;
-    v_blacklist_duration INTERVAL;
-BEGIN
-    -- Get configuration values
-    SELECT error_threshold, blacklist_duration 
-    INTO v_error_threshold, v_blacklist_duration
-    FROM blacklist_config WHERE id = 1;
-    
-    -- Auto-blacklist if error count reaches threshold
-    IF NEW.error_count >= v_error_threshold AND OLD.is_blacklisted = false THEN
-        NEW.is_blacklisted = true;
-        NEW.blacklist_reason = 'Auto-blacklisted due to high error count (' || NEW.error_count || ')';
-        NEW.blacklisted_at = NOW();
-        NEW.blacklisted_until = NOW() + v_blacklist_duration;
-    END IF;
-    -- ... rest of the function
-
-
-===
-
-Verify index effectiveness.
-
-The partial index references quality_score column which doesn't exist in the base table. This will cause an error since quality_score is computed in views, not stored in the table.
-
- -- Create partial index for recent signals
--CREATE INDEX IF NOT EXISTS idx_aggregated_signals_recent ON aggregated_signals(created_at DESC, quality_score DESC) 
-+CREATE INDEX IF NOT EXISTS idx_aggregated_signals_recent ON aggregated_signals(created_at DESC) 
-     WHERE created_at >= NOW() - INTERVAL '1 hour';
-
-
-
-
-===
-
-Fix: don’t insert into a non-existent migrations table — use the repo’s schema_migrations or create migrations.
-
-The repo defines a tracking table named schema_migrations (database/migrations/006_minimal_schema.sql line ~144) and most migrations insert into schema_migrations. The new migration (035) inserts into migrations, which has no CREATE in the repo — this will fail.
-
-Files to change:
-
-database/migrations/035_create_futures_arbitrage_tables.sql — lines 342–343
-Suggested replacement (keep the migration-numbered pattern used elsewhere):
-
-Replace
-INSERT INTO migrations (filename, applied) VALUES ('035_create_futures_arbitrage_tables.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
-
-With
-INSERT INTO schema_migrations (version, filename, description) VALUES
-(35, '035_create_futures_arbitrage_tables.sql', 'Create futures arbitrage tables')
-ON CONFLICT (version) DO NOTHING;
-
-Alternatively, if you intended a separate migrations table, add its CREATE TABLE in an earlier migration instead of changing this insert.
-
-
-===
-
-Empty string defaults for NOT NULL currency columns are problematic
-
-Setting empty strings as defaults for base_currency and quote_currency columns could lead to data quality issues. Empty strings are not valid currency identifiers.
-
--        ALTER TABLE trading_pairs ADD COLUMN base_currency VARCHAR(20) NOT NULL DEFAULT '';
-+        ALTER TABLE trading_pairs ADD COLUMN base_currency VARCHAR(20);
--        ALTER TABLE trading_pairs ADD COLUMN quote_currency VARCHAR(20) NOT NULL DEFAULT '';
-+        ALTER TABLE trading_pairs ADD COLUMN quote_currency VARCHAR(20);
-Then add a separate step to update existing rows and add NOT NULL constraint:
-
--- Update any NULL values to a placeholder or derive from symbol
-UPDATE trading_pairs 
-SET base_currency = 'UNKNOWN', 
-    quote_currency = 'UNKNOWN' 
-WHERE base_currency IS NULL OR quote_currency IS NULL;
-
--- Then add NOT NULL constraints
-ALTER TABLE trading_pairs 
-    ALTER COLUMN base_currency SET NOT NULL,
-    ALTER COLUMN quote_currency SET NOT NULL;
-Also applies to: 18-19
-
-
-===
-
-
-v_trading_pairs_debug view — filter by is_active (no deleted_at found)
-
-I couldn't find any deleted_at soft-delete column in the repo; exchanges and trading_pairs use an is_active boolean. The view currently doesn't filter out inactive records and will return inactive exchanges/trading_pairs.
-
-Files to update:
-database/migrations/037_fix_cache_warming_queries.sql — v_trading_pairs_debug view definition
-(reference) database/migrations/007_create_exchanges_table.sql and database/migrations/038_add_is_active_column.sql — exchanges / trading_pairs define is_active
-Suggested replacement for the view (filter to active trading pairs and active exchanges when present):
-
-CREATE OR REPLACE VIEW v_trading_pairs_debug AS
-SELECT
-tp.id,
-tp.exchange_id,
-e.name AS exchange_name,
-tp.symbol,
-tp.base_currency,
-tp.quote_currency,
-tp.is_active,
-tp.created_at,
-tp.updated_at
-FROM trading_pairs tp
-LEFT JOIN exchanges e ON tp.exchange_id = e.id
-WHERE tp.is_active = true
-AND (e.is_active IS NULL OR e.is_active = true)
-ORDER BY e.name, tp.symbol;
-
-====
-
-
-Cache deserialization error is silently ignored.
-
-When cache deserialization fails (line 54), the error is silently ignored and the code falls through to fetch from the service. This could hide corruption issues or type mismatches in cached data.
-
-Log the deserialization error for debugging:
-
- cachedData, err := h.redisClient.Get(ctx, cacheKey).Result()
- if err == nil {
-     var config interface{}
--    if err := json.Unmarshal([]byte(cachedData), &config); err == nil {
-+    if err := json.Unmarshal([]byte(cachedData), &config); err != nil {
-+        // Log the error but continue to fetch fresh data
-+        c.Header("X-Cache-Error", "Failed to unmarshal cached data")
-+    } else {
-         c.JSON(http.StatusOK, config)
-         return
-     }
- }
-
-
-===
-
-Deprecated CacheStats struct should be removed
-
-The CacheStats struct is marked as deprecated with a comment indicating to use CacheAnalyticsService instead. Since the code already uses CacheAnalyticsService throughout and doesn't reference this struct anywhere, it should be removed to avoid confusion.
-
--// CacheStats tracks cache hit/miss statistics (deprecated - use CacheAnalyticsService)
--type CacheStats struct {
--	Hits   int64 `json:"hits"`
--	Misses int64 `json:"misses"`
--}
--
-
-====
-
-Guard against nil orderBook before dereference
-
-FetchOrderBook returns a pointer; the handler checks err but not whether orderBook is nil. Dereferencing orderBook can panic. convertOrderBookEntries already handles nil slices (see function below), so only a nil-pointer guard is needed.
-
-Files/locations:
-internal/api/handlers/market.go — GetOrderBook handler (around lines 533–547)
-internal/api/handlers/market.go — convertOrderBookEntries (lines ~612–620) — confirms nil slices are safe
-Suggested minimal change:
-
-@@
- 	orderBook, err := h.ccxtService.FetchOrderBook(c.Request.Context(), exchange, symbol, limit)
- 	if err != nil {
- 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order book data"})
- 		return
- 	}
-+	if orderBook == nil {
-+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid order book data received"})
-+		return
-+	}
- 
- 	// Convert to our response format and cache
- 	response := OrderBookResponse{
- 		Exchange:  exchange,
- 		Symbol:    symbol,
- 		Bids:      convertOrderBookEntries(orderBook.OrderBook.Bids),
- 		Asks:      convertOrderBookEntries(orderBook.OrderBook.Asks),
- 		Timestamp: time.Now(),
- 		Cached:    false,
- 	}
-
-
-===
-
-Redis connection uses hardcoded localhost address
-
-The test creates a Redis client with a hardcoded localhost:6379 address, which may not work in all environments (CI/CD, containers, etc.).
-
-Use environment variables or test configuration:
-
-    // Create mock Redis client
--   mockRedis := redis.NewClient(&redis.Options{
--       Addr: "localhost:6379",
--       DB:   1, // Use test database
--   })
-+   redisAddr := os.Getenv("TEST_REDIS_ADDR")
-+   if redisAddr == "" {
-+       redisAddr = "localhost:6379"
-+   }
-+   mockRedis := redis.NewClient(&redis.Options{
-+       Addr: redisAddr,
-+       DB:   1, // Use test database
-+   })
-
-
-===
-
-Thread safety issue in InMemoryBlacklistCache stats
-
-The IsBlacklisted method in InMemoryBlacklistCache modifies stats (Lines 389, 399, 403) while only holding a read lock, which could cause race conditions.
-
-The stats should only be modified under a write lock:
-
- func (ibc *InMemoryBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
--	ibc.mu.RLock()
--	defer ibc.mu.RUnlock()
-+	ibc.mu.Lock()
-+	defer ibc.mu.Unlock()
- 
- 	entry, exists := ibc.cache[symbol]
- 	if !exists {
- 		ibc.stats.Misses++
- 		return false, ""
- 	}
-
-
-====
-
-Using magic date for non-expiring entries is fragile
-
-Using a far-future date (year 9999) as a sentinel value for non-expiring entries is fragile and could cause issues with date comparisons or serialization.
-
-Consider using a nullable time field or a separate boolean flag to indicate non-expiring entries:
-
- type BlacklistCacheEntry struct {
- 	Symbol    string    `json:"symbol"`
- 	Reason    string    `json:"reason"`
--	ExpiresAt time.Time `json:"expires_at"`
-+	ExpiresAt *time.Time `json:"expires_at,omitempty"` // nil means no expiration
- 	CreatedAt time.Time `json:"created_at"`
- }
-Then update the expiry checks:
-
--	if entry.ExpiresAt.Year() < 9999 && time.Now().After(entry.ExpiresAt) {
-+	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
-
-
-===
-
-Consider removing or configuring the expired entry return behavior
-
-Returning expired entries defeats the purpose of TTL and could lead to stale data being used. This should either be removed or made configurable.
-
-   // Check if entry has expired (additional check beyond Redis TTL)
-   if time.Now().After(entry.ExpiresAt) {
--    // Entry expired, but return it anyway to prevent API calls during runtime
--    // This matches the behavior of the original in-memory cache
--    log.Printf("Cached symbols for %s expired but returning to prevent API calls", exchangeID)
-+    // Entry expired, treat as cache miss
-+    log.Printf("Cached symbols for %s expired", exchangeID)
-+    c.stats.mu.Lock()
-+    c.stats.Misses++
-+    c.stats.mu.Unlock()
-+    return nil, false
-   }
-
-
-===
-
-Replace KEYS with SCAN for production safety
-
-The KEYS command blocks the Redis server and can cause performance issues in production. Use SCAN instead for non-blocking iteration.
-
- // Clear removes all cached symbols (useful for testing or cache invalidation)
- func (c *RedisSymbolCache) Clear() error {
-   ctx := context.Background()
-   pattern := c.prefix + "*"
- 
--  // Get all keys matching the pattern
--  keys, err := c.redis.Keys(ctx, pattern).Result()
--  if err != nil {
--    return fmt.Errorf("error getting cache keys: %w", err)
--  }
-+  // Use SCAN for non-blocking iteration
-+  var keys []string
-+  iter := c.redis.Scan(ctx, 0, pattern, 0).Iterator()
-+  for iter.Next(ctx) {
-+    keys = append(keys, iter.Val())
-+  }
-+  if err := iter.Err(); err != nil {
-+    return fmt.Errorf("error scanning cache keys: %w", err)
-+  }
- 
-   if len(keys) == 0 {
-     return nil
-   }
-Apply the same fix to GetCachedExchanges:
-
- func (c *RedisSymbolCache) GetCachedExchanges() ([]string, error) {
-   ctx := context.Background()
-   pattern := c.prefix + "*"
- 
--  // Get all keys matching the pattern
--  keys, err := c.redis.Keys(ctx, pattern).Result()
--  if err != nil {
--    return nil, fmt.Errorf("error getting cache keys: %w", err)
--  }
-+  // Use SCAN for non-blocking iteration
-+  var exchanges []string
-+  prefixLen := len(c.prefix)
-+  iter := c.redis.Scan(ctx, 0, pattern, 0).Iterator()
-+  for iter.Next(ctx) {
-+    key := iter.Val()
-+    if len(key) > prefixLen {
-+      exchangeID := key[prefixLen:]
-+      exchanges = append(exchanges, exchangeID)
-+    }
-+  }
-+  if err := iter.Err(); err != nil {
-+    return nil, fmt.Errorf("error scanning cache keys: %w", err)
-+  }
- 
--  // Extract exchange IDs from keys
--  var exchanges []string
--  prefixLen := len(c.prefix)
--  for _, key := range keys {
--    if len(key) > prefixLen {
--      exchangeID := key[prefixLen:]
--      exchanges = append(exchanges, exchangeID)
--    }
--  }
- 
-   return exchanges, nil
-Also applies to: 179-200
-
-===
-
-Database storage errors are silently logged but not tracked.
-
-When storing a calculated opportunity fails, the error is only passed to the Gin error handler (line 115) which may not properly track or alert on these failures. This could lead to data loss without visibility.
-
-Consider adding metrics or proper error tracking:
-
- if err := h.storeFuturesOpportunity(opportunity, &riskMetrics); err != nil {
--    // Log error but don't fail the request as this is a best-effort operation
--    _ = c.Error(err)
-+    // Track the error for monitoring
-+    c.Header("X-Storage-Warning", "Failed to persist opportunity")
-+    // Consider adding a metric: metrics.IncrementStorageFailures("futures_opportunity")
-+    _ = c.Error(err) // This will be logged by Gin's error middleware
- }
-
-
-====
-
-SQL injection risk with string concatenation.
-
-Building SQL queries with string concatenation (lines 319-321) could potentially lead to SQL injection if the argIndex calculation is incorrect or if the query building logic changes.
-
-While the current implementation uses parameterized queries correctly, the string concatenation approach is fragile. Consider using a query builder:
-
--    query += " AND symbol = ANY($" + strconv.Itoa(argIndex) + ")"
-+    query += " AND symbol = ANY($" + strconv.Itoa(argIndex) + ")" // SAFE: using parameterized query
-Or better, use a query builder library or prepared statements to avoid string concatenation entirely.
-
-
-====
-
-Potential data race in addServiceTag method
-
-The addServiceTag method modifies the input map directly, which could lead to race conditions if the same map is used concurrently.
-
-Consider creating a copy of the map to avoid modifying the input:
-
- func (mc *MetricsCollector) addServiceTag(tags map[string]string) map[string]string {
-+	// Create a copy to avoid modifying the input
-+	result := make(map[string]string, len(tags)+1)
- 	if tags == nil {
--		tags = make(map[string]string)
-+		result["service"] = mc.serviceName
-+		return result
- 	}
--	tags["service"] = mc.serviceName
--	return tags
-+	for k, v := range tags {
-+		result[k] = v
-+	}
-+	result["service"] = mc.serviceName
-+	return result
- }
-
-
-
-====
-
-Incorrect integer to string conversion causing panic
-
-Line 134 has a critical bug: string(rune(statusCode)) will not produce the expected string representation of the status code. For example, status code 200 would be converted to a rune (character) with value 200, not the string "200".
-
- func (mc *MetricsCollector) RecordAPIRequestMetrics(method, endpoint string, statusCode int, duration time.Duration, userID string) {
- 	tags := map[string]string{
- 		"method":      method,
- 		"endpoint":    endpoint,
--		"status_code": string(rune(statusCode)),
-+		"status_code": strconv.Itoa(statusCode),
- 	}
-Don't forget to add the import:
-
- import (
-+	"strconv"
- 	"time"
- 
- 	"github.com/irfndi/celebrum-ai-go/internal/logging"
- )
-
-
-
-===
-
-migrate-docker runs raw .sql files with psql -f — use the migration runner instead
-
-Short: The Makefile's migrate-docker target loops over database/migrations/*.sql and executes psql -f inside the postgres container, bypassing the existing migration runner (database/migrate.sh) that performs applied-checks and records migrations. This is a real risk if the migrations directory can be modified by an untrusted actor.
-
-Files/locations to fix or audit:
-
-Makefile — migrate-docker target (around lines ~249–255). Current block:
-docker compose -f $(DOCKER_COMPOSE_FILE) exec postgres psql -U celebrum_ai -d celebrum_ai -c "CREATE TABLE IF NOT EXISTS migrations (...)"
-@for file in $$(ls database/migrations/*.sql | sort -V); do \
-  ... docker compose -f $(DOCKER_COMPOSE_FILE) exec -T postgres psql -U celebrum_ai -d celebrum_ai -f "/database/migrations/$$(basename $$file)"; \
-done
-database/migrate.sh — contains migration_applied(), create_migrations_table(), apply_migration() and records applied migrations. The Makefile already has a migrate target that uses ./migrate.sh.
-scripts/robust-migrate.sh — another migration runner present (has similar safeguards).
-database/migrations/* — many .sql files live here; note database/migrations/035_create_futures_arbitrage_tables.sql explicitly INSERTs into migrations (line ~342), which is atypical and should be audited.
-database/README.md — includes examples that run psql -f directly (align docs with safe practice).
-Recommended fixes (pick one):
-
-Replace the loop that runs psql -f with the trusted runner inside the Compose environment. Example replacement:
-# instead of looping and calling psql -f, run:
-docker compose -f $(DOCKER_COMPOSE_FILE) exec migrate ./migrate.sh
-(The repo already uses a migrate service in compose via auto-migrate; invoking the runner preserves checks and recording.)
-If you must keep direct psql -f for specific reasons, add strict preflight checks: verify migration file checksums/signatures, consult migrations table before applying (skip if already applied), and restrict write access to the migrations directory/CI that can push migrations.
-Audit and remove any migration that mutates the migrations table itself (e.g., the INSERT in migration 035) to avoid confusing/duplicated bookkeeping.
-Consider adopting a purpose-built migration tool (golang-migrate, Flyway, etc.) or extend scripts to store file checksums to detect tampering.
-Why this is actionable: migrate-docker currently bypasses the safety logic already implemented in migrate.sh and scripts/robust-migrate.sh; updating the Makefile to use the runner (or adding validation/checks) eliminates the direct-execution risk.
-
-
-====
-
-
-APP_SERVICE_URL port likely mismatched with app’s exposed/default port (8080 vs 3000).
-
-Dockerfile exposes 8080 and nginx upstream points to app:8080, but APP_SERVICE_URL here is http://app:3000. This will cause startup/health checks to target the wrong port.
-
--APP_SERVICE_URL=http://app:3000
-+APP_SERVICE_URL=http://app:8080
-Also applies to: 33-35
-
-====
-
-Broken path handling for /api/exchanges due to missing trailing slash semantics.
-
-With proxy_pass including a URI but no trailing slash, NGINX replaces the matching location path instead of appending the remainder, dropping suffixes (e.g., /api/exchanges/binance becomes /api/exchanges).
-
-Fix by using trailing slashes on both the location and proxy_pass:
-
--location /api/exchanges {
-+location /api/exchanges/ {
-     limit_req zone=api burst=20 nodelay;
--    proxy_pass http://ccxt_backend/api/exchanges;
-+    proxy_pass http://ccxt_backend/api/exchanges/;
-     proxy_set_header Host $host;
-     proxy_set_header X-Real-IP $remote_addr;
-     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-     proxy_set_header X-Forwarded-Proto $scheme;
-     proxy_connect_timeout 10s;
-     proxy_send_timeout 30s;
-     proxy_read_timeout 30s;
-     proxy_buffering off;
- }
-
-
-===
-
-Avoid printing secrets to remote terminals/logs during verification.
-
-The current grep prints full values (including secrets) on the remote host and may end up in logs/history.
-
-Replace with a safer, redacted check:
-
--# Verify sync
--ssh user@remote-server 'cat /path/to/deployment/.env | grep -E "(DATABASE_|CCXT_|TELEGRAM_)"'
-+# Verify sync (redacted output)
-+ssh user@remote-server $'awk -F= \'
-+  /^[[:space:]]*($|#)/ { next }  # skip blanks/comments
-+  /^(DATABASE_|CCXT_|TELEGRAM_)/ {
-+    key=$1;
-+    val=$2;
-+    if (length(val)>0) val="***redacted***";
-+    printf "%s=%s\n", key, val
-+  }
-+\' /path/to/deployment/.env'
-
-====
-
-Validation commands target the app container for pg_isready/redis-cli, which aren’t installed there.
-
-The production image installs curl/wget only, so pg_isready and redis-cli will not be present. Exec into the respective service containers instead.
-
-Apply:
-
--# Test database connection
--docker exec celebrum-app pg_isready -h $DATABASE_HOST -p $DATABASE_PORT
-+# Test database connection (postgres container)
-+docker compose exec -T postgres pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"
-
--# Test Redis connection
--docker exec celebrum-app redis-cli -h $REDIS_HOST ping
-+# Test Redis connection (redis container)
-+docker compose exec -T redis redis-cli -h "$REDIS_HOST" ping
-
--# Test CCXT service
--docker exec celebrum-app curl $CCXT_SERVICE_URL/health
-+# Test CCXT service (app container already has curl)
-+docker compose exec -T app curl -fsS "$CCXT_SERVICE_URL/health"
-
-====
-
-Truncated section at end of file (“3. Check”).
-
-The guide cuts off mid-sentence, which can confuse readers.
-
-Apply this patch to complete the section:
-
--3. Check
-+3. Check Redis logs: `docker logs celebrum-redis --tail 50`
-+4. Verify app can ping Redis (look for “Redis connected” in `docker logs celebrum-app`)
-+5. Ensure `REDIS_URL` in `.env` matches `redis://redis:6379` for local compose
-Also ensure the file ends with a newline.
-
-
-====
 

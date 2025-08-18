@@ -45,7 +45,7 @@ migration_applied() {
     # Check if migration has been applied
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
         -c "SELECT 1 FROM schema_migrations WHERE filename = \$1 AND applied = true" \
-        -v migration_name="$migration_name" -t -A 2>/dev/null | grep -q 1
+        "$migration_name" -t -A 2>/dev/null | grep -q 1
 }
 
 # Function to apply migration

@@ -65,22 +65,20 @@ sudo ufw deny 6379/tcp
 sudo ufw status verbose
 ```
 
-#### Docker and UFW Integration
+#### Docker and Host Firewall Integration
 
-Docker bypasses UFW by default. To ensure UFW rules apply to Docker:
+Docker programs iptables directly. Keep it enabled and enforce host policy using the DOCKER-USER chain (applies before Docker's rules):
 
 ```bash
-# Edit Docker daemon configuration
-sudo nano /etc/docker/daemon.json
+# Block external access to Redis on the host (no effect inside the bridge)
+sudo iptables -I DOCKER-USER -p tcp --dport 6379 -j DROP
+# Allow from specific trusted subnets if needed:
+# sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -p tcp --dport 6379 -j ACCEPT
 
-# Add the following content:
-{
-  "iptables": false
-}
-
-# Restart Docker
-sudo systemctl restart docker
+# Persist rules with your distro's mechanisms (e.g., netfilter-persistent)
 ```
+
+If you prefer UFW, add rules in `/etc/ufw/before.rules` to filter before Docker's chains, or rely on a cloud firewall (recommended) plus not publishing Redis ports.
 
 ### 4. Verification Steps
 

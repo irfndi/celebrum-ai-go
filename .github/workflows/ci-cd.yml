@@ -104,7 +104,7 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD }}
           POSTGRES_DB: celebrum_test
         options: >-
           --health-cmd pg_isready
@@ -154,13 +154,13 @@ jobs:
 
       - name: Run CI/CD integration tests
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
+          DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
-        TEST_REDIS_ADDR: localhost:6379
-          RUN_TESTS: true
-          RUN_SECURITY_SCAN: true
-          RUN_PERFORMANCE_TEST: false
-          CI_ENVIRONMENT: test
+          TEST_REDIS_ADDR: localhost:6379
+          RUN_TESTS: "true"
+          RUN_SECURITY_SCAN: "true"
+          RUN_PERFORMANCE_TEST: "false"
+          CI_ENVIRONMENT: "test"
         run: |
           chmod +x scripts/ci-cd-integration.sh
           scripts/ci-cd-integration.sh test
@@ -184,7 +184,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: 'fs'
           scan-ref: '.'

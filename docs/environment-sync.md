@@ -130,13 +130,21 @@ DATABASE_SSLMODE=require
 
 ```bash
 # Test database connection
-docker compose exec -T postgres pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"
+if [ -n "$DATABASE_URL" ]; then
+  docker compose exec -T postgres pg_isready -d "$DATABASE_URL"
+else
+  docker compose exec -T postgres pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"
+fi
 
 # Test Redis connection
-docker compose exec -T redis redis-cli -h "$REDIS_HOST" ping
+if [ -n "$REDIS_PASSWORD" ]; then
+  docker compose exec -T redis redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" ping
+else
+  docker compose exec -T redis redis-cli -h "$REDIS_HOST" ping
+fi
 
 # Test CCXT service
-docker exec celebrum-app curl $CCXT_SERVICE_URL/health
+docker exec celebrum-app curl "$CCXT_SERVICE_URL/health"
 
 # Check application health
 curl http://localhost:8080/health

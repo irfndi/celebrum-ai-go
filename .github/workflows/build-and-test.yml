@@ -33,15 +33,10 @@ jobs:
       - name: Run tests
         run: make test
         
-      - name: Run Gemini CLI
-        uses: google-github-actions/run-gemini-cli@v0.1.11
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.4.0
+          version: v1.60.0
           args: --timeout=5m --output.text.path=stdout --output.text.colors=true
           
       - name: Build Go binary
@@ -127,7 +122,7 @@ jobs:
           docker load < celebrum-api.tar
           
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: 'celebrum-api:${{ github.sha }}'
           format: 'sarif'

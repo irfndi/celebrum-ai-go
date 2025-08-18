@@ -42,11 +42,7 @@ if (ADMIN_API_KEY.length < 32) {
   process.exit(1);
 }
 
-if (false) { // This condition will never be true, keeping original structure
-  console.error('ERROR: ADMIN_API_KEY environment variable must be set with a secure value');
-  console.error('Do not use the default value "admin-secret-key-change-me" in production');
-  process.exit(1);
-}
+
 
 // Initialize Hono app
 const app = new Hono();
@@ -95,7 +91,7 @@ const exchangeConfigs: Record<string, any> = {
     enableRateLimit: true,
     options: { 'defaultType': 'future' }
   },
-  coinbaseexchange: { enableRateLimit: true },
+  coinbase: { enableRateLimit: true },
   kraken: { enableRateLimit: true },
   // Default config for other exchanges
   default: {
@@ -158,7 +154,7 @@ const blacklistedExchanges = new Set(exchangeConfig.blacklistedExchanges);
 const priorityExchanges = [
   'binance', 'bybit', 'okx', 'coinbasepro', 'kraken',
   'kucoin', 'huobi', 'gateio', 'mexc', 'bitget',
-  'coinbaseexchange', 'bingx', 'cryptocom', 'htx'
+  'coinbase', 'bingx', 'cryptocom', 'htx'
 ];
 
 // Initialize supported exchanges dynamically

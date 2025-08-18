@@ -172,8 +172,8 @@ CREATE TRIGGER auto_blacklist_trigger
     EXECUTE FUNCTION auto_blacklist_high_error_pairs();
 
 -- Record this migration
-INSERT INTO schema_migrations (version, filename, description) VALUES
-    (31, '031_create_exchange_trading_pairs_table.sql', 'Create exchange_trading_pairs relationship table with blacklisting and error tracking')
-ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (filename, applied) VALUES
+    ('031_create_exchange_trading_pairs_table.sql', true)
+ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
 
 COMMIT;

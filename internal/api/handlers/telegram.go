@@ -204,12 +204,9 @@ Use /help to see all available commands
 func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID, userID int64) error {
 	// Try to get cached opportunities first
 	cachedOpportunities, err := h.getCachedTelegramOpportunities(ctx)
-	if err == nil && cachedOpportunities != nil {
-		// Check if we have actual opportunities data
-		if oppsSlice, ok := cachedOpportunities.([]interface{}); ok && len(oppsSlice) > 0 {
-			log.Printf("Using cached opportunities for Telegram user %d", userID)
-			return h.sendOpportunitiesMessage(ctx, chatID, cachedOpportunities)
-		}
+	if err == nil && len(cachedOpportunities) > 0 {
+		log.Printf("Using cached opportunities for Telegram user %d", userID)
+		return h.sendOpportunitiesMessage(ctx, chatID, cachedOpportunities)
 	}
 
 	// Call the arbitrage handler's underlying function directly
@@ -381,23 +378,69 @@ func (h *TelegramHandler) cacheTelegramOpportunities(ctx context.Context, opport
 		return
 	}
 
+	// Convert the opportunities to our typed structure
+	var typedOpportunities []ArbitrageOpportunity
+	
+	// Handle different input types from the arbitrage handler
+	switch opps := opportunities.(type) {
+	case []ArbitrageOpportunity:
+		typedOpportunities = opps
+	case []interface{}:
+		// Convert from interface{} slice to typed slice
+		for _, oppInterface := range opps {
+			if oppMap, ok := oppInterface.(map[string]interface{}); ok {
+				opp := ArbitrageOpportunity{
+					Symbol:        getString(oppMap, "symbol"),
+					ProfitPercent: getFloat64(oppMap, "profit_percent"),
+					ProfitAmount:  getFloat64(oppMap, "profit_amount"),
+					BuyExchange:   getString(oppMap, "buy_exchange"),
+					BuyPrice:      getFloat64(oppMap, "buy_price"),
+					SellExchange:  getString(oppMap, "sell_exchange"),
+					SellPrice:     getFloat64(oppMap, "sell_price"),
+				}
+				typedOpportunities = append(typedOpportunities, opp)
+			}
+		}
+	default:
+		log.Printf("Unsupported opportunities type for caching: %T", opportunities)
+		return
+	}
+
 	cacheKey := "telegram:opportunities:latest"
-	oppsJSON, err := json.Marshal(opportunities)
+	oppsJSON, err := json.Marshal(typedOpportunities)
 	if err != nil {
 		log.Printf("Failed to marshal opportunities for Telegram caching: %v", err)
 		return
 	}
 
 	// Cache for 30 seconds to balance freshness with performance
-	if err := h.redis.Set(ctx, cacheKey, string(oppsJSON), 30*time.Second); err != nil {
+	err = h.redis.Set(ctx, cacheKey, string(oppsJSON), 30*time.Second).Err()
+	if err != nil {
 		log.Printf("Failed to cache Telegram opportunities: %v", err)
-	} else {
-		log.Printf("Cached Telegram opportunities in Redis for 30 seconds")
+		return
 	}
+	log.Printf("Cached Telegram opportunities in Redis for 30 seconds")
 }
 
+// Helper functions for safe type conversion
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+func getFloat64(m map[string]interface{}, key string) float64 {
+	if val, ok := m[key].(float64); ok {
+		return val
+	}
+	return 0.0
+}
+
+
+
 // getCachedTelegramOpportunities retrieves cached opportunities from Redis
-func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) (interface{}, error) {
+func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) ([]ArbitrageOpportunity, error) {
 	if h.redis == nil {
 		return nil, fmt.Errorf("redis not available")
 	}
@@ -408,7 +451,7 @@ func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) (i
 		return nil, fmt.Errorf("no cached Telegram opportunities found")
 	}
 
-	var opportunities interface{}
+	var opportunities []ArbitrageOpportunity
 	if err := json.Unmarshal([]byte(cachedData), &opportunities); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cached Telegram opportunities: %w", err)
 	}
@@ -418,18 +461,9 @@ func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) (i
 }
 
 // sendOpportunitiesMessage formats and sends opportunities message to Telegram
-func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities interface{}) error {
-	// Type assertion to get the actual opportunities slice
-	oppsSlice, ok := opportunities.([]interface{})
-	if !ok {
-		// Try direct type assertion for the expected type
-		// This will need to be adjusted based on the actual type from ArbitrageHandler
-		log.Printf("Unexpected opportunities type: %T", opportunities)
-		return h.sendMessage(ctx, chatID, "❌ Error processing opportunities data.")
-	}
-
+func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID int64, opportunities []ArbitrageOpportunity) error {
 	// Format the message
-	if len(oppsSlice) == 0 {
+	if len(opportunities) == 0 {
 		msg := `📈 Current Arbitrage Opportunities:
 
 🔍 No profitable opportunities found at the moment.
@@ -443,30 +477,15 @@ func (h *TelegramHandler) sendOpportunitiesMessage(ctx context.Context, chatID i
 
 	// Build opportunities message
 	msg := "📈 Current Arbitrage Opportunities:\n\n"
-	for i, oppInterface := range oppsSlice {
+	for i, opp := range opportunities {
 		if i >= 5 { // Limit to top 5 for readability
 			break
 		}
 
-		// Convert interface{} to map for field access
-		oppMap, ok := oppInterface.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Extract fields with safe type assertions
-		symbol, _ := oppMap["symbol"].(string)
-		profitPercent, _ := oppMap["profit_percent"].(float64)
-		profitAmount, _ := oppMap["profit_amount"].(float64)
-		buyExchange, _ := oppMap["buy_exchange"].(string)
-		buyPrice, _ := oppMap["buy_price"].(float64)
-		sellExchange, _ := oppMap["sell_exchange"].(string)
-		sellPrice, _ := oppMap["sell_price"].(float64)
-
-		msg += fmt.Sprintf("💰 %s\n", symbol)
-		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", profitPercent, profitAmount)
-		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", buyExchange, buyPrice)
-		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", sellExchange, sellPrice)
+		msg += fmt.Sprintf("💰 %s\n", opp.Symbol)
+		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", opp.ProfitPercent, opp.ProfitAmount)
+		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", opp.BuyExchange, opp.BuyPrice)
+		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
 		msg += "\n"
 	}
 

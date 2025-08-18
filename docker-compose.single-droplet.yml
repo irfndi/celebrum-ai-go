@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Set POSTGRES_PASSWORD env var
       POSTGRES_DB: celebrum_ai
       POSTGRES_INITDB_ARGS: "--auth-host=trust"
       POSTGRES_HOST_AUTH_METHOD: trust
@@ -31,12 +31,12 @@ services:
     container_name: celebrum-migrate
     restart: "no"
     environment:
-      PGPASSWORD: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: celebrum_ai
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
       # Phase control
       STARTUP_PHASE: "1"
     volumes:
@@ -119,7 +119,7 @@ services:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres} # SECURITY: Use environment variable
       - DATABASE_DBNAME=celebrum_ai
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis

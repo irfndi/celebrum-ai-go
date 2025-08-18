@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS futures_arbitrage_opportunities (
     long_funding_rate DECIMAL(10, 8) NOT NULL,
     short_funding_rate DECIMAL(10, 8) NOT NULL,
     net_funding_rate DECIMAL(10, 8) NOT NULL,
-    funding_interval INTEGER NOT NULL DEFAULT 8, -- hours
+    funding_interval INTEGER NOT NULL DEFAULT 8 CHECK (funding_interval > 0 AND funding_interval <= 24), -- hours
     
     -- Price data
     long_mark_price DECIMAL(20, 8) NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS futures_arbitrage_opportunities (
     
     -- Position sizing recommendations
     recommended_position_size DECIMAL(20, 8),
-    max_leverage DECIMAL(5, 2) DEFAULT 1.0,
+    max_leverage DECIMAL(5, 2) NOT NULL DEFAULT 1.0,
     recommended_leverage DECIMAL(5, 2) DEFAULT 1.0,
     stop_loss_percentage DECIMAL(5, 2),
     
@@ -267,6 +267,11 @@ DECLARE
     risk_multiplier DECIMAL;
     leverage_factor DECIMAL;
 BEGIN
+    -- Handle null max_leverage
+    IF max_leverage IS NULL THEN
+        max_leverage := 1.0;
+    END IF;
+    
     -- Determine risk multiplier based on tolerance
     risk_multiplier := CASE risk_tolerance
         WHEN 'conservative' THEN 0.1
@@ -278,8 +283,8 @@ BEGIN
     -- Adjust for risk score (higher risk = smaller position)
     risk_multiplier := risk_multiplier * (100 - risk_score) / 100.0;
     
-    -- Apply leverage factor
-    leverage_factor := LEAST(max_leverage, 3.0); -- Cap at 3x for safety
+    -- Apply leverage factor with null safety
+    leverage_factor := LEAST(COALESCE(max_leverage, 1.0), 3.0); -- Cap at 3x for safety
     
     RETURN available_capital * risk_multiplier * leverage_factor;
 END;
@@ -339,5 +344,5 @@ ON CONFLICT (config_key) DO UPDATE SET
     updated_at = NOW();
 
 -- Migration completion
-INSERT INTO schema_migrations (version, dirty) VALUES (43, false)
-ON CONFLICT (version) DO UPDATE SET dirty = false;
+INSERT INTO schema_migrations (filename, applied) VALUES ('043_create_futures_arbitrage_tables.sql', true)
+ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();

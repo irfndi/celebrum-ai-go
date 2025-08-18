@@ -25,11 +25,11 @@ server:
 
 # Database configuration
 database:
-  # For local development
+  # For local development - SECURITY: Set DATABASE_PASSWORD environment variable
   host: localhost
   port: 5432
   user: postgres
-  password: postgres
+  password: "" # SECURITY: Use DATABASE_PASSWORD environment variable instead
   dbname: celebrum_ai
   sslmode: disable
 
@@ -138,7 +138,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "your-jwt-secret-key-change-this"
+  jwt_secret: "" # SECURITY: Use JWT_SECRET environment variable - never hardcode secrets
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:

@@ -9,13 +9,21 @@ BEGIN
     -- Check if base_currency column exists, if not add it
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'trading_pairs' AND column_name = 'base_currency') THEN
-        ALTER TABLE trading_pairs ADD COLUMN base_currency VARCHAR(20) NOT NULL;
+        ALTER TABLE trading_pairs ADD COLUMN base_currency VARCHAR(20);
+        -- Update existing rows with default values if needed
+        UPDATE trading_pairs SET base_currency = 'UNKNOWN' WHERE base_currency IS NULL;
+        -- Now add NOT NULL constraint
+        ALTER TABLE trading_pairs ALTER COLUMN base_currency SET NOT NULL;
     END IF;
     
     -- Check if quote_currency column exists, if not add it
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'trading_pairs' AND column_name = 'quote_currency') THEN
-        ALTER TABLE trading_pairs ADD COLUMN quote_currency VARCHAR(20) NOT NULL;
+        ALTER TABLE trading_pairs ADD COLUMN quote_currency VARCHAR(20);
+        -- Update existing rows with default values if needed
+        UPDATE trading_pairs SET quote_currency = 'UNKNOWN' WHERE quote_currency IS NULL;
+        -- Now add NOT NULL constraint
+        ALTER TABLE trading_pairs ALTER COLUMN quote_currency SET NOT NULL;
     END IF;
     
     -- Add exchange_id column if it doesn't exist
@@ -84,3 +92,10 @@ ORDER BY e.name, tp.symbol;
 
 -- Add a comment to document this migration
 COMMENT ON TABLE trading_pairs IS 'Trading pairs table - fixed schema consistency issues in migration 037';
+
+-- Record this migration
+INSERT INTO schema_migrations (filename, applied) 
+VALUES ('045_fix_cache_warming_queries.sql', true)
+ON CONFLICT (filename) DO UPDATE SET 
+    applied = EXCLUDED.applied,
+    applied_at = CURRENT_TIMESTAMP;

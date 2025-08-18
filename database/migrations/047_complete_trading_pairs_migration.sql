@@ -242,3 +242,10 @@ DROP TABLE IF EXISTS id_mapping;
 
 -- Add comment explaining this migration
 COMMENT ON SCHEMA public IS 'Migration 047 completed the trading_pairs schema migration by updating all referencing tables';
+
+-- Record this migration
+INSERT INTO schema_migrations (filename, applied) 
+VALUES ('047_complete_trading_pairs_migration.sql', true)
+ON CONFLICT (filename) DO UPDATE SET 
+    applied = EXCLUDED.applied,
+    applied_at = CURRENT_TIMESTAMP;

@@ -43,40 +43,102 @@ BEGIN
     END IF;
 END $$;
 
--- Recreate the views
--- Active funding arbitrage opportunities view
-CREATE VIEW active_funding_arbitrage_opportunities AS
+-- Recreate the active_funding_arbitrage_opportunities view
+CREATE OR REPLACE VIEW active_funding_arbitrage_opportunities AS
 SELECT 
-    fao.id,
-    fao.trading_pair_id,
-    fao.long_exchange_id,
-    fao.short_exchange_id,
-    fao.long_funding_rate,
-    fao.short_funding_rate,
-    fao.net_funding_rate,
-    fao.estimated_profit_8h,
-    fao.estimated_profit_daily,
-    fao.estimated_profit_percentage,
-    fao.long_mark_price,
-    fao.short_mark_price,
-    fao.price_difference,
-    fao.price_difference_percentage,
-    fao.risk_score,
-    fao.is_active,
-    fao.detected_at,
-    fao.expires_at,
-    fao.created_at,
+    *,
+    CASE 
+        WHEN apy >= 20 AND risk_score <= 30 THEN 'excellent'
+        WHEN apy >= 15 AND risk_score <= 50 THEN 'good'
+        WHEN apy >= 10 AND risk_score <= 70 THEN 'moderate'
+        ELSE 'poor'
+    END as opportunity_quality
+FROM funding_arbitrage_opportunities 
+WHERE is_active = true 
+  AND expires_at > NOW()
+  AND apy > 0
+ORDER BY apy DESC, risk_score ASC;
+
+-- Recreate the active_futures_arbitrage_opportunities view
+CREATE OR REPLACE VIEW active_futures_arbitrage_opportunities AS
+SELECT 
+    *,
+    CASE 
+        WHEN apy >= 20 AND risk_score <= 30 THEN 'excellent'
+        WHEN apy >= 15 AND risk_score <= 50 THEN 'good'
+        WHEN apy >= 10 AND risk_score <= 70 THEN 'moderate'
+        ELSE 'poor'
+    END as opportunity_quality,
+    
+    CASE 
+        WHEN time_to_next_funding <= 60 THEN 'urgent'
+        WHEN time_to_next_funding <= 180 THEN 'soon'
+        ELSE 'later'
+    END as funding_urgency
+FROM futures_arbitrage_opportunities 
+WHERE is_active = true 
+  AND expires_at > NOW()
+  AND apy > 0
+ORDER BY apy DESC, risk_score ASC;
+
+-- Recreate the futures_arbitrage_market_summary view
+CREATE OR REPLACE VIEW futures_arbitrage_market_summary AS
+SELECT 
+    COUNT(*) as total_opportunities,
+    AVG(apy) as average_apy,
+    MAX(apy) as highest_apy,
+    AVG(risk_score) as average_risk_score,
+    AVG(volatility_score) as average_volatility,
+    COUNT(DISTINCT symbol) as unique_symbols,
+    COUNT(DISTINCT long_exchange || '-' || short_exchange) as unique_exchange_pairs,
+    
+    -- Market condition assessment
+    CASE 
+        WHEN AVG(apy) >= 15 AND AVG(risk_score) <= 50 THEN 'favorable'
+        WHEN AVG(apy) >= 8 AND AVG(risk_score) <= 70 THEN 'neutral'
+        ELSE 'unfavorable'
+    END as market_condition,
+    
+    -- Funding rate trend
+    CASE 
+        WHEN AVG(net_funding_rate) > 0.01 THEN 'high_positive'
+        WHEN AVG(net_funding_rate) > 0.005 THEN 'moderate_positive'
+        WHEN AVG(net_funding_rate) > -0.005 THEN 'neutral'
+        WHEN AVG(net_funding_rate) > -0.01 THEN 'moderate_negative'
+        ELSE 'high_negative'
+    END as funding_rate_trend
+    
+FROM active_futures_arbitrage_opportunities;
+
+-- Recreate the active_exchange_trading_pairs view
+CREATE OR REPLACE VIEW active_exchange_trading_pairs AS
+SELECT 
+    etp.*,
     tp.symbol,
     tp.base_currency,
     tp.quote_currency,
-    le.name AS long_exchange_name,
-    se.name AS short_exchange_name
-FROM funding_arbitrage_opportunities fao
-JOIN trading_pairs tp ON fao.trading_pair_id = tp.id
-JOIN exchanges le ON fao.long_exchange_id = le.id
-JOIN exchanges se ON fao.short_exchange_id = se.id
-WHERE fao.is_active = true 
-  AND (fao.expires_at IS NULL OR fao.expires_at > CURRENT_TIMESTAMP)
-ORDER BY fao.estimated_profit_percentage DESC;
+    tp.category
+FROM exchange_trading_pairs etp
+JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
+WHERE etp.is_active = true 
+  AND etp.is_blacklisted = false;
+
+-- Recreate the blacklisted_exchange_trading_pairs view
+CREATE OR REPLACE VIEW blacklisted_exchange_trading_pairs AS
+SELECT 
+    etp.*,
+    tp.symbol,
+    tp.base_currency,
+    tp.quote_currency,
+    tp.category,
+    etp.blacklisted_at,
+    etp.blacklist_reason
+FROM exchange_trading_pairs etp
+JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
+WHERE etp.is_blacklisted = true;
+
+-- Migration completion
+INSERT INTO schema_migrations (filename, applied) VALUES ('040_fix_trading_pairs_column_sizes.sql', true)
+ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
 
 COMMIT;
