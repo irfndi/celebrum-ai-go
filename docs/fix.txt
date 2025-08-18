@@ -1,94 +1,29 @@
-In ccxt-service/index.ts around lines 734 to 744, the handler currently checks
-ccxt.exchanges using the raw request param and builds an error object that
-includes availableExchanges which is not defined on ErrorResponse and will fail
-type-checking; normalize the exchange id by converting c.req.param('exchange')
-to lower-case before checking ccxt.exchanges, and fix the error response shape
-by either removing availableExchanges from the ErrorResponse or returning a
-properly typed extended error (e.g., add an optional details or
-availableExchanges field to the ErrorResponse type and populate it), then return
-that correctly typed object with the 400 status.
+In docker-compose.ci.yml around lines 9 to 12, the compose file mixes enforced
+POSTGRES_PASSWORD with TRUST authentication which bypasses password checks;
+remove the TRUST-related settings to enforce password auth: delete the
+POSTGRES_INITDB_ARGS and POSTGRES_HOST_AUTH_METHOD entries (keep
+POSTGRES_PASSWORD and POSTGRES_DB) so CI uses password-based authentication, or
+if you truly want TRUST instead, remove the POSTGRES_PASSWORD requirement —
+prefer the first option and delete the two TRUST lines.
 
 
 ===
 
-In database/migrations/045_fix_cache_warming_queries.sql around lines 10 to 17,
-the existing IF NOT EXISTS check can match same-named tables in other schemas
-and it also skips enforcing NOT NULL when the column exists but is nullable;
-update the information_schema query to filter on table_schema (e.g., 'public' or
-the configured schema) to avoid false positives, and add an additional branch
-that checks if the column exists but is nullable (column_name = 'base_currency'
-AND is_nullable = 'YES') — in that case backfill NULL values (e.g., UPDATE
-trading_pairs SET base_currency = 'UNKNOWN' WHERE base_currency IS NULL') and
-then ALTER TABLE ... ALTER COLUMN base_currency SET NOT NULL; ensure the
-migration covers both paths: create+set NOT NULL when missing, and backfill+set
-NOT NULL when present but nullable.
-
-===
-
-In database/migrations/045_fix_cache_warming_queries.sql around lines 20 to 27,
-ensure the same safe pattern used elsewhere is applied to quote_currency: create
-the column only if it doesn't exist, add it with a safe default (e.g.
-VARCHAR(20) DEFAULT 'UNKNOWN' or add default immediately after creation),
-populate existing NULLs to 'UNKNOWN', then set the column NOT NULL, and finally
-remove the temporary DEFAULT if you don't want a permanent default; keep the IF
-NOT EXISTS guard and the explicit UPDATE before ALTER COLUMN ... SET NOT NULL to
-avoid failures on live data.
+In docker-compose.ci.yml around lines 58–62 the healthcheck `test` sequence has
+a trailing comma that breaks YAML parsing and the command assumes Bun exists in
+the ccxt-service image; remove the trailing comma so the sequence is valid, and
+either ensure the ccxt-service Dockerfile installs Bun (add installation steps)
+or replace the healthcheck with a portable command that uses an available tool
+(e.g., curl or wget) or a POSIX shell check (sh -c '...') so the healthcheck
+will succeed if Bun is not present.
 
 
 ===
 
-Avoid documenting insecure defaults; require secrets in production
-
-This bullet recommends the ${POSTGRES_PASSWORD:-postgres} fallback, which is unsafe for production and contradicts the hardening posture elsewhere. Align guidance to fail fast in prod and make the “dev-only default” explicit.
-
-- - Updated Docker Compose files to use `${POSTGRES_PASSWORD:-postgres}` pattern
-+ - Updated Docker Compose files to require `${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}` (production).
-+   For local development only, you may temporarily use `${POSTGRES_PASSWORD:-postgres}` with caution.
-
-
-===
-
-In internal/api/handlers/cleanup_test.go around lines 26 to 34, the mock's
-GetDataStats uses args.Get(0).(map[string]int64) which will panic if the test
-supplies an untyped nil; change the method to check args.Get(0) for nil before
-type-asserting and return (nil, args.Error(1)) when it is nil, otherwise perform
-the type assertion and return the asserted map with the error.
-
-
-===
-
-In internal/services/cleanup.go (implementing CleanupService) add the two
-missing methods declared in internal/api/handlers/cleanup.go (lines 12-16):
-implement func (c *CleanupService) GetDataStats(ctx context.Context)
-(map[string]int64, error) to return the data statistics and possible error, and
-implement func (c *CleanupService) RunCleanup(config services.CleanupConfig)
-error to perform the cleanup logic and return an error; ensure both methods are
-receiver functions on *CleanupService, call into existing internal logic/helpers
-to collect stats and perform cleanup, propagate errors, and (optionally) change
-RunCleanup to accept a context.Context for cancellation by adding a new
-signature func (c *CleanupService) RunCleanup(ctx context.Context, config
-services.CleanupConfig) error and update callers accordingly.
-
-
-===
-
-In internal/api/handlers/user.go around lines 409 to 417, the code currently
-logs the wrong error variable when JSON unmarshal fails and ignores non-miss
-Redis GET errors; change the flow so that after calling h.redis.Get(ctx,
-cacheKey).Result() you: 1) if err == nil attempt json.Unmarshal and on failure
-log the unmarshal error (use the local unmarshal err variable in the log
-message), and 2) if err != nil and err is not a cache miss (redis.Nil) log the
-Redis GET error explicitly (include userID/cacheKey and err) so non-miss Redis
-errors are visible. Ensure log messages are clear and use the correct error
-variables.
-
-
-===
-
-In internal/api/handlers/user.go around lines 525-533: the current code swallows
-non-NIL Redis errors and logs the wrong identifier on JSON unmarshal failure
-(uses chatID). Update the Redis handling so that if h.redis.Get(...) returns an
-error and it is not redis.Nil you log that error (include context and the
-cacheKey or telegram ID), and when json.Unmarshal fails log the correct telegram
-ID (user's Telegram ID variable) instead of chatID; ensure you still return on
-successful unmarshal.
+In docker-compose.ci.yml around lines 101 to 110, remove the trailing comma
+after the last array entry in the test command to fix the YAML parse error, and
+make the healthcheck robust by either ensuring the app image installs a small
+HTTP client (add wget or curl to the Dockerfile) or switch the healthcheck to
+use a client already present (for example replace wget with curl) or use
+CMD-SHELL to run a simple shell check (e.g. a curl -f/http check) so the
+healthcheck doesn't assume wget exists.

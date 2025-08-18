@@ -8,8 +8,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for CI security} # SECURITY: Required password
       POSTGRES_DB: celebrum_ai
-      POSTGRES_INITDB_ARGS: "--auth-host=trust"
-      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data_ci:/var/lib/postgresql/data
       - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
@@ -58,7 +56,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          'bun --eval ''fetch("http://localhost:3001/health").then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))''',
+          'bun --eval ''fetch("http://localhost:3001/health").then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))'''
         ]
       interval: 15s
       timeout: 15s
@@ -106,7 +104,7 @@ services:
           "--tries=1",
           "-O",
           "/dev/null",
-          "http://localhost:8080/health",
+          "http://localhost:8080/health"
         ]
       interval: 10s
       timeout: 15s

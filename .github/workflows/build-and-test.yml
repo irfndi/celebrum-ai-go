@@ -36,7 +36,7 @@ jobs:
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.60.0
+          version: v2.4.0
           args: --timeout=5m --output.text.path=stdout --output.text.colors=true
           
       - name: Build Go binary
