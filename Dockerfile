@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and ca-certificates (needed for go mod download)
 RUN apk add --no-cache git ca-certificates tzdata
@@ -57,6 +57,9 @@ CMD ["./main"]
 
 # Debug stage (includes debugging tools)
 FROM production AS debug
+
+# Switch to root to install debugging tools
+USER root
 
 # Install debugging and monitoring tools for development/debugging
 RUN apk --no-cache add procps htop strace lsof tcpdump

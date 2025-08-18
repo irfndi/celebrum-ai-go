@@ -73,19 +73,20 @@ func main() {
 	}
 	defer collectorService.Stop()
 
-	// Perform historical data backfill if needed
-	appLogger.Info("Checking for historical data backfill requirements")
-	if err := collectorService.PerformBackfillIfNeeded(); err != nil {
-		appLogger.WithError(err).Warn("Backfill failed")
-		// Don't fail startup if backfill fails, just log the warning
-	} else {
-		appLogger.Info("Historical data backfill check completed successfully")
-	}
-
-	// Initialize support services for futures arbitrage
+	// Initialize support services for futures arbitrage and cleanup
 	resourceManager := services.NewResourceManager(logger.Logger)
 	errorRecoveryManager := services.NewErrorRecoveryManager(logger.Logger)
 	performanceMonitor := services.NewPerformanceMonitor(logger.Logger, redis.Client, ctx)
+
+	// Start historical data backfill in background if needed
+	go func() {
+		appLogger.Info("Checking for historical data backfill requirements")
+		if err := collectorService.PerformBackfillIfNeeded(); err != nil {
+			appLogger.WithError(err).Warn("Backfill failed")
+		} else {
+			appLogger.Info("Historical data backfill check completed successfully")
+		}
+	}()
 
 	// Initialize futures arbitrage service
 	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, errorRecoveryManager, resourceManager, performanceMonitor)

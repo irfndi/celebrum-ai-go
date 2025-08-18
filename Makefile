@@ -17,7 +17,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean
+.PHONY: help build test test-coverage lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated
 
 # Default target
 all: build
@@ -262,17 +262,55 @@ auto-migrate: ## Run automatic migration sync
 	@docker compose -f $(DOCKER_COMPOSE_FILE) up --build migrate
 	@echo "$(GREEN)All migrations applied successfully!$(NC)"
 
-# Development environment with auto-migration
-dev-up: ## Start development environment with automatic migrations
-	@echo "$(GREEN)Starting development environment with automatic migrations...$(NC)"
-	@docker compose -f $(DOCKER_COMPOSE_FILE) down
-	@docker compose -f $(DOCKER_COMPOSE_FILE) up --build migrate app redis
+# Development environment with orchestrated sequential startup
+dev-up-orchestrated: ## Start development environment with robust sequential startup
+	@echo "$(GREEN)Starting development environment with orchestrated sequential startup...$(NC)"
+	@chmod +x ./startup-orchestrator.sh
+	@./startup-orchestrator.sh dev
 
-# Production-like environment with auto-migration
-prod-up: ## Start production environment with automatic migrations
-	@echo "$(GREEN)Starting production environment with automatic migrations...$(NC)"
-	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) down
-	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) up -d --build
+# Production environment with orchestrated sequential startup
+prod-up-orchestrated: ## Start production environment with robust sequential startup
+	@echo "$(GREEN)Starting production environment with orchestrated sequential startup...$(NC)"
+	@chmod +x ./startup-orchestrator.sh
+	@./startup-orchestrator.sh prod
+
+# Development environment with auto-migration (legacy - use dev-up-orchestrated for robust startup)
+dev-up: dev-up-orchestrated ## Start development environment with automatic migrations
+
+# Production-like environment with auto-migration (legacy - use prod-up-orchestrated for robust startup)
+prod-up: prod-up-orchestrated ## Start production environment with automatic migrations
+
+## Sequential Startup Control
+webhook-enable: ## Enable external connections and Telegram webhooks
+	@echo "$(GREEN)Enabling external connections and webhooks...$(NC)"
+	@chmod +x ./webhook-control.sh
+	@./webhook-control.sh enable
+
+webhook-disable: ## Disable external connections and Telegram webhooks
+	@echo "$(YELLOW)Disabling external connections and webhooks...$(NC)"
+	@chmod +x ./webhook-control.sh
+	@./webhook-control.sh disable
+
+webhook-status: ## Check webhook and external connection status
+	@echo "$(GREEN)Checking webhook status...$(NC)"
+	@chmod +x ./webhook-control.sh
+	@./webhook-control.sh status
+
+startup-status: ## Check sequential startup status
+	@echo "$(GREEN)Checking startup status...$(NC)"
+	@if [ -f ".env.startup" ]; then \
+		echo "$(GREEN)Startup configuration found:$(NC)"; \
+		cat .env.startup | grep -E "(STARTUP_PHASE|EXTERNAL_CONNECTIONS_ENABLED|WARMUP_ENABLED)"; \
+	else \
+		echo "$(YELLOW)No startup configuration found$(NC)"; \
+	fi
+
+down-orchestrated: ## Stop all services gracefully with orchestrated shutdown
+	@echo "$(YELLOW)Stopping services with orchestrated shutdown...$(NC)"
+	@./webhook-control.sh disable 2>/dev/null || true
+	@docker compose -f $(DOCKER_COMPOSE_FILE) down
+	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) down 2>/dev/null || true
+	@echo "$(GREEN)All services stopped$(NC)"
 
 ## Utilities
 clean: ## Clean build artifacts

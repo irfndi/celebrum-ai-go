@@ -1,5 +1,5 @@
 services:
-  # PostgreSQL Database
+  # PHASE 1: Database Services
   postgres:
     image: postgres:17
     container_name: celebrum-postgres
@@ -10,12 +10,14 @@ services:
       POSTGRES_DB: celebrum_ai
       POSTGRES_INITDB_ARGS: "--auth-host=trust"
       POSTGRES_HOST_AUTH_METHOD: trust
+      # Phase control
+      STARTUP_PHASE: "1"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
       - ./database:/database
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -U postgres -d celebrum_ai -c 'SELECT 1;'"]
       interval: 20s
       timeout: 30s
       retries: 20
@@ -35,12 +37,16 @@ services:
       DB_NAME: celebrum_ai
       DB_USER: postgres
       DB_PASSWORD: postgres
+      # Phase control
+      STARTUP_PHASE: "1"
     volumes:
       - ./scripts:/scripts
       - ./database/migrations:/database/migrations
     command: ["bash", "/scripts/robust-migrate.sh"]
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - celebrum-network
@@ -50,19 +56,23 @@ services:
     image: redis:7-alpine
     container_name: celebrum-redis
     restart: unless-stopped
+    environment:
+      # Phase control
+      - STARTUP_PHASE=1
     volumes:
       - redis_data:/data
       - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro
     command: redis-server /etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
     networks:
       - celebrum-network
 
-  # CCXT Service (Node.js)
+  # PHASE 3: CCXT Service (Node.js) - Warm-up Phase
   ccxt-service:
     build:
       context: ./ccxt-service
@@ -73,9 +83,15 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - LOG_LEVEL=info
+      - STARTUP_PHASE=3
+      - WARMUP_ENABLED=true
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -84,14 +100,14 @@ services:
           "-e",
           "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))",
         ]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 60s
+      interval: 25s
+      timeout: 20s
+      retries: 6
+      start_period: 90s
     networks:
       - celebrum-network
 
-  # Main Go Application
+  # PHASE 3: Main Go Application - Warm-up Phase
   app:
     build:
       context: .
@@ -112,6 +128,11 @@ services:
       - CCXT_TIMEOUT=30
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this}
       - SERVER_PORT=8080
+      # Phase control - External connections disabled during warmup
+      - STARTUP_PHASE=3
+      - WARMUP_ENABLED=true
+      - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
+      - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
@@ -138,14 +159,14 @@ services:
           "/dev/null",
           "http://localhost:8080/health",
         ]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 60s
+      interval: 25s
+      timeout: 20s
+      retries: 6
+      start_period: 120s
     networks:
       - celebrum-network
 
-  # Nginx reverse proxy
+  # PHASE 2: Nginx reverse proxy - Gateway Phase
   nginx:
     image: nginx:alpine
     container_name: celebrum-nginx
@@ -157,8 +178,19 @@ services:
       - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./configs/ssl/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
       - ./configs/ssl/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+    environment:
+      - STARTUP_PHASE=2
+      - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       app:
+        condition: service_healthy
+      ccxt-service:
         condition: service_healthy
     healthcheck:
       test:
@@ -170,9 +202,10 @@ services:
           "--spider",
           "http://localhost/health",
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     networks:
       - celebrum-network
 
