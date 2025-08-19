@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -805,4 +806,162 @@ func (sa *SignalAggregator) storeFingerprint(ctx context.Context, fingerprint *S
 	if err != nil {
 		sa.logger.WithError(err).Error("Failed to store signal fingerprint")
 	}
+}
+
+// GetActiveAggregatedSignals retrieves active aggregated signals from the database
+func (sa *SignalAggregator) GetActiveAggregatedSignals(ctx context.Context, limit int) ([]*AggregatedSignal, error) {
+	if sa.db == nil {
+		return []*AggregatedSignal{}, nil
+	}
+
+	query := `
+		SELECT 
+			id, signal_type, symbol, action, strength, confidence,
+			profit_potential, risk_level, exchanges, indicators,
+			metadata, created_at, expires_at
+		FROM aggregated_signals 
+		WHERE expires_at > NOW() 
+			AND confidence >= $1
+		ORDER BY confidence DESC, profit_potential DESC, created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := sa.db.Pool.Query(ctx, query, sa.sigConfig.MinConfidence, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query aggregated signals: %w", err)
+	}
+	defer rows.Close()
+
+	var signals []*AggregatedSignal
+	for rows.Next() {
+		signal := &AggregatedSignal{}
+		var exchangesJSON, indicatorsJSON, metadataJSON []byte
+		var strengthStr string
+
+		err := rows.Scan(
+			&signal.ID, &signal.SignalType, &signal.Symbol, &signal.Action,
+			&strengthStr, &signal.Confidence, &signal.ProfitPotential,
+			&signal.RiskLevel, &exchangesJSON, &indicatorsJSON,
+			&metadataJSON, &signal.CreatedAt, &signal.ExpiresAt,
+		)
+		if err != nil {
+			sa.logger.WithError(err).Error("Failed to scan aggregated signal")
+			continue
+		}
+
+		// Parse strength
+		signal.Strength = SignalStrength(strengthStr)
+
+		// Parse JSON fields
+		if len(exchangesJSON) > 0 {
+			if err := json.Unmarshal(exchangesJSON, &signal.Exchanges); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal exchanges")
+			}
+		}
+
+		if len(indicatorsJSON) > 0 {
+			if err := json.Unmarshal(indicatorsJSON, &signal.Indicators); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal indicators")
+			}
+		}
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &signal.Metadata); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal metadata")
+			}
+		}
+
+		signals = append(signals, signal)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over aggregated signals: %w", err)
+	}
+
+	sa.logger.WithFields(logrus.Fields{
+		"count": len(signals),
+		"limit": limit,
+	}).Info("Retrieved active aggregated signals")
+
+	return signals, nil
+}
+
+// GetAggregatedSignalsBySymbol retrieves aggregated signals for a specific symbol
+func (sa *SignalAggregator) GetAggregatedSignalsBySymbol(ctx context.Context, symbol string, limit int) ([]*AggregatedSignal, error) {
+	if sa.db == nil {
+		return []*AggregatedSignal{}, nil
+	}
+
+	query := `
+		SELECT 
+			id, signal_type, symbol, action, strength, confidence,
+			profit_potential, risk_level, exchanges, indicators,
+			metadata, created_at, expires_at
+		FROM aggregated_signals 
+		WHERE symbol = $1 
+			AND expires_at > NOW() 
+			AND confidence >= $2
+		ORDER BY confidence DESC, profit_potential DESC, created_at DESC
+		LIMIT $3
+	`
+
+	rows, err := sa.db.Pool.Query(ctx, query, symbol, sa.sigConfig.MinConfidence, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query aggregated signals for symbol %s: %w", symbol, err)
+	}
+	defer rows.Close()
+
+	var signals []*AggregatedSignal
+	for rows.Next() {
+		signal := &AggregatedSignal{}
+		var exchangesJSON, indicatorsJSON, metadataJSON []byte
+		var strengthStr string
+
+		err := rows.Scan(
+			&signal.ID, &signal.SignalType, &signal.Symbol, &signal.Action,
+			&strengthStr, &signal.Confidence, &signal.ProfitPotential,
+			&signal.RiskLevel, &exchangesJSON, &indicatorsJSON,
+			&metadataJSON, &signal.CreatedAt, &signal.ExpiresAt,
+		)
+		if err != nil {
+			sa.logger.WithError(err).Error("Failed to scan aggregated signal")
+			continue
+		}
+
+		// Parse strength
+		signal.Strength = SignalStrength(strengthStr)
+
+		// Parse JSON fields
+		if len(exchangesJSON) > 0 {
+			if err := json.Unmarshal(exchangesJSON, &signal.Exchanges); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal exchanges")
+			}
+		}
+
+		if len(indicatorsJSON) > 0 {
+			if err := json.Unmarshal(indicatorsJSON, &signal.Indicators); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal indicators")
+			}
+		}
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &signal.Metadata); err != nil {
+				sa.logger.WithError(err).Error("Failed to unmarshal metadata")
+			}
+		}
+
+		signals = append(signals, signal)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over aggregated signals for symbol %s: %w", symbol, err)
+	}
+
+	sa.logger.WithFields(logrus.Fields{
+		"symbol": symbol,
+		"count":  len(signals),
+		"limit":  limit,
+	}).Info("Retrieved aggregated signals for symbol")
+
+	return signals, nil
 }

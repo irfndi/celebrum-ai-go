@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -945,6 +947,311 @@ func (ns *NotificationService) CheckUserNotificationPreferences(ctx context.Cont
 	}
 
 	return result, nil
+}
+
+// NotifyAggregatedSignals sends notifications about aggregated signals to eligible users
+func (ns *NotificationService) NotifyAggregatedSignals(ctx context.Context, signals []*AggregatedSignal) error {
+	// Get eligible users (those with Telegram chat IDs and alerts enabled)
+	users, err := ns.getEligibleUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get eligible users: %w", err)
+	}
+
+	if len(users) == 0 {
+		log.Printf("No eligible users found for aggregated signal notifications")
+		return nil
+	}
+
+	if len(signals) == 0 {
+		log.Printf("No aggregated signals to notify")
+		return nil
+	}
+
+	// Group signals by type
+	arbitrageSignals := make([]*AggregatedSignal, 0)
+	technicalSignals := make([]*AggregatedSignal, 0)
+
+	for _, signal := range signals {
+		switch signal.SignalType {
+		case SignalTypeArbitrage:
+			arbitrageSignals = append(arbitrageSignals, signal)
+		case SignalTypeTechnical:
+			technicalSignals = append(technicalSignals, signal)
+		}
+	}
+
+	// Send notifications to each user
+	for _, user := range users {
+		// Send arbitrage signals
+		if len(arbitrageSignals) > 0 {
+			if err := ns.sendAggregatedArbitrageAlert(ctx, user, arbitrageSignals); err != nil {
+				log.Printf("Failed to send aggregated arbitrage alert to user %s: %v", user.ID, err)
+			} else {
+				log.Printf("Sent aggregated arbitrage alert to user %s", user.ID)
+			}
+		}
+
+		// Send technical analysis signals
+		if len(technicalSignals) > 0 {
+			if err := ns.sendAggregatedTechnicalAlert(ctx, user, technicalSignals); err != nil {
+				log.Printf("Failed to send aggregated technical alert to user %s: %v", user.ID, err)
+			} else {
+				log.Printf("Sent aggregated technical alert to user %s", user.ID)
+			}
+		}
+	}
+
+	log.Printf("Sent aggregated signal notifications to %d users: %d arbitrage, %d technical",
+		len(users), len(arbitrageSignals), len(technicalSignals))
+	return nil
+}
+
+// sendAggregatedArbitrageAlert sends a formatted aggregated arbitrage alert to a specific user
+func (ns *NotificationService) sendAggregatedArbitrageAlert(ctx context.Context, user userModels.User, signals []*AggregatedSignal) error {
+	if ns.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	// Check rate limit before sending
+	allowed, err := ns.checkRateLimit(ctx, user.ID)
+	if err != nil {
+		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+	}
+	if !allowed {
+		log.Printf("Rate limit exceeded for user %s, skipping aggregated arbitrage alert", user.ID)
+		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
+	}
+
+	chatID, err := strconv.ParseInt(*user.TelegramChatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	// Generate hash for signals to check cache
+	signalsHash := ns.generateAggregatedSignalsHash(signals)
+
+	// Try to get cached message first
+	var message string
+	if cachedMsg, found := ns.getCachedMessage(ctx, "aggregated_arbitrage", signalsHash); found {
+		message = cachedMsg
+		log.Printf("Using cached aggregated arbitrage message for hash %s", signalsHash[:8])
+	} else {
+		// Format the aggregated arbitrage alert message and cache it
+		message = ns.formatAggregatedArbitrageMessage(signals)
+		ns.setCachedMessage(ctx, "aggregated_arbitrage", signalsHash, message)
+		log.Printf("Formatted and cached new aggregated arbitrage message for hash %s", signalsHash[:8])
+	}
+
+	// Send the message
+	_, err = ns.bot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      message,
+		ParseMode: models.ParseModeMarkdown,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send telegram message: %w", err)
+	}
+
+	// Log the notification
+	if err := ns.logNotification(ctx, user.ID, "telegram", "aggregated_arbitrage_alert"); err != nil {
+		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+	}
+
+	return nil
+}
+
+// sendAggregatedTechnicalAlert sends a formatted aggregated technical alert to a specific user
+func (ns *NotificationService) sendAggregatedTechnicalAlert(ctx context.Context, user userModels.User, signals []*AggregatedSignal) error {
+	if ns.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	// Check rate limit before sending
+	allowed, err := ns.checkRateLimit(ctx, user.ID)
+	if err != nil {
+		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+	}
+	if !allowed {
+		log.Printf("Rate limit exceeded for user %s, skipping aggregated technical alert", user.ID)
+		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
+	}
+
+	chatID, err := strconv.ParseInt(*user.TelegramChatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	// Generate hash for signals to check cache
+	signalsHash := ns.generateAggregatedSignalsHash(signals)
+
+	// Try to get cached message first
+	var message string
+	if cachedMsg, found := ns.getCachedMessage(ctx, "aggregated_technical", signalsHash); found {
+		message = cachedMsg
+		log.Printf("Using cached aggregated technical message for hash %s", signalsHash[:8])
+	} else {
+		// Format the aggregated technical alert message and cache it
+		message = ns.formatAggregatedTechnicalMessage(signals)
+		ns.setCachedMessage(ctx, "aggregated_technical", signalsHash, message)
+		log.Printf("Formatted and cached new aggregated technical message for hash %s", signalsHash[:8])
+	}
+
+	// Send the message
+	_, err = ns.bot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      message,
+		ParseMode: models.ParseModeMarkdown,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send telegram message: %w", err)
+	}
+
+	// Log the notification
+	if err := ns.logNotification(ctx, user.ID, "telegram", "aggregated_technical_alert"); err != nil {
+		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+	}
+
+	return nil
+}
+
+// generateAggregatedSignalsHash generates a consistent hash for a slice of aggregated signals
+func (ns *NotificationService) generateAggregatedSignalsHash(signals []*AggregatedSignal) string {
+	h := sha256.New()
+	
+	// Sort signals by symbol and signal type for consistent hashing
+	sortedSignals := make([]*AggregatedSignal, len(signals))
+	copy(sortedSignals, signals)
+	sort.Slice(sortedSignals, func(i, j int) bool {
+		if sortedSignals[i].Symbol != sortedSignals[j].Symbol {
+			return sortedSignals[i].Symbol < sortedSignals[j].Symbol
+		}
+		return sortedSignals[i].SignalType < sortedSignals[j].SignalType
+	})
+	
+	for _, signal := range sortedSignals {
+		_, _ = fmt.Fprintf(h, "%s:%s:%s:%s:%.2f", 
+			signal.Symbol, 
+			signal.SignalType, 
+			signal.Action, 
+			string(signal.Strength), 
+			signal.Confidence.InexactFloat64())
+	}
+	
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// formatAggregatedArbitrageMessage formats multiple arbitrage signals into a single message
+func (ns *NotificationService) formatAggregatedArbitrageMessage(signals []*AggregatedSignal) string {
+	if len(signals) == 0 {
+		return "🔍 No arbitrage opportunities available"
+	}
+	
+	// Sort signals by profit potential (highest first)
+	sort.Slice(signals, func(i, j int) bool {
+		return signals[i].ProfitPotential.GreaterThan(signals[j].ProfitPotential)
+	})
+	
+	var message strings.Builder
+	message.WriteString("🚀 *Aggregated Arbitrage Opportunities*\n\n")
+	
+	// Limit to top 5 opportunities to keep message manageable
+	maxSignals := len(signals)
+	if maxSignals > 5 {
+		maxSignals = 5
+	}
+	
+	for i, signal := range signals[:maxSignals] {
+		message.WriteString(fmt.Sprintf("*%d. %s*\n", i+1, signal.Symbol))
+		message.WriteString(fmt.Sprintf("💰 Profit: %.2f%%\n", signal.ProfitPotential.InexactFloat64()))
+		message.WriteString(fmt.Sprintf("🎯 Confidence: %.1f%%\n", signal.Confidence.InexactFloat64()))
+		message.WriteString(fmt.Sprintf("⚡ Action: %s\n", strings.ToUpper(signal.Action)))
+		message.WriteString(fmt.Sprintf("🏪 Exchanges: %s\n", strings.Join(signal.Exchanges, ", ")))
+		
+		// Add metadata if available
+		if signal.Metadata != nil {
+			if buyPrice, ok := signal.Metadata["buy_price"]; ok {
+				message.WriteString(fmt.Sprintf("📈 Buy Price: %v\n", buyPrice))
+			}
+			if sellPrice, ok := signal.Metadata["sell_price"]; ok {
+				message.WriteString(fmt.Sprintf("📉 Sell Price: %v\n", sellPrice))
+			}
+		}
+		
+		message.WriteString("\n")
+	}
+	
+	if len(signals) > maxSignals {
+		message.WriteString(fmt.Sprintf("... and %d more opportunities\n\n", len(signals)-maxSignals))
+	}
+	
+	message.WriteString("⏰ Generated: ")
+	message.WriteString(time.Now().Format("15:04:05 MST"))
+	message.WriteString("\n\n⚠️ *Trade at your own risk*")
+	
+	return message.String()
+}
+
+// formatAggregatedTechnicalMessage formats multiple technical analysis signals into a single message
+func (ns *NotificationService) formatAggregatedTechnicalMessage(signals []*AggregatedSignal) string {
+	if len(signals) == 0 {
+		return "📊 No technical analysis signals available"
+	}
+	
+	// Sort signals by strength (highest first)
+	sort.Slice(signals, func(i, j int) bool {
+		return string(signals[i].Strength) > string(signals[j].Strength)
+	})
+	
+	var message strings.Builder
+	message.WriteString("📊 *Aggregated Technical Analysis*\n\n")
+	
+	// Limit to top 5 signals to keep message manageable
+	maxSignals := len(signals)
+	if maxSignals > 5 {
+		maxSignals = 5
+	}
+	
+	for i, signal := range signals[:maxSignals] {
+		message.WriteString(fmt.Sprintf("*%d. %s*\n", i+1, signal.Symbol))
+		message.WriteString(fmt.Sprintf("📈 Signal: %s\n", strings.ToUpper(signal.Action)))
+		message.WriteString(fmt.Sprintf("💪 Strength: %s\n", signal.Strength))
+		message.WriteString(fmt.Sprintf("🎯 Confidence: %.1f%%\n", signal.Confidence.InexactFloat64()))
+		message.WriteString(fmt.Sprintf("⚠️ Risk: %.2f%%\n", signal.RiskLevel.InexactFloat64()))
+		
+		// Add indicators if available
+		if len(signal.Indicators) > 0 {
+			message.WriteString("📊 Indicators: ")
+			message.WriteString(strings.Join(signal.Indicators, ", "))
+			message.WriteString("\n")
+		}
+		
+		// Add metadata if available
+		if signal.Metadata != nil {
+			if entryPrice, ok := signal.Metadata["entry_price"]; ok {
+				message.WriteString(fmt.Sprintf("🎯 Entry: %v\n", entryPrice))
+			}
+			if stopLoss, ok := signal.Metadata["stop_loss"]; ok {
+				message.WriteString(fmt.Sprintf("🛑 Stop Loss: %v\n", stopLoss))
+			}
+			if target, ok := signal.Metadata["target"]; ok {
+				message.WriteString(fmt.Sprintf("🎯 Target: %v\n", target))
+			}
+		}
+		
+		message.WriteString("\n")
+	}
+	
+	if len(signals) > maxSignals {
+		message.WriteString(fmt.Sprintf("... and %d more signals\n\n", len(signals)-maxSignals))
+	}
+	
+	message.WriteString("⏰ Generated: ")
+	message.WriteString(time.Now().Format("15:04:05 MST"))
+	message.WriteString("\n\n⚠️ *Trade at your own risk*")
+	
+	return message.String()
 }
 
 // NotifyTechnicalSignals sends notifications about technical analysis signals to eligible users

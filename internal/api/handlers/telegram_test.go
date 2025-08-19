@@ -251,14 +251,14 @@ func TestTelegramHandler_Integration(t *testing.T) {
 
 func TestNewTelegramHandler(t *testing.T) {
 	t.Run("create handler with nil parameters", func(t *testing.T) {
-		handler := NewTelegramHandler(nil, nil, nil, nil)
+		handler := NewTelegramHandler(nil, nil, nil, nil, nil)
 		assert.NotNil(t, handler)
 	})
 }
 
 func TestTelegramHandler_HandleWebhook_Additional(t *testing.T) {
 	t.Run("bot not initialized", func(t *testing.T) {
-		handler := NewTelegramHandler(nil, nil, nil, nil)
+		handler := NewTelegramHandler(nil, nil, nil, nil, nil)
 
 		update := map[string]interface{}{
 			"update_id": 123,
@@ -296,7 +296,7 @@ func TestTelegramHandler_HandleWebhook_Additional(t *testing.T) {
 		mockConfig := &config.TelegramConfig{
 			BotToken: "invalid_token", // This will fail but handler will still be created
 		}
-		handler := NewTelegramHandler(nil, mockConfig, nil, nil)
+		handler := NewTelegramHandler(nil, mockConfig, nil, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)

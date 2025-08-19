@@ -53,8 +53,12 @@ type CCXTConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken   string `mapstructure:"bot_token"`
-	WebhookURL string `mapstructure:"webhook_url"`
+	BotToken      string `mapstructure:"bot_token"`
+	WebhookURL    string `mapstructure:"webhook_url"`
+	UsePolling    bool   `mapstructure:"use_polling"`
+	PollingOffset int    `mapstructure:"polling_offset"`
+	PollingLimit  int    `mapstructure:"polling_limit"`
+	PollingTimeout int   `mapstructure:"polling_timeout"`
 }
 
 type CleanupConfig struct {
@@ -169,6 +173,10 @@ func setDefaults() {
 	// Telegram
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
+	viper.SetDefault("telegram.use_polling", false)
+	viper.SetDefault("telegram.polling_offset", 0)
+	viper.SetDefault("telegram.polling_limit", 100)
+	viper.SetDefault("telegram.polling_timeout", 60)
 
 	// Cleanup - Enhanced configuration with smart cleanup
 	viper.SetDefault("cleanup.market_data.retention_hours", 36)

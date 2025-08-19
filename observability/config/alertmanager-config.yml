@@ -1,0 +1,27 @@
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alertmanager@celebrum-ai.com'
+  smtp_auth_username: 'alertmanager@celebrum-ai.com'
+  smtp_auth_password: 'password'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+  routes:
+    - match:
+        service: celebrum-ai-go
+      receiver: 'celebrum-ai-alerts'
+    - match:
+        service: ccxt-service
+      receiver: 'ccxt-service-alerts'
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://127.0.0.1:5

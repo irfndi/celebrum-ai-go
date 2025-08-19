@@ -55,6 +55,8 @@ services:
     image: redis:7-alpine
     container_name: celebrum-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     # SECURITY: Removed host port mapping to prevent external Redis access
     # Redis is only accessible within the Docker network
     volumes:
@@ -85,6 +87,7 @@ services:
       - PORT=3001
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
+      - ADMIN_API_KEY=${ADMIN_API_KEY:?ADMIN_API_KEY must be set in .env file}
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,6 +134,7 @@ services:
       - WARMUP_ENABLED=true
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
+      - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
     depends_on:
       postgres:
         condition: service_healthy

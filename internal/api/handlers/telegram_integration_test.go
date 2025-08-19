@@ -113,7 +113,7 @@ func TestTelegramWebhookIntegration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create handler with nil config (bot won't initialize)
-			handler := NewTelegramHandler(nil, nil, nil, nil)
+			handler := NewTelegramHandler(nil, nil, nil, nil, nil)
 
 			// Marshal update to JSON
 			jsonData, err := json.Marshal(tt.update)
@@ -265,7 +265,7 @@ func TestTelegramErrorHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create handler with nil config
-			handler := NewTelegramHandler(nil, nil, nil, nil)
+			handler := NewTelegramHandler(nil, nil, nil, nil, nil)
 
 			// Create HTTP request
 			req := httptest.NewRequest("POST", "/telegram/webhook", bytes.NewBufferString(tt.body))
@@ -323,7 +323,7 @@ func TestTelegramConfigValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewTelegramHandler(nil, tt.config, nil, nil)
+			handler := NewTelegramHandler(nil, tt.config, nil, nil, nil)
 			assert.NotNil(t, handler) // Handler is always created
 
 			// Test that bot is not initialized with invalid configs
@@ -358,7 +358,7 @@ func BenchmarkTelegramWebhookProcessing(b *testing.B) {
 	}
 
 	jsonData, _ := json.Marshal(update)
-	handler := NewTelegramHandler(nil, nil, nil, nil)
+	handler := NewTelegramHandler(nil, nil, nil, nil, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -1493,9 +1493,11 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	displayName := caser.String(ccxtID)
 
 	// Insert new exchange with conflict resolution
+	// Use a default API URL based on the exchange name since CCXT doesn't provide this directly
+	defaultAPIURL := fmt.Sprintf("https://api.%s.com", strings.ToLower(ccxtID))
 	err = c.db.Pool.QueryRow(c.ctx,
-		"INSERT INTO exchanges (name, display_name, ccxt_id, status, has_spot, has_futures) VALUES ($1, $2, $3, 'active', true, true) ON CONFLICT (name) DO UPDATE SET ccxt_id = EXCLUDED.ccxt_id, display_name = EXCLUDED.display_name RETURNING id",
-		name, displayName, ccxtID).Scan(&exchangeID)
+		"INSERT INTO exchanges (name, display_name, ccxt_id, api_url, status, has_spot, has_futures) VALUES ($1, $2, $3, $4, 'active', true, true) ON CONFLICT (name) DO UPDATE SET ccxt_id = EXCLUDED.ccxt_id, display_name = EXCLUDED.display_name, api_url = EXCLUDED.api_url RETURNING id",
+		name, displayName, ccxtID, defaultAPIURL).Scan(&exchangeID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create or update exchange: %w", err)
 	}

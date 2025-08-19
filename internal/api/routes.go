@@ -27,7 +27,7 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()
 
@@ -46,7 +46,11 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
-	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, redis.Client)
+	
+	// Initialize telegram handler with debug logging
+	fmt.Printf("DEBUG: About to initialize Telegram handler with config: %+v\n", telegramConfig)
+	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
+	fmt.Printf("DEBUG: Telegram handler initialized: %+v\n", telegramHandler != nil)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)

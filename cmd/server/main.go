@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -105,6 +106,60 @@ func main() {
 	}
 	defer futuresArbitrageService.Stop()
 
+	// Initialize signal aggregator service
+	signalAggregator := services.NewSignalAggregator(cfg, db, logger.Logger)
+
+	// Initialize technical analysis service
+	technicalAnalysisService := services.NewTechnicalAnalysisService(
+		cfg,
+		db,
+		logger.Logger,
+		errorRecoveryManager,
+		resourceManager,
+		performanceMonitor,
+	)
+
+	// Initialize signal quality scorer
+	signalQualityScorer := services.NewSignalQualityScorer(cfg, db, logger.Logger)
+
+	// Initialize notification service
+	notificationService := services.NewNotificationService(db, redis, cfg.Telegram.BotToken)
+
+	// Initialize circuit breaker for signal processing
+	signalProcessorCircuitBreaker := services.NewCircuitBreaker(
+		"signal_processor",
+		services.CircuitBreakerConfig{
+			FailureThreshold: 5,
+			SuccessThreshold: 3,
+			Timeout:          30 * time.Second,
+			ResetTimeout:     60 * time.Second,
+			MaxRequests:      10,
+		},
+		logger.Logger,
+	)
+
+	// Initialize signal processor
+	signalProcessor := services.NewSignalProcessor(
+		db.Pool,
+		slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		signalAggregator,
+		signalQualityScorer,
+		technicalAnalysisService,
+		notificationService,
+		collectorService,
+		signalProcessorCircuitBreaker,
+	)
+
+	// Start signal processor
+	if err := signalProcessor.Start(); err != nil {
+		appLogger.WithError(err).Fatal("Failed to start signal processor")
+	}
+	defer func() {
+		if err := signalProcessor.Stop(); err != nil {
+			appLogger.WithError(err).Error("Failed to stop signal processor")
+		}
+	}()
+
 	// Initialize cleanup service
 	cleanupService := services.NewCleanupService(db, errorRecoveryManager, resourceManager, performanceMonitor)
 
@@ -139,7 +194,7 @@ func main() {
 	router := gin.Default()
 
 	// Setup routes
-	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, &cfg.Telegram)
+	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram)
 
 	// Create HTTP server with security timeouts
 	srv := &http.Server{
