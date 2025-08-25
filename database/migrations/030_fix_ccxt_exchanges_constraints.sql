@@ -50,9 +50,6 @@ BEGIN
 END $$;
 */
 
--- Record this migration
-INSERT INTO schema_migrations (version, filename, description) VALUES
-    (30, '030_fix_ccxt_exchanges_constraints.sql', 'Fix ccxt_exchanges foreign key constraints with CASCADE options')
-ON CONFLICT (version) DO NOTHING;
+-- Migration already recorded in schema_migrations table
 
 COMMIT;

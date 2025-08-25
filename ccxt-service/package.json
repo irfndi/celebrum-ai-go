@@ -4,14 +4,28 @@
   "description": "CCXT service for cryptocurrency exchange data",
   "main": "index.ts",
   "scripts": {
-    "start": "bun run index.ts",
-    "dev": "bun --watch index.ts",
-    "build": "bun build index.ts --outdir ./dist --target node",
+    "start": "node --require ./tracing.js index.js",
+    "start:bun": "bun run --preload ./tracing.js index.ts",
+    "dev": "node --require ./tracing.js --watch index.js",
+    "dev:bun": "bun --watch index.ts",
+    "build": "tsc && cp tracing.js dist/",
+    "build:bun": "bun build index.ts --outdir ./dist --target node",
     "test": "bun test"
   },
   "dependencies": {
-    "ccxt": "^4.4.99",
-    "hono": "^4.9.0"
+    "@hono/node-server": "^1.19.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
+    "@opentelemetry/exporter-otlp-http": "^0.26.0",
+    "@opentelemetry/instrumentation": "^0.203.0",
+    "@opentelemetry/instrumentation-express": "^0.52.0",
+    "@opentelemetry/instrumentation-fs": "^0.23.0",
+    "@opentelemetry/instrumentation-http": "^0.203.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/sdk-node": "^0.203.0",
+    "@opentelemetry/semantic-conventions": "^1.36.0",
+    "ccxt": "^4.5.1",
+    "hono": "^4.9.4"
   },
   "devDependencies": {
     "@types/bun": "latest",

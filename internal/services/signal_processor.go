@@ -19,17 +19,17 @@ import (
 
 // SignalProcessorConfig holds configuration for the signal processor
 type SignalProcessorConfig struct {
-	BatchSize           int           `json:"batch_size"`
-	ProcessingInterval  time.Duration `json:"processing_interval"`
-	MaxConcurrentBatch  int           `json:"max_concurrent_batch"`
-	QualityThreshold    float64       `json:"quality_threshold"`
-	DeduplicationWindow time.Duration `json:"deduplication_window"`
-	RateLimitPerSecond  int           `json:"rate_limit_per_second"`
-	RetryAttempts       int           `json:"retry_attempts"`
-	RetryDelay          time.Duration `json:"retry_delay"`
-	TimeoutDuration     time.Duration `json:"timeout_duration"`
-	SignalTTL           time.Duration `json:"signal_ttl"`
-	NotificationEnabled bool          `json:"notification_enabled"`
+	BatchSize            int                  `json:"batch_size"`
+	ProcessingInterval   time.Duration        `json:"processing_interval"`
+	MaxConcurrentBatch   int                  `json:"max_concurrent_batch"`
+	QualityThreshold     float64              `json:"quality_threshold"`
+	DeduplicationWindow  time.Duration        `json:"deduplication_window"`
+	RateLimitPerSecond   int                  `json:"rate_limit_per_second"`
+	RetryAttempts        int                  `json:"retry_attempts"`
+	RetryDelay           time.Duration        `json:"retry_delay"`
+	TimeoutDuration      time.Duration        `json:"timeout_duration"`
+	SignalTTL            time.Duration        `json:"signal_ttl"`
+	NotificationEnabled  bool                 `json:"notification_enabled"`
 	CircuitBreakerConfig CircuitBreakerConfig `json:"circuit_breaker"`
 }
 
@@ -58,15 +58,15 @@ type SignalProcessor struct {
 
 // ProcessingMetrics tracks signal processing performance
 type ProcessingMetrics struct {
-	TotalSignalsProcessed   int64     `json:"total_signals_processed"`
-	SuccessfulSignals       int64     `json:"successful_signals"`
-	FailedSignals           int64     `json:"failed_signals"`
-	QualityFilteredSignals  int64     `json:"quality_filtered_signals"`
-	NotificationsSent       int64     `json:"notifications_sent"`
-	AverageProcessingTime   float64   `json:"average_processing_time_ms"`
-	LastProcessingTime      time.Time `json:"last_processing_time"`
-	ErrorRate               float64   `json:"error_rate"`
-	ThroughputPerMinute     float64   `json:"throughput_per_minute"`
+	TotalSignalsProcessed  int64     `json:"total_signals_processed"`
+	SuccessfulSignals      int64     `json:"successful_signals"`
+	FailedSignals          int64     `json:"failed_signals"`
+	QualityFilteredSignals int64     `json:"quality_filtered_signals"`
+	NotificationsSent      int64     `json:"notifications_sent"`
+	AverageProcessingTime  float64   `json:"average_processing_time_ms"`
+	LastProcessingTime     time.Time `json:"last_processing_time"`
+	ErrorRate              float64   `json:"error_rate"`
+	ThroughputPerMinute    float64   `json:"throughput_per_minute"`
 }
 
 // ProcessingResult represents the outcome of signal processing
@@ -94,14 +94,14 @@ func NewSignalProcessor(
 	circuitBreaker *CircuitBreaker,
 ) *SignalProcessor {
 	config := &SignalProcessorConfig{
-		BatchSize:             100,
-		ProcessingInterval:    5 * time.Minute,
-		MaxConcurrentBatch:   4,
-		SignalTTL:             24 * time.Hour,
-		QualityThreshold:      0.7,
-		NotificationEnabled:   true,
-		RetryAttempts:         3,
-		RetryDelay:            30 * time.Second,
+		BatchSize:           100,
+		ProcessingInterval:  5 * time.Minute,
+		MaxConcurrentBatch:  4,
+		SignalTTL:           24 * time.Hour,
+		QualityThreshold:    0.7,
+		NotificationEnabled: true,
+		RetryAttempts:       3,
+		RetryDelay:          30 * time.Second,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -202,13 +202,30 @@ func (sp *SignalProcessor) processingLoop() {
 
 // processSignalBatch processes a batch of signals with comprehensive error handling
 func (sp *SignalProcessor) processSignalBatch() error {
+	// Stub logging for telemetry
+	_ = fmt.Sprintf("Signal batch processing: batch_size=%d, max_concurrent=%d, quality_threshold=%f",
+		sp.config.BatchSize, sp.config.MaxConcurrentBatch, sp.config.QualityThreshold)
+
+	ctx := sp.ctx
+
 	startTime := time.Now()
 	sp.lastRun = startTime
 
 	// Use circuit breaker to protect against cascading failures
-	return sp.circuitBreaker.Execute(sp.ctx, func(ctx context.Context) error {
+	err := sp.circuitBreaker.Execute(ctx, func(ctx context.Context) error {
 		return sp.processSignalBatchWithRetry(ctx, startTime)
 	})
+
+	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Signal batch processing error: %v", err)
+		return err
+	}
+
+	// Stub logging for success
+	_ = fmt.Sprintf("Signal batch processing success: duration_ms=%d", time.Since(startTime).Milliseconds())
+
+	return nil
 }
 
 // processSignalBatchWithRetry processes signals with retry logic
@@ -254,6 +271,9 @@ func (sp *SignalProcessor) processSignalBatchWithRetry(ctx context.Context, star
 
 // executeSignalBatch performs the actual signal processing
 func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime time.Time) error {
+	// Stub logging for telemetry
+	_ = fmt.Sprintf("Signal execution: timeout_duration=%s", sp.config.TimeoutDuration.String())
+
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, sp.config.TimeoutDuration)
 	defer cancel()
@@ -261,6 +281,8 @@ func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime tim
 	// Get market data for processing
 	marketData, err := sp.getMarketDataForProcessingWithContext(timeoutCtx)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Failed to get market data: %v", err)
 		return fmt.Errorf("failed to get market data: %w", err)
 	}
 
@@ -269,14 +291,21 @@ func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime tim
 		return nil
 	}
 
+	// Stub logging for market data count
+	_ = fmt.Sprintf("Market data count: %d", len(marketData))
+
 	// Process signals concurrently with timeout
 	results, err := sp.processSignalsConcurrentlyWithContext(timeoutCtx, marketData)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Failed to process signals: %v", err)
 		return fmt.Errorf("failed to process signals: %w", err)
 	}
 
 	// Store results and send notifications
 	if err := sp.handleProcessingResultsWithContext(timeoutCtx, results); err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Failed to handle processing results: %v", err)
 		return fmt.Errorf("failed to handle processing results: %w", err)
 	}
 
@@ -284,10 +313,20 @@ func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime tim
 	processingTime := time.Since(startTime)
 	sp.updateMetrics(results, processingTime)
 
+	// Add result tracking
+	successfulCount := sp.countSuccessful(results)
+	// Stub logging for results
+	_ = fmt.Sprintf("Results tracking: total=%d, successful=%d, failed=%d, duration_ms=%d",
+		len(results), successfulCount, len(results)-successfulCount, processingTime.Milliseconds())
+
+	// Stub logging for results
+	_ = fmt.Sprintf("Concurrent processing results: total=%d, successful=%d, failed=%d",
+		len(results), successfulCount, len(results)-successfulCount)
+
 	sp.logger.Info("Signal batch processed",
 		"count", len(results),
 		"duration", processingTime,
-		"successful", sp.countSuccessful(results))
+		"successful", successfulCount)
 
 	return nil
 }
@@ -387,10 +426,14 @@ func (sp *SignalProcessor) processSignalsConcurrentlyWithContext(ctx context.Con
 
 // processSignalsConcurrently processes signals using worker pool
 func (sp *SignalProcessor) processSignalsConcurrently(marketData []models.MarketData) []ProcessingResult {
+	// Stub logging for telemetry
 	workerCount := sp.config.MaxConcurrentBatch
 	if workerCount <= 0 {
 		workerCount = 4 // Default worker count
 	}
+
+	_ = fmt.Sprintf("Concurrent processing: worker_count=%d, market_data_count=%d",
+		workerCount, len(marketData))
 
 	jobs := make(chan models.MarketData, len(marketData))
 	results := make(chan ProcessingResult, len(marketData))
@@ -420,13 +463,25 @@ func (sp *SignalProcessor) processSignalsConcurrently(marketData []models.Market
 		allResults = append(allResults, result)
 	}
 
+	// Add result tracking
+	successfulCount := 0
+	for _, result := range allResults {
+		if result.Error == nil {
+			successfulCount++
+		}
+	}
+
+	// Stub logging for concurrent results
+	_ = fmt.Sprintf("All results: total=%d, successful=%d, failed=%d",
+		len(allResults), successfulCount, len(allResults)-successfulCount)
+
 	return allResults
 }
 
 // getRecentMarketDataFromDB retrieves recent market data from the database
 func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, duration time.Duration) ([]models.MarketData, error) {
 	since := time.Now().Add(-duration)
-	
+
 	query := `
 		SELECT md.id, md.exchange_id, md.trading_pair_id, md.last_price, md.volume_24h, 
 		       md.timestamp, md.created_at
@@ -437,17 +492,17 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 		ORDER BY md.timestamp DESC
 		LIMIT 100
 	`
-	
+
 	rows, err := sp.db.Query(context.Background(), query, symbol, exchange, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query market data: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var marketData []models.MarketData
 	for rows.Next() {
 		var data models.MarketData
-		err := rows.Scan(
+		scanErr := rows.Scan(
 			&data.ID,
 			&data.ExchangeID,
 			&data.TradingPairID,
@@ -456,16 +511,16 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 			&data.Timestamp,
 			&data.CreatedAt,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan market data: %w", err)
+		if scanErr != nil {
+			return nil, fmt.Errorf("failed to scan market data: %w", scanErr)
 		}
 		marketData = append(marketData, data)
 	}
-	
+
 	if err = rows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating market data rows: %w", err)
+		return nil, fmt.Errorf("error iterating market data rows: %w", err)
 	}
-	
+
 	return marketData, nil
 }
 
@@ -503,11 +558,17 @@ func (sp *SignalProcessor) signalWorker(jobs <-chan models.MarketData, results c
 
 // processSignal processes a single market data point to generate signals
 func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResult {
+	// Stub logging for telemetry
+	_ = fmt.Sprintf("Signal processing: trading_pair_id=%d, exchange_id=%d, price=%s, volume=%s",
+		data.TradingPairID, data.ExchangeID, data.LastPrice.String(), data.Volume24h.String())
+
 	startTime := time.Now()
-	
+
 	// Get trading pair symbol from database
 	symbol, err := sp.getTradingPairSymbol(data.TradingPairID)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Failed to get trading pair symbol: %v", err)
 		result := ProcessingResult{
 			SignalID:       fmt.Sprintf("unknown_%d_%d", data.TradingPairID, time.Now().Unix()),
 			Symbol:         "unknown",
@@ -517,13 +578,16 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 		}
 		return result
 	}
-	
+
 	// Get exchange name from database
 	exchangeName, err := sp.getExchangeName(data.ExchangeID)
 	if err != nil {
 		exchangeName = "unknown"
 	}
-	
+
+	// Stub logging for symbol and exchange
+	_ = fmt.Sprintf("Processing symbol: %s, exchange: %s", symbol, exchangeName)
+
 	result := ProcessingResult{
 		SignalID:       fmt.Sprintf("%s_%s_%d", symbol, exchangeName, time.Now().Unix()),
 		Symbol:         symbol,
@@ -534,6 +598,8 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	// Generate arbitrage signals
 	arbitrageSignals, err := sp.generateArbitrageSignals(data)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Arbitrage signal generation failed: %v", err)
 		result.Error = fmt.Errorf("arbitrage signal generation failed: %w", err)
 		result.ProcessingTime = time.Since(startTime)
 		return result
@@ -542,6 +608,8 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	// Generate technical analysis signals
 	technicalSignals, err := sp.generateTechnicalSignals(data)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Technical signal generation failed: %v", err)
 		result.Error = fmt.Errorf("technical signal generation failed: %w", err)
 		result.ProcessingTime = time.Since(startTime)
 		return result
@@ -550,6 +618,8 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	// Aggregate signals
 	aggregatedSignal, err := sp.aggregateSignals(arbitrageSignals, technicalSignals, data)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Signal aggregation failed: %v", err)
 		result.Error = fmt.Errorf("signal aggregation failed: %w", err)
 		result.ProcessingTime = time.Since(startTime)
 		return result
@@ -558,6 +628,8 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	// Assess signal quality
 	qualityScore, err := sp.assessSignalQuality(aggregatedSignal, data)
 	if err != nil {
+		// Stub logging for error
+		_ = fmt.Sprintf("Quality assessment failed: %v", err)
 		result.Error = fmt.Errorf("quality assessment failed: %w", err)
 		result.ProcessingTime = time.Since(startTime)
 		return result
@@ -569,6 +641,10 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	result.ProcessingTime = time.Since(startTime)
 	result.Metadata["aggregated_signal"] = aggregatedSignal
 
+	// Stub logging for final results
+	_ = fmt.Sprintf("Signal processing completed: arbitrage_count=%d, technical_count=%d, signal_type=%s, quality_score=%f, duration_ms=%d",
+		len(arbitrageSignals), len(technicalSignals), string(aggregatedSignal.SignalType), qualityScore, result.ProcessingTime.Milliseconds())
+
 	return result
 }
 
@@ -579,7 +655,7 @@ func (sp *SignalProcessor) generateArbitrageSignals(data models.MarketData) ([]A
 	if err != nil {
 		return nil, fmt.Errorf("failed to get trading pair symbol: %w", err)
 	}
-	
+
 	// Get arbitrage opportunities for this symbol
 	opportunities, err := sp.getArbitrageOpportunities(symbol)
 	if err != nil {
@@ -591,7 +667,7 @@ func (sp *SignalProcessor) generateArbitrageSignals(data models.MarketData) ([]A
 		// Create a single ArbitrageSignalInput with all opportunities
 		signal := ArbitrageSignalInput{
 			Opportunities: opportunities,
-			MinVolume:     decimal.NewFromFloat(1000.0), // Default minimum volume
+			MinVolume:     decimal.NewFromFloat(1000.0),  // Default minimum volume
 			BaseAmount:    decimal.NewFromFloat(10000.0), // Default base amount
 		}
 		signals = append(signals, signal)
@@ -640,12 +716,12 @@ func (sp *SignalProcessor) generateTechnicalSignals(data models.MarketData) ([]T
 	if err != nil {
 		return nil, fmt.Errorf("failed to get trading pair symbol: %w", err)
 	}
-	
+
 	exchangeName, err := sp.getExchangeName(data.ExchangeID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get exchange name: %w", err)
 	}
-	
+
 	var signals []TechnicalSignalInput
 
 	// Create technical signal input with price data
@@ -662,7 +738,11 @@ func (sp *SignalProcessor) generateTechnicalSignals(data models.MarketData) ([]T
 }
 
 // aggregateSignals combines arbitrage and technical signals
-func (sp *SignalProcessor) aggregateSignals(arbitrageSignals []ArbitrageSignalInput, technicalSignals []TechnicalSignalInput, data models.MarketData) (*AggregatedSignal, error) {
+func (sp *SignalProcessor) aggregateSignals(arbitrageSignals []ArbitrageSignalInput, technicalSignals []TechnicalSignalInput, _data models.MarketData) (*AggregatedSignal, error) {
+	// Stub logging for telemetry
+	_ = fmt.Sprintf("Signal aggregation: arbitrage_count=%d, technical_count=%d",
+		len(arbitrageSignals), len(technicalSignals))
+
 	// Use the signal aggregator to combine signals
 	if len(arbitrageSignals) > 0 {
 		aggregatedSignals, err := sp.signalAggregator.AggregateArbitrageSignals(sp.ctx, arbitrageSignals[0])
@@ -723,17 +803,17 @@ func (sp *SignalProcessor) assessSignalQuality(signal *AggregatedSignal, data mo
 	}
 
 	qualityInput := &SignalQualityInput{
-		SignalType:      string(signal.SignalType),
-		Symbol:          signal.Symbol,
-		Exchanges:       signal.Exchanges,
-		Volume:          decimal.NewFromFloat(volumeFloat),
-		ProfitPotential: signal.ProfitPotential,
-		Confidence:      signal.Confidence,
-		Timestamp:       signal.CreatedAt,
-		Indicators:      indicatorsInterface,
-		MarketData:      sp.convertToMarketDataSnapshot(&data),
+		SignalType:       string(signal.SignalType),
+		Symbol:           signal.Symbol,
+		Exchanges:        signal.Exchanges,
+		Volume:           decimal.NewFromFloat(volumeFloat),
+		ProfitPotential:  signal.ProfitPotential,
+		Confidence:       signal.Confidence,
+		Timestamp:        signal.CreatedAt,
+		Indicators:       indicatorsInterface,
+		MarketData:       sp.convertToMarketDataSnapshot(&data),
 		SignalComponents: sp.extractSignalComponents(signal.Metadata),
-		SignalCount:     sp.extractSignalCount(signal.Metadata),
+		SignalCount:      sp.extractSignalCount(signal.Metadata),
 	}
 
 	// Get comprehensive quality metrics
@@ -963,7 +1043,7 @@ func (sp *SignalProcessor) extractVolumeFromMetadata(metadata map[string]interfa
 // extractIndicatorsFromMetadata extracts technical indicators from signal metadata
 func (sp *SignalProcessor) extractIndicatorsFromMetadata(metadata map[string]interface{}) map[string]float64 {
 	indicators := make(map[string]float64)
-	
+
 	if indicatorsData, ok := metadata["indicators"]; ok {
 		if indicatorsMap, ok := indicatorsData.(map[string]interface{}); ok {
 			for key, value := range indicatorsMap {
@@ -977,7 +1057,7 @@ func (sp *SignalProcessor) extractIndicatorsFromMetadata(metadata map[string]int
 			}
 		}
 	}
-	
+
 	return indicators
 }
 
@@ -1001,7 +1081,7 @@ func (sp *SignalProcessor) convertToMarketDataSnapshot(data *models.MarketData) 
 // extractSignalComponents extracts signal components from metadata
 func (sp *SignalProcessor) extractSignalComponents(metadata map[string]interface{}) []string {
 	var components []string
-	
+
 	if componentsData, ok := metadata["components"]; ok {
 		if componentsList, ok := componentsData.([]interface{}); ok {
 			for _, component := range componentsList {
@@ -1011,7 +1091,7 @@ func (sp *SignalProcessor) extractSignalComponents(metadata map[string]interface
 			}
 		}
 	}
-	
+
 	return components
 }
 
@@ -1130,7 +1210,7 @@ func (sp *SignalProcessor) applyBatchQualityFiltering(results []ProcessingResult
 }
 
 // passesRateLimiting checks if a signal passes rate limiting rules
-func (sp *SignalProcessor) passesRateLimiting(result ProcessingResult) bool {
+func (sp *SignalProcessor) passesRateLimiting(_result ProcessingResult) bool {
 	// Simple rate limiting - allow one signal per symbol per processing interval
 	// In a real implementation, this would check against a cache or database
 	return true
@@ -1199,13 +1279,13 @@ func (sp *SignalProcessor) countSuccessful(results []ProcessingResult) int {
 // GetDefaultSignalProcessorConfig returns default configuration
 func GetDefaultSignalProcessorConfig() *SignalProcessorConfig {
 	return &SignalProcessorConfig{
-		ProcessingInterval:    time.Minute * 5,
-		BatchSize:            100,
+		ProcessingInterval:  time.Minute * 5,
+		BatchSize:           100,
 		MaxConcurrentBatch:  4,
-		SignalTTL:            time.Hour * 24,
-		QualityThreshold:     0.7,
-		NotificationEnabled:  true,
-		RetryAttempts:        3,
-		RetryDelay:           time.Second * 30,
+		SignalTTL:           time.Hour * 24,
+		QualityThreshold:    0.7,
+		NotificationEnabled: true,
+		RetryAttempts:       3,
+		RetryDelay:          time.Second * 30,
 	}
 }

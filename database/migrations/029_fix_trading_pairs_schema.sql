@@ -16,6 +16,17 @@ BEGIN
         -- Add exchange_id column if it doesn't exist
         ALTER TABLE trading_pairs ADD COLUMN exchange_id INTEGER;
         
+        -- Add updated_at column if it doesn't exist (needed before UPDATE due to trigger)
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'trading_pairs' 
+            AND column_name = 'updated_at'
+            AND table_schema = 'public'
+        ) THEN
+            ALTER TABLE trading_pairs ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+            RAISE NOTICE 'Added updated_at column to trading_pairs table';
+        END IF;
+        
         -- Set a default exchange_id for existing records (use first exchange)
         UPDATE trading_pairs SET exchange_id = (
             SELECT id FROM exchanges ORDER BY id LIMIT 1
@@ -115,16 +126,39 @@ END $$;
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_trading_pairs_exchange ON trading_pairs(exchange_id);
 CREATE INDEX IF NOT EXISTS idx_trading_pairs_symbol ON trading_pairs(symbol);
-CREATE INDEX IF NOT EXISTS idx_trading_pairs_active ON trading_pairs(is_active) WHERE is_active = true;
+
+-- Create index on is_active only if the column exists
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'trading_pairs' 
+        AND column_name = 'is_active'
+        AND table_schema = 'public'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_trading_pairs_active ON trading_pairs(is_active) WHERE is_active = true;
+    END IF;
+END $$;
+
+-- Add updated_at column if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'trading_pairs' 
+        AND column_name = 'updated_at'
+        AND table_schema = 'public'
+    ) THEN
+        ALTER TABLE trading_pairs ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+        RAISE NOTICE 'Added updated_at column to trading_pairs table';
+    END IF;
+END $$;
 
 -- Add updated_at trigger if it doesn't exist
 DROP TRIGGER IF EXISTS update_trading_pairs_updated_at ON trading_pairs;
 CREATE TRIGGER update_trading_pairs_updated_at BEFORE UPDATE ON trading_pairs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Record this migration
-INSERT INTO schema_migrations (version, filename, description) VALUES
-    (29, '029_fix_trading_pairs_schema.sql', 'Fix trading_pairs table schema - add exchange_id and convert UUID to SERIAL')
-ON CONFLICT (version) DO NOTHING;
+-- Migration already recorded in schema_migrations table
 
 COMMIT;

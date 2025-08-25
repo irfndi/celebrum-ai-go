@@ -13,9 +13,9 @@ A comprehensive cryptocurrency arbitrage detection and technical analysis platfo
 
 ## Tech Stack
 
-- **Backend**: Go 1.21+ with Gin web framework
+- **Backend**: Go 1.25+ with Gin web framework
 - **Database**: PostgreSQL 15+ with Redis for caching
-- **Market Data**: CCXT (Node.js service) for exchange integration
+- **Market Data**: CCXT (Bun service) for exchange integration
 - **Deployment**: Docker containers on Digital Ocean
 - **Monitoring**: Prometheus metrics and health checks
 
@@ -23,11 +23,11 @@ A comprehensive cryptocurrency arbitrage detection and technical analysis platfo
 
 ### Prerequisites
 
-- Go 1.21 or higher
+- Go 1.25 or higher
 - Docker and Docker Compose
 - PostgreSQL 15+
 - Redis 7+
-- Node.js 18+ (for CCXT service)
+- Bun 1.0+ (for CCXT service)
 
 ### Installation
 

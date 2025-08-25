@@ -10,6 +10,8 @@ DROP VIEW IF EXISTS active_futures_arbitrage_opportunities CASCADE;
 DROP VIEW IF EXISTS futures_arbitrage_market_summary CASCADE;
 DROP VIEW IF EXISTS active_exchange_trading_pairs CASCADE;
 DROP VIEW IF EXISTS blacklisted_exchange_trading_pairs CASCADE;
+DROP VIEW IF EXISTS v_trading_pairs_debug CASCADE;
+DROP VIEW IF EXISTS latest_funding_rates CASCADE;
 
 -- Increase symbol column size from VARCHAR(20) to VARCHAR(50)
 ALTER TABLE trading_pairs ALTER COLUMN symbol TYPE VARCHAR(50);
@@ -48,16 +50,16 @@ CREATE OR REPLACE VIEW active_funding_arbitrage_opportunities AS
 SELECT 
     *,
     CASE 
-        WHEN apy >= 20 AND risk_score <= 30 THEN 'excellent'
-        WHEN apy >= 15 AND risk_score <= 50 THEN 'good'
-        WHEN apy >= 10 AND risk_score <= 70 THEN 'moderate'
+        WHEN estimated_profit_percentage >= 20 AND risk_score <= 30 THEN 'excellent'
+        WHEN estimated_profit_percentage >= 15 AND risk_score <= 50 THEN 'good'
+        WHEN estimated_profit_percentage >= 10 AND risk_score <= 70 THEN 'moderate'
         ELSE 'poor'
     END as opportunity_quality
 FROM funding_arbitrage_opportunities 
 WHERE is_active = true 
-  AND expires_at > NOW()
-  AND apy > 0
-ORDER BY apy DESC, risk_score ASC;
+  AND (expires_at IS NULL OR expires_at > NOW())
+  AND estimated_profit_percentage > 0
+ORDER BY estimated_profit_percentage DESC, risk_score ASC;
 
 -- Recreate the active_futures_arbitrage_opportunities view
 CREATE OR REPLACE VIEW active_futures_arbitrage_opportunities AS
@@ -113,11 +115,7 @@ FROM active_futures_arbitrage_opportunities;
 -- Recreate the active_exchange_trading_pairs view
 CREATE OR REPLACE VIEW active_exchange_trading_pairs AS
 SELECT 
-    etp.*,
-    tp.symbol,
-    tp.base_currency,
-    tp.quote_currency,
-    tp.category
+    etp.*
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_active = true 
@@ -126,19 +124,15 @@ WHERE etp.is_active = true
 -- Recreate the blacklisted_exchange_trading_pairs view
 CREATE OR REPLACE VIEW blacklisted_exchange_trading_pairs AS
 SELECT 
-    etp.*,
-    tp.symbol,
-    tp.base_currency,
-    tp.quote_currency,
-    tp.category,
-    etp.blacklisted_at,
-    etp.blacklist_reason
+    etp.*
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_blacklisted = true;
 
 -- Migration completion
-INSERT INTO schema_migrations (filename, applied) VALUES ('040_fix_trading_pairs_column_sizes.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
+INSERT INTO schema_migrations (filename, checksum, applied_at) VALUES ('040_fix_trading_pairs_column_sizes.sql', 'checksum_040', NOW())
+ON CONFLICT (filename) DO UPDATE SET 
+    checksum = EXCLUDED.checksum,
+    applied_at = NOW();
 
 COMMIT;

@@ -28,4 +28,4 @@ CREATE INDEX IF NOT EXISTS idx_market_data_ask ON market_data(ask);
 CREATE INDEX IF NOT EXISTS idx_market_data_high_24h ON market_data(high_24h);
 CREATE INDEX IF NOT EXISTS idx_market_data_low_24h ON market_data(low_24h);
 CREATE INDEX IF NOT EXISTS idx_market_data_volume_24h ON market_data(volume_24h);
-CREATE INDEX IF NOT EXISTS idx_market_data_timestamp_range ON market_data(timestamp DESC) WHERE timestamp > NOW() - INTERVAL '7 days';
+CREATE INDEX IF NOT EXISTS idx_market_data_timestamp_range ON market_data(timestamp DESC);

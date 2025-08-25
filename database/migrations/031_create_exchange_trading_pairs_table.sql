@@ -132,37 +132,47 @@ VALUES (1, 10, '1 hour'::INTERVAL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Function to automatically blacklist trading pairs with high error counts
-CREATE OR REPLACE FUNCTION auto_blacklist_high_error_pairs()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_error_threshold INTEGER;
-    v_blacklist_duration INTERVAL;
+DO $$
 BEGIN
-    -- Get configurable thresholds
-    SELECT error_threshold, blacklist_duration
-    INTO v_error_threshold, v_blacklist_duration
-    FROM blacklist_config WHERE id = 1;
-    
-    -- Auto-blacklist if error count reaches threshold
-    IF NEW.error_count >= v_error_threshold AND OLD.is_blacklisted = false THEN
-        NEW.is_blacklisted = true;
-        NEW.blacklist_reason = 'Auto-blacklisted due to high error count (' || NEW.error_count || ')';
-        NEW.blacklisted_at = NOW();
-        NEW.blacklisted_until = NOW() + v_blacklist_duration;
+    -- Only create function if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'auto_blacklist_high_error_pairs') THEN
+        EXECUTE '
+        CREATE FUNCTION auto_blacklist_high_error_pairs()
+        RETURNS TRIGGER AS $func$
+        DECLARE
+            v_error_threshold INTEGER;
+            v_blacklist_duration INTERVAL;
+        BEGIN
+            -- Get configurable thresholds
+            SELECT error_threshold, blacklist_duration
+            INTO v_error_threshold, v_blacklist_duration
+            FROM blacklist_config WHERE id = 1;
+            
+            -- Auto-blacklist if error count reaches threshold
+            IF NEW.error_count >= v_error_threshold AND OLD.is_blacklisted = false THEN
+                NEW.is_blacklisted = true;
+                NEW.blacklist_reason = ''Auto-blacklisted due to high error count ('' || NEW.error_count || '')'';
+                NEW.blacklisted_at = NOW();
+                NEW.blacklisted_until = NOW() + v_blacklist_duration;
+            END IF;
+            
+            -- Auto-unblacklist if blacklist period has expired
+            IF NEW.is_blacklisted = true AND NEW.blacklisted_until IS NOT NULL AND NOW() > NEW.blacklisted_until THEN
+                NEW.is_blacklisted = false;
+                NEW.blacklist_reason = NULL;
+                NEW.blacklisted_at = NULL;
+                NEW.blacklisted_until = NULL;
+                NEW.error_count = 0; -- Reset error count
+            END IF;
+            
+            RETURN NEW;
+        END;
+        $func$ LANGUAGE plpgsql';
+        RAISE NOTICE 'Created auto_blacklist_high_error_pairs function';
+    ELSE
+        RAISE NOTICE 'Function auto_blacklist_high_error_pairs already exists';
     END IF;
-    
-    -- Auto-unblacklist if blacklist period has expired
-    IF NEW.is_blacklisted = true AND NEW.blacklisted_until IS NOT NULL AND NOW() > NEW.blacklisted_until THEN
-        NEW.is_blacklisted = false;
-        NEW.blacklist_reason = NULL;
-        NEW.blacklisted_at = NULL;
-        NEW.blacklisted_until = NULL;
-        NEW.error_count = 0; -- Reset error count
-    END IF;
-    
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+END $$;
 
 -- Create trigger for auto-blacklisting
 DROP TRIGGER IF EXISTS auto_blacklist_trigger ON exchange_trading_pairs;
@@ -170,10 +180,5 @@ CREATE TRIGGER auto_blacklist_trigger
     BEFORE UPDATE ON exchange_trading_pairs
     FOR EACH ROW
     EXECUTE FUNCTION auto_blacklist_high_error_pairs();
-
--- Record this migration
-INSERT INTO schema_migrations (filename, applied) VALUES
-    ('031_create_exchange_trading_pairs_table.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
 
 COMMIT;

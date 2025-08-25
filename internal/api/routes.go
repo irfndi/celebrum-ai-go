@@ -34,11 +34,15 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	// Initialize health handler
 	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL(), cacheAnalyticsService)
 
-	// Health check endpoints
-	router.GET("/health", gin.WrapF(healthHandler.HealthCheck))
-	router.HEAD("/health", gin.WrapF(healthHandler.HealthCheck))
-	router.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
-	router.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
+	// Health check endpoints with telemetry
+	healthGroup := router.Group("/")
+	healthGroup.Use(middleware.HealthCheckTelemetryMiddleware())
+	{
+		healthGroup.GET("/health", gin.WrapF(healthHandler.HealthCheck))
+		healthGroup.HEAD("/health", gin.WrapF(healthHandler.HealthCheck))
+		healthGroup.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
+		healthGroup.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
+	}
 
 	// Initialize notification service with Redis caching
 	notificationService := services.NewNotificationService(db, redis, telegramConfig.BotToken)
@@ -46,7 +50,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
-	
+
 	// Initialize telegram handler with debug logging
 	fmt.Printf("DEBUG: About to initialize Telegram handler with config: %+v\n", telegramConfig)
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
@@ -70,8 +74,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		fmt.Println("Futures arbitrage handler initialized successfully")
 	}()
 
-	// API v1 routes
+	// API v1 routes with telemetry
 	v1 := router.Group("/api/v1")
+	v1.Use(middleware.TelemetryMiddleware())
 	{
 		// Market data routes
 		market := v1.Group("/market")

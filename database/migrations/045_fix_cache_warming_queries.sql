@@ -111,9 +111,4 @@ ORDER BY e.name, tp.symbol;
 -- Add a comment to document this migration
 COMMENT ON TABLE trading_pairs IS 'Trading pairs table - fixed schema consistency issues in migration 037';
 
--- Record this migration
-INSERT INTO schema_migrations (filename, checksum) 
-VALUES ('045_fix_cache_warming_queries.sql', 'manual_migration')
-ON CONFLICT (filename) DO UPDATE SET 
-    checksum = EXCLUDED.checksum,
-    applied_at = CURRENT_TIMESTAMP;
+-- Migration completion handled automatically by migration system

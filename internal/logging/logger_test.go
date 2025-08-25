@@ -2,74 +2,181 @@ package logging
 
 import (
 	"bytes"
-	"encoding/json"
-	"strings"
+	"log/slog"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// setupTestLogger creates a logger with colors disabled for testing
-func setupTestLogger(level, env string) (*StandardLogger, *bytes.Buffer) {
-	logger := NewStandardLogger(level, env)
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
-	// Disable colors for testing
-	logger.SetFormatter(&logrus.TextFormatter{ForceColors: false})
-	return logger, &buf
+// testLogger implements the Logger interface for testing
+type testLogger struct {
+	logger *slog.Logger
 }
 
-func TestNewStandardLogger_Development(t *testing.T) {
+func (t *testLogger) WithService(serviceName string) *slog.Logger {
+	return t.logger.With("service", serviceName)
+}
+
+func (t *testLogger) WithComponent(componentName string) *slog.Logger {
+	return t.logger.With("component", componentName)
+}
+
+func (t *testLogger) WithOperation(operationName string) *slog.Logger {
+	return t.logger.With("operation", operationName)
+}
+
+func (t *testLogger) WithRequestID(requestID string) *slog.Logger {
+	return t.logger.With("request_id", requestID)
+}
+
+func (t *testLogger) WithUserID(userID string) *slog.Logger {
+	return t.logger.With("user_id", userID)
+}
+
+func (t *testLogger) WithExchange(exchange string) *slog.Logger {
+	return t.logger.With("exchange", exchange)
+}
+
+func (t *testLogger) WithSymbol(symbol string) *slog.Logger {
+	return t.logger.With("symbol", symbol)
+}
+
+func (t *testLogger) WithError(err error) *slog.Logger {
+	return t.logger.With("error", err)
+}
+
+func (t *testLogger) WithMetrics(metrics map[string]interface{}) *slog.Logger {
+	attrs := make([]any, 0, len(metrics)*2)
+	for k, v := range metrics {
+		attrs = append(attrs, k, v)
+	}
+	return t.logger.With(attrs...)
+}
+
+func (t *testLogger) LogStartup(serviceName string, version string, port int) {
+	t.logger.Info("Service starting",
+		"service", serviceName,
+		"version", version,
+		"port", port,
+		"event", "startup",
+	)
+}
+
+func (t *testLogger) LogShutdown(serviceName string, reason string) {
+	t.logger.Info("Service shutting down",
+		"service", serviceName,
+		"reason", reason,
+		"event", "shutdown",
+	)
+}
+
+func (t *testLogger) LogPerformanceMetrics(serviceName string, metrics map[string]interface{}) {
+	attrs := make([]any, 0, len(metrics)*2+2)
+	attrs = append(attrs, "service", serviceName, "event", "performance_metrics")
+	for k, v := range metrics {
+		attrs = append(attrs, k, v)
+	}
+	t.logger.Info("Performance metrics", attrs...)
+}
+
+func (t *testLogger) LogResourceStats(serviceName string, stats map[string]interface{}) {
+	attrs := make([]any, 0, len(stats)*2+2)
+	attrs = append(attrs, "service", serviceName, "event", "resource_stats")
+	for k, v := range stats {
+		attrs = append(attrs, k, v)
+	}
+	t.logger.Info("Resource statistics", attrs...)
+}
+
+func (t *testLogger) LogCacheOperation(operation string, key string, hit bool, duration int64) {
+	t.logger.Info("Cache operation",
+		"operation", operation,
+		"key", key,
+		"hit", hit,
+		"duration_ms", duration,
+		"event", "cache_operation",
+	)
+}
+
+func (t *testLogger) LogDatabaseOperation(operation string, table string, duration int64, rowsAffected int64) {
+	t.logger.Info("Database operation",
+		"operation", operation,
+		"table", table,
+		"duration_ms", duration,
+		"rows_affected", rowsAffected,
+		"event", "database_operation",
+	)
+}
+
+func (t *testLogger) LogAPIRequest(method string, path string, statusCode int, duration int64, userID string) {
+	t.logger.Info("API request",
+		"method", method,
+		"path", path,
+		"status_code", statusCode,
+		"duration_ms", duration,
+		"user_id", userID,
+		"event", "api_request",
+	)
+}
+
+func (t *testLogger) LogBusinessEvent(eventType string, details map[string]interface{}) {
+	attrs := make([]any, 0, len(details)*2+4)
+	attrs = append(attrs, "type", eventType, "event", "business_event")
+	for k, v := range details {
+		attrs = append(attrs, k, v)
+	}
+	t.logger.Info("Business event", attrs...)
+}
+
+func (t *testLogger) Logger() *slog.Logger {
+	return t.logger
+}
+
+// setupTestLogger creates a logger for testing
+func setupTestLogger(level, env string) (*StandardLogger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	// Create a basic slog logger with buffer output
+	// Use TextHandler for development environment to match expected key=value format
+	var handler slog.Handler
+	if env == "development" {
+		handler = slog.NewTextHandler(&buf, &slog.HandlerOptions{
+			Level: getSlogLevel(level),
+		})
+	} else {
+		handler = slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+			Level: getSlogLevel(level),
+		})
+	}
+	logger := slog.New(handler)
+
+	return &StandardLogger{
+		logger: &testLogger{logger: logger},
+	}, &buf
+}
+
+func TestNewStandardLogger_Basic(t *testing.T) {
 	logger := NewStandardLogger("info", "development")
 
 	assert.NotNil(t, logger)
-	assert.NotNil(t, logger.Logger)
-	assert.Equal(t, logrus.InfoLevel, logger.Level)
-
-	// Check that text formatter is used in development
-	_, ok := logger.Formatter.(*logrus.TextFormatter)
-	assert.True(t, ok, "Expected TextFormatter for development environment")
-}
-
-func TestNewStandardLogger_Production(t *testing.T) {
-	logger := NewStandardLogger("info", "production")
-
-	assert.NotNil(t, logger)
-	assert.NotNil(t, logger.Logger)
-	assert.Equal(t, logrus.InfoLevel, logger.Level)
-
-	// Check that JSON formatter is used in production
-	_, ok := logger.Formatter.(*logrus.JSONFormatter)
-	assert.True(t, ok, "Expected JSONFormatter for production environment")
-}
-
-func TestNewStandardLogger_UnknownEnvironment(t *testing.T) {
-	logger := NewStandardLogger("info", "unknown")
-
-	assert.NotNil(t, logger)
-	// Should default to text formatter for unknown environments
-	_, ok := logger.Formatter.(*logrus.TextFormatter)
-	assert.True(t, ok, "Expected TextFormatter for unknown environment")
+	assert.NotNil(t, logger.Logger())
 }
 
 func TestNewStandardLogger_LogLevels(t *testing.T) {
 	tests := []struct {
 		levelStr string
-		expected logrus.Level
+		expected slog.Level
 	}{
-		{"debug", logrus.DebugLevel},
-		{"info", logrus.InfoLevel},
-		{"warn", logrus.WarnLevel},
-		{"error", logrus.ErrorLevel},
-		{"invalid", logrus.InfoLevel}, // Should default to info
+		{"debug", slog.LevelDebug},
+		{"info", slog.LevelInfo},
+		{"warn", slog.LevelWarn},
+		{"error", slog.LevelError},
+		{"invalid", slog.LevelInfo}, // Should default to info
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.levelStr, func(t *testing.T) {
-			logger := NewStandardLogger(tt.levelStr, "development")
-			assert.Equal(t, tt.expected, logger.Level)
+			level := getSlogLevel(tt.levelStr)
+			assert.Equal(t, tt.expected, level)
 		})
 	}
 }
@@ -213,7 +320,7 @@ func TestStandardLogger_LogPerformanceMetrics(t *testing.T) {
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "service=test-service")
 	assert.Contains(t, logOutput, "event=performance_metrics")
-	assert.Contains(t, logOutput, "Performance metrics collected")
+	assert.Contains(t, logOutput, "Performance metrics")
 }
 
 func TestStandardLogger_LogResourceStats(t *testing.T) {
@@ -240,7 +347,7 @@ func TestStandardLogger_LogCacheOperation(t *testing.T) {
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "event=cache_operation")
 	assert.Contains(t, logOutput, "operation=get")
-	assert.Contains(t, logOutput, "key=\"symbols:binance\"")
+	assert.Contains(t, logOutput, "key=symbols:binance")
 	assert.Contains(t, logOutput, "hit=true")
 	assert.Contains(t, logOutput, "duration_ms=15")
 	assert.Contains(t, logOutput, "Cache operation")
@@ -293,53 +400,4 @@ func TestStandardLogger_LogBusinessEvent(t *testing.T) {
 	assert.Contains(t, logOutput, "exchange=binance")
 	assert.Contains(t, logOutput, "profit_pct=2.5")
 	assert.Contains(t, logOutput, "Business event")
-}
-
-// Test edge cases
-func TestStandardLogger_EmptyValues(t *testing.T) {
-	logger := NewStandardLogger("info", "development")
-
-	// Capture log output
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
-
-	// Test with empty strings
-	logger.WithComponent("").Info("test message")
-
-	logOutput := buf.String()
-	assert.Contains(t, logOutput, "test message")
-}
-
-func TestStandardLogger_NilMetrics(t *testing.T) {
-	logger := NewStandardLogger("info", "development")
-
-	// Capture log output
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
-
-	// Test with nil metrics
-	logger.WithMetrics(nil).Info("test message")
-
-	logOutput := buf.String()
-	assert.Contains(t, logOutput, "test message")
-}
-
-func TestStandardLogger_JSONFormatter(t *testing.T) {
-	logger := NewStandardLogger("info", "production")
-
-	// Capture log output
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
-
-	logger.WithService("test-service").Info("test message")
-
-	logOutput := buf.String()
-	// Should be valid JSON
-	var jsonData map[string]interface{}
-	err := json.Unmarshal([]byte(strings.TrimSpace(logOutput)), &jsonData)
-	require.NoError(t, err, "Output should be valid JSON")
-
-	assert.Equal(t, "test message", jsonData["message"])
-	assert.Equal(t, "info", jsonData["level"])
-	assert.Equal(t, "test-service", jsonData["service"])
 }

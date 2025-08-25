@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -20,8 +19,10 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 	"github.com/shopspring/decimal"
+	"github.com/sirupsen/logrus"
 )
 
 // CollectorConfig holds configuration for the collector service
@@ -93,7 +94,7 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	entry, exists := sc.cache[exchangeID]
 	if !exists {
 		sc.stats.Misses++
-		log.Printf("Cache MISS for %s (total hits: %d, misses: %d)", exchangeID, sc.stats.Hits, sc.stats.Misses)
+		telemetry.GetLogger().Logger().Debug("Cache MISS", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 		return nil, false
 	}
 
@@ -101,12 +102,12 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	if time.Now().After(entry.ExpiresAt) {
 		// Entry expired, treat as cache miss
 		sc.stats.Misses++
-		log.Printf("Cache MISS (expired) for %s (total hits: %d, misses: %d)", exchangeID, sc.stats.Hits, sc.stats.Misses)
+		telemetry.GetLogger().Logger().Debug("Cache MISS (expired)", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 		return nil, false
 	}
 
 	sc.stats.Hits++
-	log.Printf("Cache HIT for %s (%d symbols, hits: %d, misses: %d)", exchangeID, len(entry.Symbols), sc.stats.Hits, sc.stats.Misses)
+	telemetry.GetLogger().Logger().Debug("Cache HIT", "exchange", exchangeID, "symbols", len(entry.Symbols), "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 
 	return entry.Symbols, true
 }
@@ -121,7 +122,7 @@ func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 		Symbols:   symbols,
 		ExpiresAt: time.Now().Add(sc.ttl),
 	}
-	log.Printf("Cache SET for %s (%d symbols, total sets: %d)", exchangeID, len(symbols), sc.stats.Sets)
+	telemetry.GetLogger().Logger().Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols), "sets", sc.stats.Sets)
 }
 
 // GetStats returns current cache statistics
@@ -146,8 +147,11 @@ func (sc *SymbolCache) LogStats() {
 		hitRate = float64(sc.stats.Hits) / float64(total) * 100
 	}
 
-	log.Printf("Symbol Cache Stats - Hits: %d, Misses: %d, Sets: %d, Hit Rate: %.2f%%",
-		sc.stats.Hits, sc.stats.Misses, sc.stats.Sets, hitRate)
+	telemetry.GetLogger().Logger().Info("Symbol Cache Stats",
+		"hits", sc.stats.Hits,
+		"misses", sc.stats.Misses,
+		"sets", sc.stats.Sets,
+		"hit_rate_percent", hitRate)
 }
 
 // NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL
@@ -186,7 +190,7 @@ func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, suppo
 		LastChecked:          time.Now(),
 		ExpiresAt:            time.Now().Add(ecc.ttl),
 	}
-	log.Printf("Exchange capability cached: %s supports funding rates: %v", exchange, supports)
+	telemetry.GetLogger().Logger().Debug("Exchange capability cached", "exchange", exchange, "supports_funding_rates", supports)
 }
 
 // isBlacklistableError checks if an error indicates a symbol should be blacklisted
@@ -289,6 +293,8 @@ type CollectorService struct {
 	performanceMonitor    *PerformanceMonitor
 	// Resource optimization
 	resourceOptimizer *ResourceOptimizer
+	// Logging
+	logger *slog.Logger
 }
 
 // Worker represents a background worker for collecting data from a specific exchange
@@ -304,11 +310,19 @@ type Worker struct {
 
 // initializeSymbolCache creates either Redis-based or in-memory symbol cache
 func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
+	// Initialize logger with fallback for tests
+	var logger *slog.Logger
+	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
+		logger = telemetryLogger.Logger()
+	} else {
+		logger = slog.Default()
+	}
+
 	if redisClient != nil {
-		log.Println("Initializing Redis-based symbol cache")
+		logger.Info("Initializing Redis-based symbol cache")
 		return cache.NewRedisSymbolCache(redisClient, 1*time.Hour)
 	}
-	log.Println("Redis client not available, using in-memory symbol cache")
+	logger.Info("Redis client not available, using in-memory symbol cache")
 	return NewSymbolCache(1 * time.Hour)
 }
 
@@ -344,9 +358,9 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	fundingRateInterval := 15 * time.Minute                        // 15 minutes for funding rates
 
 	// Initialize error recovery components
-	logger := logrus.New()
-	circuitBreakerManager := NewCircuitBreakerManager(logger)
-	errorRecoveryManager := NewErrorRecoveryManager(logger)
+	logrusLogger := logrus.New()
+	circuitBreakerManager := NewCircuitBreakerManager(logrusLogger)
+	errorRecoveryManager := NewErrorRecoveryManager(logrusLogger)
 	timeoutConfig := &TimeoutConfig{
 		APICall:        10 * time.Second,
 		DatabaseQuery:  5 * time.Second,
@@ -357,11 +371,11 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		SymbolFetch:    20 * time.Second,
 		MarketData:     8 * time.Second,
 	}
-	timeoutManager := NewTimeoutManager(timeoutConfig, logger)
-	resourceManager := NewResourceManager(logger)
+	timeoutManager := NewTimeoutManager(timeoutConfig, logrusLogger)
+	resourceManager := NewResourceManager(logrusLogger)
 	// Note: PerformanceMonitor expects go-redis/redis/v8 client, but we have redis/go-redis/v9
 	// For now, we'll pass nil and handle Redis operations separately
-	performanceMonitor := NewPerformanceMonitor(logger, nil, ctx)
+	performanceMonitor := NewPerformanceMonitor(logrusLogger, nil, ctx)
 
 	// Initialize resource optimizer
 	resourceOptimizerConfig := ResourceOptimizerConfig{
@@ -397,6 +411,14 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	circuitBreakerManager.GetOrCreate("ccxt", ccxtConfig)
 	circuitBreakerManager.GetOrCreate("redis", redisConfig)
 
+	// Initialize logger with fallback for tests
+	var logger *slog.Logger
+	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
+		logger = telemetryLogger.Logger()
+	} else {
+		logger = slog.Default()
+	}
+
 	return &CollectorService{
 		db:              db,
 		ccxtService:     ccxtService,
@@ -425,12 +447,14 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		performanceMonitor:    performanceMonitor,
 		// Initialize resource optimization
 		resourceOptimizer: resourceOptimizer,
+		// Initialize logging
+		logger: logger,
 	}
 }
 
 // Start initializes and starts all collection workers asynchronously
 func (c *CollectorService) Start() error {
-	log.Println("Starting market data collector service...")
+	c.logger.Info("Starting market data collector service...")
 
 	// Initialize CCXT service
 	if err := c.ccxtService.Initialize(c.ctx); err != nil {
@@ -445,13 +469,13 @@ func (c *CollectorService) Start() error {
 	// Start symbol collection and worker creation asynchronously
 	go c.initializeWorkersAsync()
 
-	log.Println("Market data collector service started (workers initializing in background)")
+	c.logger.Info("Market data collector service started", "workers_initializing", true)
 	return nil
 }
 
 // initializeWorkersAsync handles symbol collection and worker creation in the background
 func (c *CollectorService) initializeWorkersAsync() {
-	log.Println("Starting background symbol collection and worker initialization...")
+	c.logger.Info("Starting background symbol collection and worker initialization...")
 
 	// Get supported exchanges
 	exchanges := c.ccxtService.GetSupportedExchanges()
@@ -459,14 +483,14 @@ func (c *CollectorService) initializeWorkersAsync() {
 	// Get symbols that appear on multiple exchanges for arbitrage
 	multiExchangeSymbols, err := c.getMultiExchangeSymbols(exchanges)
 	if err != nil {
-		log.Printf("Warning: Failed to get multi-exchange symbols: %v", err)
+		c.logger.Warn("Failed to get multi-exchange symbols", "error", err)
 		// Continue with individual exchange symbols as fallback
 	}
 
 	// Create workers for each exchange
 	for _, exchangeID := range exchanges {
 		if err := c.createWorker(exchangeID, multiExchangeSymbols); err != nil {
-			log.Printf("Failed to create worker for exchange %s: %v", exchangeID, err)
+			c.logger.Warn("Failed to create worker for exchange", "exchange", exchangeID, "error", err)
 			continue
 		}
 	}
@@ -476,15 +500,15 @@ func (c *CollectorService) initializeWorkersAsync() {
 	c.isReady = true
 	c.readinessMu.Unlock()
 
-	log.Printf("Background initialization complete: Started %d collection workers", len(c.workers))
+	c.logger.Info("Background initialization complete", "workers_started", len(c.workers))
 }
 
 // Stop gracefully stops all collection workers
 func (c *CollectorService) Stop() {
-	log.Println("Stopping market data collector service...")
+	c.logger.Info("Stopping market data collector service...")
 	c.cancel()
 	c.wg.Wait()
-	log.Println("Market data collector service stopped")
+	c.logger.Info("Market data collector service stopped")
 }
 
 // IsInitialized returns true if the collector service has been initialized
@@ -518,10 +542,10 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 
 	if cached, found := c.symbolCache.Get(exchangeID); found {
 		activeSymbols = cached
-		log.Printf("Using cached symbols for %s (%d symbols)", exchangeID, len(activeSymbols))
+		c.logger.Info("Using cached symbols for exchange", "exchange", exchangeID, "symbol_count", len(activeSymbols))
 	} else {
 		// Cache should always be populated during startup, log error if not found
-		log.Printf("Error: No cached symbols found for %s during worker creation", exchangeID)
+		c.logger.Error("No cached symbols found during worker creation", "exchange", exchangeID)
 		return fmt.Errorf("no cached symbols found for exchange %s - cache should be populated during startup", exchangeID)
 	}
 
@@ -530,13 +554,12 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 
 	// Further filter to only include symbols that appear on multiple exchanges (for arbitrage)
 	arbitrageSymbols := c.filterArbitrageSymbols(validSymbols, multiExchangeSymbols)
-	log.Printf("Filtered %d arbitrage symbols from %d valid active symbols for %s",
-		len(arbitrageSymbols), len(validSymbols), exchangeID)
+	c.logger.Info("Filtered arbitrage symbols", "exchange", exchangeID, "arbitrage_symbols", len(arbitrageSymbols), "valid_symbols", len(validSymbols))
 
 	// Use arbitrage symbols if available, otherwise fall back to valid active symbols
 	finalSymbols := arbitrageSymbols
 	if len(finalSymbols) == 0 {
-		log.Printf("No arbitrage symbols found for %s, using all valid active symbols", exchangeID)
+		c.logger.Info("No arbitrage symbols found, using all valid active symbols", "exchange", exchangeID)
 		finalSymbols = validSymbols
 	}
 
@@ -549,12 +572,12 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	// Ensure all trading pairs exist in database
 	for _, symbol := range finalSymbols {
 		if err := c.ensureTradingPairExists(exchangeDBID, symbol); err != nil {
-			log.Printf("Warning: Failed to ensure trading pair %s exists: %v", symbol, err)
+			c.logger.Warn("Failed to ensure trading pair exists", "symbol", symbol, "error", err)
 		}
 	}
 
 	if len(finalSymbols) == 0 {
-		log.Printf("No valid active trading pairs found for exchange %s, skipping worker creation", exchangeID)
+		c.logger.Info("No valid active trading pairs found, skipping worker creation", "exchange", exchangeID)
 		return nil
 	}
 
@@ -573,7 +596,7 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	c.wg.Add(1)
 	go c.runWorker(worker)
 
-	log.Printf("Created worker for exchange %s with %d active symbols", exchangeID, len(finalSymbols))
+	c.logger.Info("Created worker", "exchange", exchangeID, "symbol_count", len(finalSymbols))
 	return nil
 }
 
@@ -584,7 +607,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	// Register worker with resource manager for cleanup
 	workerID := fmt.Sprintf("worker_%s_%d", worker.Exchange, time.Now().UnixNano())
 	c.resourceManager.RegisterResource(workerID, GoroutineResource, func() error {
-		log.Printf("Cleaning up worker for exchange %s", worker.Exchange)
+		c.logger.Info("Cleaning up worker", "exchange", worker.Exchange)
 		worker.IsRunning = false
 		return nil
 	}, map[string]interface{}{
@@ -593,7 +616,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(workerID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", workerID, err)
+			c.logger.Error("Failed to cleanup resource", "worker_id", workerID, "error", err)
 		}
 	}()
 
@@ -613,8 +636,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	resourceOptimizationTicker := time.NewTicker(2 * time.Minute)
 	defer resourceOptimizationTicker.Stop()
 
-	log.Printf("Worker for exchange %s started with %d symbols (ticker: %v, funding: %v)",
-		worker.Exchange, len(worker.Symbols), c.tickerInterval, c.fundingRateInterval)
+	c.logger.Info("Worker started", "exchange", worker.Exchange, "symbols", len(worker.Symbols), "ticker_interval", c.tickerInterval, "funding_interval", c.fundingRateInterval)
 
 	// Track consecutive failures for graceful degradation
 	consecutiveFailures := 0
@@ -623,7 +645,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	for {
 		select {
 		case <-c.ctx.Done():
-			log.Printf("Worker for exchange %s stopping due to context cancellation", worker.Exchange)
+			c.logger.Info("Worker stopping due to context cancellation", "exchange", worker.Exchange)
 			return
 		case <-cacheStatsTicker.C:
 			// Log cache statistics periodically
@@ -632,12 +654,11 @@ func (c *CollectorService) runWorker(worker *Worker) {
 		case <-healthCheckTicker.C:
 			// Perform health check and report status
 			c.performanceMonitor.RecordWorkerHealth(worker.Exchange, worker.IsRunning, worker.ErrorCount)
-			log.Printf("Health check for worker %s: running=%v, errors=%d, last_update=%v",
-				worker.Exchange, worker.IsRunning, worker.ErrorCount, worker.LastUpdate)
+			c.logger.Info("Health check", "exchange", worker.Exchange, "running", worker.IsRunning, "errors", worker.ErrorCount, "last_update", worker.LastUpdate)
 		case <-resourceOptimizationTicker.C:
 			// Update system metrics and trigger adaptive optimization
 			if err := c.resourceOptimizer.UpdateSystemMetrics(c.ctx); err != nil {
-				log.Printf("Failed to update system metrics: %v", err)
+				c.logger.Error("Failed to update system metrics", "error", err)
 			}
 			// Check if optimization is needed
 			if c.resourceOptimizer.OptimizeIfNeeded(ResourceOptimizerConfig{
@@ -649,11 +670,11 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				MinWorkers:           2,
 				MaxWorkers:           20,
 			}) {
-				log.Printf("Resource optimization applied for worker %s", worker.Exchange)
+				c.logger.Info("Resource optimization applied", "exchange", worker.Exchange)
 			}
-			log.Printf("Resource optimization triggered for worker %s", worker.Exchange)
+			c.logger.Info("Resource optimization triggered", "exchange", worker.Exchange)
 		case <-ticker.C:
-			log.Printf("Worker tick for exchange %s - starting collection cycle", worker.Exchange)
+			c.logger.Info("Worker tick - starting collection cycle", "exchange", worker.Exchange)
 
 			// Create operation context with timeout
 			operationID := fmt.Sprintf("worker_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -671,23 +692,21 @@ func (c *CollectorService) runWorker(worker *Worker) {
 			if err != nil {
 				worker.ErrorCount++
 				consecutiveFailures++
-				log.Printf("Error collecting ticker data for exchange %s: %v (error count: %d, consecutive: %d)",
-					worker.Exchange, err, worker.ErrorCount, consecutiveFailures)
+				c.logger.Error("Error collecting ticker data", "exchange", worker.Exchange, "error", err, "error_count", worker.ErrorCount, "consecutive_failures", consecutiveFailures)
 
 				// Implement graceful degradation for consecutive failures
 				if consecutiveFailures >= maxConsecutiveFailures {
-					log.Printf("Worker for exchange %s has %d consecutive failures, implementing graceful degradation",
-						worker.Exchange, consecutiveFailures)
+					c.logger.Warn("Worker has consecutive failures, implementing graceful degradation",
+						"exchange", worker.Exchange, "consecutive_failures", consecutiveFailures)
 
 					// Increase interval temporarily to reduce load
 					ticker.Stop()
 					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
-					log.Printf("Temporarily increased collection interval for %s to %v",
-						worker.Exchange, c.tickerInterval*2)
+					c.logger.Info("Temporarily increased collection interval", "exchange", worker.Exchange, "new_interval", c.tickerInterval*2)
 				}
 
 				if worker.ErrorCount >= worker.MaxErrors {
-					log.Printf("Worker for exchange %s exceeded max errors (%d), stopping", worker.Exchange, worker.MaxErrors)
+					c.logger.Error("Worker exceeded max errors, stopping", "exchange", worker.Exchange, "max_errors", worker.MaxErrors)
 					worker.IsRunning = false
 					return
 				}
@@ -709,8 +728,8 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				if ticker.C != time.NewTicker(c.tickerInterval).C {
 					ticker.Stop()
 					ticker = time.NewTicker(c.tickerInterval)
-					log.Printf("Restored normal collection interval for %s to %v",
-						worker.Exchange, c.tickerInterval)
+					c.logger.Info("Restored normal collection interval",
+						"exchange", worker.Exchange, "interval", c.tickerInterval)
 				}
 			}
 
@@ -720,7 +739,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 			c.fundingCollectionMu.RUnlock()
 
 			if !exists || time.Since(lastFundingCollection) >= c.fundingRateInterval {
-				log.Printf("Collecting funding rates for exchange %s (interval: %v)", worker.Exchange, c.fundingRateInterval)
+				c.logger.Info("Collecting funding rates", "exchange", worker.Exchange, "interval", c.fundingRateInterval)
 
 				// Create separate context for funding rate collection
 				fundingOperationID := fmt.Sprintf("funding_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -735,7 +754,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				fundingCancel() // Clean up funding context
 
 				if err != nil {
-					log.Printf("Warning: Failed to collect funding rates for exchange %s: %v", worker.Exchange, err)
+					c.logger.Warn("Failed to collect funding rates", "exchange", worker.Exchange, "error", err)
 				} else {
 					// Update last funding collection time
 					c.fundingCollectionMu.Lock()
@@ -754,8 +773,8 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 	var collectionMethod string
 	defer func() {
 		duration := time.Since(startTime)
-		log.Printf("Ticker collection completed for %s using %s method in %v (%d symbols)",
-			worker.Exchange, collectionMethod, duration, len(worker.Symbols))
+		c.logger.Info("Ticker collection completed",
+			"exchange", worker.Exchange, "method", collectionMethod, "duration_ms", duration.Milliseconds(), "symbol_count", len(worker.Symbols))
 
 		// Cache performance metrics in Redis for monitoring
 		if c.redisClient != nil {
@@ -776,7 +795,7 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 	// Try bulk collection first, fallback to sequential if it fails
 	collectionMethod = "bulk"
 	if err := c.collectTickerDataBulk(worker); err != nil {
-		log.Printf("Bulk ticker collection failed for %s, falling back to sequential: %v", worker.Exchange, err)
+		c.logger.Warn("Bulk ticker collection failed, falling back to sequential", "exchange", worker.Exchange, "error", err)
 		collectionMethod = "sequential"
 		return c.collectTickerDataSequential(worker)
 	}
@@ -785,7 +804,7 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 
 // collectTickerDataBulk collects ticker data using bulk FetchMarketData for optimal performance
 func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
-	log.Printf("Collecting ticker data (bulk) for exchange %s (%d symbols)", worker.Exchange, len(worker.Symbols))
+	c.logger.Info("Collecting ticker data (bulk)", "exchange", worker.Exchange, "symbols", len(worker.Symbols))
 
 	// Filter out blacklisted symbols before making the bulk request
 	validSymbols := make([]string, 0, len(worker.Symbols))
@@ -794,12 +813,12 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
 			validSymbols = append(validSymbols, symbol)
 		} else {
-			log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
+			c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
 		}
 	}
 
 	if len(validSymbols) == 0 {
-		log.Printf("No valid symbols to fetch for exchange %s", worker.Exchange)
+		c.logger.Info("No valid symbols to fetch", "exchange", worker.Exchange)
 		return nil
 	}
 
@@ -818,7 +837,7 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "bulk_fetch"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", resourceID, err)
+			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
 		}
 	}()
 
@@ -835,11 +854,11 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	if err != nil {
 		// If bulk fetch fails, fall back to individual symbol collection
 		// This allows us to identify and blacklist problematic symbols
-		log.Printf("Bulk fetch failed for %s, falling back to individual symbol collection: %v", worker.Exchange, err)
+		c.logger.Info("Bulk fetch failed, falling back to individual symbol collection", "exchange", worker.Exchange, "error", err)
 		return c.collectTickerDataSequential(worker)
 	}
 
-	log.Printf("Fetched %d tickers for exchange %s", len(marketData), worker.Exchange)
+	c.logger.Info("Fetched tickers", "exchange", worker.Exchange, "count", len(marketData))
 
 	// Cache the bulk ticker data in Redis with 10-second TTL for API performance
 	if c.redisClient != nil && len(marketData) > 0 {
@@ -863,7 +882,7 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 
 			// Validate and save ticker data
 			if err := c.saveBulkTickerData(t); err != nil {
-				log.Printf("Failed to save ticker data for %s:%s: %v", t.ExchangeName, t.Symbol, err)
+				c.logger.Error("Failed to save ticker data", "exchange", t.ExchangeName, "symbol", t.Symbol, "error", err)
 				errorChan <- err
 			} else {
 				successChan <- true
@@ -883,7 +902,7 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		}
 	}
 
-	log.Printf("Successfully saved %d/%d tickers for exchange %s", successCount, len(marketData), worker.Exchange)
+	c.logger.Info("Successfully saved tickers", "exchange", worker.Exchange, "success_count", successCount, "total_count", len(marketData))
 	return nil
 }
 
@@ -896,16 +915,16 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
 			validSymbols = append(validSymbols, symbol)
 		} else {
-			log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
+			c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
 		}
 	}
 
 	if len(validSymbols) == 0 {
-		log.Printf("No valid symbols to fetch sequentially for exchange %s", worker.Exchange)
+		c.logger.Info("No valid symbols to fetch sequentially", "exchange", worker.Exchange)
 		return nil
 	}
 
-	log.Printf("Collecting ticker data (sequential) for exchange %s (%d symbols)", worker.Exchange, len(validSymbols))
+	c.logger.Info("Collecting ticker data (sequential)", "exchange", worker.Exchange, "symbols", len(validSymbols))
 
 	// Create timeout context for the entire sequential operation
 	operationID := fmt.Sprintf("sequential_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -922,7 +941,7 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "sequential_collection"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", resourceID, err)
+			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
 		}
 	}()
 
@@ -945,7 +964,7 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		})
 
 		if err != nil {
-			log.Printf("Failed to collect ticker data for %s:%s with error recovery: %v", worker.Exchange, symbol, err)
+			c.logger.Error("Failed to collect ticker data with error recovery", "exchange", worker.Exchange, "symbol", symbol, "error", err)
 			// Continue with other symbols even if one fails
 			continue
 		} else {
@@ -958,7 +977,7 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		}
 	}
 
-	log.Printf("Sequential collection completed: %d/%d symbols successful for exchange %s", successCount, len(validSymbols), worker.Exchange)
+	c.logger.Info("Sequential collection completed", "exchange", worker.Exchange, "successful", successCount, "total", len(validSymbols))
 	return nil
 }
 
@@ -971,7 +990,7 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 	cacheKey := fmt.Sprintf("bulk_tickers:%s", exchange)
 	dataJSON, err := json.Marshal(marketData)
 	if err != nil {
-		log.Printf("Failed to marshal bulk ticker data for caching: %v", err)
+		c.logger.Error("Failed to marshal bulk ticker data for caching", "error", err)
 		return
 	}
 
@@ -990,9 +1009,9 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 	})
 
 	if err != nil {
-		log.Printf("Failed to cache bulk ticker data for %s with error recovery: %v", exchange, err)
+		c.logger.Error("Failed to cache bulk ticker data with error recovery", "exchange", exchange, "error", err)
 	} else {
-		log.Printf("Cached %d tickers for %s in Redis (10s TTL)", len(marketData), exchange)
+		c.logger.Info("Cached tickers in Redis", "count", len(marketData), "exchange", exchange, "ttl", "10s")
 	}
 
 	// Also cache individual ticker data for quick lookups with error recovery
@@ -1010,7 +1029,7 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 			})
 		}); err != nil {
 			// Log circuit breaker or caching failure but continue
-			log.Printf("Failed to cache individual ticker %s: %v", individualKey, err)
+			c.logger.Error("Failed to cache individual ticker", "key", individualKey, "error", err)
 		}
 	}
 }
@@ -1022,7 +1041,7 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 		symbolKey := fmt.Sprintf("%s:%s", ticker.ExchangeName, ticker.Symbol)
 		ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
 		c.blacklistCache.Add(symbolKey, reason, ttl)
-		log.Printf("Added symbol to blacklist: %s (reason: %s)", symbolKey, reason)
+		c.logger.Info("Added symbol to blacklist", "symbol", symbolKey, "reason", reason)
 		return nil
 	}
 
@@ -1033,14 +1052,14 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	}
 
 	// Ensure trading pair exists and get its ID
-	tradingPairID, err := c.getOrCreateTradingPair(exchangeID, ticker.Symbol)
-	if err != nil {
-		return fmt.Errorf("failed to get or create trading pair: %w", err)
+	tradingPairID, pairErr := c.getOrCreateTradingPair(exchangeID, ticker.Symbol)
+	if pairErr != nil {
+		return fmt.Errorf("failed to get or create trading pair: %w", pairErr)
 	}
 
 	// Validate price data before saving to database
-	if err := c.validateMarketData(&ticker, ticker.ExchangeName, ticker.Symbol); err != nil {
-		log.Printf("Invalid market data for %s:%s - %v", ticker.ExchangeName, ticker.Symbol, err)
+	if validationErr := c.validateMarketData(&ticker, ticker.ExchangeName, ticker.Symbol); validationErr != nil {
+		c.logger.Warn("Invalid market data", "exchange", ticker.ExchangeName, "symbol", ticker.Symbol, "error", validationErr)
 		return nil // Don't save invalid data, but don't fail the collection
 	}
 
@@ -1087,7 +1106,7 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	// Check if symbol is blacklisted before making API call
 	symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
 	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
-		log.Printf("Skipping blacklisted symbol: %s (reason: %s)", symbolKey, reason)
+		c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
 		return nil
 	}
 
@@ -1106,30 +1125,30 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	}, map[string]interface{}{"exchange": exchange, "symbol": symbol, "operation": "single_fetch"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", resourceID, err)
+			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
 		}
 	}()
 
 	// Use circuit breaker for CCXT service call with retry logic
 	var ticker *models.MarketPrice
-	err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+	cbErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_single_fetch", func() error {
-			var fetchErr error
-			ticker, fetchErr = c.ccxtService.FetchSingleTicker(ctx, exchange, symbol)
-			return fetchErr
+			var retryErr error
+			ticker, retryErr = c.ccxtService.FetchSingleTicker(ctx, exchange, symbol)
+			return retryErr
 		})
 	})
 
-	if err != nil {
+	if cbErr != nil {
 		// Check if the error indicates a symbol that should be blacklisted
-		if shouldBlacklist, reason := isBlacklistableError(err); shouldBlacklist {
+		if shouldBlacklist, reason := isBlacklistableError(cbErr); shouldBlacklist {
 			symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
 			ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
 			c.blacklistCache.Add(symbolKey, reason, ttl)
-			log.Printf("Added symbol to blacklist: %s (reason: %s) - %v", symbolKey, reason, err)
+			c.logger.Info("Added symbol to blacklist with error", "symbol", symbolKey, "reason", reason, "error", cbErr)
 			return nil
 		}
-		return fmt.Errorf("failed to fetch ticker data with circuit breaker: %w", err)
+		return fmt.Errorf("failed to fetch ticker data with circuit breaker: %w", cbErr)
 	}
 
 	// Ensure exchange exists and get its ID
@@ -1139,14 +1158,14 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	}
 
 	// Ensure trading pair exists and get its ID
-	tradingPairID, err := c.getOrCreateTradingPair(exchangeID, symbol)
-	if err != nil {
-		return fmt.Errorf("failed to get or create trading pair: %w", err)
+	tradingPairID, pairErr := c.getOrCreateTradingPair(exchangeID, symbol)
+	if pairErr != nil {
+		return fmt.Errorf("failed to get or create trading pair: %w", pairErr)
 	}
 
 	// Validate price data before saving to database
-	if err := c.validateMarketData(ticker, exchange, symbol); err != nil {
-		log.Printf("Invalid market data for %s:%s - %v", exchange, symbol, err)
+	if validateErr := c.validateMarketData(ticker, exchange, symbol); validateErr != nil {
+		c.logger.Warn("Invalid market data", "exchange", exchange, "symbol", symbol, "error", validateErr)
 		return nil // Don't save invalid data, but don't fail the collection
 	}
 
@@ -1169,12 +1188,12 @@ func (c *CollectorService) collectFundingRates(worker *Worker) error {
 
 // collectFundingRatesBulk collects funding rates for futures markets using concurrent processing
 func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
-	log.Printf("Starting concurrent funding rate collection for exchange: %s", worker.Exchange)
+	c.logger.Info("Starting concurrent funding rate collection", "exchange", worker.Exchange)
 
 	// Check if we already know this exchange doesn't support funding rates
 	supports, known := c.exchangeCapabilityCache.SupportsFundingRates(worker.Exchange)
 	if known && !supports {
-		log.Printf("Skipping funding rate collection for %s: exchange does not support funding rates (cached)", worker.Exchange)
+		c.logger.Info("Skipping funding rate collection - exchange does not support funding rates", "exchange", worker.Exchange)
 		return nil
 	}
 
@@ -1193,37 +1212,37 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "funding_rates"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", resourceID, err)
+			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
 		}
 	}()
 
 	// Use circuit breaker for CCXT service call with retry logic
 	var fundingRates []ccxt.FundingRate
-	err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+	fetchErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_funding_rates", func() error {
-			var fetchErr error
-			fundingRates, fetchErr = c.ccxtService.FetchAllFundingRates(ctx, worker.Exchange)
-			return fetchErr
+			var retryErr error
+			fundingRates, retryErr = c.ccxtService.FetchAllFundingRates(ctx, worker.Exchange)
+			return retryErr
 		})
 	})
 
-	if err != nil {
+	if fetchErr != nil {
 		// Check if this is a funding rate unsupported error
-		if isFundingRateUnsupportedError(err) {
-			log.Printf("Exchange %s does not support funding rates, caching this information", worker.Exchange)
+		if isFundingRateUnsupportedError(fetchErr) {
+			c.logger.Info("Exchange does not support funding rates, caching this information", "exchange", worker.Exchange)
 			c.exchangeCapabilityCache.SetFundingRateSupport(worker.Exchange, false)
 			return nil // Don't treat this as an error
 		}
-		return fmt.Errorf("failed to fetch funding rates for %s with circuit breaker: %w", worker.Exchange, err)
+		return fmt.Errorf("failed to fetch funding rates for %s with circuit breaker: %w", worker.Exchange, fetchErr)
 	}
 
 	// If we successfully fetched funding rates, cache that this exchange supports them
 	if !known {
-		log.Printf("Exchange %s supports funding rates, caching this information", worker.Exchange)
+		c.logger.Info("Exchange supports funding rates, caching this information", "exchange", worker.Exchange)
 		c.exchangeCapabilityCache.SetFundingRateSupport(worker.Exchange, true)
 	}
 
-	log.Printf("Fetched %d funding rates for exchange %s", len(fundingRates), worker.Exchange)
+	c.logger.Info("Fetched funding rates", "exchange", worker.Exchange, "count", len(fundingRates))
 
 	if len(fundingRates) == 0 {
 		return nil
@@ -1253,12 +1272,12 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 				defer func() { <-semaphore }()
 
 				if err := c.storeFundingRate(worker.Exchange, r); err != nil {
-					log.Printf("Failed to store funding rate for %s:%s: %v", worker.Exchange, r.Symbol, err)
+					c.logger.Error("Failed to store funding rate", "exchange", worker.Exchange, "symbol", r.Symbol, "error", err)
 					mu.Lock()
 					errorCount++
 					mu.Unlock()
 				} else {
-					log.Printf("Successfully stored funding rate for %s:%s (rate: %.6f)", worker.Exchange, r.Symbol, r.FundingRate)
+					c.logger.Info("Successfully stored funding rate", "exchange", worker.Exchange, "symbol", r.Symbol, "rate", r.FundingRate)
 					mu.Lock()
 					successCount++
 					mu.Unlock()
@@ -1270,7 +1289,7 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	log.Printf("Completed funding rate collection for %s: %d successful, %d errors", worker.Exchange, successCount, errorCount)
+	c.logger.Info("Completed funding rate collection", "exchange", worker.Exchange, "successful", successCount, "errors", errorCount)
 	return nil
 }
 
@@ -1283,9 +1302,9 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 	}
 
 	// Ensure trading pair exists and get its ID
-	tradingPairID, err := c.getOrCreateTradingPair(exchangeID, rate.Symbol)
-	if err != nil {
-		return fmt.Errorf("failed to get or create trading pair: %w", err)
+	tradingPairID, pairErr := c.getOrCreateTradingPair(exchangeID, rate.Symbol)
+	if pairErr != nil {
+		return fmt.Errorf("failed to get or create trading pair: %w", pairErr)
 	}
 
 	// Convert mark_price and index_price to decimal, handling zero values
@@ -1336,7 +1355,7 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 		latestFundingKey := "latest_funding_rates"
 		c.redisClient.Del(c.ctx, latestFundingKey)
 
-		log.Printf("Invalidated funding rate caches for %s:%s", exchange, rate.Symbol)
+		c.logger.Info("Invalidated funding rate caches", "exchange", exchange, "symbol", rate.Symbol)
 	}
 
 	return nil
@@ -1380,7 +1399,7 @@ func (c *CollectorService) RestartWorker(exchangeID string) error {
 	c.wg.Add(1)
 	go c.runWorker(worker)
 
-	log.Printf("Restarted worker for exchange %s", exchangeID)
+	c.logger.Info("Restarted worker", "exchange", exchangeID)
 	return nil
 }
 
@@ -1455,7 +1474,7 @@ func (c *CollectorService) getOrCreateTradingPair(exchangeID int, symbol string)
 		c.redisClient.Set(c.ctx, cacheKey, tradingPairID, 24*time.Hour) // Cache for 24 hours
 	}
 
-	log.Printf("Created new trading pair: %s for exchange %d (ID: %d)", symbol, exchangeID, tradingPairID)
+	c.logger.Info("Created new trading pair", "symbol", symbol, "exchange_id", exchangeID, "trading_pair_id", tradingPairID)
 	return tradingPairID, nil
 }
 
@@ -1482,7 +1501,7 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	name := strings.ToLower(ccxtID)
 	err = c.db.Pool.QueryRow(c.ctx, "SELECT id FROM exchanges WHERE name = $1", name).Scan(&exchangeID)
 	if err == nil {
-		log.Printf("Found existing exchange by name: %s (ID: %d)", name, exchangeID)
+		c.logger.Info("Found existing exchange by name", "name", name, "exchange_id", exchangeID)
 		// Cache the result
 		c.redisClient.Set(c.ctx, cacheKey, exchangeID, 24*time.Hour)
 		return exchangeID, nil
@@ -1505,7 +1524,7 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	// Cache the newly created/updated exchange
 	c.redisClient.Set(c.ctx, cacheKey, exchangeID, 24*time.Hour)
 
-	log.Printf("Created or updated exchange: %s (ID: %d)", ccxtID, exchangeID)
+	c.logger.Info("Created or updated exchange", "ccxt_id", ccxtID, "exchange_id", exchangeID)
 	return exchangeID, nil
 }
 
@@ -1615,7 +1634,7 @@ func (c *CollectorService) isInvalidSymbolFormat(symbol string) bool {
 
 // fetchAndCacheSymbols fetches symbols from CCXT service and populates cache (used during startup)
 func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, error) {
-	log.Printf("Fetching active markets for exchange: %s", exchangeID)
+	c.logger.Info("Fetching active markets", "exchange", exchangeID)
 
 	// Add timeout context for better error handling
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
@@ -1624,7 +1643,7 @@ func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, er
 	markets, err := c.ccxtService.FetchMarkets(ctx, exchangeID)
 	if err != nil {
 		// Log warning but don't fail startup for individual exchange errors
-		log.Printf("Warning: Failed to fetch markets for %s (exchange may be unavailable): %v", exchangeID, err)
+		c.logger.Warn("Failed to fetch markets - exchange may be unavailable", "exchange", exchangeID, "error", err)
 		return []string{}, nil // Return empty slice instead of error
 	}
 
@@ -1646,7 +1665,7 @@ func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, er
 	c.lastSymbolRefresh[exchangeID] = time.Now()
 	c.symbolRefreshMu.Unlock()
 
-	log.Printf("Successfully fetched %d symbols for %s", len(activeSymbols), exchangeID)
+	c.logger.Info("Successfully fetched symbols", "exchange", exchangeID, "count", len(activeSymbols))
 	return activeSymbols, nil
 }
 
@@ -1667,7 +1686,7 @@ func (c *CollectorService) getMultiExchangeSymbolsConcurrent(exchanges []string)
 	optimalConcurrency := c.resourceOptimizer.GetOptimalConcurrency()
 	maxConcurrent := optimalConcurrency.MaxConcurrentSymbols
 
-	log.Printf("Collecting symbols from %d exchanges concurrently (max %d parallel, optimized) for arbitrage filtering...", len(exchanges), maxConcurrent)
+	c.logger.Info("Collecting symbols from exchanges concurrently", "exchange_count", len(exchanges), "max_concurrent", maxConcurrent, "purpose", "arbitrage_filtering")
 
 	// Create timeout context for the entire operation
 	ctx, cancel := context.WithTimeout(c.ctx, 2*time.Minute)
@@ -1676,7 +1695,7 @@ func (c *CollectorService) getMultiExchangeSymbolsConcurrent(exchanges []string)
 	// Try concurrent approach first
 	multiExchangeSymbols, err := c.tryGetSymbolsConcurrent(ctx, exchanges, symbolCount, minExchanges, maxConcurrent)
 	if err != nil {
-		log.Printf("Concurrent symbol collection failed: %v. Falling back to sequential processing...", err)
+		c.logger.Warn("Concurrent symbol collection failed, falling back to sequential processing", "error", err)
 		// Fallback to sequential processing
 		return c.getSymbolsSequential(exchanges, minExchanges)
 	}
@@ -1762,7 +1781,7 @@ func (c *CollectorService) tryGetSymbolsConcurrent(ctx context.Context, exchange
 		}
 
 		if result.err != nil {
-			log.Printf("Warning: Failed to fetch active symbols for %s: %v", result.exchangeID, result.err)
+			c.logger.Warn("Failed to fetch active symbols", "exchange", result.exchangeID, "error", result.err)
 			continue
 		}
 
@@ -1777,8 +1796,7 @@ func (c *CollectorService) tryGetSymbolsConcurrent(ctx context.Context, exchange
 		mu.Unlock()
 
 		successfulExchanges++
-		log.Printf("Found %d valid active symbols on %s (cached) [%d/%d exchanges completed]",
-			len(validSymbols), result.exchangeID, successfulExchanges, len(exchanges))
+		c.logger.Info("Found valid active symbols", "count", len(validSymbols), "exchange", result.exchangeID, "completed", successfulExchanges, "total", len(exchanges))
 	}
 
 	// Check if we have enough successful exchanges
@@ -1794,15 +1812,14 @@ func (c *CollectorService) tryGetSymbolsConcurrent(ctx context.Context, exchange
 		}
 	}
 
-	log.Printf("Concurrent symbol collection completed: Found %d symbols that appear on %d+ exchanges (out of %d total unique symbols) from %d successful exchanges",
-		len(multiExchangeSymbols), minExchanges, len(symbolCount), successfulExchanges)
+	c.logger.Info("Concurrent symbol collection completed", "symbols_on_multiple_exchanges", len(multiExchangeSymbols), "min_exchanges", minExchanges, "total_unique_symbols", len(symbolCount), "successful_exchanges", successfulExchanges)
 
 	return multiExchangeSymbols, nil
 }
 
 // getSymbolsSequential fallback method for sequential symbol collection
 func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges int) (map[string]int, error) {
-	log.Printf("Starting sequential symbol collection for %d exchanges...", len(exchanges))
+	c.logger.Info("Starting sequential symbol collection", "exchange_count", len(exchanges))
 
 	symbolCount := make(map[string]int)
 	successfulExchanges := 0
@@ -1817,7 +1834,7 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		})
 
 		if err != nil {
-			log.Printf("Warning: Failed to fetch symbols for %s in sequential mode: %v", exchangeID, err)
+			c.logger.Warn("Failed to fetch symbols in sequential mode", "exchange", exchangeID, "error", err)
 			continue
 		}
 
@@ -1830,8 +1847,7 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		}
 
 		successfulExchanges++
-		log.Printf("Sequential: Found %d valid symbols on %s [%d/%d exchanges completed]",
-			len(validSymbols), exchangeID, successfulExchanges, len(exchanges))
+		c.logger.Info("Sequential: Found valid symbols", "count", len(validSymbols), "exchange", exchangeID, "processed_exchanges", successfulExchanges, "total", len(exchanges))
 	}
 
 	// Filter to only symbols that appear on multiple exchanges
@@ -1842,8 +1858,7 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		}
 	}
 
-	log.Printf("Sequential symbol collection completed: Found %d symbols that appear on %d+ exchanges (out of %d total unique symbols) from %d successful exchanges",
-		len(multiExchangeSymbols), minExchanges, len(symbolCount), successfulExchanges)
+	c.logger.Info("Sequential symbol collection completed", "symbols_on_multiple_exchanges", len(multiExchangeSymbols), "min_exchanges", minExchanges, "total_unique_symbols", len(symbolCount), "successful_exchanges", successfulExchanges)
 
 	return multiExchangeSymbols, nil
 }
@@ -1902,12 +1917,11 @@ func (c *CollectorService) validateMarketData(ticker *models.MarketPrice, exchan
 // PerformBackfillIfNeeded checks if backfill is needed and performs it
 func (c *CollectorService) PerformBackfillIfNeeded() error {
 	if !c.backfillConfig.Enabled {
-		log.Println("Backfill is disabled in configuration, skipping historical data collection")
+		c.logger.Info("Backfill is disabled in configuration, skipping historical data collection")
 		return nil
 	}
 
-	log.Printf("Checking if historical data backfill is needed (Config: %dh backfill, %dh threshold, batch size: %d)...",
-		c.backfillConfig.BackfillHours, c.backfillConfig.MinDataThresholdHours, c.backfillConfig.BatchSize)
+	c.logger.Info("Checking if historical data backfill is needed", "backfill_hours", c.backfillConfig.BackfillHours, "threshold_hours", c.backfillConfig.MinDataThresholdHours, "batch_size", c.backfillConfig.BatchSize)
 
 	// Check if we have sufficient market data
 	needsBackfill, err := c.checkIfBackfillNeeded()
@@ -1916,18 +1930,18 @@ func (c *CollectorService) PerformBackfillIfNeeded() error {
 	}
 
 	if !needsBackfill {
-		log.Printf("Sufficient market data available (threshold: %dh), skipping backfill", c.backfillConfig.MinDataThresholdHours)
+		c.logger.Info("Sufficient market data available, skipping backfill", "threshold_hours", c.backfillConfig.MinDataThresholdHours)
 		return nil
 	}
 
-	log.Printf("Insufficient market data detected, starting %dh historical backfill process...", c.backfillConfig.BackfillHours)
+	c.logger.Info("Insufficient market data detected, starting historical backfill", "backfill_hours", c.backfillConfig.BackfillHours)
 	startTime := time.Now()
 	err = c.performHistoricalBackfill()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Historical backfill process completed in %v", time.Since(startTime))
+	c.logger.Info("Historical backfill process completed", "duration", time.Since(startTime))
 	return nil
 }
 
@@ -1944,16 +1958,15 @@ func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
 		return false, fmt.Errorf("failed to check market data count: %w", err)
 	}
 
-	log.Printf("Market data availability check: found %d records within last %dh (threshold: %v)",
-		count, c.backfillConfig.MinDataThresholdHours, thresholdTime.Format("2006-01-02 15:04"))
+	c.logger.Info("Market data availability check", "records_found", count, "threshold_hours", c.backfillConfig.MinDataThresholdHours, "threshold_time", thresholdTime.Format("2006-01-02 15:04"))
 
 	// If we have less than 100 records in the threshold period, we need backfill
 	minRecordsThreshold := 100
 	needsBackfill := count < minRecordsThreshold
 	if needsBackfill {
-		log.Printf("Backfill required: only %d records found (minimum: %d)", count, minRecordsThreshold)
+		c.logger.Info("Backfill required", "records_found", count, "minimum_required", minRecordsThreshold)
 	} else {
-		log.Printf("Sufficient data available: %d records found (minimum: %d)", count, minRecordsThreshold)
+		c.logger.Info("Sufficient data available", "records_found", count, "minimum_required", minRecordsThreshold)
 	}
 
 	return needsBackfill, nil
@@ -1966,13 +1979,13 @@ func (c *CollectorService) performHistoricalBackfill() error {
 
 // performHistoricalBackfillConcurrent collects historical data for active trading pairs using concurrent processing
 func (c *CollectorService) performHistoricalBackfillConcurrent() error {
-	log.Printf("Starting concurrent historical data backfill for %dh...", c.backfillConfig.BackfillHours)
+	c.logger.Info("Starting concurrent historical data backfill", "backfill_hours", c.backfillConfig.BackfillHours)
 	backfillStartTime := time.Now()
 
 	// Get all active exchanges and their symbols
 	exchanges := c.ccxtService.GetSupportedExchanges()
 	if len(exchanges) == 0 {
-		log.Printf("No exchanges available for backfill")
+		c.logger.Warn("No exchanges available for backfill")
 		return nil
 	}
 
@@ -1992,7 +2005,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 	failedExchanges := 0
 	var totalProcessingTime time.Duration
 
-	log.Printf("Processing %d exchanges concurrently (max %d concurrent, optimized)", len(exchanges), maxConcurrentBackfill)
+	c.logger.Info("Processing exchanges concurrently", "exchange_count", len(exchanges), "max_concurrent", maxConcurrentBackfill)
 
 	// Process exchanges concurrently
 	for _, exchangeID := range exchanges {
@@ -2004,12 +2017,12 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			log.Printf("Starting backfill for exchange: %s", exchange)
+			c.logger.Info("Starting backfill for exchange", "exchange", exchange)
 
 			// Get cached symbols for this exchange
 			symbols, found := c.symbolCache.Get(exchange)
 			if !found || len(symbols) == 0 {
-				log.Printf("No cached symbols found for %s, skipping backfill", exchange)
+				c.logger.Warn("No cached symbols found, skipping backfill", "exchange", exchange)
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2019,7 +2032,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			// Filter to valid symbols
 			validSymbols := c.filterValidSymbols(symbols)
 			if len(validSymbols) == 0 {
-				log.Printf("No valid symbols found for %s, skipping backfill", exchange)
+				c.logger.Warn("No valid symbols found, skipping backfill", "exchange", exchange)
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2030,10 +2043,10 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			maxSymbolsPerExchange := 20
 			if len(validSymbols) > maxSymbolsPerExchange {
 				validSymbols = validSymbols[:maxSymbolsPerExchange]
-				log.Printf("Limited backfill symbols for %s to %d (from %d total)", exchange, maxSymbolsPerExchange, len(symbols))
+				c.logger.Info("Limited backfill symbols", "exchange", exchange, "limited_count", maxSymbolsPerExchange, "total_count", len(symbols))
 			}
 
-			log.Printf("Starting backfill for %s with %d symbols", exchange, len(validSymbols))
+			c.logger.Info("Starting backfill", "exchange", exchange, "symbol_count", len(validSymbols))
 
 			// Track processing time for this exchange
 			exchangeStartTime := time.Now()
@@ -2043,7 +2056,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			exchangeProcessingTime := time.Since(exchangeStartTime)
 
 			if err != nil {
-				log.Printf("Error during backfill for %s: %v", exchange, err)
+				c.logger.Error("Error during backfill for exchange", "exchange", exchange, "error", err)
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2063,9 +2076,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 				c.warmBackfillCache(exchange, validSymbols[:successCount])
 			}
 
-			log.Printf("Completed backfill for %s: %d/%d symbols successful in %v (%.2f symbols/sec)",
-				exchange, successCount, len(validSymbols), exchangeProcessingTime,
-				float64(successCount)/exchangeProcessingTime.Seconds())
+			c.logger.Info("Completed backfill for exchange", "exchange", exchange, "successful_symbols", successCount, "total_symbols", len(validSymbols), "duration", exchangeProcessingTime, "symbols_per_sec", float64(successCount)/exchangeProcessingTime.Seconds())
 		}(exchangeID)
 	}
 
@@ -2082,13 +2093,17 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 	overallThroughput := float64(successfulBackfills) / totalBackfillTime.Seconds()
 	successRate := float64(successfulBackfills) / float64(totalSymbols) * 100
 
-	log.Printf("Concurrent historical backfill completed in %v:", totalBackfillTime)
-	log.Printf("  - Symbols: %d/%d successful (%.1f%% success rate)", successfulBackfills, totalSymbols, successRate)
-	log.Printf("  - Exchanges: %d successful, %d failed (total: %d)", successfulExchanges, failedExchanges, len(exchanges))
-	log.Printf("  - Performance: %.2f symbols/sec overall, %.2f avg processing time per exchange",
-		overallThroughput, avgProcessingTime.Seconds())
-	log.Printf("  - Estimated improvement: ~%.1fx faster than sequential processing",
-		float64(len(exchanges)*5)) // Rough estimate based on concurrent workers
+	c.logger.Info("Concurrent historical backfill completed",
+		"total_duration", totalBackfillTime,
+		"successful_symbols", successfulBackfills,
+		"total_symbols", totalSymbols,
+		"success_rate_percent", successRate,
+		"successful_exchanges", successfulExchanges,
+		"failed_exchanges", failedExchanges,
+		"total_exchanges", len(exchanges),
+		"overall_throughput_symbols_per_sec", overallThroughput,
+		"avg_processing_time_per_exchange_sec", avgProcessingTime.Seconds(),
+		"estimated_improvement_factor", float64(len(exchanges)*5))
 
 	return nil
 }
@@ -2106,14 +2121,14 @@ func (c *CollectorService) warmBackfillCache(exchangeID string, symbols []string
 	cacheKey := fmt.Sprintf("backfill:success:%s", exchangeID)
 	symbolsJSON, err := json.Marshal(symbols)
 	if err != nil {
-		log.Printf("Failed to marshal symbols for cache warming: %v", err)
+		c.logger.Error("Failed to marshal symbols for cache warming", "error", err)
 		return
 	}
 
 	// Cache for 1 hour to help with subsequent operations
 	err = c.redisClient.Set(ctx, cacheKey, symbolsJSON, time.Hour).Err()
 	if err != nil {
-		log.Printf("Failed to warm backfill cache for %s: %v", exchangeID, err)
+		c.logger.Error("Failed to warm backfill cache", "exchange", exchangeID, "error", err)
 		return
 	}
 
@@ -2123,7 +2138,7 @@ func (c *CollectorService) warmBackfillCache(exchangeID string, symbols []string
 		c.redisClient.Set(ctx, statusKey, "completed", time.Hour)
 	}
 
-	log.Printf("Warmed cache with %d successful backfill symbols for %s", len(symbols), exchangeID)
+	c.logger.Info("Warmed cache with successful backfill symbols", "symbol_count", len(symbols), "exchange", exchangeID)
 }
 
 // BackfillJob represents a single symbol backfill task
@@ -2157,13 +2172,11 @@ func (c *CollectorService) backfillExchangeData(exchangeID string, symbols []str
 	}, map[string]interface{}{"exchange": exchangeID, "operation": "backfill", "symbol_count": len(symbols)})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(operationID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", operationID, err)
+			c.logger.Error("Failed to cleanup resource", "operation_id", operationID, "error", err)
 		}
 	}()
 
-	log.Printf("Starting concurrent backfill for %s: %d symbols (period: %v to %v)",
-		exchangeID, len(symbols),
-		backfillStartTime.Format("2006-01-02 15:04"), time.Now().Format("2006-01-02 15:04"))
+	c.logger.Info("Starting concurrent backfill for exchange", "exchange", exchangeID, "symbol_count", len(symbols), "start_time", backfillStartTime.Format("2006-01-02 15:04"), "end_time", time.Now().Format("2006-01-02 15:04"))
 
 	// Get dynamic concurrency limit from resource optimizer
 	optimalConcurrency := c.resourceOptimizer.GetOptimalConcurrency()
@@ -2255,26 +2268,24 @@ func (c *CollectorService) backfillExchangeData(exchangeID string, symbols []str
 		// Log progress every 25% or every 10 symbols
 		if processedCount%10 == 0 || processedCount == totalSymbols {
 			progress := float64(processedCount) / float64(totalSymbols) * 100
-			log.Printf("Backfill progress for %s: %.1f%% (%d/%d symbols, %d successful, %d failed)",
-				exchangeID, progress, processedCount, totalSymbols, successCount, failedCount)
+			c.logger.Info("Backfill progress", "exchange", exchangeID, "progress_percent", progress, "processed", processedCount, "total", totalSymbols, "successful", successCount, "failed", failedCount)
 		}
 	}
 
 	// Log any errors encountered
 	if len(errors) > 0 {
-		log.Printf("Backfill errors for %s (%d total):", exchangeID, len(errors))
+		c.logger.Warn("Backfill errors encountered", "exchange", exchangeID, "error_count", len(errors))
 		for i, err := range errors {
 			if i < 5 { // Log first 5 errors to avoid spam
-				log.Printf("  - %v", err)
+				c.logger.Error("Backfill error detail", "exchange", exchangeID, "error", err)
 			} else if i == 5 {
-				log.Printf("  - ... and %d more errors", len(errors)-5)
+				c.logger.Warn("Additional backfill errors suppressed", "exchange", exchangeID, "additional_errors", len(errors)-5)
 				break
 			}
 		}
 	}
 
-	log.Printf("Concurrent backfill completed for %s: %d successful, %d failed (total: %d symbols)",
-		exchangeID, successCount, failedCount, totalSymbols)
+	c.logger.Info("Concurrent backfill completed for exchange", "exchange", exchangeID, "successful", successCount, "failed", failedCount, "total_symbols", totalSymbols)
 	return successCount, nil
 }
 
@@ -2298,7 +2309,7 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	}, map[string]interface{}{"exchange": job.ExchangeID, "symbol": job.Symbol, "worker_id": workerID, "operation": "backfill_job"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(operationID); err != nil {
-			log.Printf("Failed to cleanup resource %s: %v", operationID, err)
+			c.logger.Error("Failed to cleanup resource", "operation_id", operationID, "error", err)
 		}
 	}()
 
@@ -2313,8 +2324,7 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	// Check if symbol is blacklisted
 	symbolKey := fmt.Sprintf("%s:%s", job.ExchangeID, job.Symbol)
 	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
-		log.Printf("Worker %d: Skipping blacklisted symbol %s (reason: %s)",
-			workerID, symbolKey, reason)
+		c.logger.Info("Skipping blacklisted symbol", "worker_id", workerID, "symbol", symbolKey, "reason", reason)
 		result.Error = fmt.Errorf("symbol blacklisted: %s", reason)
 		return result
 	}
@@ -2325,8 +2335,7 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	})
 
 	if err != nil {
-		log.Printf("Worker %d: Failed to backfill %s:%s: %v",
-			workerID, job.ExchangeID, job.Symbol, err)
+		c.logger.Error("Failed to backfill symbol", "worker_id", workerID, "exchange", job.ExchangeID, "symbol", job.Symbol, "error", err)
 		result.Error = err
 		return result
 	}
@@ -2366,8 +2375,7 @@ func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exc
 	baseVolume := ticker.Volume
 	dataPointsGenerated := 0
 
-	log.Printf("Generating historical data for %s:%s from %v (baseline: price=%s, volume=%s)",
-		exchangeID, symbol, startTime.Format("2006-01-02 15:04"), basePrice, baseVolume)
+	c.logger.Info("Generating historical data", "exchange", exchangeID, "symbol", symbol, "start_time", startTime.Format("2006-01-02 15:04"), "baseline_price", basePrice, "baseline_volume", baseVolume)
 
 	for currentTime.Before(time.Now().Add(-interval)) {
 		// Add some realistic price variation (±2%)
@@ -2394,7 +2402,6 @@ func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exc
 		currentTime = currentTime.Add(interval)
 	}
 
-	log.Printf("Generated %d historical data points for %s:%s (30min intervals)",
-		dataPointsGenerated, exchangeID, symbol)
+	c.logger.Info("Generated historical data points", "data_points", dataPointsGenerated, "exchange", exchangeID, "symbol", symbol, "interval", "30min")
 	return nil
 }

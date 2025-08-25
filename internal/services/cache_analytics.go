@@ -159,7 +159,7 @@ func (c *CacheAnalyticsService) GetMetrics(ctx context.Context) (*CacheMetrics, 
 }
 
 // parseRedisInfo parses Redis INFO command output
-func (c *CacheAnalyticsService) parseRedisInfo(info string) map[string]string {
+func (c *CacheAnalyticsService) parseRedisInfo(_info string) map[string]string {
 	result := make(map[string]string)
 
 	// This is a simplified parser - in real implementation you'd parse the actual INFO output

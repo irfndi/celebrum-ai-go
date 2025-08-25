@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 )
@@ -26,6 +27,7 @@ type ResourceOptimizer struct {
 	performanceHistory   []PerformanceSnapshot
 	maxHistorySize       int
 	adaptiveMode         bool
+	logger               *slog.Logger
 }
 
 // OptimalConcurrency holds dynamically calculated concurrency limits
@@ -65,27 +67,38 @@ type ResourceOptimizerConfig struct {
 
 // NewResourceOptimizer creates a new resource optimizer
 func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
+	// Initialize logger with fallback for tests
+	var logger *slog.Logger
+	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
+		logger = telemetryLogger.Logger()
+	} else {
+		logger = slog.Default()
+	}
+
 	ro := &ResourceOptimizer{
 		cpuCores:             runtime.NumCPU(),
 		optimizationInterval: config.OptimizationInterval,
 		maxHistorySize:       config.MaxHistorySize,
 		adaptiveMode:         config.AdaptiveMode,
 		performanceHistory:   make([]PerformanceSnapshot, 0, config.MaxHistorySize),
+		logger:               logger,
 	}
 
 	// Get initial memory info
 	if memInfo, err := mem.VirtualMemory(); err == nil {
 		ro.memoryGB = float64(memInfo.Total) / (1024 * 1024 * 1024)
 	} else {
-		log.Printf("Warning: Could not get memory info, using default: %v", err)
+		ro.logger.Warn("Could not get memory info, using default", "error", err)
 		ro.memoryGB = 8.0 // Default to 8GB
 	}
 
 	// Calculate initial optimal concurrency
 	ro.calculateOptimalConcurrency(config)
 
-	log.Printf("Resource Optimizer initialized: CPU cores=%d, Memory=%.1fGB, Adaptive=%v",
-		ro.cpuCores, ro.memoryGB, ro.adaptiveMode)
+	ro.logger.Info("Resource Optimizer initialized",
+		"cpu_cores", ro.cpuCores,
+		"memory_gb", ro.memoryGB,
+		"adaptive_mode", ro.adaptiveMode)
 
 	return ro
 }
@@ -137,12 +150,12 @@ func (ro *ResourceOptimizer) calculateOptimalConcurrency(config ResourceOptimize
 		CPUThreshold:           config.CPUThreshold,
 	}
 
-	log.Printf("Calculated optimal concurrency: Workers=%d, Symbols=%d, Backfill=%d, Writes=%d, CB=%d",
-		ro.optimalConcurrency.MaxWorkers,
-		ro.optimalConcurrency.MaxConcurrentSymbols,
-		ro.optimalConcurrency.MaxConcurrentBackfill,
-		ro.optimalConcurrency.MaxConcurrentWrites,
-		ro.optimalConcurrency.MaxCircuitBreakerCalls)
+	ro.logger.Info("Calculated optimal concurrency",
+		"max_workers", ro.optimalConcurrency.MaxWorkers,
+		"max_concurrent_symbols", ro.optimalConcurrency.MaxConcurrentSymbols,
+		"max_concurrent_backfill", ro.optimalConcurrency.MaxConcurrentBackfill,
+		"max_concurrent_writes", ro.optimalConcurrency.MaxConcurrentWrites,
+		"max_circuit_breaker_calls", ro.optimalConcurrency.MaxCircuitBreakerCalls)
 }
 
 // GetOptimalConcurrency returns the current optimal concurrency settings
@@ -216,7 +229,7 @@ func (ro *ResourceOptimizer) OptimizeIfNeeded(config ResourceOptimizerConfig) bo
 
 	// Check if adaptive optimization is needed
 	if adaptive && ro.shouldOptimize() {
-		log.Printf("Adaptive optimization triggered due to performance changes")
+		ro.logger.Info("Adaptive optimization triggered due to performance changes")
 		ro.calculateOptimalConcurrency(config)
 		ro.mu.Lock()
 		ro.lastOptimization = time.Now()
@@ -226,7 +239,7 @@ func (ro *ResourceOptimizer) OptimizeIfNeeded(config ResourceOptimizerConfig) bo
 
 	// Regular optimization interval
 	if time.Since(lastOpt) >= ro.optimizationInterval {
-		log.Printf("Regular optimization triggered (interval: %v)", ro.optimizationInterval)
+		ro.logger.Info("Regular optimization triggered", "interval", ro.optimizationInterval)
 		ro.calculateOptimalConcurrency(config)
 		ro.mu.Lock()
 		ro.lastOptimization = time.Now()

@@ -129,6 +129,15 @@ func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *lo
 
 // AggregateArbitrageSignals processes arbitrage opportunities into aggregated signals with price ranges
 func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input ArbitrageSignalInput) ([]*AggregatedSignal, error) {
+	// Stub telemetry - log arbitrage signal aggregation
+	sa.logger.WithFields(logrus.Fields{
+		"operation_type": "signal_aggregation",
+		"signal_type":    "arbitrage",
+		"input_count":    len(input.Opportunities),
+		"min_volume":     input.MinVolume.String(),
+		"base_amount":    input.BaseAmount.String(),
+	}).Info("Starting arbitrage signal aggregation")
+
 	sa.logger.Info("Aggregating arbitrage signals with enhanced price ranges")
 
 	var signals []*AggregatedSignal
@@ -216,14 +225,36 @@ func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input
 		}
 	}
 
+	// Stub telemetry - log aggregation results
+	sa.logger.WithFields(logrus.Fields{
+		"signals_generated": len(signals),
+		"symbols_processed": len(symbolGroups),
+		"operation_result":  "success",
+	}).Info("Arbitrage signal aggregation completed")
+
 	return signals, nil
 }
 
 // AggregateTechnicalSignals processes technical analysis data into aggregated signals
 func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input TechnicalSignalInput) ([]*AggregatedSignal, error) {
+	// Stub telemetry - log technical signal aggregation
+	sa.logger.WithFields(logrus.Fields{
+		"operation_type": "signal_aggregation",
+		"signal_type":    "technical",
+		"symbol":         input.Symbol,
+		"exchange":       input.Exchange,
+		"prices_count":   len(input.Prices),
+		"volumes_count":  len(input.Volumes),
+	}).Info("Starting technical signal aggregation")
+
 	sa.logger.WithField("symbol", input.Symbol).Info("Aggregating technical signals")
 
 	if len(input.Prices) < 20 {
+		// Stub telemetry - log insufficient data error
+		sa.logger.WithFields(logrus.Fields{
+			"required_points": 20,
+			"actual_points":   len(input.Prices),
+		}).Error("Insufficient price data for technical analysis")
 		return nil, fmt.Errorf("insufficient price data for technical analysis: need at least 20 points, got %d", len(input.Prices))
 	}
 
@@ -309,11 +340,24 @@ func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input
 		}
 	}
 
+	// Stub telemetry - log technical signal results
+	sa.logger.WithFields(logrus.Fields{
+		"signals_generated": len(qualitySignals),
+		"signals_raw_count": len(signals),
+		"operation_result":  "success",
+	}).Info("Technical signal aggregation completed")
+
 	return qualitySignals, nil
 }
 
 // DeduplicateSignals removes duplicate signals based on fingerprinting
 func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*AggregatedSignal) ([]*AggregatedSignal, error) {
+	// Stub telemetry - log deduplication start
+	sa.logger.WithFields(logrus.Fields{
+		"operation_type":      "signal_deduplication",
+		"signals_input_count": len(signals),
+	}).Info("Starting signal deduplication")
+
 	sa.logger.Info("Deduplicating signals")
 
 	var uniqueSignals []*AggregatedSignal
@@ -337,6 +381,13 @@ func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*A
 			sa.storeFingerprint(ctx, fingerprint)
 		}
 	}
+
+	// Stub telemetry - log deduplication results
+	sa.logger.WithFields(logrus.Fields{
+		"signals_unique_count":       len(uniqueSignals),
+		"signals_duplicates_removed": len(signals) - len(uniqueSignals),
+		"operation_result":           "success",
+	}).Info("Signal deduplication completed")
 
 	sa.logger.WithFields(logrus.Fields{
 		"original_count": len(signals),

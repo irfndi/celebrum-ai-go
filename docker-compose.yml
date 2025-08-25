@@ -23,6 +23,7 @@ services:
       start_period: 60s
     networks:
       - celebrum-network
+      - signoz-net
 
   # Migration Service - Runs automatically to sync all environments
   migrate:
@@ -36,6 +37,8 @@ services:
       DB_NAME: ${POSTGRES_DB:-celebrum_ai}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
+      # Migration configuration
+      MIGRATIONS_DIR: /database/migrations
       # Phase control
       STARTUP_PHASE: "1"
     volumes:
@@ -72,7 +75,7 @@ services:
     networks:
       - celebrum-network
 
-  # PHASE 3: CCXT Service (Node.js) - Warm-up Phase
+  # PHASE 3: CCXT Service (Bun) - Warm-up Phase
   ccxt-service:
     build:
       context: ./ccxt-service
@@ -88,6 +91,10 @@ services:
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
       - ADMIN_API_KEY=${ADMIN_API_KEY:?ADMIN_API_KEY must be set in .env file}
+      # OpenTelemetry configuration
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4318
+      - OTEL_SERVICE_NAME=ccxt-service
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=ccxt-service,service.version=1.0.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,6 +110,7 @@ services:
       start_period: 90s
     networks:
       - celebrum-network
+      - signoz-net
 
   # PHASE 3: Main Go Application - Warm-up Phase
   app:
@@ -113,7 +121,7 @@ services:
     container_name: celebrum-app
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8081:8081"
     env_file:
       - .env
     environment:
@@ -135,6 +143,15 @@ services:
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
+      # OpenTelemetry configuration
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4318
+      - OTEL_SERVICE_NAME=celebrum-ai-app
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=celebrum-ai-app,service.version=1.0.0
+      # Go application telemetry configuration (viper expects TELEMETRY_*)
+      - TELEMETRY_ENABLED=true
+      - TELEMETRY_OTLP_ENDPOINT=http://signoz-otel-collector:4318
+      # Enable debug logging to see telemetry initialization
+      - LOG_LEVEL=debug
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,13 +162,14 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
       interval: 20s
       timeout: 15s
       retries: 5
       start_period: 120s
     networks:
       - celebrum-network
+      - signoz-net
 
   # PHASE 2: Nginx reverse proxy - Gateway Phase
   nginx:
@@ -196,5 +214,8 @@ volumes:
 networks:
   celebrum-network:
     driver: bridge
+  signoz-net:
+    external: true
+    name: signoz-net
   default:
     name: celebrum-network

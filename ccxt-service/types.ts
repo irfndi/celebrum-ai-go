@@ -16,7 +16,7 @@ export interface ExchangeInfo {
 }
 
 export interface ExchangesResponse {
-  exchanges: ExchangeInfo[];
+  exchanges: string[];
 }
 
 export interface TickerResponse {

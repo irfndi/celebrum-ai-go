@@ -14,6 +14,7 @@ type Config struct {
 	Redis       RedisConfig      `mapstructure:"redis"`
 	CCXT        CCXTConfig       `mapstructure:"ccxt"`
 	Telegram    TelegramConfig   `mapstructure:"telegram"`
+	Telemetry   TelemetryConfig  `mapstructure:"telemetry"`
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
 	Backfill    BackfillConfig   `mapstructure:"backfill"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
@@ -53,12 +54,20 @@ type CCXTConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken      string `mapstructure:"bot_token"`
-	WebhookURL    string `mapstructure:"webhook_url"`
-	UsePolling    bool   `mapstructure:"use_polling"`
-	PollingOffset int    `mapstructure:"polling_offset"`
-	PollingLimit  int    `mapstructure:"polling_limit"`
-	PollingTimeout int   `mapstructure:"polling_timeout"`
+	BotToken       string `mapstructure:"bot_token"`
+	WebhookURL     string `mapstructure:"webhook_url"`
+	UsePolling     bool   `mapstructure:"use_polling"`
+	PollingOffset  int    `mapstructure:"polling_offset"`
+	PollingLimit   int    `mapstructure:"polling_limit"`
+	PollingTimeout int    `mapstructure:"polling_timeout"`
+}
+
+type TelemetryConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
+	ServiceName    string `mapstructure:"service_name"`
+	ServiceVersion string `mapstructure:"service_version"`
+	LogLevel       string `mapstructure:"log_level"`
 }
 
 type CleanupConfig struct {
@@ -177,6 +186,13 @@ func setDefaults() {
 	viper.SetDefault("telegram.polling_offset", 0)
 	viper.SetDefault("telegram.polling_limit", 100)
 	viper.SetDefault("telegram.polling_timeout", 60)
+
+	// Telemetry
+	viper.SetDefault("telemetry.enabled", true)
+	viper.SetDefault("telemetry.otlp_endpoint", "http://localhost:4318")
+	viper.SetDefault("telemetry.service_name", "celebrum-ai-go")
+	viper.SetDefault("telemetry.service_version", "1.0.0")
+	viper.SetDefault("telemetry.log_level", "info")
 
 	// Cleanup - Enhanced configuration with smart cleanup
 	viper.SetDefault("cleanup.market_data.retention_hours", 36)

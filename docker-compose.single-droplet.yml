@@ -72,7 +72,7 @@ services:
     networks:
       - celebrum-network
 
-  # PHASE 3: CCXT Service (Node.js) - Warm-up Phase
+  # PHASE 3: CCXT Service (Bun) - Warm-up Phase
   ccxt-service:
     build:
       context: ./ccxt-service

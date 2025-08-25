@@ -152,22 +152,32 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 CREATE INDEX IF NOT EXISTS idx_market_data_exchange_timestamp ON market_data(exchange_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_pair_timestamp ON market_data(trading_pair_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_symbol ON funding_rates(exchange_id, symbol);
-CREATE INDEX IF NOT EXISTS idx_funding_rates_timestamp ON funding_rates(funding_rate_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_pair ON funding_rates(exchange_id, trading_pair_id);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_funding_time ON funding_rates(funding_time DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_detected_at ON arbitrage_opportunities(detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active, detected_at DESC);
-CREATE INDEX IF NOT EXISTS idx_trading_pairs_exchange ON trading_pairs(exchange_id);
-CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
+-- Skip exchange_id index as trading_pairs table doesn't have exchange_id column
+-- CREATE INDEX IF NOT EXISTS idx_trading_pairs_exchange ON trading_pairs(exchange_id);
+-- Create index on telegram_chat_id instead of telegram_user_id
+CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_chat_id) WHERE telegram_chat_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_technical_indicators_lookup ON technical_indicators(exchange_id, trading_pair_id, timeframe, timestamp DESC);
 
--- Add updated_at triggers
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+-- Add updated_at triggers (conditional creation to avoid ownership issues)
+DO $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_proc 
+        WHERE proname = 'update_updated_at_column'
+    ) THEN
+        CREATE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $func$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $func$ LANGUAGE plpgsql;
+    END IF;
+END $$;
 
 -- Apply updated_at triggers to all relevant tables
 DROP TRIGGER IF EXISTS update_exchanges_updated_at ON exchanges;
@@ -205,31 +215,7 @@ SELECT * FROM (VALUES
 ) AS t(name, display_name, ccxt_id, has_spot, has_futures)
 WHERE NOT EXISTS (SELECT 1 FROM exchanges WHERE name = t.name);
 
--- Mark all migrations 006-028 as completed
-INSERT INTO schema_migrations (version, filename, description) VALUES
-    (6, '006_minimal_schema.sql', 'Complete schema setup - combines all fixes from 007-028'),
-    (7, '007_fix_funding_rate_support.sql', 'Merged into 006'),
-    (8, '008_fix_market_data_null_price.sql', 'Merged into 006'),
-    (9, '009_add_exchange_symbol_validation.sql', 'Merged into 006'),
-    (10, '010_fix_database_issues.sql', 'Merged into 006'),
-    (11, '011_enhanced_symbol_validation.sql', 'Merged into 006'),
-    (12, '012_fix_type_mismatch.sql', 'Merged into 006'),
-    (13, '013_add_missing_funding_columns.sql', 'Merged into 006'),
-    (14, '014_fix_funding_column_names.sql', 'Merged into 006'),
-    (15, '015_cleanup_funding_columns.sql', 'Merged into 006'),
-    (16, '016_add_arbitrage_created_at.sql', 'Merged into 006'),
-    (17, '017_fix_missing_objects.sql', 'Merged into 006'),
-    (18, '018_fix_funding_rates_upsert.sql', 'Merged into 006'),
-    (19, '019_ensure_exchanges_structure.sql', 'Merged into 006'),
-    (20, '020_ensure_ccxt_exchanges_structure.sql', 'Merged into 006'),
-    (21, '021_populate_exchanges_and_ccxt_data.sql', 'Merged into 006'),
-    (22, '022_fix_exchanges_table_structure.sql', 'Merged into 006'),
-    (23, '023_add_missing_exchange_columns.sql', 'Merged into 006'),
-    (24, '024_force_exchange_columns.sql', 'Merged into 006'),
-    (25, '025_final_exchange_fix.sql', 'Merged into 006'),
-    (26, '026_fix_missing_columns_alter.sql', 'Merged into 006'),
-    (27, '027_fix_api_url_constraint.sql', 'Merged into 006'),
-    (28, '028_fix_schema_issues.sql', 'Merged into 006')
-ON CONFLICT (version) DO NOTHING;
+-- All migrations are already recorded in schema_migrations table
+-- No need to insert duplicates
 
 COMMIT;

@@ -3,10 +3,11 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 	"github.com/redis/go-redis/v9"
 )
@@ -16,6 +17,7 @@ type CacheWarmingService struct {
 	redisClient *redis.Client
 	ccxtService ccxt.CCXTService
 	db          *database.PostgresDB
+	logger      *slog.Logger
 }
 
 // NewCacheWarmingService creates a new cache warming service
@@ -24,47 +26,48 @@ func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTServ
 		redisClient: redisClient,
 		ccxtService: ccxtService,
 		db:          db,
+		logger:      telemetry.GetLogger().Logger(),
 	}
 }
 
 // WarmCache performs cache warming for frequently accessed data
 func (c *CacheWarmingService) WarmCache(ctx context.Context) error {
-	log.Println("Starting cache warming...")
+	c.logger.Info("Starting cache warming")
 	start := time.Now()
 
 	// Warm exchange configuration cache
 	if err := c.warmExchangeConfig(ctx); err != nil {
-		log.Printf("Warning: Failed to warm exchange config cache: %v", err)
+		c.logger.Warn("Failed to warm exchange config cache", "error", err)
 	}
 
 	// Warm supported exchanges cache
 	if err := c.warmSupportedExchanges(ctx); err != nil {
-		log.Printf("Warning: Failed to warm supported exchanges cache: %v", err)
+		c.logger.Warn("Failed to warm supported exchanges cache", "error", err)
 	}
 
 	// Warm trading pairs cache
 	if err := c.warmTradingPairs(ctx); err != nil {
-		log.Printf("Warning: Failed to warm trading pairs cache: %v", err)
+		c.logger.Warn("Failed to warm trading pairs cache", "error", err)
 	}
 
 	// Warm exchange data cache
 	if err := c.warmExchanges(ctx); err != nil {
-		log.Printf("Warning: Failed to warm exchanges cache: %v", err)
+		c.logger.Warn("Failed to warm exchanges cache", "error", err)
 	}
 
 	// Warm funding rates cache
 	if err := c.warmFundingRates(ctx); err != nil {
-		log.Printf("Warning: Failed to warm funding rates cache: %v", err)
+		c.logger.Warn("Failed to warm funding rates cache", "error", err)
 	}
 
 	duration := time.Since(start)
-	log.Printf("Cache warming completed in %v", duration)
+	c.logger.Info("Cache warming completed", "duration_ms", duration.Milliseconds())
 	return nil
 }
 
 // warmExchangeConfig warms the exchange configuration cache
 func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
-	log.Println("Warming exchange configuration cache...")
+	c.logger.Info("Warming exchange configuration cache")
 
 	// Get exchange config from CCXT service
 	config, err := c.ccxtService.GetExchangeConfig(ctx)
@@ -84,13 +87,13 @@ func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("Exchange configuration cache warmed successfully")
+	c.logger.Info("Exchange configuration cache warmed successfully")
 	return nil
 }
 
 // warmSupportedExchanges warms the supported exchanges cache
 func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error {
-	log.Println("Warming supported exchanges cache...")
+	c.logger.Info("Warming supported exchanges cache")
 
 	// Get supported exchanges from CCXT service
 	exchanges := c.ccxtService.GetSupportedExchanges()
@@ -107,13 +110,13 @@ func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error 
 		return err
 	}
 
-	log.Printf("Supported exchanges cache warmed successfully (%d exchanges)", len(exchanges))
+	c.logger.Info("Supported exchanges cache warmed successfully", "count", len(exchanges))
 	return nil
 }
 
 // warmTradingPairs warms the trading pairs cache
 func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
-	log.Println("Warming trading pairs cache...")
+	c.logger.Info("Warming trading pairs cache")
 
 	// Get all trading pairs from database
 	query := `SELECT id, symbol, base_currency, quote_currency FROM trading_pairs LIMIT 1000`
@@ -127,7 +130,7 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 	for rows.Next() {
 		var id int
 		var symbol, baseCurrency, quoteCurrency string
-		if err := rows.Scan(&id, &symbol, &baseCurrency, &quoteCurrency); err != nil {
+		if scanErr := rows.Scan(&id, &symbol, &baseCurrency, &quoteCurrency); scanErr != nil {
 			continue
 		}
 
@@ -140,26 +143,26 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 			"quote_currency": quoteCurrency,
 		}
 
-		pairJSON, err := json.Marshal(pairData)
-		if err != nil {
+		pairJSON, marshalErr := json.Marshal(pairData)
+		if marshalErr != nil {
 			continue
 		}
 
-		err = c.redisClient.Set(ctx, cacheKey, pairJSON, 24*time.Hour).Err()
-		if err != nil {
+		setErr := c.redisClient.Set(ctx, cacheKey, pairJSON, 24*time.Hour).Err()
+		if setErr != nil {
 			continue
 		}
 
 		count++
 	}
 
-	log.Printf("Trading pairs cache warmed successfully (%d pairs)", count)
+	c.logger.Info("Trading pairs cache warmed successfully", "count", count)
 	return nil
 }
 
 // warmExchanges warms the exchanges cache
 func (c *CacheWarmingService) warmExchanges(ctx context.Context) error {
-	log.Println("Warming exchanges cache...")
+	c.logger.Info("Warming exchanges cache")
 
 	// Get all exchanges from database
 	query := `SELECT id, name FROM exchanges LIMIT 100`
@@ -173,27 +176,27 @@ func (c *CacheWarmingService) warmExchanges(ctx context.Context) error {
 	for rows.Next() {
 		var id int
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		if scanErr := rows.Scan(&id, &name); scanErr != nil {
 			continue
 		}
 
 		// Cache exchange ID by name with 24 hour TTL
 		cacheKey := "exchange:" + name
-		err = c.redisClient.Set(ctx, cacheKey, id, 24*time.Hour).Err()
-		if err != nil {
+		setErr := c.redisClient.Set(ctx, cacheKey, id, 24*time.Hour).Err()
+		if setErr != nil {
 			continue
 		}
 
 		count++
 	}
 
-	log.Printf("Exchanges cache warmed successfully (%d exchanges)", count)
+	c.logger.Info("Exchanges cache warmed successfully", "count", count)
 	return nil
 }
 
 // warmFundingRates warms the funding rates cache
 func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
-	log.Println("Warming funding rates cache...")
+	c.logger.Info("Warming funding rates cache")
 
 	// Get latest funding rates from database for each exchange-symbol combination
 	query := `
@@ -223,7 +226,7 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 		var fundingRate float64
 		var nextFundingTime, timestamp time.Time
 
-		if err := rows.Scan(&exchangeName, &symbol, &fundingRate, &nextFundingTime, &timestamp); err != nil {
+		if scanErr := rows.Scan(&exchangeName, &symbol, &fundingRate, &nextFundingTime, &timestamp); scanErr != nil {
 			continue
 		}
 
@@ -237,19 +240,19 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 			"timestamp":         timestamp,
 		}
 
-		fundingJSON, err := json.Marshal(fundingData)
-		if err != nil {
+		fundingJSON, marshalErr := json.Marshal(fundingData)
+		if marshalErr != nil {
 			continue
 		}
 
-		err = c.redisClient.Set(ctx, cacheKey, fundingJSON, time.Minute).Err()
-		if err != nil {
+		setErr := c.redisClient.Set(ctx, cacheKey, fundingJSON, time.Minute).Err()
+		if setErr != nil {
 			continue
 		}
 
 		count++
 	}
 
-	log.Printf("Funding rates cache warmed successfully (%d rates)", count)
+	c.logger.Info("Funding rates cache warmed successfully", "count", count)
 	return nil
 }

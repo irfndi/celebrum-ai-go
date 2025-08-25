@@ -244,60 +244,114 @@ SELECT
     
 FROM active_futures_arbitrage_opportunities;
 
--- Create functions for calculations
-CREATE OR REPLACE FUNCTION calculate_futures_arbitrage_apy(
-    net_funding_rate DECIMAL,
-    funding_interval INTEGER DEFAULT 8
-) RETURNS DECIMAL AS $$
+-- Create functions for calculations (with ownership check)
+DO $$
 BEGIN
-    -- Calculate APY from funding rate
-    -- APY = (1 + rate_per_period)^periods_per_year - 1
-    -- periods_per_year = 365 * 24 / funding_interval
-    RETURN (POWER(1 + net_funding_rate, 365.0 * 24.0 / funding_interval) - 1) * 100;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calculate_futures_arbitrage_apy') THEN
+        EXECUTE '
+        CREATE FUNCTION calculate_futures_arbitrage_apy(
+            net_funding_rate DECIMAL,
+            funding_interval INTEGER DEFAULT 8
+        ) RETURNS DECIMAL AS $func$
+        BEGIN
+            -- Calculate APY from funding rate
+            -- APY = (1 + rate_per_period)^periods_per_year - 1
+            -- periods_per_year = 365 * 24 / funding_interval
+            RETURN (POWER(1 + net_funding_rate, 365.0 * 24.0 / funding_interval) - 1) * 100;
+        END;
+        $func$ LANGUAGE plpgsql IMMUTABLE;';
+    ELSE
+        -- Function exists, skip creation to avoid ownership issues
+        NULL;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore ownership errors
+        NULL;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$;
 
-CREATE OR REPLACE FUNCTION calculate_position_size_recommendation(
-    available_capital DECIMAL,
-    risk_tolerance VARCHAR DEFAULT 'moderate',
-    risk_score DECIMAL DEFAULT 50,
-    max_leverage DECIMAL DEFAULT 1.0
-) RETURNS DECIMAL AS $$
-DECLARE
-    risk_multiplier DECIMAL;
-    leverage_factor DECIMAL;
+DO $$
 BEGIN
-    -- Determine risk multiplier based on tolerance
-    risk_multiplier := CASE risk_tolerance
-        WHEN 'conservative' THEN 0.1
-        WHEN 'moderate' THEN 0.2
-        WHEN 'aggressive' THEN 0.4
-        ELSE 0.2
-    END;
-    
-    -- Adjust for risk score (higher risk = smaller position)
-    risk_multiplier := risk_multiplier * (100 - risk_score) / 100.0;
-    
-    -- Apply leverage factor
-    leverage_factor := LEAST(max_leverage, 3.0); -- Cap at 3x for safety
-    
-    RETURN available_capital * risk_multiplier * leverage_factor;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calculate_position_size_recommendation') THEN
+        EXECUTE '
+        CREATE FUNCTION calculate_position_size_recommendation(
+            available_capital DECIMAL,
+            risk_tolerance VARCHAR DEFAULT ''moderate'',
+            risk_score DECIMAL DEFAULT 50,
+            max_leverage DECIMAL DEFAULT 1.0
+        ) RETURNS DECIMAL AS $func$
+        DECLARE
+            risk_multiplier DECIMAL;
+            leverage_factor DECIMAL;
+        BEGIN
+            -- Determine risk multiplier based on tolerance
+            risk_multiplier := CASE risk_tolerance
+                WHEN ''conservative'' THEN 0.1
+                WHEN ''moderate'' THEN 0.2
+                WHEN ''aggressive'' THEN 0.4
+                ELSE 0.2
+            END;
+            
+            -- Adjust for risk score (higher risk = smaller position)
+            risk_multiplier := risk_multiplier * (100 - risk_score) / 100.0;
+            
+            -- Apply leverage factor
+            leverage_factor := LEAST(max_leverage, 3.0); -- Cap at 3x for safety
+            
+            RETURN available_capital * risk_multiplier * leverage_factor;
+        END;
+        $func$ LANGUAGE plpgsql IMMUTABLE;';
+    ELSE
+        -- Function exists, skip creation to avoid ownership issues
+        NULL;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore ownership errors
+        NULL;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$;
 
--- Create trigger to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+-- Create trigger to update updated_at timestamp (with ownership check)
+DO $$
 BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
+        EXECUTE '
+        CREATE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $func$
+        BEGIN
+            NEW.updated_at = NOW();
+            RETURN NEW;
+        END;
+        $func$ LANGUAGE plpgsql;';
+    ELSE
+        -- Function exists, skip creation to avoid ownership issues
+        NULL;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore ownership errors
+        NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-CREATE TRIGGER update_futures_arbitrage_strategies_updated_at
-    BEFORE UPDATE ON futures_arbitrage_strategies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- Create trigger with existence check
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_futures_arbitrage_strategies_updated_at') THEN
+        EXECUTE '
+        CREATE TRIGGER update_futures_arbitrage_strategies_updated_at
+            BEFORE UPDATE ON futures_arbitrage_strategies
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore trigger creation errors
+        NULL;
+END;
+$$;
 
 -- Grant permissions to application roles
 GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_opportunities TO authenticated;
@@ -324,8 +378,34 @@ COMMENT ON TABLE futures_arbitrage_executions IS 'Logs of actual arbitrage strat
 COMMENT ON VIEW active_futures_arbitrage_opportunities IS 'Active opportunities with quality and urgency classifications';
 COMMENT ON VIEW futures_arbitrage_market_summary IS 'Real-time market summary for futures arbitrage conditions';
 
-COMMENT ON FUNCTION calculate_futures_arbitrage_apy IS 'Calculates annualized percentage yield from funding rates';
-COMMENT ON FUNCTION calculate_position_size_recommendation IS 'Recommends position size based on capital, risk tolerance, and market conditions';
+-- Add comments for functions (with ownership check)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid 
+               WHERE n.nspname = 'public' AND p.proname = 'calculate_futures_arbitrage_apy' 
+               AND pg_has_role(current_user, p.proowner, 'USAGE')) THEN
+        EXECUTE 'COMMENT ON FUNCTION calculate_futures_arbitrage_apy IS ''Calculates annualized percentage yield from funding rates''';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore ownership errors
+        NULL;
+END;
+$$;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid 
+               WHERE n.nspname = 'public' AND p.proname = 'calculate_position_size_recommendation' 
+               AND pg_has_role(current_user, p.proowner, 'USAGE')) THEN
+        EXECUTE 'COMMENT ON FUNCTION calculate_position_size_recommendation IS ''Recommends position size based on capital, risk tolerance, and market conditions''';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore ownership errors
+        NULL;
+END;
+$$;
 
 -- Insert initial configuration data
 INSERT INTO system_config (config_key, config_value, description) VALUES 
@@ -339,5 +419,7 @@ ON CONFLICT (config_key) DO UPDATE SET
     updated_at = NOW();
 
 -- Migration completion
-INSERT INTO schema_migrations (filename, applied) VALUES ('035_create_futures_arbitrage_tables.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
+INSERT INTO schema_migrations (filename, checksum, applied_at) VALUES ('035_create_futures_arbitrage_tables.sql', 'checksum_035', NOW())
+ON CONFLICT (filename) DO UPDATE SET 
+    checksum = EXCLUDED.checksum,
+    applied_at = NOW();

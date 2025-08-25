@@ -41,11 +41,13 @@ test: ## Run tests across all languages
 	go test -v ./...
 	@# Run TypeScript/JavaScript tests in ccxt-service
 	@if [ -d "ccxt-service" ]; then \
-		cd ccxt-service && pnpm test 2>/dev/null || (echo "$(YELLOW)No pnpm test script found$(NC)" && npm test 2>/dev/null || true); \
+		cd ccxt-service && bun test 2>/dev/null || true; \
 	fi
 	@# Run shell script tests if available
 	@if [ -f "scripts/test.sh" ]; then \
 		bash scripts/test.sh; \
+	else \
+		true; \
 	fi
 
 test-coverage: ## Run tests with coverage report
@@ -53,6 +55,11 @@ test-coverage: ## Run tests with coverage report
 	go test -v -coverprofile=coverage.out ./cmd/... ./internal/... ./pkg/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
+
+# E2E trace validation script (requires SigNoz collector running)
+test-traces: ## Verify OTLP traces end-to-end using Bun script
+	@echo "$(GREEN)Running OTLP traces validation script...$(NC)"
+	bun run ./test-traces-bun.ts
 
 lint: ## Run linter across all languages
 	@echo "$(GREEN)Running linter across all languages...$(NC)"
@@ -92,7 +99,7 @@ fmt: ## Format code across all languages
 
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
-	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
+	@if [ "$$([ -n "$(shell gofmt -s -l .)" ] && echo 1 || echo 0)" -eq 1 ]; then \
 		echo "$(RED)The following files are not formatted:$(NC)"; \
 		gofmt -s -l .; \
 		exit 1; \
@@ -309,6 +316,64 @@ down-orchestrated: ## Stop all services gracefully with orchestrated shutdown
 	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) down 2>/dev/null || true
 	@echo "$(GREEN)All services stopped$(NC)"
 
+## Observability (SigNoz)
+observability-deploy: ## Deploy SigNoz observability stack
+	@echo "$(GREEN)Deploying SigNoz observability stack...$(NC)"
+	@chmod +x ./observability/scripts/deploy.sh
+	@./observability/scripts/deploy.sh
+
+observability-health: ## Check SigNoz services health
+	@echo "$(GREEN)Checking SigNoz services health...$(NC)"
+	@chmod +x ./observability/scripts/health-check.sh
+	@./observability/scripts/health-check.sh
+
+observability-stop: ## Stop SigNoz observability stack
+	@echo "$(YELLOW)Stopping SigNoz observability stack...$(NC)"
+	cd observability && docker compose --env-file .env.observability down
+
+observability-logs: ## Show SigNoz services logs
+	@echo "$(GREEN)Showing SigNoz services logs...$(NC)"
+	cd observability && docker compose --env-file .env.observability logs -f
+
+observability-logs-query: ## Show SigNoz Query Service logs
+	@echo "$(GREEN)Showing SigNoz Query Service logs...$(NC)"
+	cd observability && docker compose --env-file .env.observability logs -f signoz-query-service
+
+observability-logs-frontend: ## Show SigNoz Frontend logs
+	@echo "$(GREEN)Showing SigNoz Frontend logs...$(NC)"
+	cd observability && docker compose --env-file .env.observability logs -f signoz-frontend
+
+observability-logs-collector: ## Show OpenTelemetry Collector logs
+	@echo "$(GREEN)Showing OpenTelemetry Collector logs...$(NC)"
+	cd observability && docker compose --env-file .env.observability logs -f signoz-otel-collector
+
+observability-logs-clickhouse: ## Show ClickHouse logs
+	@echo "$(GREEN)Showing ClickHouse logs...$(NC)"
+	cd observability && docker compose --env-file .env.observability logs -f signoz-clickhouse
+
+observability-restart: ## Restart SigNoz observability stack
+	@echo "$(YELLOW)Restarting SigNoz observability stack...$(NC)"
+	cd observability && docker compose --env-file .env.observability restart
+
+observability-clean: ## Clean up SigNoz stack (containers only)
+	@echo "$(YELLOW)Cleaning up SigNoz stack...$(NC)"
+	@chmod +x ./observability/scripts/cleanup.sh
+	@./observability/scripts/cleanup.sh
+
+observability-clean-all: ## Clean up SigNoz stack (including volumes and data)
+	@echo "$(RED)Cleaning up SigNoz stack completely...$(NC)"
+	@chmod +x ./observability/scripts/cleanup.sh
+	@./observability/scripts/cleanup.sh --volumes --data --force
+
+observability-status: ## Show SigNoz services status
+	@echo "$(GREEN)SigNoz Services Status:$(NC)"
+	cd observability && docker compose --env-file .env.observability ps
+
+observability-ui: ## Open SigNoz UI in browser
+	@echo "$(GREEN)Opening SigNoz UI...$(NC)"
+	@echo "$(BLUE)SigNoz UI: http://localhost:3301$(NC)"
+	@command -v open >/dev/null 2>&1 && open http://localhost:3301 || echo "$(YELLOW)Please open http://localhost:3301 in your browser$(NC)"
+
 ## Utilities
 clean: ## Clean build artifacts
 	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"
@@ -326,7 +391,7 @@ mod-download: ## Download Go modules
 	go mod download
 
 ## CCXT Service
-ccxt-setup: ## Setup CCXT Node.js service
+ccxt-setup: ## Setup CCXT Bun service
 	@echo "$(GREEN)Setting up CCXT service...$(NC)"
 	cd ccxt-service && bun install
 

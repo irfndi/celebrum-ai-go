@@ -130,14 +130,19 @@ CREATE INDEX IF NOT EXISTS idx_exchanges_ccxt_id ON exchanges(ccxt_id);
 CREATE INDEX IF NOT EXISTS idx_exchanges_status ON exchanges(status);
 CREATE INDEX IF NOT EXISTS idx_exchanges_active ON exchanges(is_active);
 
--- Add updated_at trigger
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+-- Add updated_at trigger (conditional creation)
+DO $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
+        CREATE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $func$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $func$ LANGUAGE plpgsql;
+    END IF;
+END $$;
 
 DROP TRIGGER IF EXISTS update_exchanges_updated_at ON exchanges;
 CREATE TRIGGER update_exchanges_updated_at BEFORE UPDATE ON exchanges

@@ -38,7 +38,7 @@ services:
     networks:
       - celebrum-network
 
-  # CCXT Service (Node.js)
+  # CCXT Service (Bun)
   ccxt-service:
     build:
       context: ./ccxt-service

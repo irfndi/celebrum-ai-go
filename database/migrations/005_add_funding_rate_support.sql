@@ -44,12 +44,11 @@ CREATE TABLE IF NOT EXISTS funding_arbitrage_opportunities (
 );
 
 -- Add Bybit exchange for funding rate arbitrage
-INSERT INTO exchanges (name, display_name, ccxt_id, countries, rate_limit, has_cors, has_spot, has_futures, has_margin, status, website_url) VALUES
-('bybit', 'Bybit', 'bybit', ARRAY['VG'], 600, true, true, true, true, 'active', 'https://www.bybit.com')
-ON CONFLICT (ccxt_id) DO UPDATE SET
-    has_futures = EXCLUDED.has_futures,
-    has_margin = EXCLUDED.has_margin,
-    status = EXCLUDED.status;
+INSERT INTO exchanges (name, api_url, is_active) VALUES
+('bybit', 'https://api.bybit.com', true)
+ON CONFLICT (name) DO UPDATE SET
+    api_url = EXCLUDED.api_url,
+    is_active = EXCLUDED.is_active;
 
 -- Add futures trading pairs for funding rate arbitrage
 INSERT INTO trading_pairs (symbol, base_currency, quote_currency, is_futures) VALUES
@@ -73,7 +72,7 @@ INSERT INTO trading_pairs (symbol, base_currency, quote_currency, is_futures) VA
 ('NEAR/USDT:USDT', 'NEAR', 'USDT', true),
 ('ALGO/USDT:USDT', 'ALGO', 'USDT', true),
 ('VET/USDT:USDT', 'VET', 'USDT', true)
-ON CONFLICT (symbol, is_futures) DO NOTHING;
+ON CONFLICT (symbol) DO NOTHING;
 
 -- Create indexes for funding rate tables
 CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_pair_time ON funding_rates(exchange_id, trading_pair_id, funding_time DESC);

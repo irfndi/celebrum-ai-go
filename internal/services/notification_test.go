@@ -188,9 +188,12 @@ func TestArbitrageOpportunity_EdgeCases(t *testing.T) {
 		ProfitAmount:  -500.0,
 		Volume:        -1.0,
 	}
+	assert.Equal(t, "TEST/USDT", negativeOpp.Symbol)
 	assert.Equal(t, -100.0, negativeOpp.BuyPrice)
 	assert.Equal(t, -50.0, negativeOpp.SellPrice)
 	assert.Equal(t, -10.0, negativeOpp.ProfitPercent)
+	assert.Equal(t, -500.0, negativeOpp.ProfitAmount)
+	assert.Equal(t, -1.0, negativeOpp.Volume)
 
 	// Test with very large values
 	largeOpp := ArbitrageOpportunity{
@@ -201,9 +204,12 @@ func TestArbitrageOpportunity_EdgeCases(t *testing.T) {
 		ProfitAmount:  100000.0,
 		Volume:        1000.0,
 	}
+	assert.Equal(t, "BTC/USDT", largeOpp.Symbol)
 	assert.Equal(t, 1000000.0, largeOpp.BuyPrice)
 	assert.Equal(t, 1100000.0, largeOpp.SellPrice)
 	assert.Equal(t, 10.0, largeOpp.ProfitPercent)
+	assert.Equal(t, 100000.0, largeOpp.ProfitAmount)
+	assert.Equal(t, 1000.0, largeOpp.Volume)
 }
 
 // Test formatArbitrageMessage with edge cases

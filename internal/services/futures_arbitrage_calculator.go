@@ -235,7 +235,7 @@ func (calc *FuturesArbitrageCalculator) calculateVolatilityScore(
 
 // calculateLiquidityScore calculates liquidity-based score
 func (calc *FuturesArbitrageCalculator) calculateLiquidityScore(
-	input models.FuturesArbitrageCalculationInput,
+	_input models.FuturesArbitrageCalculationInput,
 ) decimal.Decimal {
 	// Simplified liquidity score
 	// In a real implementation, this would consider order book depth, volume, etc.
@@ -342,7 +342,7 @@ func (calc *FuturesArbitrageCalculator) calculateMaxLossPercentage(riskTolerance
 }
 
 // calculateNextFundingTime estimates next funding time
-func (calc *FuturesArbitrageCalculator) calculateNextFundingTime(fundingInterval int) time.Time {
+func (calc *FuturesArbitrageCalculator) calculateNextFundingTime(_fundingInterval int) time.Time {
 	// Simplified calculation - in reality, this would query exchange APIs
 	now := time.Now().UTC()
 
@@ -426,7 +426,7 @@ func (calc *FuturesArbitrageCalculator) CalculateRiskMetrics(
 }
 
 // Helper methods for risk calculations
-func (calc *FuturesArbitrageCalculator) calculatePriceCorrelation(data []models.FundingRateHistoryPoint) decimal.Decimal {
+func (calc *FuturesArbitrageCalculator) calculatePriceCorrelation(_data []models.FundingRateHistoryPoint) decimal.Decimal {
 	// Simplified correlation calculation
 	return decimal.NewFromFloat(0.95) // Assume high correlation between exchanges
 }

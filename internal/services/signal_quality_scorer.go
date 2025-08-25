@@ -125,6 +125,11 @@ func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds
 
 // AssessSignalQuality performs comprehensive quality assessment
 func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error) {
+	// Stub logging for telemetry
+	_ = fmt.Sprintf("Signal quality assessment: type=%s, symbol=%s, exchanges=%v, volume=%f, profit=%f, confidence=%f",
+		input.SignalType, input.Symbol, input.Exchanges, input.Volume.InexactFloat64(),
+		input.ProfitPotential.InexactFloat64(), input.Confidence.InexactFloat64())
+
 	sqs.logger.WithFields(logrus.Fields{
 		"signal_type": input.SignalType,
 		"symbol":      input.Symbol,
@@ -163,6 +168,13 @@ func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *
 		"market_condition": marketConditionScore,
 		"multi_signal":     multiSignalScore,
 	})
+
+	// Stub logging for result tracking
+	_ = fmt.Sprintf("Quality assessment results: overall=%f, exchange=%f, volume=%f, liquidity=%f, volatility=%f, timing=%f, confidence=%f, risk=%f, freshness=%f, market=%f",
+		overallScore.InexactFloat64(), exchangeScore.InexactFloat64(), volumeScore.InexactFloat64(),
+		liquidityScore.InexactFloat64(), volatilityScore.InexactFloat64(), timingScore.InexactFloat64(),
+		confidenceScore.InexactFloat64(), riskScore.InexactFloat64(), dataFreshnessScore.InexactFloat64(),
+		marketConditionScore.InexactFloat64())
 
 	return &SignalQualityMetrics{
 		OverallScore:         overallScore,
@@ -575,7 +587,7 @@ func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Cont
 }
 
 // fetchExchangeStatistics retrieves exchange statistics from database
-func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (map[string]*ExchangeMetrics, error) {
+func (sqs *SignalQualityScorer) fetchExchangeStatistics(_ctx context.Context) (map[string]*ExchangeMetrics, error) {
 	// This would typically query the database for exchange performance metrics
 	// For now, we'll return some default values
 	stats := map[string]*ExchangeMetrics{

@@ -154,6 +154,14 @@ monitoring:
     enabled: true
     path: /metrics
 
+# Telemetry configuration for OpenTelemetry
+telemetry:
+  enabled: true
+  otlp_endpoint: http://localhost:4318
+  service_name: celebrum-ai-go
+  service_version: 1.0.0
+  log_level: info # debug, info, warn, error
+
 # Feature flags
 features:
   telegram_bot: true

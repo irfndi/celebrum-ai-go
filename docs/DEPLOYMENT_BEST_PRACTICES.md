@@ -44,7 +44,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.25'
           
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -56,7 +56,7 @@ jobs:
       - name: Run tests
         run: |
           make test
-          cd ccxt-service && npm ci && npm test
+          cd ccxt-service && bun install --frozen-lockfile && bun test
           
       - name: Build Docker images
         run: |

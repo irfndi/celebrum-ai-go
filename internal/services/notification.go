@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+
+	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,9 +24,10 @@ import (
 )
 
 type NotificationService struct {
-	db    *database.PostgresDB
-	redis *database.RedisClient
-	bot   *bot.Bot
+	db     *database.PostgresDB
+	redis  *database.RedisClient
+	bot    *bot.Bot
+	logger *slog.Logger
 }
 
 type ArbitrageOpportunity struct {
@@ -75,9 +78,10 @@ func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient
 	}
 
 	return &NotificationService{
-		db:    db,
-		redis: redis,
-		bot:   telegramBot,
+		db:     db,
+		redis:  redis,
+		bot:    telegramBot,
+		logger: telemetry.Logger(),
 	}
 }
 
@@ -91,7 +95,7 @@ func (ns *NotificationService) PublishOpportunityUpdate(ctx context.Context, opp
 
 	// Note: Redis pub/sub would require additional Redis client methods
 	// For now, we'll use the cache mechanism as the primary distribution method
-	log.Printf("Would publish %d opportunities to Redis channel '%s'", len(opportunities), channel)
+	telemetry.Logger().Info("Would publish opportunities to Redis channel", "opportunity_count", len(opportunities), "channel", channel)
 }
 
 // GetCacheStats returns statistics about Redis cache usage
@@ -135,7 +139,7 @@ func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context,
 	}
 
 	if len(users) == 0 {
-		log.Printf("No eligible users found for arbitrage notifications")
+		telemetry.Logger().Info("No eligible users found for arbitrage notifications")
 		return nil
 	}
 
@@ -159,24 +163,23 @@ func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context,
 		// Send true arbitrage opportunities
 		if len(arbitrageOpps) > 0 {
 			if err := ns.sendArbitrageAlert(ctx, user, arbitrageOpps); err != nil {
-				log.Printf("Failed to send arbitrage alert to user %s: %v", user.ID, err)
+				telemetry.Logger().Error("Failed to send arbitrage alert", "user_id", user.ID, "error", err)
 			} else {
-				log.Printf("Sent arbitrage alert to user %s", user.ID)
+				telemetry.Logger().Info("Sent arbitrage alert", "user_id", user.ID)
 			}
 		}
 
 		// Send technical analysis opportunities (if any)
 		if len(technicalOpps) > 0 {
 			if err := ns.sendArbitrageAlert(ctx, user, technicalOpps); err != nil {
-				log.Printf("Failed to send technical alert to user %s: %v", user.ID, err)
+				telemetry.Logger().Error("Failed to send technical alert", "user_id", user.ID, "error", err)
 			} else {
-				log.Printf("Sent technical alert to user %s", user.ID)
+				telemetry.Logger().Info("Sent technical alert", "user_id", user.ID)
 			}
 		}
 	}
 
-	log.Printf("Sent notifications to %d users: %d arbitrage, %d technical opportunities",
-		len(users), len(arbitrageOpps), len(technicalOpps))
+	telemetry.Logger().Info("Sent notifications", "user_count", len(users), "arbitrage_opportunities", len(arbitrageOpps), "technical_opportunities", len(technicalOpps))
 	return nil
 }
 
@@ -189,14 +192,14 @@ func (ns *NotificationService) cacheArbitrageOpportunities(ctx context.Context, 
 	cacheKey := "arbitrage_opportunities:latest"
 	oppsJSON, err := json.Marshal(opportunities)
 	if err != nil {
-		log.Printf("Failed to marshal opportunities for caching: %v", err)
+		telemetry.Logger().Error("Failed to marshal opportunities for caching", "error", err)
 		return
 	}
 
 	if err := ns.redis.Set(ctx, cacheKey, string(oppsJSON), 30*time.Second); err != nil {
-		log.Printf("Failed to cache arbitrage opportunities: %v", err)
+		telemetry.Logger().Error("Failed to cache arbitrage opportunities", "error", err)
 	} else {
-		log.Printf("Cached %d arbitrage opportunities in Redis for 30 seconds", len(opportunities))
+		telemetry.Logger().Info("Cached arbitrage opportunities in Redis", "opportunity_count", len(opportunities), "ttl_seconds", 30)
 	}
 }
 
@@ -209,14 +212,14 @@ func (ns *NotificationService) CacheMarketData(ctx context.Context, exchange str
 	cacheKey := fmt.Sprintf("market_data:%s", exchange)
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Failed to marshal market data for caching: %v", err)
+		telemetry.Logger().Error("Failed to marshal market data for caching", "error", err)
 		return
 	}
 
 	if err := ns.redis.Set(ctx, cacheKey, string(dataJSON), 10*time.Second); err != nil {
-		log.Printf("Failed to cache market data for %s: %v", exchange, err)
+		telemetry.Logger().Error("Failed to cache market data", "exchange", exchange, "error", err)
 	} else {
-		log.Printf("Cached market data for %s in Redis for 10 seconds", exchange)
+		telemetry.Logger().Info("Cached market data in Redis", "exchange", exchange, "ttl_seconds", 10)
 	}
 }
 
@@ -236,7 +239,7 @@ func (ns *NotificationService) GetCachedMarketData(ctx context.Context, exchange
 		return fmt.Errorf("failed to unmarshal cached market data: %w", err)
 	}
 
-	log.Printf("Retrieved cached market data for %s from Redis", exchange)
+	telemetry.Logger().Info("Retrieved cached market data from Redis", "exchange", exchange)
 	return nil
 }
 
@@ -248,9 +251,9 @@ func (ns *NotificationService) InvalidateUserCache(ctx context.Context) {
 
 	cacheKey := "eligible_users:arbitrage"
 	if err := ns.redis.Delete(ctx, cacheKey); err != nil {
-		log.Printf("Failed to invalidate user cache: %v", err)
+		telemetry.Logger().Error("Failed to invalidate user cache", "error", err)
 	} else {
-		log.Printf("Invalidated eligible users cache")
+		telemetry.Logger().Info("Invalidated eligible users cache")
 	}
 }
 
@@ -262,9 +265,9 @@ func (ns *NotificationService) InvalidateOpportunityCache(ctx context.Context) {
 
 	cacheKey := "arbitrage_opportunities:latest"
 	if err := ns.redis.Delete(ctx, cacheKey); err != nil {
-		log.Printf("Failed to invalidate opportunity cache: %v", err)
+		telemetry.Logger().Error("Failed to invalidate opportunity cache", "error", err)
 	} else {
-		log.Printf("Invalidated arbitrage opportunities cache")
+		telemetry.Logger().Info("Invalidated arbitrage opportunities cache")
 	}
 }
 
@@ -445,11 +448,12 @@ func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userMode
 		cachedData, err := ns.redis.Get(ctx, cacheKey)
 		if err == nil && cachedData != "" {
 			var users []userModels.User
-			if err := json.Unmarshal([]byte(cachedData), &users); err == nil {
-				log.Printf("Retrieved %d eligible users from Redis cache", len(users))
+			unmarshalErr := json.Unmarshal([]byte(cachedData), &users)
+			if unmarshalErr == nil {
+				ns.logger.Info("Retrieved eligible users from Redis cache", "count", len(users))
 				return users, nil
 			}
-			log.Printf("Failed to unmarshal cached users: %v", err)
+			ns.logger.Error("Failed to unmarshal cached users", "error", unmarshalErr)
 		}
 	}
 
@@ -478,7 +482,7 @@ func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userMode
 	for rows.Next() {
 		var user userModels.User
 		if err := rows.Scan(&user.ID, &user.Email, &user.TelegramChatID, &user.SubscriptionTier, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			log.Printf("Failed to scan user row: %v", err)
+			ns.logger.Error("Failed to scan user row", "error", err)
 			continue
 		}
 		users = append(users, user)
@@ -488,13 +492,13 @@ func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userMode
 	if ns.redis != nil && len(users) > 0 {
 		usersJSON, err := json.Marshal(users)
 		if err == nil {
-			if err := ns.redis.Set(ctx, cacheKey, string(usersJSON), 5*time.Minute); err != nil {
-				log.Printf("Failed to cache eligible users: %v", err)
+			if setErr := ns.redis.Set(ctx, cacheKey, string(usersJSON), 5*time.Minute); setErr != nil {
+				ns.logger.Error("Failed to cache eligible users", "error", setErr)
 			} else {
-				log.Printf("Cached %d eligible users in Redis for 5 minutes", len(users))
+				ns.logger.Info("Cached eligible users in Redis", "count", len(users), "ttl_minutes", 5)
 			}
 		} else {
-			log.Printf("Failed to marshal users for caching: %v", err)
+			ns.logger.Error("Failed to marshal users for caching", "error", err)
 		}
 	}
 
@@ -514,13 +518,13 @@ func (ns *NotificationService) checkRateLimit(ctx context.Context, userID string
 
 	// Remove old entries (older than 1 minute)
 	if err := ns.redis.Client.ZRemRangeByScore(ctx, rateKey, "0", fmt.Sprintf("%d", oneMinuteAgo)).Err(); err != nil {
-		log.Printf("Failed to clean old rate limit entries for user %s: %v", userID, err)
+		ns.logger.Error("Failed to clean old rate limit entries", "user_id", userID, "error", err)
 	}
 
 	// Count current notifications in the last minute
 	count, err := ns.redis.Client.ZCard(ctx, rateKey).Result()
 	if err != nil {
-		log.Printf("Failed to get rate limit count for user %s: %v", userID, err)
+		ns.logger.Error("Failed to get rate limit count", "user_id", userID, "error", err)
 		return true, nil // Allow if Redis operation fails
 	}
 
@@ -534,12 +538,12 @@ func (ns *NotificationService) checkRateLimit(ctx context.Context, userID string
 		Score:  float64(now),
 		Member: fmt.Sprintf("%d", now),
 	}).Err(); err != nil {
-		log.Printf("Failed to add rate limit entry for user %s: %v", userID, err)
+		ns.logger.Error("Failed to add rate limit entry", "user_id", userID, "error", err)
 	}
 
 	// Set expiration for the key (2 minutes to be safe)
 	if err := ns.redis.Client.Expire(ctx, rateKey, 2*time.Minute).Err(); err != nil {
-		log.Printf("Failed to set expiration for rate limit key %s: %v", rateKey, err)
+		ns.logger.Error("Failed to set expiration for rate limit key", "key", rateKey, "error", err)
 	}
 
 	return true, nil
@@ -593,7 +597,7 @@ func (ns *NotificationService) setCachedMessage(ctx context.Context, msgType, ha
 
 	cacheKey := fmt.Sprintf("msg_cache:%s:%s", msgType, hash)
 	if err := ns.redis.Set(ctx, cacheKey, message, 5*time.Minute); err != nil {
-		log.Printf("Failed to cache message for key %s: %v", cacheKey, err)
+		ns.logger.Error("Failed to cache message", "key", cacheKey, "error", err)
 	}
 }
 
@@ -606,10 +610,10 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
-		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+		ns.logger.Error("Rate limit check failed", "user_id", user.ID, "error", err)
 	}
 	if !allowed {
-		log.Printf("Rate limit exceeded for user %s, skipping notification", user.ID)
+		ns.logger.Info("Rate limit exceeded, skipping notification", "user_id", user.ID)
 		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
 	}
 
@@ -625,12 +629,12 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 	var message string
 	if cachedMsg, found := ns.getCachedMessage(ctx, "arbitrage", oppHash); found {
 		message = cachedMsg
-		log.Printf("Using cached arbitrage message for hash %s", oppHash[:8])
+		ns.logger.Info("Using cached arbitrage message", "hash", oppHash[:8])
 	} else {
 		// Format the alert message and cache it
 		message = ns.formatArbitrageMessage(opportunities)
 		ns.setCachedMessage(ctx, "arbitrage", oppHash, message)
-		log.Printf("Formatted and cached new arbitrage message for hash %s", oppHash[:8])
+		ns.logger.Info("Formatted and cached new arbitrage message", "hash", oppHash[:8])
 	}
 
 	// Send the message
@@ -646,7 +650,7 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 
 	// Log the notification
 	if err := ns.logNotification(ctx, user.ID, "telegram", "arbitrage_alert"); err != nil {
-		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+		ns.logger.Error("Failed to log notification", "user_id", user.ID, "error", err)
 	}
 
 	return nil
@@ -661,10 +665,10 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
-		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+		ns.logger.Error("Rate limit check failed", "user_id", user.ID, "error", err)
 	}
 	if !allowed {
-		log.Printf("Rate limit exceeded for user %s, skipping enhanced arbitrage notification", user.ID)
+		ns.logger.Info("Rate limit exceeded, skipping enhanced arbitrage notification", "user_id", user.ID)
 		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
 	}
 
@@ -680,12 +684,12 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 	var message string
 	if cachedMsg, found := ns.getCachedMessage(ctx, "enhanced_arbitrage", signalHash); found {
 		message = cachedMsg
-		log.Printf("Using cached enhanced arbitrage message for hash %s", signalHash[:8])
+		ns.logger.Info("Using cached enhanced arbitrage message", "hash", signalHash[:8])
 	} else {
 		// Format the enhanced alert message and cache it
 		message = ns.formatEnhancedArbitrageMessage(signal)
 		ns.setCachedMessage(ctx, "enhanced_arbitrage", signalHash, message)
-		log.Printf("Formatted and cached new enhanced arbitrage message for hash %s", signalHash[:8])
+		ns.logger.Info("Formatted and cached new enhanced arbitrage message", "hash", signalHash[:8])
 	}
 
 	// Send the message
@@ -700,7 +704,7 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 
 	// Log the notification
 	if err := ns.logNotification(ctx, user.ID, "telegram", "enhanced_arbitrage_alert"); err != nil {
-		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+		ns.logger.Error("Failed to log notification", "user_id", user.ID, "error", err)
 	}
 
 	return nil
@@ -715,7 +719,7 @@ func (ns *NotificationService) NotifyEnhancedArbitrageSignals(ctx context.Contex
 	}
 
 	if len(users) == 0 {
-		log.Printf("No eligible users found for enhanced arbitrage notifications")
+		ns.logger.Info("No eligible users found for enhanced arbitrage notifications")
 		return nil
 	}
 
@@ -728,7 +732,7 @@ func (ns *NotificationService) NotifyEnhancedArbitrageSignals(ctx context.Contex
 	}
 
 	if len(arbitrageSignals) == 0 {
-		log.Printf("No arbitrage signals found to notify")
+		ns.logger.Info("No arbitrage signals found to notify")
 		return nil
 	}
 
@@ -736,14 +740,14 @@ func (ns *NotificationService) NotifyEnhancedArbitrageSignals(ctx context.Contex
 	for _, user := range users {
 		for _, signal := range arbitrageSignals {
 			if err := ns.sendEnhancedArbitrageAlert(ctx, user, signal); err != nil {
-				log.Printf("Failed to send enhanced arbitrage alert to user %s: %v", user.ID, err)
+				ns.logger.Error("Failed to send enhanced arbitrage alert", "user_id", user.ID, "error", err)
 			} else {
-				log.Printf("Sent enhanced arbitrage alert to user %s for %s", user.ID, signal.Symbol)
+				ns.logger.Info("Sent enhanced arbitrage alert", "user_id", user.ID, "symbol", signal.Symbol)
 			}
 		}
 	}
 
-	log.Printf("Sent enhanced arbitrage notifications to %d users: %d signals", len(users), len(arbitrageSignals))
+	ns.logger.Info("Sent enhanced arbitrage notifications", "user_count", len(users), "signal_count", len(arbitrageSignals))
 	return nil
 }
 
@@ -940,9 +944,9 @@ func (ns *NotificationService) CheckUserNotificationPreferences(ctx context.Cont
 			cacheValue = "true"
 		}
 		if err := ns.redis.Set(ctx, cacheKey, cacheValue, 5*time.Minute); err != nil {
-			log.Printf("Failed to cache user preferences for user %s: %v", userID, err)
+			ns.logger.Error("Failed to cache user preferences", "user_id", userID, "error", err)
 		} else {
-			log.Printf("Cached user preferences for user %s: %v", userID, result)
+			ns.logger.Info("Cached user preferences", "user_id", userID, "preferences", result)
 		}
 	}
 
@@ -958,12 +962,12 @@ func (ns *NotificationService) NotifyAggregatedSignals(ctx context.Context, sign
 	}
 
 	if len(users) == 0 {
-		log.Printf("No eligible users found for aggregated signal notifications")
+		ns.logger.Info("No eligible users found for aggregated signal notifications")
 		return nil
 	}
 
 	if len(signals) == 0 {
-		log.Printf("No aggregated signals to notify")
+		ns.logger.Info("No aggregated signals to notify")
 		return nil
 	}
 
@@ -985,24 +989,24 @@ func (ns *NotificationService) NotifyAggregatedSignals(ctx context.Context, sign
 		// Send arbitrage signals
 		if len(arbitrageSignals) > 0 {
 			if err := ns.sendAggregatedArbitrageAlert(ctx, user, arbitrageSignals); err != nil {
-				log.Printf("Failed to send aggregated arbitrage alert to user %s: %v", user.ID, err)
+				ns.logger.Error("Failed to send aggregated arbitrage alert", "user_id", user.ID, "error", err)
 			} else {
-				log.Printf("Sent aggregated arbitrage alert to user %s", user.ID)
+				ns.logger.Info("Sent aggregated arbitrage alert", "user_id", user.ID)
 			}
 		}
 
 		// Send technical analysis signals
 		if len(technicalSignals) > 0 {
 			if err := ns.sendAggregatedTechnicalAlert(ctx, user, technicalSignals); err != nil {
-				log.Printf("Failed to send aggregated technical alert to user %s: %v", user.ID, err)
+				ns.logger.Error("Failed to send aggregated technical alert", "user_id", user.ID, "error", err)
 			} else {
-				log.Printf("Sent aggregated technical alert to user %s", user.ID)
+				ns.logger.Info("Sent aggregated technical alert", "user_id", user.ID)
 			}
 		}
 	}
 
-	log.Printf("Sent aggregated signal notifications to %d users: %d arbitrage, %d technical",
-		len(users), len(arbitrageSignals), len(technicalSignals))
+	ns.logger.Info("Sent aggregated signal notifications",
+		"user_count", len(users), "arbitrage_signals", len(arbitrageSignals), "technical_signals", len(technicalSignals))
 	return nil
 }
 
@@ -1015,10 +1019,10 @@ func (ns *NotificationService) sendAggregatedArbitrageAlert(ctx context.Context,
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
-		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+		ns.logger.Error("Rate limit check failed", "user_id", user.ID, "error", err)
 	}
 	if !allowed {
-		log.Printf("Rate limit exceeded for user %s, skipping aggregated arbitrage alert", user.ID)
+		ns.logger.Info("Rate limit exceeded, skipping aggregated arbitrage alert", "user_id", user.ID)
 		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
 	}
 
@@ -1034,12 +1038,12 @@ func (ns *NotificationService) sendAggregatedArbitrageAlert(ctx context.Context,
 	var message string
 	if cachedMsg, found := ns.getCachedMessage(ctx, "aggregated_arbitrage", signalsHash); found {
 		message = cachedMsg
-		log.Printf("Using cached aggregated arbitrage message for hash %s", signalsHash[:8])
+		ns.logger.Info("Using cached aggregated arbitrage message", "hash", signalsHash[:8])
 	} else {
 		// Format the aggregated arbitrage alert message and cache it
 		message = ns.formatAggregatedArbitrageMessage(signals)
 		ns.setCachedMessage(ctx, "aggregated_arbitrage", signalsHash, message)
-		log.Printf("Formatted and cached new aggregated arbitrage message for hash %s", signalsHash[:8])
+		ns.logger.Info("Formatted and cached new aggregated arbitrage message", "hash", signalsHash[:8])
 	}
 
 	// Send the message
@@ -1055,7 +1059,7 @@ func (ns *NotificationService) sendAggregatedArbitrageAlert(ctx context.Context,
 
 	// Log the notification
 	if err := ns.logNotification(ctx, user.ID, "telegram", "aggregated_arbitrage_alert"); err != nil {
-		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+		ns.logger.Error("Failed to log notification", "user_id", user.ID, "error", err)
 	}
 
 	return nil
@@ -1070,10 +1074,10 @@ func (ns *NotificationService) sendAggregatedTechnicalAlert(ctx context.Context,
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
-		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+		ns.logger.Error("Rate limit check failed", "user_id", user.ID, "error", err)
 	}
 	if !allowed {
-		log.Printf("Rate limit exceeded for user %s, skipping aggregated technical alert", user.ID)
+		ns.logger.Info("Rate limit exceeded, skipping aggregated technical alert", "user_id", user.ID)
 		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
 	}
 
@@ -1089,12 +1093,12 @@ func (ns *NotificationService) sendAggregatedTechnicalAlert(ctx context.Context,
 	var message string
 	if cachedMsg, found := ns.getCachedMessage(ctx, "aggregated_technical", signalsHash); found {
 		message = cachedMsg
-		log.Printf("Using cached aggregated technical message for hash %s", signalsHash[:8])
+		ns.logger.Info("Using cached aggregated technical message", "hash", signalsHash[:8])
 	} else {
 		// Format the aggregated technical alert message and cache it
 		message = ns.formatAggregatedTechnicalMessage(signals)
 		ns.setCachedMessage(ctx, "aggregated_technical", signalsHash, message)
-		log.Printf("Formatted and cached new aggregated technical message for hash %s", signalsHash[:8])
+		ns.logger.Info("Formatted and cached new aggregated technical message", "hash", signalsHash[:8])
 	}
 
 	// Send the message
@@ -1110,7 +1114,7 @@ func (ns *NotificationService) sendAggregatedTechnicalAlert(ctx context.Context,
 
 	// Log the notification
 	if err := ns.logNotification(ctx, user.ID, "telegram", "aggregated_technical_alert"); err != nil {
-		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+		ns.logger.Error("Failed to log notification", "user_id", user.ID, "error", err)
 	}
 
 	return nil
@@ -1119,7 +1123,7 @@ func (ns *NotificationService) sendAggregatedTechnicalAlert(ctx context.Context,
 // generateAggregatedSignalsHash generates a consistent hash for a slice of aggregated signals
 func (ns *NotificationService) generateAggregatedSignalsHash(signals []*AggregatedSignal) string {
 	h := sha256.New()
-	
+
 	// Sort signals by symbol and signal type for consistent hashing
 	sortedSignals := make([]*AggregatedSignal, len(signals))
 	copy(sortedSignals, signals)
@@ -1129,16 +1133,16 @@ func (ns *NotificationService) generateAggregatedSignalsHash(signals []*Aggregat
 		}
 		return sortedSignals[i].SignalType < sortedSignals[j].SignalType
 	})
-	
+
 	for _, signal := range sortedSignals {
-		_, _ = fmt.Fprintf(h, "%s:%s:%s:%s:%.2f", 
-			signal.Symbol, 
-			signal.SignalType, 
-			signal.Action, 
-			string(signal.Strength), 
+		_, _ = fmt.Fprintf(h, "%s:%s:%s:%s:%.2f",
+			signal.Symbol,
+			signal.SignalType,
+			signal.Action,
+			string(signal.Strength),
 			signal.Confidence.InexactFloat64())
 	}
-	
+
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
@@ -1147,28 +1151,28 @@ func (ns *NotificationService) formatAggregatedArbitrageMessage(signals []*Aggre
 	if len(signals) == 0 {
 		return "🔍 No arbitrage opportunities available"
 	}
-	
+
 	// Sort signals by profit potential (highest first)
 	sort.Slice(signals, func(i, j int) bool {
 		return signals[i].ProfitPotential.GreaterThan(signals[j].ProfitPotential)
 	})
-	
+
 	var message strings.Builder
 	message.WriteString("🚀 *Aggregated Arbitrage Opportunities*\n\n")
-	
+
 	// Limit to top 5 opportunities to keep message manageable
 	maxSignals := len(signals)
 	if maxSignals > 5 {
 		maxSignals = 5
 	}
-	
+
 	for i, signal := range signals[:maxSignals] {
 		message.WriteString(fmt.Sprintf("*%d. %s*\n", i+1, signal.Symbol))
 		message.WriteString(fmt.Sprintf("💰 Profit: %.2f%%\n", signal.ProfitPotential.InexactFloat64()))
 		message.WriteString(fmt.Sprintf("🎯 Confidence: %.1f%%\n", signal.Confidence.InexactFloat64()))
 		message.WriteString(fmt.Sprintf("⚡ Action: %s\n", strings.ToUpper(signal.Action)))
 		message.WriteString(fmt.Sprintf("🏪 Exchanges: %s\n", strings.Join(signal.Exchanges, ", ")))
-		
+
 		// Add metadata if available
 		if signal.Metadata != nil {
 			if buyPrice, ok := signal.Metadata["buy_price"]; ok {
@@ -1178,18 +1182,18 @@ func (ns *NotificationService) formatAggregatedArbitrageMessage(signals []*Aggre
 				message.WriteString(fmt.Sprintf("📉 Sell Price: %v\n", sellPrice))
 			}
 		}
-		
+
 		message.WriteString("\n")
 	}
-	
+
 	if len(signals) > maxSignals {
 		message.WriteString(fmt.Sprintf("... and %d more opportunities\n\n", len(signals)-maxSignals))
 	}
-	
+
 	message.WriteString("⏰ Generated: ")
 	message.WriteString(time.Now().Format("15:04:05 MST"))
 	message.WriteString("\n\n⚠️ *Trade at your own risk*")
-	
+
 	return message.String()
 }
 
@@ -1198,35 +1202,35 @@ func (ns *NotificationService) formatAggregatedTechnicalMessage(signals []*Aggre
 	if len(signals) == 0 {
 		return "📊 No technical analysis signals available"
 	}
-	
+
 	// Sort signals by strength (highest first)
 	sort.Slice(signals, func(i, j int) bool {
 		return string(signals[i].Strength) > string(signals[j].Strength)
 	})
-	
+
 	var message strings.Builder
 	message.WriteString("📊 *Aggregated Technical Analysis*\n\n")
-	
+
 	// Limit to top 5 signals to keep message manageable
 	maxSignals := len(signals)
 	if maxSignals > 5 {
 		maxSignals = 5
 	}
-	
+
 	for i, signal := range signals[:maxSignals] {
 		message.WriteString(fmt.Sprintf("*%d. %s*\n", i+1, signal.Symbol))
 		message.WriteString(fmt.Sprintf("📈 Signal: %s\n", strings.ToUpper(signal.Action)))
 		message.WriteString(fmt.Sprintf("💪 Strength: %s\n", signal.Strength))
 		message.WriteString(fmt.Sprintf("🎯 Confidence: %.1f%%\n", signal.Confidence.InexactFloat64()))
 		message.WriteString(fmt.Sprintf("⚠️ Risk: %.2f%%\n", signal.RiskLevel.InexactFloat64()))
-		
+
 		// Add indicators if available
 		if len(signal.Indicators) > 0 {
 			message.WriteString("📊 Indicators: ")
 			message.WriteString(strings.Join(signal.Indicators, ", "))
 			message.WriteString("\n")
 		}
-		
+
 		// Add metadata if available
 		if signal.Metadata != nil {
 			if entryPrice, ok := signal.Metadata["entry_price"]; ok {
@@ -1239,18 +1243,18 @@ func (ns *NotificationService) formatAggregatedTechnicalMessage(signals []*Aggre
 				message.WriteString(fmt.Sprintf("🎯 Target: %v\n", target))
 			}
 		}
-		
+
 		message.WriteString("\n")
 	}
-	
+
 	if len(signals) > maxSignals {
 		message.WriteString(fmt.Sprintf("... and %d more signals\n\n", len(signals)-maxSignals))
 	}
-	
+
 	message.WriteString("⏰ Generated: ")
 	message.WriteString(time.Now().Format("15:04:05 MST"))
 	message.WriteString("\n\n⚠️ *Trade at your own risk*")
-	
+
 	return message.String()
 }
 
@@ -1263,20 +1267,20 @@ func (ns *NotificationService) NotifyTechnicalSignals(ctx context.Context, signa
 	}
 
 	if len(users) == 0 {
-		log.Printf("No eligible users found for technical signal notifications")
+		ns.logger.Info("No eligible users found for technical signal notifications")
 		return nil
 	}
 
 	// Send notifications to each user
 	for _, user := range users {
 		if err := ns.sendTechnicalAlert(ctx, user, signals); err != nil {
-			log.Printf("Failed to send technical alert to user %s: %v", user.ID, err)
+			ns.logger.Error("Failed to send technical alert", "user_id", user.ID, "error", err)
 		} else {
-			log.Printf("Sent technical alert to user %s", user.ID)
+			ns.logger.Info("Sent technical alert", "user_id", user.ID)
 		}
 	}
 
-	log.Printf("Sent technical signal notifications to %d users: %d signals", len(users), len(signals))
+	ns.logger.Info("Sent technical signal notifications", "user_count", len(users), "signal_count", len(signals))
 	return nil
 }
 
@@ -1289,10 +1293,10 @@ func (ns *NotificationService) sendTechnicalAlert(ctx context.Context, user user
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
-		log.Printf("Rate limit check failed for user %s: %v", user.ID, err)
+		ns.logger.Error("Rate limit check failed", "user_id", user.ID, "error", err)
 	}
 	if !allowed {
-		log.Printf("Rate limit exceeded for user %s, skipping technical alert", user.ID)
+		ns.logger.Info("Rate limit exceeded, skipping technical alert", "user_id", user.ID)
 		return fmt.Errorf("rate limit exceeded for user %s", user.ID)
 	}
 
@@ -1308,12 +1312,12 @@ func (ns *NotificationService) sendTechnicalAlert(ctx context.Context, user user
 	var message string
 	if cachedMsg, found := ns.getCachedMessage(ctx, "technical", signalsHash); found {
 		message = cachedMsg
-		log.Printf("Using cached technical message for hash %s", signalsHash[:8])
+		ns.logger.Info("Using cached technical message", "hash", signalsHash[:8])
 	} else {
 		// Format the technical alert message and cache it
 		message = ns.formatTechnicalSignalMessage(signals)
 		ns.setCachedMessage(ctx, "technical", signalsHash, message)
-		log.Printf("Formatted and cached new technical message for hash %s", signalsHash[:8])
+		ns.logger.Info("Formatted and cached new technical message", "hash", signalsHash[:8])
 	}
 
 	// Send the message
@@ -1329,7 +1333,7 @@ func (ns *NotificationService) sendTechnicalAlert(ctx context.Context, user user
 
 	// Log the notification
 	if err := ns.logNotification(ctx, user.ID, "telegram", "technical_alert"); err != nil {
-		log.Printf("Failed to log notification for user %s: %v", user.ID, err)
+		ns.logger.Error("Failed to log notification", "user_id", user.ID, "error", err)
 	}
 
 	return nil

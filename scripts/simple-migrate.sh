@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied_at ON schema_migrations
 
 # Get applied migrations
 get_applied_migrations() {
-    execute_sql "SELECT filename FROM schema_migrations ORDER BY applied_at;" | grep -v "filename" | grep -v "^-" | grep -v "^(" | grep -v "^$" || true
+    execute_sql "SELECT filename FROM schema_migrations ORDER BY applied_at;" | grep -v "filename" | grep -v "^-" | grep -v "^(" | grep -v "^$" | sed 's/^[[:space:]]*//' || true
 }
 
 # Calculate file checksum

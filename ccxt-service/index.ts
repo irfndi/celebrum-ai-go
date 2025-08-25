@@ -1,12 +1,26 @@
+/*
+Worker utilities note (Bun >= 1.2.21):
+- For cross-thread messaging that moves large JSON, send raw strings via postMessage(jsonString)
+  instead of wrapping it inside objects/arrays (e.g., postMessage({ data: jsonString })).
+- Keep the large payload as a standalone top-level string to leverage Bun's fast path; parse on the
+  receiver only when needed (e.g., const data = JSON.parse(message)).
+- If you need metadata, consider sending a small metadata message separately, or keep the large payload
+  as a top-level string field to preserve fast-path benefits.
+*/
+// Initialize OpenTelemetry tracing first
+require('./tracing');
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 // import { compress } from 'hono/compress'; // Removed due to CompressionStream not available in Bun
 import { secureHeaders } from 'hono/secure-headers';
 import { validator } from 'hono/validator';
-import ccxt from 'ccxt';
+// Use require for CCXT to ensure all exchanges are available in test environment
+const ccxt = require('ccxt');
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type {
   HealthResponse,
   ExchangesResponse,
@@ -46,6 +60,9 @@ if (ADMIN_API_KEY.length < 32) {
 
 // Initialize Hono app
 const app = new Hono();
+
+// Initialize OpenTelemetry tracer
+const tracer = trace.getTracer('ccxt-service', '1.0.0');
 
 // Middleware
 app.use('*', secureHeaders());
@@ -246,81 +263,201 @@ console.log(`Active exchanges:`, Object.keys(exchanges).sort().join(', '));
 
 // Health check endpoint
 app.get('/health', (c) => {
-  const response: HealthResponse = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    service: 'ccxt-service',
-    version: '1.0.0'
-  };
-  return c.json(response);
+  return tracer.startActiveSpan('ccxt-service.health', {
+    attributes: {
+      'http.method': 'GET',
+      'http.url': '/health',
+      'service.name': 'ccxt-service',
+      'handler.name': 'health_check'
+    }
+  }, (span) => {
+    try {
+      span.addEvent('health_check_started');
+      
+      const response: HealthResponse = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'ccxt-service',
+        version: '1.0.0'
+      };
+      
+      span.setAttributes({
+        'health.status': response.status,
+        'health.service': response.service,
+        'health.version': response.version
+      });
+      
+      span.addEvent('health_check_completed', {
+        'response.status': response.status
+      });
+      
+      span.setStatus({ code: SpanStatusCode.OK });
+      return c.json(response);
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ 
+        code: SpanStatusCode.ERROR, 
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 });
 
 // Get supported exchanges
 app.get('/api/exchanges', (c) => {
-  try {
-    const exchangeList = Object.keys(exchanges).map(id => ({
-      id,
-      name: exchanges[id].name || id,
-      countries: (exchanges[id].countries || []).filter((country): country is string => country !== undefined),
-      urls: exchanges[id].urls || {}
-    }));
-    
-    const response: ExchangesResponse = { exchanges: exchangeList };
-    return c.json(response);
-  } catch (error) {
-    const errorResponse: ErrorResponse = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    };
-    return c.json(errorResponse, 500);
-  }
+  return tracer.startActiveSpan('ccxt-service.get_exchanges', {
+    attributes: {
+      'http.method': 'GET',
+      'http.url': '/api/exchanges',
+      'service.name': 'ccxt-service',
+      'handler.name': 'get_exchanges'
+    }
+  }, (span) => {
+    try {
+      span.addEvent('exchanges_fetch_started');
+      
+      // Return array of exchange IDs as strings for test compatibility
+      const exchangeList = Object.keys(exchanges);
+      
+      span.setAttributes({
+        'exchanges.count': exchangeList.length,
+        'exchanges.active': Object.keys(exchanges).length
+      });
+      
+      const response: ExchangesResponse = { exchanges: exchangeList };
+      
+      span.addEvent('exchanges_fetch_completed', {
+        'response.exchanges_count': exchangeList.length
+      });
+      
+      span.setStatus({ code: SpanStatusCode.OK });
+      return c.json(response);
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ 
+        code: SpanStatusCode.ERROR, 
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      
+      const errorResponse: ErrorResponse = {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 500);
+    } finally {
+      span.end();
+    }
+  });
 });
 
 // Get ticker data
-app.get('/api/ticker/:exchange/:symbol', async (c) => {
-  try {
-    const exchange = c.req.param('exchange');
-    const symbol = c.req.param('symbol');
-    
-    if (!exchanges[exchange]) {
-      const errorResponse: ErrorResponse = {
-        error: 'Exchange not supported',
-        timestamp: new Date().toISOString()
-      };
-      return c.json(errorResponse, 400);
+app.get('/api/ticker/:exchange/*', async (c) => {
+  const exchange = c.req.param('exchange');
+  const pathParts = c.req.path.split('/');
+  const symbol = pathParts.slice(4).join('/'); // Extract everything after /api/ticker/{exchange}/
+  
+  return tracer.startActiveSpan('ccxt-service.get_ticker', {
+    attributes: {
+      'http.method': 'GET',
+      'http.url': `/api/ticker/${exchange}/${symbol}`,
+      'service.name': 'ccxt-service',
+      'handler.name': 'get_ticker'
     }
-
-    // Add retry logic for Binance
-    let retries = exchange === 'binance' ? 3 : 1;
-    let lastError;
-    
-    for (let i = 0; i < retries; i++) {
-      try {
-        const ticker = await exchanges[exchange].fetchTicker(symbol);
-        const response: TickerResponse = {
-          exchange,
-          symbol,
-          ticker,
+  }, async (span) => {
+    try {
+      
+      span.setAttributes({
+        'ticker.exchange': exchange,
+        'ticker.symbol': symbol
+      });
+      
+      span.addEvent('ticker_fetch_started', {
+        'exchange': exchange,
+        'symbol': symbol
+      });
+      
+      if (!exchanges[exchange]) {
+        span.addEvent('exchange_not_supported', { 'exchange': exchange });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: 'Exchange not supported' });
+        
+        const errorResponse: ErrorResponse = {
+          error: 'Exchange not supported',
           timestamp: new Date().toISOString()
         };
-        
-        return c.json(response);
-      } catch (error) {
-        lastError = error;
-        if (i < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+        return c.json(errorResponse, 400);
+      }
+
+      // Add retry logic for Binance
+      let retries = exchange === 'binance' ? 3 : 1;
+      let lastError;
+      
+      span.setAttributes({
+        'ticker.retries_max': retries
+      });
+      
+      for (let i = 0; i < retries; i++) {
+        try {
+          span.addEvent('ticker_fetch_attempt', {
+            'attempt': i + 1,
+            'max_retries': retries
+          });
+          
+          const ticker = await exchanges[exchange].fetchTicker(symbol);
+          
+          span.setAttributes({
+            'ticker.price': ticker.last || 0,
+            'ticker.volume': ticker.baseVolume || 0,
+            'ticker.bid': ticker.bid || 0,
+            'ticker.ask': ticker.ask || 0
+          });
+          
+          const response: TickerResponse = {
+            exchange,
+            symbol,
+            ticker,
+            timestamp: new Date().toISOString()
+          };
+          
+          span.addEvent('ticker_fetch_completed', {
+            'price': ticker.last,
+            'volume': ticker.baseVolume
+          });
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return c.json(response);
+        } catch (error) {
+          lastError = error;
+          span.addEvent('ticker_fetch_retry', {
+            'attempt': i + 1,
+            'error': error instanceof Error ? error.message : 'Unknown error'
+          });
+          
+          if (i < retries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+          }
         }
       }
+      
+      throw lastError;
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ 
+        code: SpanStatusCode.ERROR, 
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      
+      const errorResponse: ErrorResponse = {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 500);
+    } finally {
+      span.end();
     }
-    
-    throw lastError;
-  } catch (error) {
-    const errorResponse: ErrorResponse = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    };
-    return c.json(errorResponse, 500);
-  }
+  });
 });
 
 // Get order book
@@ -538,7 +675,7 @@ app.get('/api/funding-rates/:exchange',
             
             if (fundingRate) {
                fundingRates.push({
-                 symbol: fundingRate.symbol || symbol,
+                 symbol: symbol,
                  fundingRate: fundingRate.fundingRate || 0,
                  fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
                  nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,

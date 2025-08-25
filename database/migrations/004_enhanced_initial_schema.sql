@@ -13,10 +13,29 @@ CREATE SCHEMA IF NOT EXISTS analytics;
 CREATE SCHEMA IF NOT EXISTS audit;
 
 -- Create custom types for better data integrity
-CREATE TYPE exchange_status AS ENUM ('active', 'inactive', 'maintenance');
-CREATE TYPE order_side AS ENUM ('buy', 'sell');
-CREATE TYPE alert_type AS ENUM ('price', 'arbitrage', 'technical');
-CREATE TYPE alert_status AS ENUM ('active', 'triggered', 'expired', 'disabled');
+DO $$ BEGIN
+    CREATE TYPE exchange_status AS ENUM ('active', 'inactive', 'maintenance');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE order_side AS ENUM ('buy', 'sell');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE alert_type AS ENUM ('price', 'arbitrage', 'technical');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE alert_status AS ENUM ('active', 'triggered', 'expired', 'disabled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Users table (enhanced version)
 CREATE TABLE IF NOT EXISTS users (
@@ -156,6 +175,12 @@ CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add missing columns to existing arbitrage_opportunities table
+ALTER TABLE arbitrage_opportunities ADD COLUMN IF NOT EXISTS profit_amount DECIMAL(20, 8);
+ALTER TABLE arbitrage_opportunities ADD COLUMN IF NOT EXISTS volume DECIMAL(20, 8);
+ALTER TABLE arbitrage_opportunities ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE arbitrage_opportunities ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
 -- Technical indicators
 CREATE TABLE IF NOT EXISTS technical_indicators (
     id BIGSERIAL PRIMARY KEY,
@@ -169,6 +194,15 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add missing columns to existing technical_indicators table
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS exchange_id INTEGER REFERENCES exchanges(id);
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS indicator_name VARCHAR(50);
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS indicator_value DECIMAL(20, 8);
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS indicator_signal VARCHAR(20);
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS metadata JSONB;
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP WITH TIME ZONE;
+ALTER TABLE technical_indicators ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
 -- User alerts
 CREATE TABLE IF NOT EXISTS user_alerts (
@@ -230,21 +264,54 @@ CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DE
 CREATE INDEX IF NOT EXISTS idx_order_book_exchange_pair_timestamp ON order_book_data(exchange_id, trading_pair_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_ohlcv_exchange_pair_timeframe_timestamp ON ohlcv_data(exchange_id, trading_pair_id, timeframe, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active, detected_at DESC) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_technical_indicators_exchange_pair_timeframe ON technical_indicators(exchange_id, trading_pair_id, timeframe, timestamp DESC);
+-- Only create index if exchange_id column exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'technical_indicators' AND column_name = 'exchange_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_technical_indicators_exchange_pair_timeframe ON technical_indicators(exchange_id, trading_pair_id, timeframe, timestamp DESC);
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_user_alerts_user_active ON user_alerts(user_id, is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_alert_notifications_user_sent ON alert_notifications(user_id, sent_at DESC);
-CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_exchanges_status ON exchanges(status) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_trading_pairs_active ON trading_pairs(is_active) WHERE is_active = true;
+-- Create index on telegram_chat_id if it exists, or telegram_user_id if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'telegram_chat_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_users_telegram_chat_id ON users(telegram_chat_id) WHERE telegram_chat_id IS NOT NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'telegram_user_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
+    END IF;
+END $$;
+-- Create index on exchanges status/is_active column if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'exchanges' AND column_name = 'status') THEN
+        CREATE INDEX IF NOT EXISTS idx_exchanges_status ON exchanges(status) WHERE status = 'active';
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'exchanges' AND column_name = 'is_active') THEN
+        CREATE INDEX IF NOT EXISTS idx_exchanges_is_active ON exchanges(is_active) WHERE is_active = true;
+    END IF;
+END $$;
+-- Create index on trading_pairs is_active column if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trading_pairs' AND column_name = 'is_active') THEN
+        CREATE INDEX IF NOT EXISTS idx_trading_pairs_active ON trading_pairs(is_active) WHERE is_active = true;
+    END IF;
+END $$;
 
 -- Create triggers for updated_at timestamps
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+DO $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
+        CREATE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $func$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $func$ language 'plpgsql';
+    END IF;
+END $$;
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_exchanges_updated_at BEFORE UPDATE ON exchanges FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -299,10 +299,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_futures_arbitrage_strategies_updated_at
-    BEFORE UPDATE ON futures_arbitrage_strategies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- Create trigger only if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'update_futures_arbitrage_strategies_updated_at' 
+        AND tgrelid = 'futures_arbitrage_strategies'::regclass
+    ) THEN
+        CREATE TRIGGER update_futures_arbitrage_strategies_updated_at
+            BEFORE UPDATE ON futures_arbitrage_strategies
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
 
 -- Grant permissions to application roles
 GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_opportunities TO authenticated;
@@ -329,8 +340,31 @@ COMMENT ON TABLE futures_arbitrage_executions IS 'Logs of actual arbitrage strat
 COMMENT ON VIEW active_futures_arbitrage_opportunities IS 'Active opportunities with quality and urgency classifications';
 COMMENT ON VIEW futures_arbitrage_market_summary IS 'Real-time market summary for futures arbitrage conditions';
 
-COMMENT ON FUNCTION calculate_futures_arbitrage_apy IS 'Calculates annualized percentage yield from funding rates';
-COMMENT ON FUNCTION calculate_position_size_recommendation IS 'Recommends position size based on capital, risk tolerance, and market conditions';
+-- Add function comments with ownership checks
+DO $$
+BEGIN
+    -- Only add comments if we have permission
+    IF EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND p.proname = 'calculate_futures_arbitrage_apy'
+        AND pg_has_role(p.proowner, 'USAGE')
+    ) THEN
+        EXECUTE 'COMMENT ON FUNCTION calculate_futures_arbitrage_apy IS ''Calculates annualized percentage yield from funding rates''';
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND p.proname = 'calculate_position_size_recommendation'
+        AND pg_has_role(p.proowner, 'USAGE')
+    ) THEN
+        EXECUTE 'COMMENT ON FUNCTION calculate_position_size_recommendation IS ''Recommends position size based on capital, risk tolerance, and market conditions''';
+    END IF;
+END
+$$;
 
 -- Insert initial configuration data
 INSERT INTO system_config (config_key, config_value, description) VALUES 
@@ -343,6 +377,4 @@ ON CONFLICT (config_key) DO UPDATE SET
     config_value = EXCLUDED.config_value,
     updated_at = NOW();
 
--- Migration completion
-INSERT INTO schema_migrations (filename, applied) VALUES ('043_create_futures_arbitrage_tables.sql', true)
-ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW();
+-- Migration completion handled automatically by migration system

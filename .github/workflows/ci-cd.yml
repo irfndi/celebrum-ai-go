@@ -34,7 +34,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.25'
   NODE_VERSION: '20'
 
 jobs:
@@ -133,11 +133,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          bun-version: 1.2.21
 
       - name: Cache Go modules
         uses: actions/cache@v3
@@ -150,7 +149,7 @@ jobs:
       - name: Install dependencies
         run: |
           go mod download
-          npm ci
+          cd ccxt-service && bun install --frozen-lockfile
 
       - name: Run CI/CD integration tests
         env:

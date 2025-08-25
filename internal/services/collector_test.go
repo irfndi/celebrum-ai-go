@@ -296,11 +296,12 @@ func TestCollectorService_RestartWorker(t *testing.T) {
 }
 
 func TestWorker_Struct(t *testing.T) {
+	now := time.Now()
 	worker := &Worker{
 		Exchange:   "binance",
 		Symbols:    []string{"BTC/USDT", "ETH/USDT"},
 		Interval:   60 * time.Second,
-		LastUpdate: time.Now(),
+		LastUpdate: now,
 		IsRunning:  true,
 		ErrorCount: 0,
 		MaxErrors:  5,
@@ -309,6 +310,7 @@ func TestWorker_Struct(t *testing.T) {
 	assert.Equal(t, "binance", worker.Exchange)
 	assert.Len(t, worker.Symbols, 2)
 	assert.Equal(t, 60*time.Second, worker.Interval)
+	assert.Equal(t, now, worker.LastUpdate)
 	assert.True(t, worker.IsRunning)
 	assert.Equal(t, 0, worker.ErrorCount)
 	assert.Equal(t, 5, worker.MaxErrors)
