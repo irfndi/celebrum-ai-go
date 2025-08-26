@@ -176,7 +176,7 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
+	viper.SetDefault("ccxt.service_url", "http://localhost:3000")
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram

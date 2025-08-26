@@ -371,7 +371,7 @@ test_ccxt_service() {
         log_success "CCXT service is running"
         
         # Test CCXT endpoints if available
-        local ccxt_url="http://localhost:3001/health"
+        local ccxt_url="http://localhost:3000/health"
         if curl -sf "$ccxt_url" > /dev/null 2>&1; then
             log_success "CCXT service health endpoint is responding"
         else

@@ -1,3 +1,4 @@
+import "./test-setup";
 import { test, expect } from "bun:test";
 
 // Set required environment variables for testing

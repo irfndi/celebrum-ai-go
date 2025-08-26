@@ -99,7 +99,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    if: ${{ !github.event.inputs.skip_tests }}
+    if: ${{ github.event_name != 'workflow_dispatch' || !github.event.inputs.skip_tests }}
     services:
       postgres:
         image: postgres:15
@@ -262,7 +262,7 @@ jobs:
     if: |
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'staging' &&
-      (success() || github.event.inputs.skip_tests)
+      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
     environment:
       name: staging
       url: https://staging.celebrum-ai.com
@@ -300,7 +300,7 @@ jobs:
     if: |
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'production' &&
-      (success() || github.event.inputs.skip_tests)
+      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
     environment:
       name: production
       url: https://celebrum-ai.com

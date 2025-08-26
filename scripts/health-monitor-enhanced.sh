@@ -24,7 +24,7 @@ OPTIONAL_SERVICES=("ccxt" "nginx")
 # Health check endpoints
 declare -A HEALTH_ENDPOINTS=(
     ["app"]="http://localhost:8080/health"
-    ["ccxt"]="http://localhost:3001/health"
+    ["ccxt"]="http://localhost:3000/health"
     ["nginx"]="http://localhost:80/health"
 )
 

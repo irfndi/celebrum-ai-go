@@ -15,7 +15,7 @@ interface TestResult {
 
 class TraceTestRunner {
   private goServiceUrl = 'http://localhost:8081';
-  private ccxtServiceUrl = 'http://localhost:3001';
+  private ccxtServiceUrl = 'http://localhost:3000';
   private results: TestResult[] = [];
 
   async testGoService(): Promise<void> {

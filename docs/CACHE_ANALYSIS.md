@@ -37,7 +37,7 @@ While Redis is initialized and available, it's only used by:
 The "context canceled" errors you see are **normal shutdown behavior**:
 
 ```
-Failed to collect ticker data for binance:CRV/USDT:USDT: failed to fetch ticker data: failed to fetch ticker for binance:CRV/USDT:USDT: failed to make request: Get "http://ccxt-service:3001/api/ticker/binance/CRVUSDT:USDT": context canceled
+Failed to collect ticker data for binance:CRV/USDT:USDT: failed to fetch ticker data: failed to fetch ticker for binance:CRV/USDT:USDT: failed to make request: Get "http://ccxt-service:3000/api/ticker/binance/CRVUSDT:USDT": context canceled
 ```
 
 ### Why This Happens

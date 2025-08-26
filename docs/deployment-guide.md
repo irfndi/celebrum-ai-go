@@ -84,8 +84,8 @@ curl http://localhost:8080/health
 
 #### Issue: "no such host" errors for ccxt-service
 - **Cause**: Service networking misconfiguration
-- **Solution**: Ensure `CCXT_SERVICE_URL=http://ccxt-service:3001` in environment variables
-- **Verification**: `docker exec celebrum-app curl http://ccxt-service:3001/health`
+- **Solution**: Ensure `CCXT_SERVICE_URL=http://ccxt-service:3000` in environment variables
+- **Verification**: `docker exec celebrum-app curl http://ccxt-service:3000/health`
 
 #### Issue: Application not responding on port 8080
 - **Cause**: Blocking operations preventing HTTP server startup

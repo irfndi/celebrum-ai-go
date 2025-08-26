@@ -23,12 +23,12 @@ DATABASE_SSLMODE=require  # Use 'require' for production
 ### Service URLs (Critical for Docker Networking)
 ```bash
 # Local development
-CCXT_SERVICE_URL=http://localhost:3001
+CCXT_SERVICE_URL=http://localhost:3000
 REDIS_HOST=localhost
 REDIS_PASSWORD=  # Optional for local development
 
 # Remote deployment (Docker Compose)
-CCXT_SERVICE_URL=http://ccxt-service:3001
+CCXT_SERVICE_URL=http://ccxt-service:3000
 REDIS_HOST=redis
 REDIS_PASSWORD=your-secure-redis-password
 ```
@@ -74,7 +74,7 @@ ssh user@remote-server 'cd /path/to/deployment && ./scripts/verify-env-sync.sh'
 ```bash
 ENVIRONMENT=development
 DATABASE_HOST=localhost
-CCXT_SERVICE_URL=http://localhost:3001
+CCXT_SERVICE_URL=http://localhost:3000
 REDIS_HOST=localhost
 REDIS_PASSWORD=  # Optional for local development
 TELEGRAM_WEBHOOK_URL=https://your-ngrok-url.ngrok.io/api/telegram/webhook
@@ -85,7 +85,7 @@ DATABASE_SSLMODE=disable
 ```bash
 ENVIRONMENT=production
 DATABASE_URL=postgresql://user:pass@host:port/db?sslmode=require
-CCXT_SERVICE_URL=http://ccxt-service:3001
+CCXT_SERVICE_URL=http://ccxt-service:3000
 REDIS_HOST=redis
 REDIS_PASSWORD=your-secure-redis-password
 TELEGRAM_WEBHOOK_URL=https://your-production-domain.com/api/telegram/webhook
@@ -96,7 +96,7 @@ DATABASE_SSLMODE=require
 
 | Variable | Local | Remote |
 |----------|-------|--------|
-| `CCXT_SERVICE_URL` | `http://localhost:3001` | `http://ccxt-service:3001` |
+| `CCXT_SERVICE_URL` | `http://localhost:3000` | `http://ccxt-service:3000` |
 | `REDIS_HOST` | `localhost` | `redis` |
 | `REDIS_PASSWORD` | Optional/empty | `your-secure-redis-password` |
 | `TELEGRAM_WEBHOOK_URL` | `https://ngrok-url.ngrok.io/api/telegram/webhook` | `https://domain.com/api/telegram/webhook` |

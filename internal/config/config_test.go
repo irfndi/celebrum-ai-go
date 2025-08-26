@@ -64,7 +64,7 @@ func TestConfig_Struct(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "redis_pass", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "test_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://example.com/webhook", config.Telegram.WebhookURL)
@@ -124,11 +124,11 @@ func TestRedisConfig_Struct(t *testing.T) {
 
 func TestCCXTConfig_Struct(t *testing.T) {
 	config := CCXTConfig{
-		ServiceURL: "http://ccxt.example.com:3001",
+		ServiceURL: "http://ccxt.example.com:3000",
 		Timeout:    60,
 	}
 
-	assert.Equal(t, "http://ccxt.example.com:3001", config.ServiceURL)
+	assert.Equal(t, "http://ccxt.example.com:3000", config.ServiceURL)
 	assert.Equal(t, 60, config.Timeout)
 }
 
@@ -170,7 +170,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "", config.Telegram.BotToken)
 	assert.Equal(t, "", config.Telegram.WebhookURL)
@@ -191,7 +191,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	_ = os.Setenv("REDIS_PORT", "6380")
 	_ = os.Setenv("REDIS_PASSWORD", "redis_prod_pass")
 	_ = os.Setenv("REDIS_DB", "1")
-	_ = os.Setenv("CCXT_SERVICE_URL", "http://prod-ccxt.example.com:3001")
+	_ = os.Setenv("CCXT_SERVICE_URL", "http://prod-ccxt.example.com:3000")
 	_ = os.Setenv("CCXT_TIMEOUT", "60")
 	_ = os.Setenv("TELEGRAM_BOT_TOKEN", "prod_bot_token")
 	_ = os.Setenv("TELEGRAM_WEBHOOK_URL", "https://prod-api.example.com/webhook")
@@ -235,7 +235,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 6380, config.Redis.Port)
 	assert.Equal(t, "redis_prod_pass", config.Redis.Password)
 	assert.Equal(t, 1, config.Redis.DB)
-	assert.Equal(t, "http://prod-ccxt.example.com:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://prod-ccxt.example.com:3000", config.CCXT.ServiceURL)
 	assert.Equal(t, 60, config.CCXT.Timeout)
 	assert.Equal(t, "prod_bot_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://prod-api.example.com/webhook", config.Telegram.WebhookURL)

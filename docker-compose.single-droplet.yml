@@ -81,7 +81,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=3000
       - LOG_LEVEL=info
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
@@ -98,7 +98,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))",
+          "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))",
         ]
       interval: 25s
       timeout: 20s
@@ -124,7 +124,7 @@ services:
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - CCXT_SERVICE_URL=http://ccxt-service:3000
       - CCXT_TIMEOUT=30
       - JWT_SECRET=${JWT_SECRET} # REQUIRED: Set JWT_SECRET env var
       - SERVER_PORT=8080

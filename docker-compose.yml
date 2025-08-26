@@ -84,10 +84,10 @@ services:
     container_name: celebrum-ccxt
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
       - NODE_ENV=development
-      - PORT=3001
+      - PORT=3000
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
       - ADMIN_API_KEY=${ADMIN_API_KEY:?ADMIN_API_KEY must be set in .env file}
@@ -103,7 +103,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 20s
       timeout: 15s
       retries: 5
@@ -135,7 +135,7 @@ services:
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - CCXT_SERVICE_URL=http://ccxt-service:3000
       - CCXT_TIMEOUT=30
       # Phase control
       - STARTUP_PHASE=3
