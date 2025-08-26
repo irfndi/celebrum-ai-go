@@ -21,7 +21,7 @@ describe('tracing-utils ensureTracesPath', () => {
 
   test('handles scheme-less host:port', () => {
     const out = ensureTracesPath('collector:4318');
-    expect(out.endsWith('/v1/traces')).toBe(true);
+    expect(new URL(out).pathname).toBe('/v1/traces');
   });
 
   test('appends to custom base path', () => {

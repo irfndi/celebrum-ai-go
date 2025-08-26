@@ -11,6 +11,13 @@ const { SEMATTRS_HTTP_METHOD, SEMATTRS_HTTP_ROUTE, SEMATTRS_HTTP_STATUS_CODE } =
 // Get tracer instance
 const tracer = trace.getTracer('ccxt-service', '1.0.0');
 
+// Startup guard: Ensure API_KEY is configured
+if (!process.env.API_KEY) {
+  console.error('ERROR: API_KEY environment variable is required but not set');
+  console.error('Please set API_KEY environment variable before starting the service');
+  process.exit(1);
+}
+
 const app = new Hono();
 
 // Security middleware
@@ -21,19 +28,19 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 }));
 
-// API Key validation middleware
-app.use('/api/*', async (c, next) => {
-  const span = tracer.startSpan('ccxt.auth.validate_api_key', {
+// Admin API Key validation middleware (only for admin endpoints)
+const adminAuth = async (c, next) => {
+  const span = tracer.startSpan('ccxt.auth.validate_admin_api_key', {
     kind: SpanKind.INTERNAL,
     attributes: {
-      'operation.type': 'authentication',
+      'operation.type': 'admin_authentication',
       'auth.method': 'api_key',
     },
   });
 
   try {
     const apiKey = c.req.header('X-API-Key');
-    const expectedKey = process.env.API_KEY || 'your-secret-api-key';
+    const expectedKey = process.env.API_KEY;
     
     span.setAttributes({
       'auth.api_key.present': !!apiKey,
@@ -59,7 +66,7 @@ app.use('/api/*', async (c, next) => {
   } finally {
     span.end();
   }
-});
+};
 
 // Exchange configuration
 const exchangeConfigs = {
@@ -176,24 +183,15 @@ app.get('/api/exchanges', (c) => {
   });
 
   try {
-    const exchangeList = Object.keys(exchanges).map(id => ({
-      id,
-      name: exchanges[id].name,
-      countries: exchanges[id].countries,
-      has: {
-        fetchTicker: exchanges[id].has.fetchTicker,
-        fetchOrderBook: exchanges[id].has.fetchOrderBook,
-        fetchTrades: exchanges[id].has.fetchTrades,
-      },
-    }));
+    const exchangeIds = Object.keys(exchanges);
 
     span.setAttributes({
-      'exchanges.count': exchangeList.length,
+      'exchanges.count': exchangeIds.length,
       'operation.result': 'success',
     });
 
     span.setStatus({ code: SpanStatusCode.OK });
-    return c.json({ exchanges: exchangeList });
+    return c.json({ exchanges: exchangeIds });
   } catch (error) {
     span.recordException(error);
     span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
@@ -392,6 +390,460 @@ app.get('/api/trades/:exchange/:symbol', async (c) => {
 
     span.setStatus({ code: SpanStatusCode.OK });
     return c.json({ trades, responseTime: duration });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+// Get OHLCV data
+app.get('/api/ohlcv/:exchange/:symbol', async (c) => {
+  const exchangeId = c.req.param('exchange');
+  const symbol = c.req.param('symbol');
+  const timeframe = c.req.query('timeframe') || '1h';
+  const limit = parseInt(c.req.query('limit') || '100');
+  
+  const span = tracer.startSpan('ccxt.ohlcv.fetch', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'fetch_ohlcv',
+      'http.method': 'GET',
+      'http.route': '/api/ohlcv/:exchange/:symbol',
+      'exchange.id': exchangeId,
+      'trading.symbol': symbol,
+      'ohlcv.timeframe': timeframe,
+      'ohlcv.limit': limit,
+    },
+  });
+
+  try {
+    const exchange = exchanges[exchangeId];
+    if (!exchange) {
+      span.setAttributes({
+        'error.type': 'exchange_not_found',
+        'operation.result': 'error',
+      });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Exchange not found' });
+      return c.json({ error: 'Exchange not found' }, 404);
+    }
+
+    if (!exchange.has.fetchOHLCV) {
+      span.setAttributes({
+        'error.type': 'feature_not_supported',
+        'operation.result': 'error',
+      });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'OHLCV not supported' });
+      return c.json({ error: 'OHLCV not supported by this exchange' }, 400);
+    }
+
+    const startTime = Date.now();
+    const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, undefined, limit);
+    const duration = Date.now() - startTime;
+
+    span.setAttributes({
+      'ohlcv.symbol': symbol,
+      'ohlcv.timeframe': timeframe,
+      'ohlcv.count': ohlcv.length,
+      'api.response_time_ms': duration,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      exchange: exchangeId,
+      symbol,
+      timeframe,
+      ohlcv,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+// Get trading pairs for an exchange
+app.get('/api/markets/:exchange', async (c) => {
+  const exchangeId = c.req.param('exchange');
+  
+  const span = tracer.startSpan('ccxt.markets.fetch', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'fetch_markets',
+      'http.method': 'GET',
+      'http.route': '/api/markets/:exchange',
+      'exchange.id': exchangeId,
+    },
+  });
+
+  try {
+    const exchange = exchanges[exchangeId];
+    if (!exchange) {
+      span.setAttributes({
+        'error.type': 'exchange_not_found',
+        'operation.result': 'error',
+      });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Exchange not found' });
+      return c.json({ error: 'Exchange not found' }, 404);
+    }
+
+    const startTime = Date.now();
+    const markets = await exchange.loadMarkets();
+    const symbols = Object.keys(markets);
+    const duration = Date.now() - startTime;
+
+    span.setAttributes({
+      'markets.count': symbols.length,
+      'api.response_time_ms': duration,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      exchange: exchangeId,
+      symbols,
+      count: symbols.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+// Get funding rates for an exchange
+app.get('/api/funding-rates/:exchange', async (c) => {
+  const exchangeId = c.req.param('exchange');
+  const symbolsParam = c.req.query('symbols');
+  const symbols = symbolsParam ? symbolsParam.split(',') : undefined;
+  
+  const span = tracer.startSpan('ccxt.funding_rates.fetch', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'fetch_funding_rates',
+      'http.method': 'GET',
+      'http.route': '/api/funding-rates/:exchange',
+      'exchange.id': exchangeId,
+      'funding_rates.symbols_count': symbols ? symbols.length : 0,
+    },
+  });
+
+  try {
+    const exchange = exchanges[exchangeId];
+    if (!exchange) {
+      span.setAttributes({
+        'error.type': 'exchange_not_found',
+        'operation.result': 'error',
+      });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Exchange not found' });
+      return c.json({ error: 'Exchange not found' }, 404);
+    }
+
+    // Check if exchange supports funding rates
+    if (!exchange.has.fetchFundingRates && !exchange.has.fetchFundingRate) {
+      span.setAttributes({
+        'error.type': 'feature_not_supported',
+        'operation.result': 'error',
+      });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Funding rates not supported' });
+      return c.json({ error: 'Exchange does not support funding rates' }, 400);
+    }
+
+    const startTime = Date.now();
+    let fundingRates = [];
+
+    if (symbols && symbols.length > 0) {
+      // Fetch funding rates for specific symbols
+      for (const symbol of symbols) {
+        try {
+          let fundingRate;
+          if (exchange.has.fetchFundingRate) {
+            fundingRate = await exchange.fetchFundingRate(symbol);
+          } else {
+            // Fallback to fetchFundingRates with single symbol
+            const rates = await exchange.fetchFundingRates([symbol]);
+            fundingRate = rates[symbol];
+          }
+          
+          if (fundingRate) {
+            fundingRates.push({
+              symbol: symbol,
+              fundingRate: fundingRate.fundingRate || 0,
+              fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
+              nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
+              markPrice: fundingRate.markPrice || 0,
+              indexPrice: fundingRate.indexPrice || 0,
+              timestamp: fundingRate.timestamp || Date.now()
+            });
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch funding rate for ${symbol} on ${exchangeId}:`, error);
+        }
+      }
+    } else {
+      // Fetch all funding rates
+      try {
+        if (exchange.has.fetchFundingRates) {
+          const rates = await exchange.fetchFundingRates();
+          fundingRates = Object.values(rates).map((rate) => ({
+            symbol: rate.symbol,
+            fundingRate: rate.fundingRate || 0,
+            fundingTimestamp: rate.fundingTimestamp || Date.now(),
+            nextFundingTime: rate.nextFundingDatetime ? new Date(rate.nextFundingDatetime).getTime() : 0,
+            markPrice: rate.markPrice || 0,
+            indexPrice: rate.indexPrice || 0,
+            timestamp: rate.timestamp || Date.now()
+          }));
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch all funding rates for ${exchangeId}:`, error);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+
+    span.setAttributes({
+      'funding_rates.count': fundingRates.length,
+      'api.response_time_ms': duration,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      exchange: exchangeId,
+      fundingRates,
+      count: fundingRates.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+// Admin endpoints (require API key authentication)
+app.post('/api/admin/exchanges/blacklist/:exchange', adminAuth, async (c) => {
+  const exchangeId = c.req.param('exchange');
+  
+  const span = tracer.startSpan('ccxt.admin.blacklist_exchange', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'admin_blacklist_exchange',
+      'http.method': 'POST',
+      'http.route': '/api/admin/exchanges/blacklist/:exchange',
+      'exchange.id': exchangeId,
+    },
+  });
+
+  try {
+    if (!blacklistedExchanges.includes(exchangeId)) {
+      blacklistedExchanges.push(exchangeId);
+      
+      // Remove from active exchanges if it exists
+      if (exchanges[exchangeId]) {
+        delete exchanges[exchangeId];
+      }
+    }
+
+    span.setAttributes({
+      'blacklist.exchange_id': exchangeId,
+      'blacklist.total_count': blacklistedExchanges.length,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      message: `Exchange ${exchangeId} blacklisted`,
+      blacklistedExchanges,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+app.get('/api/admin/exchanges/config', adminAuth, async (c) => {
+  const span = tracer.startSpan('ccxt.admin.get_config', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'admin_get_config',
+      'http.method': 'GET',
+      'http.route': '/api/admin/exchanges/config',
+    },
+  });
+
+  try {
+    span.setAttributes({
+      'config.exchanges_count': Object.keys(exchangeConfigs).length,
+      'config.blacklisted_count': blacklistedExchanges.length,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      exchangeConfigs,
+      blacklistedExchanges,
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+app.post('/api/admin/exchanges/refresh', adminAuth, async (c) => {
+  const span = tracer.startSpan('ccxt.admin.refresh_exchanges', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'admin_refresh_exchanges',
+      'http.method': 'POST',
+      'http.route': '/api/admin/exchanges/refresh',
+    },
+  });
+
+  try {
+    const previousCount = Object.keys(exchanges).length;
+    
+    // Clear existing exchanges
+    for (const exchangeId in exchanges) {
+      delete exchanges[exchangeId];
+    }
+    
+    // Reinitialize exchanges
+    initializeExchanges();
+    
+    const newCount = Object.keys(exchanges).length;
+
+    span.setAttributes({
+      'refresh.previous_count': previousCount,
+      'refresh.new_count': newCount,
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      message: 'Exchanges refreshed successfully',
+      previousCount,
+      newCount,
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    span.recordException(error);
+    span.setAttributes({
+      'error.type': error.constructor.name,
+      'error.message': error.message,
+      'operation.result': 'error',
+    });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    return c.json({ error: error.message }, 500);
+  } finally {
+    span.end();
+  }
+});
+
+app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
+  const exchangeId = c.req.param('exchange');
+  const body = await c.req.json().catch(() => ({}));
+  const config = body.config || { sandbox: false, enableRateLimit: true };
+  
+  const span = tracer.startSpan('ccxt.admin.add_exchange', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      'operation.type': 'admin_add_exchange',
+      'http.method': 'POST',
+      'http.route': '/api/admin/exchanges/add/:exchange',
+      'exchange.id': exchangeId,
+    },
+  });
+
+  try {
+    // Remove from blacklist if present
+    const blacklistIndex = blacklistedExchanges.indexOf(exchangeId);
+    if (blacklistIndex > -1) {
+      blacklistedExchanges.splice(blacklistIndex, 1);
+    }
+    
+    // Add to config
+    exchangeConfigs[exchangeId] = config;
+    
+    // Initialize the exchange
+    try {
+      const ExchangeClass = ccxt[exchangeId];
+      if (ExchangeClass) {
+        exchanges[exchangeId] = new ExchangeClass(config);
+      } else {
+        throw new Error(`Exchange class not found for ${exchangeId}`);
+      }
+    } catch (initError) {
+      console.error(`Failed to initialize exchange ${exchangeId}:`, initError);
+      throw initError;
+    }
+
+    span.setAttributes({
+      'add.exchange_id': exchangeId,
+      'add.config': JSON.stringify(config),
+      'operation.result': 'success',
+    });
+
+    span.setStatus({ code: SpanStatusCode.OK });
+    return c.json({ 
+      message: `Exchange ${exchangeId} added successfully`,
+      exchangeId,
+      config,
+      activeExchanges: Object.keys(exchanges),
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     span.recordException(error);
     span.setAttributes({

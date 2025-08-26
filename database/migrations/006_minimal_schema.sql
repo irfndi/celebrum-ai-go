@@ -2,6 +2,8 @@
 -- Description: Complete schema setup - combines all fixes from 007-028
 -- This replaces all migrations 007-028 with a single robust schema
 
+BEGIN;
+
 -- Add missing columns to exchanges table (safe to run multiple times)
 ALTER TABLE exchanges 
 ADD COLUMN IF NOT EXISTS display_name VARCHAR(100),
@@ -84,6 +86,7 @@ CREATE TABLE IF NOT EXISTS market_data (
     open DECIMAL(20,8),
     close DECIMAL(20,8),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     UNIQUE(exchange_id, trading_pair_id, timestamp)
 );
 
@@ -152,8 +155,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 CREATE INDEX IF NOT EXISTS idx_market_data_exchange_timestamp ON market_data(exchange_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_pair_timestamp ON market_data(trading_pair_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_pair ON funding_rates(exchange_id, trading_pair_id);
-CREATE INDEX IF NOT EXISTS idx_funding_rates_funding_time ON funding_rates(funding_time DESC);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_symbol ON funding_rates(exchange_id, symbol);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_next_funding_time ON funding_rates(next_funding_time DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_detected_at ON arbitrage_opportunities(detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active, detected_at DESC);
 -- Skip exchange_id index as trading_pairs table doesn't have exchange_id column

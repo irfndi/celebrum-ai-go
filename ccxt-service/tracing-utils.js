@@ -14,8 +14,18 @@ function ensureTracesPath(url) {
     }
   } catch (e) {
     // Fallback when URL lacks scheme (e.g., collector:4318)
-    if (/\/v1\/traces\/?$/.test(url)) return url;
-    return `${String(url).replace(/\/$/, '')}/v1/traces`;
+    // Add http:// scheme to make it parseable by URL constructor
+    const urlWithScheme = `http://${url}`;
+    try {
+      const u = new URL(urlWithScheme);
+      if (/\/v1\/traces\/?$/.test(u.pathname)) return u.toString();
+      u.pathname = `${u.pathname.replace(/\/$/, '')}/v1/traces`;
+      return u.toString();
+    } catch (e2) {
+      // Final fallback for malformed URLs
+      if (/\/v1\/traces\/?$/.test(url)) return url;
+      return `${String(url).replace(/\/$/, '')}/v1/traces`;
+    }
   }
 }
 

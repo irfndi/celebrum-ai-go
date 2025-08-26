@@ -10,8 +10,28 @@ const service = mod.default;
 
 console.log('Service imported successfully');
 
-// Wait a bit for initialization
-await new Promise(resolve => setTimeout(resolve, 3000));
+// Wait for service to be ready with active readiness probe
+async function waitForServiceReady(timeoutMs = 10000, intervalMs = 300) {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const healthRes = await service.fetch(new Request('http://localhost/health'));
+      if (healthRes.status === 200) {
+        console.log('Service is ready!');
+        return;
+      }
+    } catch (error) {
+      // Network errors are expected during startup, continue polling
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  
+  throw new Error(`Service failed to become ready within ${timeoutMs}ms`);
+}
+
+await waitForServiceReady();
 
 // Test ticker endpoint with error details
 try {

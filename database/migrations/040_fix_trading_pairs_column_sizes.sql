@@ -1,4 +1,4 @@
--- Migration 032: Fix trading_pairs table column sizes
+-- Migration 040: Fix trading_pairs table column sizes
 -- Description: Increase column sizes to accommodate longer symbol names, especially for futures contracts
 -- This fixes the "value too long for type character varying(20)" error
 
@@ -115,7 +115,11 @@ FROM active_futures_arbitrage_opportunities;
 -- Recreate the active_exchange_trading_pairs view
 CREATE OR REPLACE VIEW active_exchange_trading_pairs AS
 SELECT 
-    etp.*
+    etp.*,
+    tp.symbol,
+    tp.base_currency,
+    tp.quote_currency,
+    tp.category
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_active = true 
@@ -124,7 +128,11 @@ WHERE etp.is_active = true
 -- Recreate the blacklisted_exchange_trading_pairs view
 CREATE OR REPLACE VIEW blacklisted_exchange_trading_pairs AS
 SELECT 
-    etp.*
+    etp.*,
+    tp.symbol,
+    tp.base_currency,
+    tp.quote_currency,
+    tp.category
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_blacklisted = true;

@@ -72,7 +72,7 @@ INSERT INTO trading_pairs (symbol, base_currency, quote_currency, is_futures) VA
 ('NEAR/USDT:USDT', 'NEAR', 'USDT', true),
 ('ALGO/USDT:USDT', 'ALGO', 'USDT', true),
 ('VET/USDT:USDT', 'VET', 'USDT', true)
-ON CONFLICT (symbol) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- Create indexes for funding rate tables
 CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_pair_time ON funding_rates(exchange_id, trading_pair_id, funding_time DESC);

@@ -35,19 +35,21 @@ try {
 
 console.log('\n=== Now testing index.ts import ===');
 
-try {
-  // Import the service
-  const mod = require('./index.ts');
-  console.log('Service imported successfully');
-  console.log('Service type:', typeof mod.default);
-  
-  // Wait a bit for initialization
-  setTimeout(() => {
-    console.log('Test completed');
-    process.exit(0);
-  }, 3000);
-  
-} catch (error) {
-  console.error('Failed to import service:', error);
-  process.exit(1);
-}
+(async () => {
+  try {
+    // Import the service using dynamic import for TypeScript
+    const mod = await import('./index.ts');
+    console.log('Service imported successfully');
+    console.log('Service type:', typeof mod.default);
+    
+    // Wait a bit for initialization
+    setTimeout(() => {
+      console.log('Test completed');
+      process.exit(0);
+    }, 3000);
+    
+  } catch (error) {
+    console.error('Failed to import service:', error);
+    process.exit(1);
+  }
+})();

@@ -16,9 +16,25 @@ async function getService() {
         // Force fresh import by adding timestamp to avoid module caching issues
         const mod = await import("./index.ts?" + Date.now());
         serviceInstance = mod.default as { port: number | string; fetch: (req: Request) => Promise<Response> };
-        // Give the service time to initialize exchanges
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        return serviceInstance;
+        
+        // Wait for service to be ready using readiness probe
+        const timeout = 10000; // 10 seconds
+        const interval = 200; // 200ms
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < timeout) {
+          try {
+            const healthRes = await serviceInstance.fetch(new Request("http://localhost/health"));
+            if (healthRes.status === 200) {
+              return serviceInstance;
+            }
+          } catch (error) {
+            // Service not ready yet, continue polling
+          }
+          await new Promise(resolve => setTimeout(resolve, interval));
+        }
+        
+        throw new Error(`Service failed to become ready within ${timeout}ms`);
       })();
     }
     await initializationPromise;

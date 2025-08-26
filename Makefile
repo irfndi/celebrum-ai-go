@@ -40,8 +40,8 @@ test: ## Run tests across all languages
 	@# Run Go tests
 	go test -v ./...
 	@# Run TypeScript/JavaScript tests in ccxt-service
-	@if [ -d "ccxt-service" ]; then \
-		cd ccxt-service && bun test 2>/dev/null || true; \
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		cd ccxt-service && bun test; \
 	fi
 	@# Run shell script tests if available
 	@if [ -f "scripts/test.sh" ]; then \
@@ -99,9 +99,10 @@ fmt: ## Format code across all languages
 
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
-	@if [ "$$([ -n "$(shell gofmt -s -l .)" ] && echo 1 || echo 0)" -eq 1 ]; then \
+	@UNFORMATTED="$$(gofmt -s -l .)"; \
+	if [ -n "$$UNFORMATTED" ]; then \
 		echo "$(RED)The following files are not formatted:$(NC)"; \
-		gofmt -s -l .; \
+		echo "$$UNFORMATTED"; \
 		exit 1; \
 	else \
 		echo "$(GREEN)All files are properly formatted$(NC)"; \
@@ -269,14 +270,14 @@ auto-migrate: ## Run automatic migration sync
 # Development environment with orchestrated sequential startup
 dev-up-orchestrated: ## Start development environment with robust sequential startup
 	@echo "$(GREEN)Starting development environment with orchestrated sequential startup...$(NC)"
-	@chmod +x ./startup-orchestrator.sh
-	@./startup-orchestrator.sh dev
+	@chmod +x scripts/startup-orchestrator.sh
+	@./scripts/startup-orchestrator.sh dev
 
 # Production environment with orchestrated sequential startup
 prod-up-orchestrated: ## Start production environment with robust sequential startup
 	@echo "$(GREEN)Starting production environment with orchestrated sequential startup...$(NC)"
-	@chmod +x ./startup-orchestrator.sh
-	@./startup-orchestrator.sh prod
+	@chmod +x scripts/startup-orchestrator.sh
+	@./scripts/startup-orchestrator.sh prod
 
 # Development environment with auto-migration (legacy - use dev-up-orchestrated for robust startup)
 dev-up: dev-up-orchestrated ## Start development environment with automatic migrations

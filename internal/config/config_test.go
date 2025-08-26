@@ -64,7 +64,7 @@ func TestConfig_Struct(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "redis_pass", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "test_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://example.com/webhook", config.Telegram.WebhookURL)

@@ -27,8 +27,30 @@ async function runTests() {
     const exchangesRes = await service.fetch(new Request('http://localhost/api/exchanges'));
     console.log('Exchanges status:', exchangesRes.status);
     const exchangesBody = await exchangesRes.json();
-    console.log('Exchanges count:', exchangesBody.exchanges?.length || 0);
-    console.log('Has binance:', exchangesBody.exchanges?.includes('binance'));
+    
+    // Handle both string[] and object[] exchange formats
+    let count = 0;
+    let hasBinance = false;
+    
+    if (exchangesBody && exchangesBody.exchanges && Array.isArray(exchangesBody.exchanges)) {
+      count = exchangesBody.exchanges.length;
+      
+      if (count > 0) {
+        const firstElement = exchangesBody.exchanges[0];
+        if (typeof firstElement === 'string') {
+          // Handle string[] format
+          hasBinance = exchangesBody.exchanges.includes('binance');
+        } else if (typeof firstElement === 'object' && firstElement !== null) {
+          // Handle object[] format
+          hasBinance = exchangesBody.exchanges.some(item => 
+            item && (item.id === 'binance' || item.name === 'binance')
+          );
+        }
+      }
+    }
+    
+    console.log('Exchanges count:', count);
+    console.log('Has binance:', hasBinance);
     
     // Test 3: Markets endpoint
     console.log('\n--- Test 3: Markets endpoint ---');

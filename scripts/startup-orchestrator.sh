@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Celebrum AI - 4-Phase Sequential Startup Orchestrator
 # This script manages the sequential startup of Docker services

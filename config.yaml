@@ -97,7 +97,7 @@ cleanup:
     deletion_hours: 12 # Delete oldest 12 hours when cleaning
   arbitrage_opportunities:
     retention_hours: 72 # Keep 72 hours of arbitrage opportunities
-  interval_minutes: 60 # Run cleanup every 60 minutes
+  interval: 60 # Run cleanup every 60 minutes
   enable_smart_cleanup: true # Use smart cleanup strategy
 
 # Historical Data Backfill configuration

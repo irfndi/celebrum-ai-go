@@ -1341,10 +1341,10 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 		return fmt.Errorf("failed to save funding rate: %w", err)
 	}
 
-	// Invalidate cached funding rates for this exchange and symbol
+	// Invalidate cached funding rates for this exchange and trading pair
 	if c.redisClient != nil {
-		// Clear funding rates cache for this specific exchange-symbol combination
-		fundingRateKey := fmt.Sprintf("funding_rates:%s:%s", exchange, rate.Symbol)
+		// Clear funding rates cache for this specific exchange-trading pair combination
+		fundingRateKey := fmt.Sprintf("funding_rates:%s:%d", exchange, tradingPairID)
 		c.redisClient.Del(c.ctx, fundingRateKey)
 
 		// Clear general funding rates cache for this exchange
@@ -1355,7 +1355,7 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 		latestFundingKey := "latest_funding_rates"
 		c.redisClient.Del(c.ctx, latestFundingKey)
 
-		c.logger.Info("Invalidated funding rate caches", "exchange", exchange, "symbol", rate.Symbol)
+		c.logger.Info("Invalidated funding rate caches", "exchange", exchange, "trading_pair_id", tradingPairID)
 	}
 
 	return nil
