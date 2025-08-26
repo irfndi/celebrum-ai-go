@@ -94,21 +94,11 @@ curl http://localhost:8080/health
 
 ### 5. Common Issues and Solutions
 
-#### Issue: "no such host" errors for ccxt-service
-- **Cause**: Service networking misconfiguration
-- **Solution**: Ensure `CCXT_SERVICE_URL=http://ccxt-service:3000` in environment variables
-- **Verification**: `docker exec celebrum-app curl http://ccxt-service:3000/health`
-
-#### Issue: Application not responding on port 8080
-- **Cause**: Blocking operations preventing HTTP server startup
-- **Solution**: Move long-running operations to background goroutines
-- **Verification**: `netstat -tlnp | grep 8080` should show the server listening
-
 #### Issue: Database foreign key constraint violations
 - **Cause**: Missing exchange records in database
 - **Solution**: Ensure proper database migrations and seed data
-- **Note**: These are warnings and don't prevent the application from functioning
-
+**Impact**: FK violations indicate data integrity issues that can break application flows.
+**Action**: Ensure all migrations have run and required seed/reference data exists before starting dependent services.
 ### 6. Monitoring and Logs
 
 ```bash
