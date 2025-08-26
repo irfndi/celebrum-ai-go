@@ -49,6 +49,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - LOG_LEVEL=info
+      - API_KEY=${API_KEY:?API_KEY must be set for ccxt-service}
     depends_on:
       redis:
         condition: service_healthy

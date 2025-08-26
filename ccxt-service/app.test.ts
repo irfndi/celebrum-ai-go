@@ -65,7 +65,7 @@ test("/api/exchanges returns mocked exchange list", async () => {
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(Array.isArray(body.exchanges)).toBe(true);
-  expect(body.exchanges).toContain("binance");
+  expect(body.exchanges.includes("binance")).toBe(true);
 });
 
 test("/api/markets/:exchange returns symbols", async () => {

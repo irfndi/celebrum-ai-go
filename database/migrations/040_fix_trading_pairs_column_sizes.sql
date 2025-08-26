@@ -137,6 +137,46 @@ FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_blacklisted = true;
 
+-- Recreate the v_trading_pairs_debug view
+CREATE OR REPLACE VIEW v_trading_pairs_debug AS
+SELECT 
+    tp.id as trading_pair_id,
+    tp.symbol as tp_symbol,
+    tp.base_currency as tp_base_currency,
+    tp.quote_currency as tp_quote_currency,
+    tp.category as tp_category,
+    tp.is_futures as tp_is_futures,
+    tp.is_active as tp_is_active,
+    etp.id as exchange_trading_pair_id,
+    etp.exchange_id as etp_exchange_id,
+    etp.symbol as etp_symbol,
+    etp.base_currency as etp_base_currency,
+    etp.quote_currency as etp_quote_currency,
+    etp.is_active as etp_is_active,
+    etp.is_blacklisted as etp_is_blacklisted,
+    e.name as exchange_name
+FROM trading_pairs tp
+LEFT JOIN exchange_trading_pairs etp ON tp.id = etp.trading_pair_id
+LEFT JOIN exchanges e ON etp.exchange_id = e.id
+ORDER BY tp.symbol, e.name;
+
+-- Recreate the latest_funding_rates view
+CREATE OR REPLACE VIEW latest_funding_rates AS
+SELECT DISTINCT ON (fr.exchange_id, fr.trading_pair_id)
+    fr.*,
+    e.name as exchange_name,
+    tp.symbol,
+    tp.base_currency,
+    tp.quote_currency
+FROM funding_rates fr
+JOIN exchanges e ON fr.exchange_id = e.id
+JOIN trading_pairs tp ON fr.trading_pair_id = tp.id
+WHERE tp.is_futures = true
+ORDER BY fr.exchange_id, fr.trading_pair_id, fr.funding_time DESC;
+
+-- Add index for exchange_trading_pairs(trading_pair_id)
+CREATE INDEX IF NOT EXISTS idx_exchange_trading_pairs_trading_pair_id ON exchange_trading_pairs(trading_pair_id);
+
 -- Migration completion
 INSERT INTO schema_migrations (filename, checksum, applied_at) VALUES ('040_fix_trading_pairs_column_sizes.sql', 'checksum_040', NOW())
 ON CONFLICT (filename) DO UPDATE SET 

@@ -10,6 +10,31 @@ The symbol cache in this application uses **in-memory storage**, not Redis. Here
 - **Purpose**: Caches exchange symbols to reduce API calls to CCXT service
 - **TTL**: Configurable expiration time for cached data
 
+### Redis Dependency and Graceful Degradation
+**Redis Dependency**: The application requires Redis to start successfully. If Redis is unavailable during startup, the application will fail to initialize.
+
+**Graceful Degradation**: During runtime, services handle Redis unavailability gracefully:
+- Services check `if redisClient == nil` before Redis operations
+- When Redis is unavailable, services skip caching operations and continue with core functionality
+- No automatic fallback to alternative cache implementations
+- Symbol cache remains in-memory regardless of Redis status
+
+### Redis Usage Patterns
+
+**Redis IS extensively used for**:
+- Bulk ticker data caching (`cacheBulkTickerData`)
+- Backfill cache warming (`warmBackfillCache`)
+- User notification preferences caching
+- Arbitrage opportunities caching
+- Blacklist cache operations
+- Market data caching
+- Rate limiting for notifications
+- Cross-service data sharing and persistence
+
+**In-Memory caching is used for**:
+- CollectorService symbol caching (performance-critical operations)
+- TTL-based symbol expiration
+
 ### Cache Statistics Added
 The cache now includes comprehensive monitoring:
 
@@ -27,9 +52,10 @@ type SymbolCacheStats struct {
 - **Performance Monitoring**: Track cache effectiveness
 
 ### Redis Usage in Application
-While Redis is initialized and available, it's only used by:
+Redis is extensively used across multiple services:
+- CollectorService, NotificationService, CacheWarmingService, BlacklistCache
 - API routes (via `api.SetupRoutes`)
-- Not used by the CollectorService symbol cache
+- Cross-service data sharing, persistence, and performance optimization
 
 ## Context Cancellation Errors - Normal Behavior
 

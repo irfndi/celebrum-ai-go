@@ -5,16 +5,23 @@ const { Hono } = require('hono');
 const { cors } = require('hono/cors');
 const { secureHeaders } = require('hono/secure-headers');
 const ccxt = require('ccxt');
+const crypto = require('crypto');
 const { trace, context, SpanStatusCode, SpanKind } = require('@opentelemetry/api');
 const { SEMATTRS_HTTP_METHOD, SEMATTRS_HTTP_ROUTE, SEMATTRS_HTTP_STATUS_CODE } = require('@opentelemetry/semantic-conventions');
 
 // Get tracer instance
 const tracer = trace.getTracer('ccxt-service', '1.0.0');
 
-// Startup guard: Ensure API_KEY is configured
+// Startup guards: Ensure both API_KEY and ADMIN_API_KEY are configured
 if (!process.env.API_KEY) {
   console.error('ERROR: API_KEY environment variable is required but not set');
   console.error('Please set API_KEY environment variable before starting the service');
+  process.exit(1);
+}
+
+if (!process.env.ADMIN_API_KEY) {
+  console.error('ERROR: ADMIN_API_KEY environment variable is required but not set');
+  console.error('Please set ADMIN_API_KEY environment variable before starting the service');
   process.exit(1);
 }
 
@@ -40,15 +47,26 @@ const adminAuth = async (c, next) => {
 
   try {
     const apiKey = c.req.header('X-API-Key');
-    const expectedKey = process.env.API_KEY;
+    const expectedKey = process.env.ADMIN_API_KEY;
     
     span.setAttributes({
       'auth.api_key.present': !!apiKey,
       'auth.expected_key.present': !!expectedKey,
     });
     
-    if (!apiKey || apiKey !== expectedKey) {
-      span.recordException(new Error('Invalid or missing API key'));
+    if (!apiKey || !expectedKey) {
+      span.recordException(new Error('Missing API key or expected key'));
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Authentication failed' });
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    // Use timing-safe comparison to prevent timing attacks
+    const providedKeyBuffer = Buffer.from(apiKey, 'utf8');
+    const expectedKeyBuffer = Buffer.from(expectedKey, 'utf8');
+    
+    if (providedKeyBuffer.length !== expectedKeyBuffer.length || 
+        !crypto.timingSafeEqual(providedKeyBuffer, expectedKeyBuffer)) {
+      span.recordException(new Error('Invalid API key'));
       span.setStatus({ code: SpanStatusCode.ERROR, message: 'Authentication failed' });
       return c.json({ error: 'Unauthorized' }, 401);
     }
@@ -583,22 +601,27 @@ app.get('/api/funding-rates/:exchange', async (c) => {
           let fundingRate;
           if (exchange.has.fetchFundingRate) {
             fundingRate = await exchange.fetchFundingRate(symbol);
-          } else {
-            // Fallback to fetchFundingRates with single symbol
+          } else if (exchange.has.fetchFundingRates) {
+            // Fallback to fetchFundingRates with single symbol - verify support first
             const rates = await exchange.fetchFundingRates([symbol]);
             fundingRate = rates[symbol];
+          } else {
+            console.warn(`Exchange ${exchangeId} does not support funding rates for symbol ${symbol}`);
+            continue;
           }
           
           if (fundingRate) {
-            fundingRates.push({
-              symbol: symbol,
-              fundingRate: fundingRate.fundingRate || 0,
-              fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
+            // Normalize the funding rate data
+            const normalizedRate = {
+              symbol: fundingRate.symbol || symbol,
+              fundingRate: typeof fundingRate.fundingRate === 'number' ? fundingRate.fundingRate : 0,
+              fundingTimestamp: fundingRate.fundingTimestamp || fundingRate.timestamp || Date.now(),
               nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
-              markPrice: fundingRate.markPrice || 0,
-              indexPrice: fundingRate.indexPrice || 0,
+              markPrice: typeof fundingRate.markPrice === 'number' ? fundingRate.markPrice : 0,
+              indexPrice: typeof fundingRate.indexPrice === 'number' ? fundingRate.indexPrice : 0,
               timestamp: fundingRate.timestamp || Date.now()
-            });
+            };
+            fundingRates.push(normalizedRate);
           }
         } catch (error) {
           console.warn(`Failed to fetch funding rate for ${symbol} on ${exchangeId}:`, error);
@@ -611,11 +634,11 @@ app.get('/api/funding-rates/:exchange', async (c) => {
           const rates = await exchange.fetchFundingRates();
           fundingRates = Object.values(rates).map((rate) => ({
             symbol: rate.symbol,
-            fundingRate: rate.fundingRate || 0,
-            fundingTimestamp: rate.fundingTimestamp || Date.now(),
+            fundingRate: typeof rate.fundingRate === 'number' ? rate.fundingRate : 0,
+            fundingTimestamp: rate.fundingTimestamp || rate.timestamp || Date.now(),
             nextFundingTime: rate.nextFundingDatetime ? new Date(rate.nextFundingDatetime).getTime() : 0,
-            markPrice: rate.markPrice || 0,
-            indexPrice: rate.indexPrice || 0,
+            markPrice: typeof rate.markPrice === 'number' ? rate.markPrice : 0,
+            indexPrice: typeof rate.indexPrice === 'number' ? rate.indexPrice : 0,
             timestamp: rate.timestamp || Date.now()
           }));
         }
@@ -720,9 +743,20 @@ app.get('/api/admin/exchanges/config', adminAuth, async (c) => {
       'operation.result': 'success',
     });
 
+    // Redact sensitive information from exchangeConfigs before returning
+    const redactedExchangeConfigs = {};
+    for (const [exchangeId, config] of Object.entries(exchangeConfigs)) {
+      redactedExchangeConfigs[exchangeId] = { ...config };
+      if (redactedExchangeConfigs[exchangeId].apiKey) redactedExchangeConfigs[exchangeId].apiKey = '[REDACTED]';
+      if (redactedExchangeConfigs[exchangeId].secret) redactedExchangeConfigs[exchangeId].secret = '[REDACTED]';
+      if (redactedExchangeConfigs[exchangeId].password) redactedExchangeConfigs[exchangeId].password = '[REDACTED]';
+      if (redactedExchangeConfigs[exchangeId].uid) redactedExchangeConfigs[exchangeId].uid = '[REDACTED]';
+      if (redactedExchangeConfigs[exchangeId].privateKey) redactedExchangeConfigs[exchangeId].privateKey = '[REDACTED]';
+    }
+
     span.setStatus({ code: SpanStatusCode.OK });
     return c.json({ 
-      exchangeConfigs,
+      exchangeConfigs: redactedExchangeConfigs,
       blacklistedExchanges,
       activeExchanges: Object.keys(exchanges),
       timestamp: new Date().toISOString()
@@ -830,9 +864,17 @@ app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
       throw initError;
     }
 
+    // Redact sensitive information from config before logging
+    const redactedConfig = { ...config };
+    if (redactedConfig.apiKey) redactedConfig.apiKey = '[REDACTED]';
+    if (redactedConfig.secret) redactedConfig.secret = '[REDACTED]';
+    if (redactedConfig.password) redactedConfig.password = '[REDACTED]';
+    if (redactedConfig.uid) redactedConfig.uid = '[REDACTED]';
+    if (redactedConfig.privateKey) redactedConfig.privateKey = '[REDACTED]';
+    
     span.setAttributes({
       'add.exchange_id': exchangeId,
-      'add.config': JSON.stringify(config),
+      'add.config': JSON.stringify(redactedConfig),
       'operation.result': 'success',
     });
 
@@ -840,7 +882,7 @@ app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
     return c.json({ 
       message: `Exchange ${exchangeId} added successfully`,
       exchangeId,
-      config,
+      config: redactedConfig,
       activeExchanges: Object.keys(exchanges),
       timestamp: new Date().toISOString()
     });

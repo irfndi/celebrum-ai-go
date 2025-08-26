@@ -2,8 +2,8 @@
 
 # Variables
 APP_NAME=celebrum-ai
-GO_VERSION=1.24
-DOCKER_REGISTRY=celebrum-ai
+GO_VERSION=1.25
+DOCKER_REGISTRY=ghcr.io/irfndi
 DOCKER_IMAGE_APP=$(DOCKER_REGISTRY)/app:latest
 DOCKER_IMAGE_CCXT=$(DOCKER_REGISTRY)/ccxt-service:latest
 DOCKER_COMPOSE_FILE=docker-compose.yml

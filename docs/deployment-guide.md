@@ -29,10 +29,10 @@ docker-compose up -d
 
 The services must start in this order:
 
-1. **PostgreSQL Database** (`celebrum-postgres`)
-2. **Redis Cache** (`celebrum-redis`)
-3. **CCXT Service** (`celebrum-ccxt`)
-4. **Main Application** (`celebrum-app`)
+1. **PostgreSQL Database** (`postgres`)
+2. **Redis Cache** (`redis`)
+3. **CCXT Service** (`ccxt-service`)
+4. **Main Application** (`app`)
 
 ### 3. Critical Fix Applied
 
@@ -61,6 +61,18 @@ After deployment, verify all services are healthy:
 ```bash
 # Check container status
 docker ps
+
+# Check PostgreSQL
+docker-compose ps postgres
+
+# Check Redis
+docker-compose ps redis
+
+# Check CCXT Service
+docker-compose ps ccxt-service
+
+# Check Main App
+docker-compose ps app
 
 # Test main application health
 curl http://localhost:8080/health
@@ -101,10 +113,10 @@ curl http://localhost:8080/health
 
 ```bash
 # Monitor application logs
-docker logs -f celebrum-app
+docker logs -f app
 
 # Check for startup messages
-docker logs celebrum-app | grep -E '(Service starting|Starting|event: startup)'
+docker logs app | grep -E '(Service starting|Starting|event: startup)'
 
 # Monitor all services
 docker-compose logs -f
@@ -125,7 +137,7 @@ Ensure the following critical environment variables are synchronized between loc
 - [ ] All containers are running (`docker ps`)
 - [ ] Health endpoint responds (`curl http://localhost:8080/health`)
 - [ ] Server is listening on port 8080 (`netstat -tlnp | grep 8080`)
-- [ ] No critical errors in logs (`docker logs celebrum-app`)
+- [ ] No critical errors in logs (`docker logs app`)
 - [ ] CCXT service is accessible from main app
 - [ ] Database connections are working
 - [ ] Redis connections are working
@@ -140,13 +152,44 @@ If deployment fails:
 4. Check that all required ports are available
 5. Verify database migrations have been applied
 
+## Common Issues
+
+### CCXT Service Connection Issues
+- **Problem**: Main app cannot connect to ccxt-service
+- **Solution**: Ensure ccxt-service is healthy before starting main app
+- **Check**: `docker logs ccxt-service`
+
+### Database Connection Issues
+- **Problem**: App fails to connect to PostgreSQL
+- **Solution**: Verify PostgreSQL is healthy and environment variables are set
+- **Check**: `docker logs postgres`
+
+### Redis Connection Issues
+- **Problem**: App fails to connect to Redis
+- **Solution**: Verify Redis is running and accessible
+- **Check**: `docker logs redis`
+
 For persistent issues, restart services in dependency order:
 
-```bash
-docker-compose down
-docker-compose up -d postgres redis
-# Wait for databases to be ready
-docker-compose up -d ccxt-service
-# Wait for CCXT service to be healthy
-docker-compose up -d app
-```
+### Phase 1: Database Services
+1. **Start PostgreSQL**:
+   ```bash
+   docker-compose up -d postgres
+   ```
+
+2. **Start Redis**:
+   ```bash
+   docker-compose up -d redis
+   ```
+
+### Phase 2: CCXT Service
+3. **Start CCXT Service**:
+   ```bash
+   docker-compose up -d ccxt-service
+   ```
+
+### Phase 3: Main Application
+4. **Start Main Go Application**:
+   ```bash
+   docker-compose up -d app
+   ```

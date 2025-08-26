@@ -8,8 +8,8 @@ BEGIN;
 -- Add funding rate data table
 CREATE TABLE IF NOT EXISTS funding_rates (
     id BIGSERIAL PRIMARY KEY,
-    exchange_id INTEGER NOT NULL REFERENCES exchanges(id),
-    trading_pair_id INTEGER NOT NULL REFERENCES trading_pairs(id),
+    exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
+    trading_pair_id INTEGER NOT NULL REFERENCES trading_pairs(id) ON DELETE CASCADE,
     funding_rate DECIMAL(10, 8) NOT NULL,
     funding_time TIMESTAMP WITH TIME ZONE NOT NULL,
     next_funding_time TIMESTAMP WITH TIME ZONE,
@@ -23,24 +23,25 @@ CREATE TABLE IF NOT EXISTS funding_rates (
 -- Add funding rate arbitrage opportunities table
 CREATE TABLE IF NOT EXISTS funding_arbitrage_opportunities (
     id BIGSERIAL PRIMARY KEY,
-    trading_pair_id INTEGER NOT NULL REFERENCES trading_pairs(id),
-    long_exchange_id INTEGER NOT NULL REFERENCES exchanges(id),
-    short_exchange_id INTEGER NOT NULL REFERENCES exchanges(id),
+    trading_pair_id INTEGER NOT NULL REFERENCES trading_pairs(id) ON DELETE CASCADE,
+    long_exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
+    short_exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
     long_funding_rate DECIMAL(10, 8) NOT NULL,
     short_funding_rate DECIMAL(10, 8) NOT NULL,
     net_funding_rate DECIMAL(10, 8) NOT NULL,
-    estimated_profit_8h DECIMAL(20, 8) NOT NULL,
-    estimated_profit_daily DECIMAL(20, 8) NOT NULL,
-    estimated_profit_percentage DECIMAL(8, 4) NOT NULL,
+    estimated_profit_8h DECIMAL(20, 8) NOT NULL CHECK (estimated_profit_8h >= 0),
+    estimated_profit_daily DECIMAL(20, 8) NOT NULL CHECK (estimated_profit_daily >= 0),
+    estimated_profit_percentage DECIMAL(8, 4) NOT NULL CHECK (estimated_profit_percentage >= 0),
     long_mark_price DECIMAL(20, 8),
     short_mark_price DECIMAL(20, 8),
     price_difference DECIMAL(20, 8),
     price_difference_percentage DECIMAL(8, 4),
-    risk_score DECIMAL(4, 2) DEFAULT 1.0,
+    risk_score DECIMAL(4, 2) DEFAULT 1.0 CHECK (risk_score >= 0 AND risk_score <= 100),
     is_active BOOLEAN DEFAULT true,
-    detected_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    detected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(trading_pair_id, long_exchange_id, short_exchange_id, detected_at)
 );
 
 -- Add Bybit exchange for funding rate arbitrage
@@ -113,7 +114,7 @@ FROM funding_rates fr
 JOIN exchanges e ON fr.exchange_id = e.id
 JOIN trading_pairs tp ON fr.trading_pair_id = tp.id
 WHERE tp.is_futures = true
-ORDER BY fr.exchange_id, fr.trading_pair_id, fr.timestamp DESC;
+ORDER BY fr.exchange_id, fr.trading_pair_id, fr.funding_time DESC;
 
 -- Add system configuration for funding rate arbitrage
 INSERT INTO system_config (config_key, config_value, description) VALUES

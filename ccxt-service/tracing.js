@@ -66,10 +66,11 @@ const instrumentations = getNodeAutoInstrumentations({
   '@opentelemetry/instrumentation-http': {
     enabled: true,
     requestHook: (span, request) => {
-      // Add custom attributes to HTTP spans
+      // Log API key presence for debugging (redacted for security)
+      const apiKey = request.getHeader ? request.getHeader('x-api-key') : request.headers?.['x-api-key'];
       span.setAttributes({
         'http.request.header.user_agent': request.headers['user-agent'] || 'unknown',
-        'http.request.header.x_api_key': request.headers['x-api-key'] ? 'present' : 'absent',
+        'http.request.header.x_api_key': apiKey ? '[REDACTED]' : 'absent'
       });
     },
     responseHook: (span, response) => {
