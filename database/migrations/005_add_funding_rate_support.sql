@@ -36,12 +36,13 @@ CREATE TABLE IF NOT EXISTS funding_arbitrage_opportunities (
     short_mark_price DECIMAL(20, 8),
     price_difference DECIMAL(20, 8),
     price_difference_percentage DECIMAL(8, 4),
-    risk_score DECIMAL(4, 2) DEFAULT 1.0 CHECK (risk_score >= 0 AND risk_score <= 100),
+    risk_score DECIMAL(4, 2) DEFAULT 1.0 CHECK (risk_score >= 1.0 AND risk_score <= 5.0),
     is_active BOOLEAN DEFAULT true,
     detected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(trading_pair_id, long_exchange_id, short_exchange_id, detected_at)
+    UNIQUE(trading_pair_id, long_exchange_id, short_exchange_id, detected_at),
+    CHECK (long_exchange_id <> short_exchange_id)
 );
 
 -- Add Bybit exchange for funding rate arbitrage

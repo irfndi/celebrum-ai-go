@@ -11,7 +11,7 @@ DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-celebrum}"
 DB_USER="${DB_USER:-postgres}"
 DB_PASSWORD="${DB_PASSWORD:-postgres}"
-MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-/database/migrations}"
 MAX_WAIT_TIME="${MAX_WAIT_TIME:-300}"
 CONNECTION_TIMEOUT="${CONNECTION_TIMEOUT:-30}"
 
@@ -112,13 +112,16 @@ create_migrations_table() {
     local sql="
 CREATE TABLE IF NOT EXISTS schema_migrations (
     id SERIAL PRIMARY KEY,
-    filename VARCHAR(255) NOT NULL UNIQUE,
-    checksum VARCHAR(64) NOT NULL,
+    filename VARCHAR(255) UNIQUE,
+    checksum VARCHAR(64),
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     execution_time_ms INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_schema_migrations_filename ON schema_migrations(filename);
+-- Ensure filename column exists and is enforced unique
+ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS filename VARCHAR(255);
+ALTER TABLE schema_migrations ALTER COLUMN filename SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS schema_migrations_filename_key ON schema_migrations(filename);
 CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied_at ON schema_migrations(applied_at);
 "
     
@@ -160,9 +163,8 @@ apply_migration() {
         local end_time=$(date +%s%3N)
         local execution_time=$((end_time - start_time))
         
-        # Record migration
-        local record_sql="INSERT INTO schema_migrations (filename, checksum, execution_time_ms) VALUES ('$filename', '$checksum', $execution_time);"
-        
+        # Record migration (idempotent)
+        local record_sql="INSERT INTO schema_migrations (filename, checksum, execution_time_ms) VALUES ('$filename', '$checksum', $execution_time) ON CONFLICT (filename) DO UPDATE SET checksum = EXCLUDED.checksum, execution_time_ms = EXCLUDED.execution_time_ms, applied_at = CURRENT_TIMESTAMP;"
         if execute_sql "$record_sql"; then
             log_success "Migration applied successfully: $filename (${execution_time}ms)"
             return 0
@@ -216,7 +218,7 @@ run_migrations() {
     if [ $migrations_applied -eq 0 ]; then
         log "No new migrations to apply"
     else
-        log_success "Applied $migrations_applied migration(s) successfully"
+        log "Applied $migrations_applied migration(s)"
     fi
     
     return 0

@@ -319,8 +319,13 @@ app.get('/api/exchanges', (c) => {
     try {
       span.addEvent('exchanges_fetch_started');
       
-      // Return array of exchange IDs as strings for test compatibility
-      const exchangeList = Object.keys(exchanges);
+      // Return array of ExchangeInfo objects for proper API contract
+      const exchangeList = Object.keys(exchanges).map(id => ({
+        id,
+        name: exchanges[id].name || id,
+        countries: exchanges[id].countries || [],
+        urls: exchanges[id].urls || {}
+      }));
       
       span.setAttributes({
         'exchanges.count': exchangeList.length,
@@ -725,6 +730,122 @@ app.get('/api/funding-rates/:exchange',
     }
   }
 );
+
+// Backward compatibility: Single funding rate endpoint
+app.get('/api/funding-rate/:exchange/*', async (c) => {
+  try {
+    const exchange = c.req.param('exchange');
+    const pathParts = c.req.path.split('/');
+    const rawSymbol = pathParts.slice(4).join('/'); // Extract everything after /api/funding-rate/{exchange}/
+
+    let symbol = rawSymbol || '';
+    try {
+      symbol = decodeURIComponent(rawSymbol);
+    } catch {
+      // keep raw symbol if decode fails
+    }
+
+    if (!exchanges[exchange]) {
+      const errorResponse: ErrorResponse = {
+        error: 'Exchange not supported',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Check if exchange supports funding rates
+    if (!exchanges[exchange].has['fetchFundingRates'] && !exchanges[exchange].has['fetchFundingRate']) {
+      const errorResponse: ErrorResponse = {
+        error: 'Exchange does not support funding rates',
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const ex = exchanges[exchange];
+
+    const normalizeSimple = (s: string) => (s || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const stripMarginSuffix = (s: string) => (s || '').split(':')[0];
+
+    const normalizedReq = normalizeSimple(symbol);
+
+    let fundingRate: any | undefined;
+    let canonicalSymbol: string | undefined;
+
+    // Try to resolve canonical symbol from markets
+    try {
+      const markets = await ex.loadMarkets();
+      const symbols = Object.keys(markets);
+      canonicalSymbol = symbols.find((s: string) => normalizeSimple(stripMarginSuffix(s)) === normalizedReq);
+    } catch (err) {
+      console.warn(`loadMarkets failed for ${exchange}:`, err);
+    }
+
+    // Try direct fetchFundingRate with canonical symbol
+    if (!fundingRate && canonicalSymbol && ex.has['fetchFundingRate']) {
+      try {
+        fundingRate = await ex.fetchFundingRate(canonicalSymbol);
+      } catch (err) {
+        console.warn(`fetchFundingRate failed for ${canonicalSymbol} on ${exchange}:`, err);
+      }
+    }
+
+    // Try fetchFundingRates with canonical symbol if supported
+    if (!fundingRate && canonicalSymbol && ex.has['fetchFundingRates']) {
+      try {
+        const rates = await ex.fetchFundingRates([canonicalSymbol]);
+        if (rates) {
+          // Some exchanges return an object map, others may return array
+          if (Array.isArray(rates)) {
+            fundingRate = rates.find((r: any) => r?.symbol && normalizeSimple(stripMarginSuffix(r.symbol)) === normalizedReq);
+          } else {
+            fundingRate = (rates as any)[canonicalSymbol] ||
+              Object.values(rates as any).find((r: any) => r?.symbol && normalizeSimple(stripMarginSuffix(r.symbol)) === normalizedReq);
+          }
+        }
+      } catch (err) {
+        console.warn(`fetchFundingRates([${canonicalSymbol}]) failed on ${exchange}:`, err);
+      }
+    }
+
+    // Final fallback: fetch all funding rates and scan
+    if (!fundingRate && ex.has['fetchFundingRates']) {
+      try {
+        const rates = await ex.fetchFundingRates();
+        const values = Array.isArray(rates) ? rates : Object.values(rates || {});
+        fundingRate = values.find((r: any) => r?.symbol && normalizeSimple(stripMarginSuffix(r.symbol)) === normalizedReq);
+      } catch (err) {
+        console.warn(`fetchAllFundingRates failed on ${exchange}:`, err);
+      }
+    }
+
+    if (!fundingRate) {
+      const errorResponse: ErrorResponse = {
+        error: `Funding rate not found for ${symbol} on ${exchange}`,
+        timestamp: new Date().toISOString()
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    const response: FundingRate = {
+      symbol: fundingRate.symbol || canonicalSymbol || symbol,
+      fundingRate: fundingRate.fundingRate || 0,
+      fundingTimestamp: fundingRate.fundingTimestamp || fundingRate.timestamp || Date.now(),
+      nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : (fundingRate.nextFundingTime || 0),
+      markPrice: fundingRate.markPrice || 0,
+      indexPrice: fundingRate.indexPrice || 0,
+      timestamp: fundingRate.timestamp || Date.now()
+    };
+
+    return c.json(response);
+  } catch (error) {
+    const errorResponse: ErrorResponse = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+    return c.json(errorResponse, 500);
+  }
+});
 
 
 

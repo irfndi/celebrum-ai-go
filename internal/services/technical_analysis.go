@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
@@ -353,13 +354,13 @@ func (tas *TechnicalAnalysisService) calculateRSI(prices []float64, period int) 
 }
 
 // calculateMACD calculates Moving Average Convergence Divergence
-func (tas *TechnicalAnalysisService) calculateMACD(prices []float64, _fastPeriod, slowPeriod, signalPeriod int) *IndicatorResult {
+func (tas *TechnicalAnalysisService) calculateMACD(prices []float64, fastPeriod, slowPeriod, signalPeriod int) *IndicatorResult {
 	if len(prices) < slowPeriod+signalPeriod {
 		return nil
 	}
 
-	// Calculate MACD
-	macdIndicator := trend.NewMacdWithPeriod[float64](12, 26, 9)
+	// Calculate MACD with configurable periods
+	macdIndicator := trend.NewMacdWithPeriod[float64](fastPeriod, slowPeriod, signalPeriod)
 	macdLine, macdSignal := macdIndicator.Compute(helper.SliceToChan(prices))
 	macdLineSlice := helper.ChanToSlice(macdLine)
 	macdSignalSlice := helper.ChanToSlice(macdSignal)
@@ -389,21 +390,38 @@ func (tas *TechnicalAnalysisService) calculateMACD(prices []float64, _fastPeriod
 }
 
 // calculateBollingerBands calculates Bollinger Bands
-func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, period int, _stdDev float64) *IndicatorResult {
+func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, period int, stdDev float64) *IndicatorResult {
 	if len(prices) < period {
 		return nil
 	}
 
-	// Bollinger Bands calculation - using SMA as approximation
+	// Bollinger Bands calculation with configurable standard deviation
 	smaIndicator := trend.NewSmaWithPeriod[float64](period)
-	result := helper.ChanToSlice(smaIndicator.Compute(helper.SliceToChan(prices)))
+	smaValues := helper.ChanToSlice(smaIndicator.Compute(helper.SliceToChan(prices)))
 
-	values := make([]decimal.Decimal, len(result))
-	for i, val := range result {
+	// Calculate standard deviation for each period
+	stdDevValues := make([]float64, len(smaValues))
+	for i := period - 1; i < len(prices); i++ {
+		// Calculate standard deviation for the window
+		window := prices[i-period+1 : i+1]
+		stdDevValues[i-period+1] = tas.calculateStandardDeviation(window, smaValues[i-period+1])
+	}
+
+	// Calculate upper and lower bands
+	upperBand := make([]float64, len(smaValues))
+	lowerBand := make([]float64, len(smaValues))
+	for i := 0; i < len(smaValues); i++ {
+		upperBand[i] = smaValues[i] + (stdDev * stdDevValues[i])
+		lowerBand[i] = smaValues[i] - (stdDev * stdDevValues[i])
+	}
+
+	// Use middle band (SMA) as the primary value
+	values := make([]decimal.Decimal, len(smaValues))
+	for i, val := range smaValues {
 		values[i] = decimal.NewFromFloat(val)
 	}
 
-	signal, strength := tas.analyzeBollingerBandsSignal(prices, result, period)
+	signal, strength := tas.analyzeBollingerBandsSignal(prices, smaValues, upperBand, lowerBand, period)
 
 	return &IndicatorResult{
 		Name:      "BB",
@@ -412,6 +430,23 @@ func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, p
 		Strength:  strength,
 		Timestamp: time.Now(),
 	}
+}
+
+// calculateStandardDeviation calculates standard deviation for a price window
+func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64, mean float64) float64 {
+	if len(window) == 0 {
+		return 0
+	}
+
+	// Calculate variance
+	variance := 0.0
+	for _, price := range window {
+		variance += math.Pow(price-mean, 2)
+	}
+	variance /= float64(len(window))
+
+	// Return standard deviation
+	return math.Sqrt(variance)
 }
 
 // calculateATR calculates Average True Range
@@ -451,8 +486,8 @@ func (tas *TechnicalAnalysisService) calculateATR(high, low, close []float64, pe
 	}
 }
 
-// calculateStochastic calculates Stochastic Oscillator (simplified implementation)
-func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []float64, kPeriod, _dPeriod int) *IndicatorResult {
+// calculateStochastic calculates Stochastic Oscillator
+func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []float64, kPeriod, dPeriod int) *IndicatorResult {
 	if len(high) < kPeriod || len(low) < kPeriod || len(close) < kPeriod {
 		return nil
 	}
@@ -483,12 +518,26 @@ func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []floa
 	// Take only valid results
 	validResults := result[kPeriod-1:]
 
-	values := make([]decimal.Decimal, len(validResults))
-	for i, val := range validResults {
+	// Calculate %D (moving average of %K)
+	if len(validResults) < dPeriod {
+		return nil
+	}
+	
+	dValues := make([]float64, len(validResults)-dPeriod+1)
+	for i := dPeriod - 1; i < len(validResults); i++ {
+		sum := 0.0
+		for j := i - dPeriod + 1; j <= i; j++ {
+			sum += validResults[j]
+		}
+		dValues[i-dPeriod+1] = sum / float64(dPeriod)
+	}
+
+	values := make([]decimal.Decimal, len(dValues))
+	for i, val := range dValues {
 		values[i] = decimal.NewFromFloat(val)
 	}
 
-	signal, strength := tas.analyzeStochasticSignal(validResults)
+	signal, strength := tas.analyzeStochasticSignal(dValues)
 
 	return &IndicatorResult{
 		Name:      "STOCH",
@@ -531,6 +580,7 @@ func (tas *TechnicalAnalysisService) calculateOBV(prices, volumes []float64) *In
 
 // Signal analysis functions
 
+// analyzeSMASignal analyzes SMA signals with period-based adjustments
 func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, period int) (string, decimal.Decimal) {
 	if len(prices) < 2 || len(sma) < 2 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -541,26 +591,38 @@ func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, per
 	prevPrice := prices[len(prices)-2]
 	prevSMA := sma[len(sma)-2]
 
+	// Calculate distance from SMA as percentage
+	distanceFromSMA := math.Abs(currentPrice - currentSMA) / currentSMA
+	
+	// Adjust signal strength based on period (longer periods = stronger signals)
+	periodMultiplier := math.Min(1.5, float64(period)/20.0) // Scale based on period
+	
 	// Price crossing above SMA
 	if currentPrice > currentSMA && prevPrice <= prevSMA {
-		return "buy", decimal.NewFromFloat(0.7)
+		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price crossing below SMA
 	if currentPrice < currentSMA && prevPrice >= prevSMA {
-		return "sell", decimal.NewFromFloat(0.7)
+		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		return "sell", decimal.NewFromFloat(strength)
 	}
-	// Price above SMA (bullish)
+	
+	// Price above SMA (bullish) - adjust strength based on period and distance
 	if currentPrice > currentSMA {
-		return "buy", decimal.NewFromFloat(0.6)
+		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		return "buy", decimal.NewFromFloat(strength)
 	}
-	// Price below SMA (bearish)
+	// Price below SMA (bearish) - adjust strength based on period and distance
 	if currentPrice < currentSMA {
-		return "sell", decimal.NewFromFloat(0.6)
+		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		return "sell", decimal.NewFromFloat(strength)
 	}
 
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
+// analyzeEMASignal analyzes EMA signals with period-based adjustments
 func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, period int) (string, decimal.Decimal) {
 	// Similar logic to SMA but with higher sensitivity
 	if len(prices) < 2 || len(ema) < 2 {
@@ -572,17 +634,32 @@ func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, per
 	prevPrice := prices[len(prices)-2]
 	prevEMA := ema[len(ema)-2]
 
+	// Calculate distance from EMA as percentage
+	distanceFromEMA := math.Abs(currentPrice - currentEMA) / currentEMA
+	
+	// EMA is more sensitive than SMA, so use higher base strength
+	// Adjust signal strength based on period
+	periodMultiplier := math.Min(1.3, float64(period)/15.0) // EMA periods typically shorter
+
+	// Price crossing above EMA (stronger signal due to EMA sensitivity)
 	if currentPrice > currentEMA && prevPrice <= prevEMA {
-		return "buy", decimal.NewFromFloat(0.75)
+		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		return "buy", decimal.NewFromFloat(strength)
 	}
+	// Price crossing below EMA (stronger signal due to EMA sensitivity)
 	if currentPrice < currentEMA && prevPrice >= prevEMA {
-		return "sell", decimal.NewFromFloat(0.75)
+		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		return "sell", decimal.NewFromFloat(strength)
 	}
+	// Price above EMA (bullish)
 	if currentPrice > currentEMA {
-		return "buy", decimal.NewFromFloat(0.65)
+		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		return "buy", decimal.NewFromFloat(strength)
 	}
+	// Price below EMA (bearish)
 	if currentPrice < currentEMA {
-		return "sell", decimal.NewFromFloat(0.65)
+		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		return "sell", decimal.NewFromFloat(strength)
 	}
 
 	return "hold", decimal.NewFromFloat(0.5)
@@ -639,25 +716,56 @@ func (tas *TechnicalAnalysisService) analyzeMACDSignal(macd []float64) (string, 
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
-func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, bb []float64, period int) (string, decimal.Decimal) {
-	// This is a simplified analysis - in practice, you'd need upper, middle, and lower bands
-	if len(prices) == 0 || len(bb) == 0 {
+// analyzeBollingerBandsSignal analyzes Bollinger Bands signals with period-based adjustments
+func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValues, upperBand, lowerBand []float64, period int) (string, decimal.Decimal) {
+	// Implement actual Bollinger Bands signal analysis
+	if len(prices) == 0 || len(smaValues) == 0 || len(upperBand) == 0 || len(lowerBand) == 0 {
 		return "hold", decimal.NewFromFloat(0.5)
 	}
 
 	currentPrice := prices[len(prices)-1]
-	currentBB := bb[len(bb)-1]
+	currentSMA := smaValues[len(smaValues)-1]
+	currentUpper := upperBand[len(upperBand)-1]
+	currentLower := lowerBand[len(lowerBand)-1]
 
-	// Price near lower band (potential buy)
-	if currentPrice < currentBB*0.98 {
-		return "buy", decimal.NewFromFloat(0.7)
-	}
-	// Price near upper band (potential sell)
-	if currentPrice > currentBB*1.02 {
-		return "sell", decimal.NewFromFloat(0.7)
+	// Calculate band width and position
+	bandWidth := currentUpper - currentLower
+	distanceFromSMA := math.Abs(currentPrice - currentSMA)
+	positionInBand := (currentPrice - currentLower) / bandWidth
+	
+	// Adjust signal strength based on period (longer periods = more reliable signals)
+	periodMultiplier := math.Min(1.4, float64(period)/25.0) // BB typically use longer periods
+
+	// Price near lower band (potential buy) - stronger signal for longer periods
+	if currentPrice <= currentLower*1.02 {
+		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		return "buy", decimal.NewFromFloat(strength)
 	}
 
-	return "hold", decimal.NewFromFloat(0.5)
+	// Price near upper band (potential sell) - stronger signal for longer periods
+	if currentPrice >= currentUpper*0.98 {
+		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		return "sell", decimal.NewFromFloat(strength)
+	}
+
+	// Price near middle band (hold) - very neutral signal
+	if distanceFromSMA < bandWidth*0.1 {
+		return "hold", decimal.NewFromFloat(0.5)
+	}
+
+	// Price between bands - use position and period to determine signal
+	if positionInBand < 0.3 {
+		// Lower half of bands - slightly bearish unless momentum suggests otherwise
+		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		return "sell", decimal.NewFromFloat(strength)
+	} else if positionInBand > 0.7 {
+		// Upper half of bands - slightly bullish unless momentum suggests otherwise
+		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		return "buy", decimal.NewFromFloat(strength)
+	} else {
+		// Middle range - neutral
+		return "hold", decimal.NewFromFloat(0.5)
+	}
 }
 
 func (tas *TechnicalAnalysisService) analyzeStochasticSignal(stoch []float64) (string, decimal.Decimal) {

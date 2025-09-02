@@ -11,13 +11,13 @@ The symbol cache in this application uses **in-memory storage**, not Redis. Here
 - **TTL**: Configurable expiration time for cached data
 
 ### Redis Dependency and Graceful Degradation
-**Redis Dependency**: The application requires Redis to start successfully. If Redis is unavailable during startup, the application will fail to initialize.
+**Redis Dependency**: The application can start without Redis and includes graceful fallback mechanisms. Redis is optional for core functionality.
 
-**Graceful Degradation**: During runtime, services handle Redis unavailability gracefully:
-- Services check `if redisClient == nil` before Redis operations
-- When Redis is unavailable, services skip caching operations and continue with core functionality
-- No automatic fallback to alternative cache implementations
-- Symbol cache remains in-memory regardless of Redis status
+**Graceful Degradation**: The application handles Redis unavailability both at startup and runtime:
+- Services perform runtime nil checks with `if redisClient == nil` before Redis operations
+- When Redis is unavailable, services gracefully fall back to in-memory implementations
+- Core functionality continues without Redis, with reduced caching performance
+- Symbol cache operates independently in-memory regardless of Redis status
 
 ### Redis Usage Patterns
 

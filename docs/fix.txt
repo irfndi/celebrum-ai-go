@@ -1,313 +1,44 @@
-fix:
-- In ccxt-service/app.test.ts around lines 62 to 69, the test currently asserts
-body.exchanges contains the string "binance" but the API returns an array of
-exchange objects (e.g. { id, name, ... }); update the assertion to check the
-object shape instead of a string — either assert that body.exchanges is an array
-and that one of the entries has id === "binance" (e.g. map ids and check
-inclusion) or use an arrayContaining/objectContaining-style assertion to confirm
-an object with { id: "binance" } exists.
+- In ccxt-service/index.js around lines 633 to 644, the code assumes
+exchange.fetchFundingRates() returns an object and uses Object.values, which
+fails or mis-shapes results when the exchange returns an array (or
+null/undefined); make it shape-agnostic by checking the return type
+(Array.isArray) and normalizing to an array (use the array directly or
+Object.values for objects), guard against null/undefined by defaulting to an
+empty array, then map over that normalized array to produce fundingRates with
+the same field-safe checks (typeof checks for numbers, fallbacks for timestamps
+and nextFundingDatetime) so both array and object responses are handled
+uniformly.
 
-- Separate admin key from general API key and use timing-safe compare.
-Right now adminAuth validates X-API-Key against process.env.API_KEY. Use a distinct ADMIN_API_KEY and constant-time comparison to reduce cross-scope leakage and timing side-channels.
+- In database/migrations/005_add_funding_rate_support.sql around lines 26 to 45,
+add a CHECK to prevent identical venues by enforcing long_exchange_id <>
+short_exchange_id, and change the risk_score constraint to match the
+system_config range by restricting it to BETWEEN 1.0 AND 5.0 (keep the DEFAULT
+1.0), or if you intend to allow 0–100 instead, update the system_config
+description instead of changing the migration; implement the chosen option so
+the CHECK and documentation remain consistent.
 
-Apply:
+- In docker-compose.ci.yml around lines 48 to 53, the service environment includes
+API_KEY but not ADMIN_API_KEY which causes index.js to exit when ADMIN_API_KEY
+is missing; add ADMIN_API_KEY to the environment block for CI (either reference
+the CI secret with the required-check syntax like ${ADMIN_API_KEY:?ADMIN_API_KEY
+must be set for ccxt-service} or set a CI-safe value) so the container starts
+successfully.
 
--const adminAuth = async (c, next) => {
-+const crypto = require('crypto');
-+const adminAuth = async (c, next) => {
-   const span = tracer.startSpan('ccxt.auth.validate_admin_api_key', {
-@@
--    const apiKey = c.req.header('X-API-Key');
--    const expectedKey = process.env.API_KEY;
-+    const apiKey = c.req.header('X-API-Key') || '';
-+    const expectedKey = process.env.ADMIN_API_KEY || '';
-@@
--    if (!apiKey || apiKey !== expectedKey) {
-+    if (!apiKey || !expectedKey ||
-+        apiKey.length !== expectedKey.length ||
-+        !crypto.timingSafeEqual(Buffer.from(apiKey), Buffer.from(expectedKey))) {
-       span.recordException(new Error('Invalid or missing API key'));
-       span.setStatus({ code: SpanStatusCode.ERROR, message: 'Authentication failed' });
-       return c.json({ error: 'Unauthorized' }, 401);
-     }
-And tighten startup guards near Line 14:
+- In docker-compose.single-droplet.yml around lines 97-106 (and similarly at
+156-165 and 200-208), the healthcheck uses a JSON-array form that hard-depends
+on wget; change to a portable CMD-SHELL form that first attempts curl and falls
+back to wget (or uses sh -c to run a one-liner that tries curl || wget) so the
+check works across images without guaranteed binaries; update each healthcheck
+to use shell form (e.g. sh -c 'command1 || command2') with appropriate flags and
+exit codes to probe http://localhost:3000/health (adjust port/path per section).
 
--if (!process.env.API_KEY) {
-+if (!process.env.API_KEY || !process.env.ADMIN_API_KEY) {
--  console.error('ERROR: API_KEY environment variable is required but not set');
-+  console.error('ERROR: API_KEY and ADMIN_API_KEY are required but not set');
-   console.error('Please set API_KEY environment variable before starting the service');
-   process.exit(1);
-}
+- In docs/CACHE_ANALYSIS.md around lines 13 to 21, the current text incorrectly
+states Redis is required at startup and that no automatic fallback exists;
+update the wording to reflect that the application can start without Redis and
+that a configured cache selection falls back to the in-memory implementation
+when Redis is not configured or unavailable. Mention that services still perform
+runtime nil checks (e.g., if redisClient == nil) and skip Redis operations when
+needed, and explicitly note that symbol cache remains in-memory; remove the
+claim that the app will fail to initialize without Redis and replace it with a
+brief description of the graceful fallback behavior and when Redis is used.
 
-- In ccxt-service/index.js around lines 538 to 654, the single-symbol fallback
-uses rates[symbol] which fails when exchange.fetchFundingRates returns an array;
-also there’s no guard that fetchFundingRates exists. Update the single-symbol
-branch to first verify exchange.has.fetchFundingRates before calling it, then
-normalize the returned rates: if rates is an Array, locate the entry by matching
-rate.symbol === symbol; if rates is an Object, use rates[symbol]; handle a
-missing entry by skipping and logging. Ensure downstream code reads fields from
-the found rate only after null-checking it.
-
-- 🛠️ Refactor suggestion
-
-Avoid leaking secrets in tracing attributes.
-Serializing the full admin-provided exchange config into span attributes can leak API keys/secrets to your tracing backend.
-
--    span.setAttributes({
--      'add.exchange_id': exchangeId,
--      'add.config': JSON.stringify(config),
--      'operation.result': 'success',
--    });
-+    const redacted = { ...config };
-+    for (const k of ['apiKey','secret','password','uid','privateKey']) {
-+      if (k in redacted) redacted[k] = '[REDACTED]';
-+    }
-+    span.setAttributes({
-+      'add.exchange_id': exchangeId,
-+      'add.config': JSON.stringify(redacted),
-+      'operation.result': 'success',
-+    });
-📝 Committable suggestion
-‼️ IMPORTANT
-Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
-
-Suggested change
-app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
-  const exchangeId = c.req.param('exchange');
-  const body = await c.req.json().catch(() => ({}));
-  const config = body.config || { sandbox: false, enableRateLimit: true };
-  
-  const span = tracer.startSpan('ccxt.admin.add_exchange', {
-    kind: SpanKind.SERVER,
-    attributes: {
-      'operation.type': 'admin_add_exchange',
-      'http.method': 'POST',
-      'http.route': '/api/admin/exchanges/add/:exchange',
-      'exchange.id': exchangeId,
-    },
-  });
-  try {
-    // Remove from blacklist if present
-    const blacklistIndex = blacklistedExchanges.indexOf(exchangeId);
-    if (blacklistIndex > -1) {
-      blacklistedExchanges.splice(blacklistIndex, 1);
-    }
-    
-    // Add to config
-    exchangeConfigs[exchangeId] = config;
-    
-    // Initialize the exchange
-    try {
-      const ExchangeClass = ccxt[exchangeId];
-      if (ExchangeClass) {
-        exchanges[exchangeId] = new ExchangeClass(config);
-      } else {
-        throw new Error(`Exchange class not found for ${exchangeId}`);
-      }
-    } catch (initError) {
-      console.error(`Failed to initialize exchange ${exchangeId}:`, initError);
-      throw initError;
-    }
-    span.setAttributes({
-      'add.exchange_id': exchangeId,
-      'add.config': JSON.stringify(config),
-      'operation.result': 'success',
-    });
-    span.setStatus({ code: SpanStatusCode.OK });
-    return c.json({ 
-      message: `Exchange ${exchangeId} added successfully`,
-      exchangeId,
-      config,
-      activeExchanges: Object.keys(exchanges),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    span.recordException(error);
-    span.setAttributes({
-      'error.type': error.constructor.name,
-      'error.message': error.message,
-      'operation.result': 'error',
-    });
-    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-    return c.json({ error: error.message }, 500);
-  } finally {
-    span.end();
-  }
-});
-app.post('/api/admin/exchanges/add/:exchange', adminAuth, async (c) => {
-  const exchangeId = c.req.param('exchange');
-  const body = await c.req.json().catch(() => ({}));
-  const config = body.config || { sandbox: false, enableRateLimit: true };
-  
-  const span = tracer.startSpan('ccxt.admin.add_exchange', {
-    kind: SpanKind.SERVER,
-    attributes: {
-      'operation.type': 'admin_add_exchange',
-      'http.method': 'POST',
-      'http.route': '/api/admin/exchanges/add/:exchange',
-      'exchange.id': exchangeId,
-    },
-  });
-  try {
-    // Remove from blacklist if present
-    const blacklistIndex = blacklistedExchanges.indexOf(exchangeId);
-    if (blacklistIndex > -1) {
-      blacklistedExchanges.splice(blacklistIndex, 1);
-    }
-    
-    // Add to config
-    exchangeConfigs[exchangeId] = config;
-    
-    // Initialize the exchange
-    try {
-      const ExchangeClass = ccxt[exchangeId];
-      if (ExchangeClass) {
-        exchanges[exchangeId] = new ExchangeClass(config);
-      } else {
-        throw new Error(`Exchange class not found for ${exchangeId}`);
-      }
-    } catch (initError) {
-      console.error(`Failed to initialize exchange ${exchangeId}:`, initError);
-      throw initError;
-    }
-    // Redact sensitive fields before recording span attributes
-    const redacted = { ...config };
-    for (const k of ['apiKey', 'secret', 'password', 'uid', 'privateKey']) {
-      if (k in redacted) redacted[k] = '[REDACTED]';
-    }
-    span.setAttributes({
-      'add.exchange_id': exchangeId,
-      'add.config': JSON.stringify(redacted),
-      'operation.result': 'success',
-    });
-    span.setStatus({ code: SpanStatusCode.OK });
-    return c.json({ 
-      message: `Exchange ${exchangeId} added successfully`,
-      exchangeId,
-      config,
-      activeExchanges: Object.keys(exchanges),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    span.recordException(error);
-    span.setAttributes({
-      'error.type': error.constructor.name,
-      'error.message': error.message,
-      'operation.result': 'error',
-    });
-    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-    return c.json({ error: error.message }, 500);
-  } finally {
-    span.end();
-  }
-});
-
-- database/migrations/005_add_funding_rate_support.sql lines 13–18: the view uses
-fr.timestamp (ingestion time) to pick "latest" rows which can return older
-events if ingested late; update the view to use fr.funding_time for ordering per
-exchange_id and trading_pair_id so the most recent event-time is chosen (i.e.,
-change the ORDER BY to exchange_id, trading_pair_id, funding_time DESC) and add
-a short comment in the migration explaining that funding_time is used to reflect
-event-time semantics; alternatively, if you want ingestion-time semantics,
-instead add a covering index on (exchange_id, trading_pair_id, timestamp DESC)
-and a comment documenting the choice—apply one of these two fixes and include
-the rationale in the migration file.
-
-- In database/migrations/005_add_funding_rate_support.sql around lines 27 to 44,
-harden the arbitrage table by: add CHECK constraints ensuring risk_score is
-between 0 and 100 (or an appropriate positive range) and that
-estimated_profit_8h, estimated_profit_daily, and estimated_profit_percentage are
->= 0; set detected_at default to CURRENT_TIMESTAMP to simplify inserts; add
-explicit ON DELETE behavior on the foreign keys (use ON DELETE RESTRICT to
-prevent orphaned rows if you want to block deleting referenced exchanges, or ON
-DELETE CASCADE if you prefer automatic cleanup) for long_exchange_id and
-short_exchange_id; and create a UNIQUE constraint over the identifying columns
-(e.g., base_asset, quote_asset, long_exchange_id, short_exchange_id,
-detected_at) to prevent duplicate opportunities. Ensure constraint names are
-unique and consistent with your naming conventions.
-
-- In database/migrations/040_fix_trading_pairs_column_sizes.sql around lines 7–15
-you drop seven views with CASCADE but never recreate v_trading_pairs_debug and
-latest_funding_rates; either add CREATE OR REPLACE VIEW statements for those two
-views later in this migration (restore their definitions exactly as they were or
-updated to match schema changes) or remove their DROP statements from this file
-and place them in a separate “remove-deprecated-views” migration with an
-explanatory comment and PR note documenting the removal so downstream consumers
-can adapt.
-
-- In database/migrations/040_fix_trading_pairs_column_sizes.sql around lines 115
-to 127, the view selects etp.* plus tp.symbol, tp.base_currency and
-tp.quote_currency which creates duplicate column names and will fail; add
-explicit aliases for the tp columns (e.g., tp.symbol AS tp_symbol,
-tp.base_currency AS tp_base_currency, tp.quote_currency AS tp_quote_currency or
-other clear names) and, before/or in this migration, create a single-column
-index for exchange_trading_pairs(trading_pair_id) using CREATE INDEX IF NOT
-EXISTS idx_exchange_trading_pairs_trading_pair_id ON
-exchange_trading_pairs(trading_pair_id) to optimize joins.
-
-- In database/migrations/040_fix_trading_pairs_column_sizes.sql around lines 128
-to 139, the view SELECT uses etp.* and tp.*, causing duplicate column names
-(e.g., id, symbol conflicts); replace the star expansions with an explicit
-column list: enumerate etp columns and then select tp columns with unique
-aliases (e.g., tp.symbol AS tp_symbol, tp.base_currency AS tp_base_currency,
-tp.quote_currency AS tp_quote_currency, tp.category AS tp_category) or rename
-conflicting etp columns as needed so every column in the view has a unique name;
-update the CREATE OR REPLACE VIEW statement accordingly.
-
-- In docker-compose.ci.yml around lines 49–51, the ccxt-service is missing the
-required API_KEY env var which causes index.js to exit on startup; add an
-API_KEY environment variable for the service (preferably referencing the CI
-secret/variable, e.g. CCXT_API_KEY) or a safe placeholder value so the container
-does not crash in CI, and if possible source it from an env_file or CI secret
-injection to avoid committing credentials.
-
-- In docker-compose.single-droplet.yml around lines 82 to 87, the ccxt-service
-will exit at startup without API_KEY (and ADMIN_API_KEY if you split admin
-endpoints); add environment entries for API_KEY and ADMIN_API_KEY under the
-service's environment section (or reference secured secrets/.env values) so the
-service can start; ensure values are provided for production (use secret
-management or .env references rather than plaintext in the compose file) and
-restart/test the container.
-
-- In docker-compose.single-droplet.yml around lines 95-105 (and also apply same
-fix to blocks at 154-167 and 198-210), the healthcheck "test" flow sequences
-contain trailing commas which cause a YAML parse error; remove the trailing
-commas after the last element in each flow sequence (or convert the flow
-sequence to a block sequence) and ensure proper indentation so the test array is
-a valid YAML list (e.g., no comma after "/health" and no comma after the closing
-bracket if using flow style).
-
-- In docs/CACHE_ANALYSIS.md around lines 68 to 74, the conclusion incorrectly
-states Redis is initialized but not used for symbol caching; update the wording
-to reflect the actual auto-selection behavior (in-memory vs Redis) used by the
-system rather than asserting Redis is never used for symbol caching. Edit the
-bullet to explain that caching selects the appropriate backend based on
-configuration/environment (e.g., defaults to in-memory with TTL but will use
-Redis when enabled/configured), and remove the absolute claim that Redis is not
-used so the conclusion aligns with selection logic described elsewhere.
-
-- In docs/deployment-guide.md around lines 32 to 36, the listed service names
-(celebrum-postgres, celebrum-redis, celebrum-ccxt, celebrum-app) do not match
-the docker-compose service identifiers; update the snippet to use the actual
-service names used in the compose files: postgres, redis, ccxt-service, app so
-examples and commands (e.g., docker compose up postgres redis ccxt-service app)
-work as documented.
-
-- 🛠️ Refactor suggestion
-
-Registry/image naming is inconsistent with CI (GHCR vs local).
-Makefile pushes to "celebrum-ai/*" (Docker Hub namespace), but CI builds to ghcr.io/${{ github.repository }}. Unify to avoid split registries.
-
-Option A: adopt GHCR in Makefile:
-
--DOCKER_REGISTRY=celebrum-ai
-+DOCKER_REGISTRY=ghcr.io/$(shell echo $(IMAGE_NS) )
-+# Add at top or export IMAGE_NS from env (e.g., owner/repo)
-Option B: parameterize:
-
--DOCKER_REGISTRY=celebrum-ai
-+DOCKER_REGISTRY?=ghcr.io/$(shell basename $$(git config --get remote.origin.url 2>/dev/null | sed -E 's/.*[:/](.*)\.git/\1/'))
-And ensure docker-push* targets reference the same registry base as CI.
-
-Also applies to: 225-241

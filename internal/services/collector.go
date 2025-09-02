@@ -1326,16 +1326,15 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 
 	// Save funding rate to database with upsert to handle duplicates
 	_, err = c.db.Pool.Exec(c.ctx,
-		`INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_rate_timestamp, next_funding_time, mark_price, index_price, timestamp, created_at) 
+		`INSERT INTO funding_rates (exchange_id, trading_pair_id, funding_rate, funding_time, next_funding_time, mark_price, index_price, timestamp, created_at) 
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		 ON CONFLICT (exchange_id, trading_pair_id, funding_rate_timestamp) 
+		 ON CONFLICT (exchange_id, trading_pair_id, funding_time) 
 		 DO UPDATE SET 
 			funding_rate = EXCLUDED.funding_rate,
 			next_funding_time = EXCLUDED.next_funding_time,
 			mark_price = EXCLUDED.mark_price,
 			index_price = EXCLUDED.index_price,
-			timestamp = EXCLUDED.timestamp,
-			updated_at = NOW()`,
+			timestamp = EXCLUDED.timestamp`,
 		exchangeID, tradingPairID, rate.FundingRate, rate.FundingTimestamp.Time(), rate.NextFundingTime.Time(), markPrice, indexPrice, timestamp, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to save funding rate: %w", err)

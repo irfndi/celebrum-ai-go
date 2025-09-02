@@ -632,7 +632,9 @@ app.get('/api/funding-rates/:exchange', async (c) => {
       try {
         if (exchange.has.fetchFundingRates) {
           const rates = await exchange.fetchFundingRates();
-          fundingRates = Object.values(rates).map((rate) => ({
+          // Normalize rates to array - handle both array and object responses, guard against null/undefined
+          const normalizedRates = rates == null ? [] : (Array.isArray(rates) ? rates : Object.values(rates));
+          fundingRates = normalizedRates.map((rate) => ({
             symbol: rate.symbol,
             fundingRate: typeof rate.fundingRate === 'number' ? rate.fundingRate : 0,
             fundingTimestamp: rate.fundingTimestamp || rate.timestamp || Date.now(),

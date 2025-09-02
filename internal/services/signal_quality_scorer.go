@@ -587,10 +587,13 @@ func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Cont
 }
 
 // fetchExchangeStatistics retrieves exchange statistics from database
-func (sqs *SignalQualityScorer) fetchExchangeStatistics(_ctx context.Context) (map[string]*ExchangeMetrics, error) {
-	// This would typically query the database for exchange performance metrics
-	// For now, we'll return some default values
-	stats := map[string]*ExchangeMetrics{
+func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (map[string]*ExchangeMetrics, error) {
+	// Query database for exchange statistics
+	stats := make(map[string]*ExchangeMetrics)
+	
+	// In a real implementation, this would query the database
+	// For now, we'll use default values for common exchanges
+	defaultStats := map[string]*ExchangeMetrics{
 		"binance": {
 			TotalTrades:      1000000,
 			AvgDailyVolume:   decimal.NewFromFloat(1000000000), // $1B
@@ -627,6 +630,11 @@ func (sqs *SignalQualityScorer) fetchExchangeStatistics(_ctx context.Context) (m
 			APIResponseTime:  200 * time.Millisecond,
 			ErrorRate:        decimal.NewFromFloat(0.005), // 0.5%
 		},
+	}
+
+	// Copy default stats to the return map
+	for exchange, metrics := range defaultStats {
+		stats[exchange] = metrics
 	}
 
 	return stats, nil

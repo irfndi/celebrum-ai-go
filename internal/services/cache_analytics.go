@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,13 +160,27 @@ func (c *CacheAnalyticsService) GetMetrics(ctx context.Context) (*CacheMetrics, 
 }
 
 // parseRedisInfo parses Redis INFO command output
-func (c *CacheAnalyticsService) parseRedisInfo(_info string) map[string]string {
+func (c *CacheAnalyticsService) parseRedisInfo(info string) map[string]string {
 	result := make(map[string]string)
+	
+	if info == "" {
+		return result
+	}
 
-	// This is a simplified parser - in real implementation you'd parse the actual INFO output
-	result["redis_version"] = "unknown"
-	result["used_memory_human"] = "unknown"
-	result["connected_clients"] = "unknown"
+	lines := strings.Split(info, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			result[key] = value
+		}
+	}
 
 	return result
 }

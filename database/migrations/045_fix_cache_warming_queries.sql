@@ -93,7 +93,8 @@ BEGIN
 END $$;
 
 -- Create a view to help with debugging and verification
-CREATE OR REPLACE VIEW v_trading_pairs_debug AS
+DROP VIEW IF EXISTS v_trading_pairs_debug;
+CREATE VIEW v_trading_pairs_debug AS
 SELECT 
     tp.id,
     tp.exchange_id,

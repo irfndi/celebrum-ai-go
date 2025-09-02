@@ -316,20 +316,47 @@ END
 $$;
 
 -- Grant permissions to application roles
-GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_opportunities TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_strategies TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON funding_rate_history TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_executions TO authenticated;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_opportunities TO authenticated;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_strategies TO authenticated;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON funding_rate_history TO authenticated;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON futures_arbitrage_executions TO authenticated;
+        GRANT SELECT ON active_futures_arbitrage_opportunities TO authenticated;
+        GRANT SELECT ON futures_arbitrage_market_summary TO authenticated;
+        GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+    ELSE
+        RAISE NOTICE 'Role authenticated does not exist, skipping GRANTs';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Skipping GRANTs to authenticated: %', SQLERRM;
+END $$;
 
-GRANT SELECT ON active_futures_arbitrage_opportunities TO authenticated;
-GRANT SELECT ON futures_arbitrage_market_summary TO authenticated;
-
-GRANT SELECT ON futures_arbitrage_opportunities TO anon;
-GRANT SELECT ON active_futures_arbitrage_opportunities TO anon;
-GRANT SELECT ON futures_arbitrage_market_summary TO anon;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        GRANT SELECT ON futures_arbitrage_opportunities TO anon;
+        GRANT SELECT ON active_futures_arbitrage_opportunities TO anon;
+        GRANT SELECT ON futures_arbitrage_market_summary TO anon;
+    ELSE
+        RAISE NOTICE 'Role anon does not exist, skipping GRANTs';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Skipping GRANTs to anon: %', SQLERRM;
+END $$;
 
 -- Grant usage on sequences (if any are created automatically)
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+    ELSE
+        RAISE NOTICE 'Role authenticated does not exist, skipping sequence USAGE grant';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Skipping sequence USAGE grant to authenticated: %', SQLERRM;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON TABLE futures_arbitrage_opportunities IS 'Stores futures arbitrage opportunities with comprehensive risk and profit metrics';

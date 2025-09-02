@@ -139,6 +139,16 @@ func main() {
 		}
 	}()
 
+	// Initialize futures arbitrage calculator
+	arbitrageCalculator := services.NewFuturesArbitrageCalculator()
+
+	// Initialize regular arbitrage service
+	arbitrageService := services.NewArbitrageService(db, cfg, arbitrageCalculator)
+	if err := arbitrageService.Start(); err != nil {
+		logrusLogger.WithError(err).Fatal("Failed to start arbitrage service")
+	}
+	defer arbitrageService.Stop()
+
 	// Initialize futures arbitrage service
 	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, errorRecoveryManager, resourceManager, performanceMonitor)
 	if err := futuresArbitrageService.Start(); err != nil {

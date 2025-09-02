@@ -17,6 +17,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
 	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 )
 
 type ArbitrageHandler struct {
@@ -491,29 +492,39 @@ func (h *ArbitrageHandler) findCrossExchangeArbitrage(symbol string, exchanges m
 		}
 	}
 
-	// Calculate profit opportunity
+	// Calculate profit opportunity using high-precision decimals
 	if lowestPrice.price > 0 && highestPrice.price > lowestPrice.price && lowestPrice.exchange != highestPrice.exchange {
-		profitPercent := ((highestPrice.price - lowestPrice.price) / lowestPrice.price) * 100
+		buy := decimal.NewFromFloat(lowestPrice.price)
+		sell := decimal.NewFromFloat(highestPrice.price)
+		if buy.GreaterThan(decimal.Zero) && sell.GreaterThan(buy) {
+			profitPercentDec := sell.Sub(buy).Div(buy).Mul(decimal.NewFromInt(100))
+			minProfitDec := decimal.NewFromFloat(minProfit)
+			if profitPercentDec.GreaterThanOrEqual(minProfitDec) {
+				// Use minimum volume between exchanges
+				minVol := math.Min(lowestPrice.volume, highestPrice.volume)
+				volDec := decimal.NewFromFloat(minVol)
+				profitAmountDec := sell.Sub(buy).Mul(volDec)
 
-		if profitPercent >= minProfit {
-			// Use minimum volume between exchanges
-			volume := math.Min(lowestPrice.volume, highestPrice.volume)
-			profitAmount := (highestPrice.price - lowestPrice.price) * volume
+				buyF, _ := buy.Float64()
+				sellF, _ := sell.Float64()
+				profitPercentF, _ := profitPercentDec.Float64()
+				profitAmountF, _ := profitAmountDec.Float64()
 
-			opportunity := ArbitrageOpportunity{
-				Symbol:          symbol,
-				BuyExchange:     lowestPrice.exchange,
-				SellExchange:    highestPrice.exchange,
-				BuyPrice:        lowestPrice.price,
-				SellPrice:       highestPrice.price,
-				ProfitPercent:   profitPercent,
-				ProfitAmount:    profitAmount,
-				Volume:          volume,
-				Timestamp:       time.Now(),
-				OpportunityType: "arbitrage", // True cross-exchange arbitrage
+				opportunity := ArbitrageOpportunity{
+					Symbol:          symbol,
+					BuyExchange:     lowestPrice.exchange,
+					SellExchange:    highestPrice.exchange,
+					BuyPrice:        buyF,
+					SellPrice:       sellF,
+					ProfitPercent:   profitPercentF,
+					ProfitAmount:    profitAmountF,
+					Volume:          minVol,
+					Timestamp:       time.Now(),
+					OpportunityType: "arbitrage", // True cross-exchange arbitrage
+				}
+
+				opportunities = append(opportunities, opportunity)
 			}
-
-			opportunities = append(opportunities, opportunity)
 		}
 	}
 
@@ -601,35 +612,51 @@ func (h *ArbitrageHandler) findTechnicalAnalysisOpportunities(ctx context.Contex
 			sma := h.calculateSMA(prices, 5)
 			currentPrice := prices[0] // Most recent price
 
-			// Check for oversold/overbought conditions
-			deviationPercent := ((currentPrice - sma) / sma) * 100
+			// Check for oversold/overbought conditions using decimals
+			smaDec := decimal.NewFromFloat(sma)
+			curDec := decimal.NewFromFloat(currentPrice)
+			if smaDec.IsZero() {
+				continue
+			}
+			deviationPercentDec := curDec.Sub(smaDec).Div(smaDec).Mul(decimal.NewFromInt(100)).Abs()
+			minProfitDec := decimal.NewFromFloat(minProfit)
 
-			if math.Abs(deviationPercent) >= minProfit {
+			if deviationPercentDec.GreaterThanOrEqual(minProfitDec) {
 				// Create technical opportunity
-				var buyPrice, sellPrice float64
+				var buyPriceDec, sellPriceDec decimal.Decimal
 				var opportunityType string
 
-				if deviationPercent < 0 {
+				if curDec.LessThan(smaDec) {
 					// Oversold - buy opportunity
-					buyPrice = currentPrice
-					sellPrice = sma
+					buyPriceDec = curDec
+					sellPriceDec = smaDec
 					opportunityType = "technical_oversold"
 				} else {
 					// Overbought - sell opportunity
-					buyPrice = sma
-					sellPrice = currentPrice
+					buyPriceDec = smaDec
+					sellPriceDec = curDec
 					opportunityType = "technical_overbought"
 				}
+
+				// Use a conservative fraction of volume
+				volDec := decimal.NewFromFloat(priceHistory[0].volume).Mul(decimal.NewFromFloat(0.1))
+				profitAmountDec := sellPriceDec.Sub(buyPriceDec).Abs().Mul(volDec)
+
+				buyF, _ := buyPriceDec.Float64()
+				sellF, _ := sellPriceDec.Float64()
+				profitPercentF, _ := deviationPercentDec.Float64()
+				profitAmountF, _ := profitAmountDec.Float64()
+				volF, _ := volDec.Float64()
 
 				opportunity := ArbitrageOpportunity{
 					Symbol:          symbol,
 					BuyExchange:     exchange,
 					SellExchange:    exchange + " (technical)",
-					BuyPrice:        buyPrice,
-					SellPrice:       sellPrice,
-					ProfitPercent:   math.Abs(deviationPercent),
-					ProfitAmount:    math.Abs(sellPrice-buyPrice) * priceHistory[0].volume * 0.1,
-					Volume:          priceHistory[0].volume * 0.1,
+					BuyPrice:        buyF,
+					SellPrice:       sellF,
+					ProfitPercent:   profitPercentF,
+					ProfitAmount:    profitAmountF,
+					Volume:          volF,
 					Timestamp:       time.Now(),
 					OpportunityType: opportunityType,
 				}
@@ -686,19 +713,35 @@ func (h *ArbitrageHandler) findVolatilityOpportunities(ctx context.Context, minP
 			continue
 		}
 
-		// Calculate volatility percentage
-		volatility := ((maxPrice - minPrice) / avgPrice) * 100
+		// Calculate volatility percentage using decimals
+		minDec := decimal.NewFromFloat(minPrice)
+		maxDec := decimal.NewFromFloat(maxPrice)
+		avgDec := decimal.NewFromFloat(avgPrice)
+		if avgDec.IsZero() || maxDec.LessThan(minDec) {
+			continue
+		}
+		volatilityDec := maxDec.Sub(minDec).Div(avgDec).Mul(decimal.NewFromInt(100))
+		minProfitDec := decimal.NewFromFloat(minProfit)
 
-		if volatility >= minProfit {
+		if volatilityDec.GreaterThanOrEqual(minProfitDec) {
+			volPortion := decimal.NewFromFloat(avgVolume).Mul(decimal.NewFromFloat(0.05))
+			profitAmountDec := maxDec.Sub(minDec).Mul(volPortion)
+
+			buyF, _ := minDec.Float64()
+			sellF, _ := maxDec.Float64()
+			profitPercentF, _ := volatilityDec.Float64()
+			profitAmountF, _ := profitAmountDec.Float64()
+			volF, _ := volPortion.Float64()
+
 			opportunity := ArbitrageOpportunity{
 				Symbol:          symbol,
 				BuyExchange:     exchange,
 				SellExchange:    exchange + " (volatility)",
-				BuyPrice:        minPrice,
-				SellPrice:       maxPrice,
-				ProfitPercent:   volatility,
-				ProfitAmount:    (maxPrice - minPrice) * avgVolume * 0.05, // 5% of volume
-				Volume:          avgVolume * 0.05,
+				BuyPrice:        buyF,
+				SellPrice:       sellF,
+				ProfitPercent:   profitPercentF,
+				ProfitAmount:    profitAmountF,
+				Volume:          volF,
 				Timestamp:       time.Now(),
 				OpportunityType: "volatility",
 			}

@@ -104,10 +104,14 @@ type MarketDataConfig struct {
 }
 
 type ArbitrageConfig struct {
-	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
-	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
-	CheckInterval      string   `mapstructure:"check_interval"`
+	MinProfitThreshold float64 `mapstructure:"min_profit_threshold"`
+	MaxTradeAmount     float64 `mapstructure:"max_trade_amount"`
+	CheckInterval      string  `mapstructure:"check_interval"`
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
+	Enabled            bool    `mapstructure:"enabled"`
+	IntervalSeconds    int     `mapstructure:"interval_seconds"`
+	MaxAgeMinutes      int     `mapstructure:"max_age_minutes"`
+	BatchSize          int     `mapstructure:"batch_size"`
 }
 
 type BlacklistConfig struct {
@@ -218,7 +222,11 @@ func setDefaults() {
 	viper.SetDefault("market_data.exchanges", []string{"binance", "coinbase", "kraken", "bitfinex", "huobi"})
 
 	// Arbitrage
+	viper.SetDefault("arbitrage.enabled", true)
+	viper.SetDefault("arbitrage.interval_seconds", 60)
 	viper.SetDefault("arbitrage.min_profit_threshold", 0.5)
+	viper.SetDefault("arbitrage.max_age_minutes", 30)
+	viper.SetDefault("arbitrage.batch_size", 100)
 	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
 	viper.SetDefault("arbitrage.check_interval", "2m")
 	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})

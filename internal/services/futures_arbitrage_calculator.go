@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -235,13 +237,49 @@ func (calc *FuturesArbitrageCalculator) calculateVolatilityScore(
 
 // calculateLiquidityScore calculates liquidity-based score
 func (calc *FuturesArbitrageCalculator) calculateLiquidityScore(
-	_input models.FuturesArbitrageCalculationInput,
+	input models.FuturesArbitrageCalculationInput,
 ) decimal.Decimal {
-	// Simplified liquidity score
-	// In a real implementation, this would consider order book depth, volume, etc.
-
-	// For now, return a base score that could be enhanced with real market data
-	return decimal.NewFromInt(75) // Assume good liquidity as default
+	// Calculate liquidity score based on available market data
+	// Higher score indicates better liquidity
+	
+	// Base score from price convergence - smaller spread indicates better liquidity
+	priceSpread := input.LongMarkPrice.Sub(input.ShortMarkPrice).Abs()
+	priceSpreadPercent := priceSpread.Div(input.LongMarkPrice).Mul(decimal.NewFromInt(100))
+	
+	// Score decreases as price spread increases
+	spreadScore := decimal.NewFromInt(100).Sub(priceSpreadPercent.Mul(decimal.NewFromFloat(2.0)))
+	if spreadScore.LessThan(decimal.NewFromInt(0)) {
+		spreadScore = decimal.NewFromInt(0)
+	}
+	
+	// Base amount consideration - larger amounts may have liquidity impact
+	amountScore := decimal.NewFromInt(100)
+	if input.BaseAmount.GreaterThan(decimal.NewFromInt(100000)) { // > $100k
+		amountScore = decimal.NewFromInt(80) // Reduced score for large amounts
+	} else if input.BaseAmount.GreaterThan(decimal.NewFromInt(50000)) { // > $50k
+		amountScore = decimal.NewFromInt(90)
+	}
+	
+	// Exchange-specific liquidity factors (simplified)
+	exchangeScore := decimal.NewFromInt(100)
+	if input.LongExchange != input.ShortExchange {
+		// Different exchanges may have different liquidity profiles
+		exchangeScore = decimal.NewFromInt(90)
+	}
+	
+	// Weighted average of different factors
+	liquidityScore := spreadScore.Mul(decimal.NewFromFloat(0.5)).
+		Add(amountScore.Mul(decimal.NewFromFloat(0.3))).
+		Add(exchangeScore.Mul(decimal.NewFromFloat(0.2)))
+	
+	// Ensure score is within 0-100 range
+	if liquidityScore.GreaterThan(decimal.NewFromInt(100)) {
+		liquidityScore = decimal.NewFromInt(100)
+	} else if liquidityScore.LessThan(decimal.NewFromInt(0)) {
+		liquidityScore = decimal.NewFromInt(0)
+	}
+	
+	return liquidityScore
 }
 
 // CalculatePositionSizing calculates recommended position sizes and leverage
@@ -342,12 +380,18 @@ func (calc *FuturesArbitrageCalculator) calculateMaxLossPercentage(riskTolerance
 }
 
 // calculateNextFundingTime estimates next funding time
-func (calc *FuturesArbitrageCalculator) calculateNextFundingTime(_fundingInterval int) time.Time {
-	// Simplified calculation - in reality, this would query exchange APIs
+func (calc *FuturesArbitrageCalculator) calculateNextFundingTime(fundingInterval int) time.Time {
+	// Calculate next funding time based on interval
 	now := time.Now().UTC()
 
-	// Most exchanges have funding at 00:00, 08:00, 16:00 UTC
-	fundingHours := []int{0, 8, 16}
+	// Common funding intervals: 8 hours (00:00, 08:00, 16:00) or 4 hours
+	var fundingHours []int
+	if fundingInterval == 4 {
+		fundingHours = []int{0, 4, 8, 12, 16, 20}
+	} else {
+		// Default to 8-hour intervals
+		fundingHours = []int{0, 8, 16}
+	}
 
 	currentHour := now.Hour()
 	var nextFundingHour int
@@ -374,7 +418,7 @@ func (calc *FuturesArbitrageCalculator) isOpportunityActive(
 	riskScore decimal.Decimal,
 ) bool {
 	// Minimum thresholds for active opportunities
-	minFundingRate := decimal.NewFromFloat(0.0001) // 0.01% minimum
+	minFundingRate := decimal.NewFromFloat(0.00001) // 0.001% minimum (realistic for crypto funding rates)
 	maxRiskScore := decimal.NewFromInt(80)         // Maximum 80% risk
 
 	return netFundingRate.GreaterThan(minFundingRate) && riskScore.LessThan(maxRiskScore)
@@ -426,9 +470,65 @@ func (calc *FuturesArbitrageCalculator) CalculateRiskMetrics(
 }
 
 // Helper methods for risk calculations
-func (calc *FuturesArbitrageCalculator) calculatePriceCorrelation(_data []models.FundingRateHistoryPoint) decimal.Decimal {
-	// Simplified correlation calculation
-	return decimal.NewFromFloat(0.95) // Assume high correlation between exchanges
+func (calc *FuturesArbitrageCalculator) calculatePriceCorrelation(data []models.FundingRateHistoryPoint) decimal.Decimal {
+	if len(data) < 2 {
+		return decimal.NewFromFloat(0.95) // Default high correlation
+	}
+
+	// Extract mark prices for correlation calculation
+	prices := make([]float64, len(data))
+	for i, point := range data {
+		prices[i] = point.MarkPrice.InexactFloat64()
+	}
+
+	// Calculate Pearson correlation coefficient
+	return calc.calculatePearsonCorrelation(prices)
+}
+
+// calculatePearsonCorrelation calculates Pearson correlation coefficient
+func (calc *FuturesArbitrageCalculator) calculatePearsonCorrelation(prices []float64) decimal.Decimal {
+	n := float64(len(prices))
+	if n < 2 {
+		return decimal.NewFromFloat(0.0)
+	}
+
+	// Calculate mean
+	sum := 0.0
+	for _, price := range prices {
+		sum += price
+	}
+	mean := sum / n
+
+	// Calculate covariance and standard deviations
+	sumCovariance := 0.0
+	sumVarianceX := 0.0
+	sumVarianceY := 0.0
+
+	// Use price series with lag 1 for correlation calculation
+	for i := 0; i < len(prices)-1; i++ {
+		x := prices[i] - mean
+		y := prices[i+1] - mean
+		
+		sumCovariance += x * y
+		sumVarianceX += x * x
+		sumVarianceY += y * y
+	}
+
+	// Calculate correlation coefficient
+	if sumVarianceX == 0 || sumVarianceY == 0 {
+		return decimal.NewFromFloat(0.0)
+	}
+
+	correlation := sumCovariance / (math.Sqrt(sumVarianceX) * math.Sqrt(sumVarianceY))
+	
+	// Clamp correlation between -1 and 1
+	if correlation > 1.0 {
+		correlation = 1.0
+	} else if correlation < -1.0 {
+		correlation = -1.0
+	}
+
+	return decimal.NewFromFloat(correlation)
 }
 
 func (calc *FuturesArbitrageCalculator) calculatePriceVolatility(data []models.FundingRateHistoryPoint) decimal.Decimal {
@@ -541,4 +641,123 @@ func (calc *FuturesArbitrageCalculator) calculateVariance(values []float64, mean
 		sum += diff * diff
 	}
 	return sum / float64(len(values)-1)
+}
+
+// CalculateArbitrageOpportunities calculates regular price arbitrage opportunities across exchanges
+func (calc *FuturesArbitrageCalculator) CalculateArbitrageOpportunities(
+	ctx context.Context,
+	marketData map[string][]models.MarketData,
+) ([]models.ArbitrageOpportunity, error) {
+	
+	var opportunities []models.ArbitrageOpportunity
+	
+	// Group market data by symbol across all exchanges
+	symbolPrices := make(map[string]map[string]models.MarketData)
+	
+	for exchange, data := range marketData {
+		for _, marketData := range data {
+			symbol := ""
+			if marketData.TradingPair != nil && marketData.TradingPair.Symbol != "" {
+				symbol = marketData.TradingPair.Symbol
+			}
+			
+			if symbol == "" {
+				continue
+			}
+			
+			if symbolPrices[symbol] == nil {
+				symbolPrices[symbol] = make(map[string]models.MarketData)
+			}
+			symbolPrices[symbol][exchange] = marketData
+		}
+	}
+	
+	// Calculate arbitrage opportunities for each symbol
+	for symbol, exchangeData := range symbolPrices {
+		if len(exchangeData) < 2 {
+			continue // Need at least 2 exchanges for arbitrage
+		}
+		
+		symbolOpportunities := calc.calculateSymbolArbitrage(symbol, exchangeData)
+		opportunities = append(opportunities, symbolOpportunities...)
+	}
+	
+	return opportunities, nil
+}
+
+// calculateSymbolArbitrage calculates arbitrage opportunities for a specific symbol
+func (calc *FuturesArbitrageCalculator) calculateSymbolArbitrage(
+	symbol string,
+	exchangeData map[string]models.MarketData,
+) []models.ArbitrageOpportunity {
+	
+	var opportunities []models.ArbitrageOpportunity
+	
+	// Find the lowest and highest prices
+	var lowestPrice decimal.Decimal
+	var highestPrice decimal.Decimal
+	var lowestExchange string
+	var highestExchange string
+	var lowestData, highestData models.MarketData
+	
+	first := true
+	for exchange, data := range exchangeData {
+		if first {
+			lowestPrice = data.LastPrice
+			highestPrice = data.LastPrice
+			lowestExchange = exchange
+			highestExchange = exchange
+			lowestData = data
+			highestData = data
+			first = false
+			continue
+		}
+		
+		if data.LastPrice.LessThan(lowestPrice) {
+			lowestPrice = data.LastPrice
+			lowestExchange = exchange
+			lowestData = data
+		}
+		
+		if data.LastPrice.GreaterThan(highestPrice) {
+			highestPrice = data.LastPrice
+			highestExchange = exchange
+			highestData = data
+		}
+	}
+	
+	// Calculate profit percentage
+	if lowestPrice.IsZero() {
+		return opportunities
+	}
+	
+	priceDifference := highestPrice.Sub(lowestPrice)
+	profitPercentage := priceDifference.Div(lowestPrice).Mul(decimal.NewFromInt(100))
+	
+	// Only create opportunity if profit is meaningful (above 0.1%)
+	if profitPercentage.GreaterThan(decimal.NewFromFloat(0.1)) {
+		// Calculate estimated profit for a $10,000 position
+		baseAmount := decimal.NewFromInt(10000)
+		estimatedAmount := baseAmount.Div(lowestPrice).Mul(highestPrice)
+		_ = estimatedAmount.Sub(baseAmount) // profitAmount for logging/debugging
+		
+		opportunity := models.ArbitrageOpportunity{
+			ID:               fmt.Sprintf("%s_%s_%s_%d", symbol, lowestExchange, highestExchange, time.Now().Unix()),
+			TradingPairID:    lowestData.TradingPairID,
+			BuyExchangeID:    lowestData.ExchangeID,
+			SellExchangeID:   highestData.ExchangeID,
+			BuyPrice:         lowestPrice,
+			SellPrice:        highestPrice,
+			ProfitPercentage: profitPercentage,
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(time.Minute * 30), // Expire after 30 minutes
+			BuyExchange:      &models.Exchange{ID: lowestData.ExchangeID, Name: lowestExchange},
+			SellExchange:     &models.Exchange{ID: highestData.ExchangeID, Name: highestExchange},
+			TradingPair:      lowestData.TradingPair,
+		}
+		
+		opportunities = append(opportunities, opportunity)
+	}
+	
+	return opportunities
 }
