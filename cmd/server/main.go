@@ -24,11 +24,17 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Application failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Initialize telemetry first
@@ -291,4 +297,5 @@ func main() {
 	}
 
 	logrusLogger.Info("Server exited gracefully")
+	return nil
 }
