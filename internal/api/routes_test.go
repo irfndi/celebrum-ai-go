@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -369,6 +370,11 @@ func TestSetupRoutes_FunctionSignature(t *testing.T) {
 func TestSetupRoutes_PanicHandling(t *testing.T) {
 	// Set Gin to test mode
 	gin.SetMode(gin.TestMode)
+
+	// Set a test admin API key to avoid environment variable check
+	oldAdminKey := os.Getenv("ADMIN_API_KEY")
+	os.Setenv("ADMIN_API_KEY", "test-admin-key-for-testing-purposes-only")
+	defer os.Setenv("ADMIN_API_KEY", oldAdminKey)
 
 	// Create a new router
 	router := gin.New()

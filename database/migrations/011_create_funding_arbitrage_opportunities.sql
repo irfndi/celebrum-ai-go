@@ -1,5 +1,5 @@
 -- Create funding arbitrage opportunities table
--- Migration 009: Add missing funding_arbitrage_opportunities table
+-- Migration 011: Add missing funding_arbitrage_opportunities table
 -- Created: 2025-01-17
 
 BEGIN;
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS funding_arbitrage_opportunities (
 -- Create indexes for funding arbitrage opportunities
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_active ON funding_arbitrage_opportunities(is_active, detected_at DESC) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_profit ON funding_arbitrage_opportunities(estimated_profit_percentage DESC);
-CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_risk ON funding_arbitrage_opportunities(risk_score ASC);
+CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_active_filter ON funding_arbitrage_opportunities(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_expires ON funding_arbitrage_opportunities(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Create view for active funding arbitrage opportunities

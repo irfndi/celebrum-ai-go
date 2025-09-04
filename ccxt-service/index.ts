@@ -7,7 +7,7 @@ Worker utilities note (Bun >= 1.2.21):
 - If you need metadata, consider sending a small metadata message separately, or keep the large payload
   as a top-level string field to preserve fast-path benefits.
 */
-// Initialize OpenTelemetry tracing first
+import { serve } from '@hono/node-server'
 require('./tracing');
 
 import { Hono } from 'hono';
@@ -323,7 +323,7 @@ app.get('/api/exchanges', (c) => {
       const exchangeList = Object.keys(exchanges).map(id => ({
         id,
         name: exchanges[id].name || id,
-        countries: exchanges[id].countries || [],
+        countries: (exchanges[id].countries || []).map(country => String(country)),
         urls: exchanges[id].urls || {}
       }));
       
@@ -863,7 +863,11 @@ app.post('/api/admin/exchanges/blacklist/:exchange', adminAuth, async (c) => {
       // Save configuration to file
       const saved = saveExchangeConfig(exchangeConfig);
       if (!saved) {
-        console.warn('Failed to persist blacklist changes to file');
+        console.error('Failed to persist blacklist changes to file');
+        return c.json({
+          error: 'Failed to persist configuration changes',
+          timestamp: new Date().toISOString()
+        }, 500);
       }
       
       // Remove from active exchanges if it exists
@@ -1059,7 +1063,7 @@ app.notFound((c) => {
 console.log(`🚀 CCXT Service starting on port ${PORT}`);
 console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
 
-export default {
-  port: PORT,
+serve({
   fetch: app.fetch,
-};
+  port: Number(PORT),
+});

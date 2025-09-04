@@ -220,29 +220,7 @@ func run() error {
 	cleanupService := services.NewCleanupService(db, errorRecoveryManager, resourceManager, performanceMonitor)
 
 	// Start cleanup service with configuration
-	cleanupConfig := services.CleanupConfig{
-		MarketData: struct {
-			RetentionHours int `yaml:"retention_hours" default:"36"`
-			DeletionHours  int `yaml:"deletion_hours" default:"12"`
-		}{
-			RetentionHours: cfg.Cleanup.MarketData.RetentionHours,
-			DeletionHours:  cfg.Cleanup.MarketData.DeletionHours,
-		},
-		FundingRates: struct {
-			RetentionHours int `yaml:"retention_hours" default:"36"`
-			DeletionHours  int `yaml:"deletion_hours" default:"12"`
-		}{
-			RetentionHours: cfg.Cleanup.FundingRates.RetentionHours,
-			DeletionHours:  cfg.Cleanup.FundingRates.DeletionHours,
-		},
-		ArbitrageOpportunities: struct {
-			RetentionHours int `yaml:"retention_hours" default:"72"`
-		}{
-			RetentionHours: cfg.Cleanup.ArbitrageOpportunities.RetentionHours,
-		},
-		IntervalMinutes:    cfg.Cleanup.IntervalMinutes,
-		EnableSmartCleanup: cfg.Cleanup.EnableSmartCleanup,
-	}
+	cleanupConfig := cfg.Cleanup
 	go cleanupService.Start(cleanupConfig)
 	defer cleanupService.Stop()
 

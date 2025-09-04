@@ -57,7 +57,12 @@ func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtUR
 
 func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer("celebrum-ai-app")
-	ctx, span := tracer.Start(r.Context(), "health_check")
+	
+	// Create context with timeout for health checks
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	
+	ctx, span := tracer.Start(ctx, "health_check")
 	defer span.End()
 
 	span.SetAttributes(

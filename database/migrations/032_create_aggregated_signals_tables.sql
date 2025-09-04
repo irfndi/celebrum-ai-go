@@ -224,17 +224,23 @@ WHERE created_at >= NOW() - INTERVAL '24 hours'
 GROUP BY signal_type, symbol, action, strength
 ORDER BY avg_quality_score DESC;
 
--- Grant permissions to application roles
-GRANT SELECT, INSERT, UPDATE, DELETE ON aggregated_signals TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON signal_fingerprints TO authenticated;
-GRANT SELECT ON active_quality_signals TO authenticated;
-GRANT SELECT ON signal_statistics TO authenticated;
-GRANT EXECUTE ON FUNCTION cleanup_expired_signals() TO authenticated;
-GRANT EXECUTE ON FUNCTION calculate_signal_quality_score(DECIMAL, DECIMAL, DECIMAL, VARCHAR, VARCHAR) TO authenticated;
-
--- Grant basic read access to anonymous users for public signal data
-GRANT SELECT ON active_quality_signals TO anon;
-GRANT SELECT ON signal_statistics TO anon;
+-- Grant permissions to application roles (only if roles exist)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON aggregated_signals TO authenticated;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON signal_fingerprints TO authenticated;
+        GRANT SELECT ON active_quality_signals TO authenticated;
+        GRANT SELECT ON signal_statistics TO authenticated;
+        GRANT EXECUTE ON FUNCTION cleanup_expired_signals() TO authenticated;
+        GRANT EXECUTE ON FUNCTION calculate_signal_quality_score(DECIMAL, DECIMAL, DECIMAL, VARCHAR, VARCHAR) TO authenticated;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        GRANT SELECT ON active_quality_signals TO anon;
+        GRANT SELECT ON signal_statistics TO anon;
+    END IF;
+END $$;
 
 -- Create additional performance indexes for complex queries
 -- Note: Cannot use NOW() in index predicates as it's not immutable
@@ -469,10 +475,15 @@ $func$ LANGUAGE plpgsql;
 END
 $$;
 
--- Grant permissions for new functions
-GRANT EXECUTE ON FUNCTION batch_cleanup_signals(INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_signal_analytics(INTERVAL) TO authenticated;
-GRANT EXECUTE ON FUNCTION track_signal_performance(VARCHAR, DECIMAL, TIMESTAMP) TO authenticated;
+-- Grant permissions for new functions (only if roles exist)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        GRANT EXECUTE ON FUNCTION batch_cleanup_signals(INTEGER) TO authenticated;
+        GRANT EXECUTE ON FUNCTION get_signal_analytics(INTERVAL) TO authenticated;
+        GRANT EXECUTE ON FUNCTION track_signal_performance(VARCHAR, DECIMAL, TIMESTAMP) TO authenticated;
+    END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON TABLE aggregated_signals IS 'Stores aggregated trading signals from various sources (arbitrage, technical analysis)';

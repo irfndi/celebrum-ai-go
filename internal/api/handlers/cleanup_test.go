@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -31,7 +31,7 @@ func (m *MockCleanupService) GetDataStats(ctx context.Context) (map[string]int64
 	return args.Get(0).(map[string]int64), args.Error(1)
 }
 
-func (m *MockCleanupService) RunCleanup(config services.CleanupConfig) error {
+func (m *MockCleanupService) RunCleanup(config config.CleanupConfig) error {
 	args := m.Called(config)
 	return args.Error(0)
 }
@@ -185,10 +185,10 @@ func TestCleanupHandler_TriggerCleanup(t *testing.T) {
 
 			// Setup expectations
 			if tt.cleanupError == nil {
-				mockService.On("RunCleanup", mock.AnythingOfType("services.CleanupConfig")).Return(tt.cleanupError)
+				mockService.On("RunCleanup", mock.AnythingOfType("config.CleanupConfig")).Return(tt.cleanupError)
 				mockService.On("GetDataStats", mock.Anything).Return(tt.statsAfterCleanup, tt.statsError)
 			} else {
-				mockService.On("RunCleanup", mock.AnythingOfType("services.CleanupConfig")).Return(tt.cleanupError)
+				mockService.On("RunCleanup", mock.AnythingOfType("config.CleanupConfig")).Return(tt.cleanupError)
 			}
 
 			// Create request
@@ -265,7 +265,7 @@ func TestCleanupHandler_TriggerCleanup_ParameterParsing(t *testing.T) {
 			handler := NewCleanupHandler(mockService)
 
 			// Setup expectations - we'll verify the config passed to RunCleanup
-			mockService.On("RunCleanup", mock.MatchedBy(func(config services.CleanupConfig) bool {
+			mockService.On("RunCleanup", mock.MatchedBy(func(config config.CleanupConfig) bool {
 				return config.MarketData.RetentionHours == tt.expectedMarketDataHours &&
 					config.FundingRates.RetentionHours == tt.expectedFundingRateHours &&
 					config.ArbitrageOpportunities.RetentionHours == tt.expectedArbitrageHours

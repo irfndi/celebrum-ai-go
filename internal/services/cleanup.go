@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
 	"log/slog"
@@ -22,21 +23,7 @@ type CleanupService struct {
 }
 
 // CleanupConfig defines cleanup configuration
-type CleanupConfig struct {
-	MarketData struct {
-		RetentionHours int `yaml:"retention_hours" default:"36"`
-		DeletionHours  int `yaml:"deletion_hours" default:"12"`
-	} `yaml:"market_data"`
-	FundingRates struct {
-		RetentionHours int `yaml:"retention_hours" default:"36"`
-		DeletionHours  int `yaml:"deletion_hours" default:"12"`
-	} `yaml:"funding_rates"`
-	ArbitrageOpportunities struct {
-		RetentionHours int `yaml:"retention_hours" default:"72"`
-	} `yaml:"arbitrage_opportunities"`
-	IntervalMinutes    int  `yaml:"interval_minutes" default:"60"`
-	EnableSmartCleanup bool `yaml:"enable_smart_cleanup" default:"true"`
-}
+type CleanupConfig = config.CleanupConfig
 
 // NewCleanupService creates a new cleanup service
 func NewCleanupService(db *database.PostgresDB, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {

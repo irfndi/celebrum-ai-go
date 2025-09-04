@@ -83,7 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_funding_rates_next_funding ON funding_rates(next_
 
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_active ON funding_arbitrage_opportunities(is_active, detected_at DESC) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_profit ON funding_arbitrage_opportunities(estimated_profit_percentage DESC);
-CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_risk ON funding_arbitrage_opportunities(risk_score ASC);
+CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_active_filter ON funding_arbitrage_opportunities(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_funding_arbitrage_expires ON funding_arbitrage_opportunities(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Create view for active funding arbitrage opportunities

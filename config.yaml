@@ -25,11 +25,11 @@ server:
 
 # Database configuration
 database:
-  # For local development - SECURITY: Set DATABASE_PASSWORD environment variable
+  # For local development with Docker on host
   host: localhost
   port: 5432
-  user: postgres
-  password: "" # SECURITY: Use DATABASE_PASSWORD environment variable instead
+  user: celebrum_user
+  password: celebrum_password_123
   dbname: celebrum_ai
   sslmode: disable
 
@@ -44,7 +44,7 @@ database:
 
 # Redis configuration
 redis:
-  host: localhost
+  host: redis
   port: 6379
   password: ""
   db: 0
@@ -58,7 +58,7 @@ redis:
 
 # CCXT Service configuration
 ccxt:
-  service_url: http://localhost:3001
+  service_url: http://ccxt-service:3001
   timeout: 30
   retry_attempts: 3
   retry_delay: 1s

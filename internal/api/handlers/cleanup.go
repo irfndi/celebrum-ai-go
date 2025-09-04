@@ -6,13 +6,13 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfndi/celebrum-ai-go/internal/config"
 )
 
 // CleanupInterface defines the interface for cleanup operations
 type CleanupInterface interface {
 	GetDataStats(ctx context.Context) (map[string]int64, error)
-	RunCleanup(config services.CleanupConfig) error
+	RunCleanup(config config.CleanupConfig) error
 }
 
 // CleanupHandler handles cleanup-related API endpoints
@@ -89,24 +89,16 @@ func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 	}
 
 	// Create cleanup config for manual trigger
-	config := services.CleanupConfig{
-		MarketData: struct {
-			RetentionHours int `yaml:"retention_hours" default:"36"`
-			DeletionHours  int `yaml:"deletion_hours" default:"12"`
-		}{
+	config := config.CleanupConfig{
+		MarketData: config.CleanupDataConfig{
 			RetentionHours: marketDataHours,
 			DeletionHours:  12, // Default deletion hours
 		},
-		FundingRates: struct {
-			RetentionHours int `yaml:"retention_hours" default:"36"`
-			DeletionHours  int `yaml:"deletion_hours" default:"12"`
-		}{
+		FundingRates: config.CleanupDataConfig{
 			RetentionHours: fundingRateHours,
 			DeletionHours:  12, // Default deletion hours
 		},
-		ArbitrageOpportunities: struct {
-			RetentionHours int `yaml:"retention_hours" default:"72"`
-		}{
+		ArbitrageOpportunities: config.CleanupArbitrageConfig{
 			RetentionHours: arbitrageHours,
 		},
 		IntervalMinutes:    60,   // Default interval

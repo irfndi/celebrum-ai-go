@@ -94,13 +94,15 @@ CREATE TABLE IF NOT EXISTS market_data (
 CREATE TABLE IF NOT EXISTS funding_rates (
     id SERIAL PRIMARY KEY,
     exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
-    symbol VARCHAR(50) NOT NULL,
-    funding_rate DECIMAL(10,6),
-    funding_rate_timestamp TIMESTAMP WITH TIME ZONE,
+    trading_pair_id INTEGER NOT NULL REFERENCES trading_pairs(id) ON DELETE CASCADE,
+    funding_rate DECIMAL(10,8),
+    funding_time TIMESTAMP WITH TIME ZONE,
     next_funding_time TIMESTAMP WITH TIME ZONE,
+    mark_price DECIMAL(20,8),
+    index_price DECIMAL(20,8),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(exchange_id, symbol, funding_rate_timestamp)
+    UNIQUE(exchange_id, trading_pair_id, funding_time)
 );
 
 -- Create arbitrage_opportunities table with is_active column
@@ -155,7 +157,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 CREATE INDEX IF NOT EXISTS idx_market_data_exchange_timestamp ON market_data(exchange_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_pair_timestamp ON market_data(trading_pair_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_symbol ON funding_rates(exchange_id, symbol);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_pair_time ON funding_rates(exchange_id, trading_pair_id, funding_time DESC);
 CREATE INDEX IF NOT EXISTS idx_funding_rates_next_funding_time ON funding_rates(next_funding_time DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_detected_at ON arbitrage_opportunities(detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_opportunities_active ON arbitrage_opportunities(is_active, detected_at DESC);

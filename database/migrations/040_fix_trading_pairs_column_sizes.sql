@@ -115,11 +115,20 @@ FROM active_futures_arbitrage_opportunities;
 -- Recreate the active_exchange_trading_pairs view
 CREATE OR REPLACE VIEW active_exchange_trading_pairs AS
 SELECT 
-    etp.*,
+    etp.id,
+    etp.exchange_id,
+    etp.trading_pair_id,
+    etp.symbol as exchange_symbol,
+    etp.base_currency as exchange_base_currency,
+    etp.quote_currency as exchange_quote_currency,
+    etp.is_active,
+    etp.is_blacklisted,
+    etp.created_at,
+    etp.updated_at,
     tp.symbol,
     tp.base_currency,
     tp.quote_currency,
-    tp.category
+    tp.is_futures
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_active = true 
@@ -128,11 +137,20 @@ WHERE etp.is_active = true
 -- Recreate the blacklisted_exchange_trading_pairs view
 CREATE OR REPLACE VIEW blacklisted_exchange_trading_pairs AS
 SELECT 
-    etp.*,
+    etp.id,
+    etp.exchange_id,
+    etp.trading_pair_id,
+    etp.symbol as exchange_symbol,
+    etp.base_currency as exchange_base_currency,
+    etp.quote_currency as exchange_quote_currency,
+    etp.is_active,
+    etp.is_blacklisted,
+    etp.created_at,
+    etp.updated_at,
     tp.symbol,
     tp.base_currency,
     tp.quote_currency,
-    tp.category
+    tp.is_futures
 FROM exchange_trading_pairs etp
 JOIN trading_pairs tp ON etp.trading_pair_id = tp.id
 WHERE etp.is_blacklisted = true;
@@ -144,7 +162,6 @@ SELECT
     tp.symbol as tp_symbol,
     tp.base_currency as tp_base_currency,
     tp.quote_currency as tp_quote_currency,
-    tp.category as tp_category,
     tp.is_futures as tp_is_futures,
     tp.is_active as tp_is_active,
     etp.id as exchange_trading_pair_id,
