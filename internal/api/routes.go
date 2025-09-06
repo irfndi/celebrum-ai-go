@@ -12,7 +12,7 @@ import (
 	futuresHandlers "github.com/irfndi/celebrum-ai-go/internal/handlers"
 	"github.com/irfndi/celebrum-ai-go/internal/middleware"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 )
 
 type HealthResponse struct {

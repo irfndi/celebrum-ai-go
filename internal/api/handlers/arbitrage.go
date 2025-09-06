@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )

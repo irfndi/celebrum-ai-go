@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 )
 
 type AnalysisHandler struct {

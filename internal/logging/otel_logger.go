@@ -104,6 +104,14 @@ func (l *OTLPLogger) Logger() *slog.Logger {
 	return l.logger
 }
 
+// OTLPLogger returns the underlying OpenTelemetry logger for testing
+func (l *OTLPLogger) OTLPLogger() otellog.Logger {
+	if l.provider != nil {
+		return l.provider.Logger("test")
+	}
+	return nil
+}
+
 // OTLPHandler implements slog.Handler for OTLP logging
 type OTLPHandler struct {
 	logger otellog.Logger

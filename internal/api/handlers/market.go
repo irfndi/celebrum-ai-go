@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/irfndi/celebrum-ai-go/internal/database"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/shopspring/decimal"
 )
 
@@ -442,9 +442,9 @@ func (h *MarketHandler) GetTicker(c *gin.Context) {
 			response := TickerResponse{
 				Exchange:  exchange,
 				Symbol:    symbol,
-				Price:     ticker.Price,
-				Volume:    ticker.Volume,
-				Timestamp: ticker.Timestamp,
+				Price:     decimal.NewFromFloat(ticker.GetPrice()),
+				Volume:    decimal.NewFromFloat(ticker.GetVolume()),
+				Timestamp: ticker.GetTimestamp(),
 			}
 			// Cache the live ticker data
 			h.CacheTicker(c.Request.Context(), cacheKey, response)
@@ -591,11 +591,11 @@ func (h *MarketHandler) GetBulkTickers(c *gin.Context) {
 	tickers := make([]TickerResponse, 0, len(marketData))
 	for _, ticker := range marketData {
 		tickers = append(tickers, TickerResponse{
-			Exchange:  ticker.ExchangeName,
-			Symbol:    ticker.Symbol,
-			Price:     ticker.Price,
-			Volume:    ticker.Volume,
-			Timestamp: ticker.Timestamp,
+			Exchange:  ticker.GetExchangeName(),
+			Symbol:    ticker.GetSymbol(),
+			Price:     decimal.NewFromFloat(ticker.GetPrice()),
+			Volume:    decimal.NewFromFloat(ticker.GetVolume()),
+			Timestamp: ticker.GetTimestamp(),
 		})
 	}
 

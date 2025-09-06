@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -2,10 +2,32 @@ package ccxt
 
 import (
 	"context"
+	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 )
+
+// MarketPriceInterface defines the interface for market price data
+type MarketPriceInterface interface {
+	GetPrice() float64
+	GetVolume() float64
+	GetTimestamp() time.Time
+	GetExchangeName() string
+	GetSymbol() string
+}
+
+// ArbitrageOpportunityInterface defines the interface for arbitrage opportunity data
+type ArbitrageOpportunityInterface interface {
+	GetSymbol() string
+	GetBuyExchange() string
+	GetSellExchange() string
+	GetBuyPrice() decimal.Decimal
+	GetSellPrice() decimal.Decimal
+	GetProfitPercentage() decimal.Decimal
+	GetDetectedAt() time.Time
+	GetExpiresAt() time.Time
+}
 
 // CCXTService defines the interface for CCXT operations
 type CCXTService interface {

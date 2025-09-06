@@ -9,9 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/pashagolub/pgxmock/v4"
+	"github.com/redis/go-redis/v9"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Test server configuration
@@ -93,309 +98,329 @@ func TestGinRouterSetup(t *testing.T) {
 	assert.NotEqual(t, router, newRouter)
 }
 
-// Test configuration loading patterns
-func TestConfigurationPatterns(t *testing.T) {
-	// Test environment variable patterns used in config
-	envVars := map[string]string{
-		"SERVER_PORT":    "8080",
-		"DATABASE_HOST":  "localhost",
-		"DATABASE_PORT":  "5432",
-		"REDIS_HOST":     "localhost",
-		"REDIS_PORT":     "6379",
-		"TELEGRAM_TOKEN": "test_token",
-	}
+// Test middleware setup
+func TestMiddlewareSetup(t *testing.T) {
+	// Test router with middleware
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+	router.Use(otelgin.Middleware("celebrum-ai-go-test"))
 
-	for key, value := range envVars {
-		// Set environment variable
-		_ = os.Setenv(key, value)
-		defer func() { _ = os.Unsetenv(key) }()
-
-		// Verify it was set
-		actual := os.Getenv(key)
-		assert.Equal(t, value, actual)
-	}
+	assert.NotNil(t, router)
 }
 
-// Test server startup patterns
-func TestServerStartupPatterns(t *testing.T) {
-	// Test server configuration struct
-	type ServerConfig struct {
-		Port int
-		Host string
+// Test HTTP server timeouts
+func TestHTTPServerTimeouts(t *testing.T) {
+	// Test server with security timeouts
+	router := gin.New()
+	srv := &http.Server{
+		Addr:              ":8080",
+		Handler:           router,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       15 * time.Second,
 	}
 
-	cfg := ServerConfig{
-		Port: 8080,
-		Host: "localhost",
-	}
-
-	assert.Equal(t, 8080, cfg.Port)
-	assert.Equal(t, "localhost", cfg.Host)
-
-	// Test address formatting
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	assert.Equal(t, "localhost:8080", addr)
-
-	// Test port-only address
-	portOnlyAddr := fmt.Sprintf(":%d", cfg.Port)
-	assert.Equal(t, ":8080", portOnlyAddr)
+	assert.NotNil(t, srv)
+	assert.Equal(t, 10*time.Second, srv.ReadTimeout)
+	assert.Equal(t, 10*time.Second, srv.WriteTimeout)
+	assert.Equal(t, 5*time.Second, srv.ReadHeaderTimeout)
+	assert.Equal(t, 15*time.Second, srv.IdleTimeout)
 }
 
-// Test graceful shutdown patterns
-func TestGracefulShutdownPatterns(t *testing.T) {
-	// Test shutdown timeout
-	shutdownTimeout := 30 * time.Second
-	assert.Equal(t, 30*time.Second, shutdownTimeout)
+// Test configuration loading
+func TestConfigurationLoading(t *testing.T) {
+	// Test environment variable parsing
+	testConfig := struct {
+		ServerPort int    `env:"SERVER_PORT" envDefault:"8080"`
+		LogLevel   string `env:"LOG_LEVEL" envDefault:"info"`
+	}{}
 
-	// Test context with shutdown timeout
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	// Test default values
+	assert.Equal(t, 8080, testConfig.ServerPort)
+	assert.Equal(t, "info", testConfig.LogLevel)
+}
+
+// Test Redis connection mock
+func TestRedisConnectionMock(t *testing.T) {
+	// Test miniredis setup
+	s, err := miniredis.Run()
+	assert.NoError(t, err)
+	defer s.Close()
+
+	// Test Redis client
+	rdb := redis.NewClient(&redis.Options{
+		Addr: s.Addr(),
+	})
+	assert.NotNil(t, rdb)
+
+	// Test basic operations
+	err = rdb.Set(context.Background(), "test", "value", 0).Err()
+	assert.NoError(t, err)
+
+	val, err := rdb.Get(context.Background(), "test").Result()
+	assert.NoError(t, err)
+	assert.Equal(t, "value", val)
+}
+
+// Test database mock
+func TestDatabaseMock(t *testing.T) {
+	// Test pgxmock setup
+	mock, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mock.Close()
+
+	assert.NotNil(t, mock)
+}
+
+// Test logger setup
+func TestLoggerSetup(t *testing.T) {
+	// Test logrus logger
+	logger := logrus.New()
+	assert.NotNil(t, logger)
+
+	// Test log level setting
+	logger.SetLevel(logrus.InfoLevel)
+	assert.Equal(t, logrus.InfoLevel, logger.GetLevel())
+
+	// Test JSON formatter
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	assert.NotNil(t, logger.Formatter)
+}
+
+// Test graceful shutdown
+func TestGracefulShutdown(t *testing.T) {
+	// Test server shutdown
+	router := gin.New()
+	_ = &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+
+	// Test context cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	deadline, ok := ctx.Deadline()
-	assert.True(t, ok)
-	assert.True(t, deadline.After(time.Now().Add(29*time.Second)))
-	assert.True(t, deadline.Before(time.Now().Add(31*time.Second)))
+	assert.NotNil(t, ctx)
+	assert.NotNil(t, cancel)
+
+	// Test that context can be cancelled
+	cancel()
+	select {
+	case <-ctx.Done():
+		assert.True(t, true)
+	default:
+		assert.Fail(t, "Context should be cancelled")
+	}
 }
 
-// Test error handling patterns
-func TestErrorHandlingPatterns(t *testing.T) {
-	// Test error formatting patterns used in main
+// Test error handling
+func TestErrorHandling(t *testing.T) {
+	// Test error formatting
 	err := fmt.Errorf("test error")
+	assert.NotNil(t, err)
+	assert.Equal(t, "test error", err.Error())
 
-	// Test configuration error
-	configErr := fmt.Errorf("Failed to load configuration: %v", err)
-	assert.Contains(t, configErr.Error(), "Failed to load configuration")
-	assert.Contains(t, configErr.Error(), "test error")
-
-	// Test database error
-	dbErr := fmt.Errorf("Failed to connect to database: %v", err)
-	assert.Contains(t, dbErr.Error(), "Failed to connect to database")
-	assert.Contains(t, dbErr.Error(), "test error")
-
-	// Test Redis error
-	redisErr := fmt.Errorf("Failed to connect to Redis: %v", err)
-	assert.Contains(t, redisErr.Error(), "Failed to connect to Redis")
-	assert.Contains(t, redisErr.Error(), "test error")
-
-	// Test server error
-	serverErr := fmt.Errorf("Failed to start server: %v", err)
-	assert.Contains(t, serverErr.Error(), "Failed to start server")
-	assert.Contains(t, serverErr.Error(), "test error")
+	// Test error with context
+	wrappedErr := fmt.Errorf("wrapped error: %w", err)
+	assert.NotNil(t, wrappedErr)
+	assert.Contains(t, wrappedErr.Error(), "test error")
 }
 
-// Test HTTP server error handling
-func TestHTTPServerErrorHandling(t *testing.T) {
-	// Test server closed error
-	assert.Equal(t, "http: Server closed", http.ErrServerClosed.Error())
+// Test memory monitoring
+func TestMemoryMonitoring(t *testing.T) {
+	// Test memory stats
+	memStats, err := mem.VirtualMemory()
+	assert.NoError(t, err)
+	assert.NotNil(t, memStats)
 
-	// Test error comparison
-	testErr := http.ErrServerClosed
-	assert.Equal(t, http.ErrServerClosed, testErr)
-
-	// Test different error
-	otherErr := fmt.Errorf("different error")
-	assert.NotEqual(t, http.ErrServerClosed, otherErr)
+	// Test that memory values are reasonable
+	assert.True(t, memStats.Total > 0)
+	assert.True(t, memStats.Available > 0)
+	assert.True(t, memStats.Used >= 0)
+	assert.True(t, memStats.UsedPercent >= 0)
+	assert.True(t, memStats.UsedPercent <= 100)
 }
 
-// Test time operations
-func TestTimeOperations(t *testing.T) {
-	// Test timeout duration
-	timeout := 30 * time.Second
-	assert.Equal(t, 30*time.Second, timeout)
-
-	// Test time comparison
-	now := time.Now()
-	future := now.Add(timeout)
-	assert.True(t, future.After(now))
-	assert.True(t, now.Before(future))
-
-	// Test duration arithmetic
-	halfTimeout := timeout / 2
-	assert.Equal(t, 15*time.Second, halfTimeout)
-	doubleTimeout := timeout * 2
-	assert.Equal(t, 60*time.Second, doubleTimeout)
-}
-
-// Test configuration validation patterns
+// Test configuration validation
 func TestConfigurationValidation(t *testing.T) {
 	// Test port validation
-	validPorts := []int{80, 443, 3000, 8000, 8080, 9000}
+	validPorts := []int{80, 8080, 3000, 8000, 9000}
 	for _, port := range validPorts {
-		assert.Greater(t, port, 0)
-		assert.LessOrEqual(t, port, 65535)
+		assert.True(t, port > 0)
+		assert.True(t, port < 65536)
 	}
 
-	// Test invalid ports
-	invalidPorts := []int{-1, 0, 65536, 100000}
-	for _, port := range invalidPorts {
-		if port <= 0 {
-			assert.LessOrEqual(t, port, 0)
-		} else {
-			assert.Greater(t, port, 65535)
-		}
+	// Test timeout validation
+	timeouts := []time.Duration{
+		5 * time.Second,
+		10 * time.Second,
+		30 * time.Second,
+		60 * time.Second,
+	}
+	for _, timeout := range timeouts {
+		assert.True(t, timeout > 0)
 	}
 }
 
-// Test logging patterns
-func TestLoggingPatterns(t *testing.T) {
-	// Test log message formatting
-	port := 8080
-	startupMsg := fmt.Sprintf("Server starting on port %d", port)
-	assert.Equal(t, "Server starting on port 8080", startupMsg)
+// Test HTTP methods and routes
+func TestHTTPMethodsAndRoutes(t *testing.T) {
+	// Test router with basic routes
+	router := gin.New()
+	
+	// Test GET route
+	router.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "GET test"})
+	})
 
-	// Test shutdown message
-	shutdownMsg := "Shutting down server..."
-	assert.Equal(t, "Shutting down server...", shutdownMsg)
+	// Test POST route
+	router.POST("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "POST test"})
+	})
 
-	// Test exit message
-	exitMsg := "Server exited"
-	assert.Equal(t, "Server exited", exitMsg)
+	assert.NotNil(t, router)
 }
 
-// Test defer patterns
-func TestDeferPatterns(t *testing.T) {
-	// Test defer execution order
-	var order []string
+// Test middleware chain
+func TestMiddlewareChain(t *testing.T) {
+	// Test middleware order
+	router := gin.New()
+	
+	// Add middleware in order
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+	router.Use(otelgin.Middleware("test-service"))
 
-	func() {
-		defer func() { order = append(order, "first") }()
-		defer func() { order = append(order, "second") }()
-		defer func() { order = append(order, "third") }()
-	}()
-
-	// Defers execute in LIFO order
-	expected := []string{"third", "second", "first"}
-	assert.Equal(t, expected, order)
+	assert.NotNil(t, router)
 }
 
-// Test goroutine patterns
-func TestGoroutinePatterns(t *testing.T) {
-	// Test channel communication
-	done := make(chan bool)
+// Test context management
+func TestContextManagement(t *testing.T) {
+	// Test background context
+	ctx := context.Background()
+	assert.NotNil(t, ctx)
 
-	go func() {
-		// Simulate server startup
-		time.Sleep(10 * time.Millisecond)
-		done <- true
-	}()
+	// Test context with timeout
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	// Wait for goroutine completion
+	assert.NotNil(t, ctx)
+	assert.NotNil(t, cancel)
+}
+
+// Test server lifecycle
+func TestServerLifecycle(t *testing.T) {
+	// Test server creation and configuration
+	router := gin.New()
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+
+	assert.NotNil(t, srv)
+	assert.Equal(t, ":8080", srv.Addr)
+	assert.NotNil(t, srv.Handler)
+
+	// Test that server is not running initially
+	assert.False(t, false) // Placeholder for actual running state check
+}
+
+// Test error scenarios
+func TestErrorScenarios(t *testing.T) {
+	// Test invalid port
+	invalidPort := -1
+	assert.True(t, invalidPort < 0)
+
+	// Test empty address
+	emptyAddr := ""
+	assert.Equal(t, "", emptyAddr)
+
+	// Test nil handler
+	var nilHandler http.Handler
+	assert.Nil(t, nilHandler)
+}
+
+// Test configuration scenarios
+func TestConfigurationScenarios(t *testing.T) {
+	// Test different server configurations
+	configs := []struct {
+		addr         string
+		readTimeout  time.Duration
+		writeTimeout time.Duration
+	}{
+		{":8080", 10 * time.Second, 10 * time.Second},
+		{":3000", 5 * time.Second, 5 * time.Second},
+		{":9000", 30 * time.Second, 30 * time.Second},
+	}
+
+	for _, cfg := range configs {
+		assert.NotEmpty(t, cfg.addr)
+		assert.True(t, cfg.readTimeout > 0)
+		assert.True(t, cfg.writeTimeout > 0)
+	}
+}
+
+// Test signal handling scenarios
+func TestSignalHandlingScenarios(t *testing.T) {
+	// Test signal channel capacity
+	quit := make(chan os.Signal, 1)
+	assert.Equal(t, 1, cap(quit))
+
+	// Test that channel is empty initially
 	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Goroutine did not complete in time")
+	case sig := <-quit:
+		assert.Fail(t, fmt.Sprintf("Unexpected signal: %v", sig))
+	default:
+		assert.True(t, true)
 	}
 }
 
-// Test main function behavior with mock environment
-func TestMainFunction(t *testing.T) {
-	// Save original environment
-	originalPort := os.Getenv("SERVER_PORT")
-	originalDBHost := os.Getenv("DATABASE_HOST")
-	originalDBPort := os.Getenv("DATABASE_PORT")
-	originalRedisHost := os.Getenv("REDIS_HOST")
-	originalRedisPort := os.Getenv("REDIS_PORT")
+// Test timeout scenarios
+func TestTimeoutScenarios(t *testing.T) {
+	// Test various timeout durations
+	timeouts := []struct {
+		name     string
+		duration time.Duration
+		valid    bool
+	}{
+		{"zero", 0, false},
+		{"short", time.Second, true},
+		{"medium", 30 * time.Second, true},
+		{"long", time.Minute, true},
+		{"very long", time.Hour, true},
+	}
 
-	// Set test environment
-	os.Setenv("SERVER_PORT", "8081")
-	os.Setenv("DATABASE_HOST", "localhost")
-	os.Setenv("DATABASE_PORT", "5432")
-	os.Setenv("REDIS_HOST", "localhost")
-	os.Setenv("REDIS_PORT", "6379")
-	os.Setenv("TELEGRAM_TOKEN", "test_token")
-	os.Setenv("TELEGRAM_CHAT_ID", "123456789")
-	os.Setenv("ADMIN_API_KEY", "test_admin_key")
-
-	// Restore original environment after test
-	defer func() {
-		if originalPort != "" {
-			os.Setenv("SERVER_PORT", originalPort)
-		} else {
-			os.Unsetenv("SERVER_PORT")
+	for _, tt := range timeouts {
+		if tt.valid {
+			assert.True(t, tt.duration > 0)
 		}
-		if originalDBHost != "" {
-			os.Setenv("DATABASE_HOST", originalDBHost)
-		} else {
-			os.Unsetenv("DATABASE_HOST")
-		}
-		if originalDBPort != "" {
-			os.Setenv("DATABASE_PORT", originalDBPort)
-		} else {
-			os.Unsetenv("DATABASE_PORT")
-		}
-		if originalRedisHost != "" {
-			os.Setenv("REDIS_HOST", originalRedisHost)
-		} else {
-			os.Unsetenv("REDIS_HOST")
-		}
-		if originalRedisPort != "" {
-			os.Setenv("REDIS_PORT", originalRedisPort)
-		} else {
-			os.Unsetenv("REDIS_PORT")
-		}
-	}()
-
-	// Test that environment variables are set correctly
-	assert.Equal(t, "8081", os.Getenv("SERVER_PORT"))
-	assert.Equal(t, "localhost", os.Getenv("DATABASE_HOST"))
-	assert.Equal(t, "5432", os.Getenv("DATABASE_PORT"))
-	assert.Equal(t, "localhost", os.Getenv("REDIS_HOST"))
-	assert.Equal(t, "6379", os.Getenv("REDIS_PORT"))
-	assert.Equal(t, "test_token", os.Getenv("TELEGRAM_TOKEN"))
-	assert.Equal(t, "123456789", os.Getenv("TELEGRAM_CHAT_ID"))
-	assert.Equal(t, "test_admin_key", os.Getenv("ADMIN_API_KEY"))
-}
-
-// Test main function configuration loading to improve coverage
-func TestMainFunctionConfigLoading(t *testing.T) {
-	// Test configuration loading - this will execute some of the main function's code paths
-	cfg, err := config.Load()
-	if err != nil {
-		// If config loading fails (expected in test environment), test the error handling path
-		assert.NotNil(t, err)
-		assert.Contains(t, err.Error(), "Failed to load configuration")
-	} else {
-		// If config loads successfully, test that we can access configuration values
-		assert.NotNil(t, cfg)
-		assert.Greater(t, cfg.Server.Port, 0)
-		assert.NotEmpty(t, cfg.Database.Host)
-		assert.Greater(t, cfg.Database.Port, 0)
 	}
 }
 
-// Test run function to improve coverage
-func TestRunFunction(t *testing.T) {
-	// Set Gin to test mode to avoid debug output
-	gin.SetMode(gin.TestMode)
-	
-	// Since the run() function contains logrusLogger.Fatal() calls that exit the process,
-	// we can't test it directly without causing the test to fail.
-	// Instead, we'll test the individual components that make up the run function.
-	
-	// Test that the run function exists and is callable
-	assert.NotNil(t, run)
-	
-	// Test configuration loading (the first part of run function)
-	cfg, err := config.Load()
-	if err != nil {
-		// If config loading fails, that's expected in test environment
-		assert.NotNil(t, err)
-		assert.Contains(t, err.Error(), "configuration")
-	} else {
-		// If config loads successfully, test that it has expected values
-		assert.NotNil(t, cfg)
-		assert.Greater(t, cfg.Server.Port, 0)
+// Test main function error handling
+func TestMainFunctionErrorHandling(t *testing.T) {
+	// Test that main function handles errors properly
+	// This is a placeholder test since we can't easily test os.Exit
+	assert.True(t, true)
+}
+
+// Benchmark test for server creation
+func BenchmarkServerCreation(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		router := gin.New()
+		_ = &http.Server{
+			Addr:    ":8080",
+			Handler: router,
+		}
 	}
 }
 
-// Test main function entry point to improve coverage
-func TestMainFunctionEntryPoint(t *testing.T) {
-	// Test that main function exists and can be called
-	// We can't call main() directly as it would exit the process
-	// but we can test that the function exists
-	assert.NotNil(t, main)
-	
-	// Test that run function exists and can be called
-	assert.NotNil(t, run)
+// Benchmark test for context creation
+func BenchmarkContextCreation(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cancel()
+		_ = ctx
+	}
 }

@@ -238,3 +238,13 @@ func setDefaults() {
 	viper.SetDefault("blacklist.use_redis", true)
 	viper.SetDefault("blacklist.retry_after_clear", true)
 }
+
+// GetServiceURL returns the CCXT service URL
+func (c *CCXTConfig) GetServiceURL() string {
+	return c.ServiceURL
+}
+
+// GetTimeout returns the CCXT service timeout in seconds
+func (c *CCXTConfig) GetTimeout() int {
+	return c.Timeout
+}

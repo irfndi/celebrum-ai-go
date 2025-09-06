@@ -41,6 +41,31 @@ type MarketPrice struct {
 	Timestamp    time.Time       `json:"timestamp"`
 }
 
+// GetPrice returns the price as float64
+func (mp *MarketPrice) GetPrice() float64 {
+	return mp.Price.InexactFloat64()
+}
+
+// GetVolume returns the volume as float64
+func (mp *MarketPrice) GetVolume() float64 {
+	return mp.Volume.InexactFloat64()
+}
+
+// GetTimestamp returns the timestamp
+func (mp *MarketPrice) GetTimestamp() time.Time {
+	return mp.Timestamp
+}
+
+// GetExchangeName returns the exchange name
+func (mp *MarketPrice) GetExchangeName() string {
+	return mp.ExchangeName
+}
+
+// GetSymbol returns the symbol
+func (mp *MarketPrice) GetSymbol() string {
+	return mp.Symbol
+}
+
 // TickerData represents real-time ticker information from CCXT
 type TickerData struct {
 	Symbol    string          `json:"symbol"`

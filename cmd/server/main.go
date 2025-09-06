@@ -18,7 +18,7 @@ import (
 	"github.com/irfndi/celebrum-ai-go/internal/logging"
 	"github.com/irfndi/celebrum-ai-go/internal/services"
 	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )

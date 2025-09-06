@@ -44,6 +44,18 @@ type BlacklistCache interface {
 	GetBlacklistedSymbols() ([]BlacklistCacheEntry, error)
 }
 
+// BlacklistRepository interface defines the contract for database operations
+// This allows for dependency injection and testing with mock implementations
+type BlacklistRepository interface {
+	AddExchange(ctx context.Context, exchangeName, reason string, expiresAt *time.Time) (*database.ExchangeBlacklistEntry, error)
+	RemoveExchange(ctx context.Context, exchangeName string) error
+	IsBlacklisted(ctx context.Context, exchangeName string) (bool, string, error)
+	GetAllBlacklisted(ctx context.Context) ([]database.ExchangeBlacklistEntry, error)
+	CleanupExpired(ctx context.Context) (int64, error)
+	GetBlacklistHistory(ctx context.Context, limit int) ([]database.ExchangeBlacklistEntry, error)
+	ClearAll(ctx context.Context) (int64, error)
+}
+
 // RedisBlacklistCache implements BlacklistCache using Redis with database persistence
 type RedisBlacklistCache struct {
 	client redis.Cmdable
@@ -51,11 +63,11 @@ type RedisBlacklistCache struct {
 	stats  BlacklistCacheStats
 	mu     sync.RWMutex
 	prefix string
-	repo   *database.BlacklistRepository
+	repo   BlacklistRepository
 }
 
 // NewRedisBlacklistCache creates a new Redis-based blacklist cache with database persistence
-func NewRedisBlacklistCache(client redis.Cmdable, repo *database.BlacklistRepository) *RedisBlacklistCache {
+func NewRedisBlacklistCache(client redis.Cmdable, repo BlacklistRepository) *RedisBlacklistCache {
 	return &RedisBlacklistCache{
 		client: client,
 		ctx:    context.Background(),

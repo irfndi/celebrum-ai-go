@@ -76,6 +76,46 @@ type ArbitrageOpportunityResponse struct {
 	ValidForMinutes int             `json:"valid_for_minutes,omitempty"`
 }
 
+// GetSymbol returns the symbol
+func (ao *ArbitrageOpportunityResponse) GetSymbol() string {
+	return ao.Symbol
+}
+
+// GetBuyExchange returns the buy exchange
+func (ao *ArbitrageOpportunityResponse) GetBuyExchange() string {
+	return ao.BuyExchange
+}
+
+// GetSellExchange returns the sell exchange
+func (ao *ArbitrageOpportunityResponse) GetSellExchange() string {
+	return ao.SellExchange
+}
+
+// GetBuyPrice returns the buy price
+func (ao *ArbitrageOpportunityResponse) GetBuyPrice() decimal.Decimal {
+	return ao.BuyPrice
+}
+
+// GetSellPrice returns the sell price
+func (ao *ArbitrageOpportunityResponse) GetSellPrice() decimal.Decimal {
+	return ao.SellPrice
+}
+
+// GetProfitPercentage returns the profit percentage
+func (ao *ArbitrageOpportunityResponse) GetProfitPercentage() decimal.Decimal {
+	return ao.ProfitPercentage
+}
+
+// GetDetectedAt returns the detection time
+func (ao *ArbitrageOpportunityResponse) GetDetectedAt() time.Time {
+	return ao.DetectedAt
+}
+
+// GetExpiresAt returns the expiration time
+func (ao *ArbitrageOpportunityResponse) GetExpiresAt() time.Time {
+	return ao.ExpiresAt
+}
+
 // ArbitrageOpportunitiesResponse represents the response for arbitrage opportunities list
 type ArbitrageOpportunitiesResponse struct {
 	Opportunities []ArbitrageOpportunityResponse `json:"opportunities"`

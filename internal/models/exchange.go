@@ -10,6 +10,7 @@ type Exchange struct {
 	Name      string     `json:"name" db:"name"`
 	APIURL    string     `json:"api_url" db:"api_url"`
 	IsActive  bool       `json:"is_active" db:"is_active"`
+	Priority  int        `json:"priority" db:"priority"`
 	LastPing  *time.Time `json:"last_ping" db:"last_ping"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 }
@@ -35,6 +36,7 @@ type ExchangeInfo struct {
 	Name             string `json:"name"`
 	CCXTID           string `json:"ccxt_id"`
 	IsActive         bool   `json:"is_active"`
+	Priority         int    `json:"priority"`
 	HasFutures       bool   `json:"has_futures"`
 	WebsocketEnabled bool   `json:"websocket_enabled"`
 	Status           string `json:"status"`

@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ExchangeBlacklistEntry represents a blacklisted exchange in the database
@@ -20,13 +21,21 @@ type ExchangeBlacklistEntry struct {
 	IsActive     bool       `json:"is_active" db:"is_active"`
 }
 
+// DatabasePool defines the interface for database pool operations
+// This interface allows for both real pool and mock pool implementations
+type DatabasePool interface {
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+}
+
 // BlacklistRepository handles database operations for exchange blacklist
 type BlacklistRepository struct {
-	pool *pgxpool.Pool
+	pool DatabasePool
 }
 
 // NewBlacklistRepository creates a new blacklist repository
-func NewBlacklistRepository(pool *pgxpool.Pool) *BlacklistRepository {
+func NewBlacklistRepository(pool DatabasePool) *BlacklistRepository {
 	return &BlacklistRepository{
 		pool: pool,
 	}

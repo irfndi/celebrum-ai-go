@@ -2,234 +2,112 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"sync"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 
-
-func TestCacheWarmingService_BasicFunctionality(t *testing.T) {
-	// Test basic service creation and validation
-	// Since the service depends on telemetry.GetLogger() which may not be initialized in tests,
-	// we'll focus on testing the logic that doesn't require logger initialization
+// TestCacheWarmingService_NewCacheWarmingService tests service creation
+func TestCacheWarmingService_NewCacheWarmingService(t *testing.T) {
+	// Create service with nil dependencies to test service creation
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	// Test that we can validate the service structure
-	assert.NotNil(t, "CacheWarmingService")
-	
-	// Test context handling for cache warming
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	
-	// Verify context is properly set up
-	assert.NotNil(t, ctx)
-	assert.NotNil(t, cancel)
-	
-	// Test context cancellation
-	cancel()
-	time.Sleep(10 * time.Millisecond)
-	
-	select {
-	case <-ctx.Done():
-		// Context was cancelled as expected
-		assert.Equal(t, context.Canceled, ctx.Err())
-	default:
-		t.Error("Context should have been cancelled")
-	}
+	// Service should be created successfully (nil dependencies are handled gracefully)
+	assert.NotNil(t, service)
 }
 
-func TestCacheWarmingService_ContextTimeout(t *testing.T) {
-	// Test context timeout handling for cache warming operations
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
-	// Verify context is properly set up
-	assert.NotNil(t, ctx)
-	assert.NotNil(t, cancel)
+// TestCacheWarmingService_WarmCache tests the main cache warming function
+func TestCacheWarmingService_WarmCache(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	// Wait for context to timeout
-	time.Sleep(20 * time.Millisecond)
+	ctx := context.Background()
+	err := service.WarmCache(ctx)
 	
-	// Context should be cancelled due to timeout
-	select {
-	case <-ctx.Done():
-		assert.Equal(t, context.DeadlineExceeded, ctx.Err())
-	default:
-		t.Error("Context should have timed out")
-	}
+	// The function should handle nil dependencies gracefully and return nil
+	// Individual warming operations will fail and log warnings, but overall function succeeds
+	assert.Nil(t, err)
 }
 
-func TestCacheWarmingService_ConcurrentOperations(t *testing.T) {
-	// Test concurrent operation handling for cache warming
-	var wg sync.WaitGroup
-	var counter int64
-	var mu sync.Mutex
-
-	// Test concurrent increment operations (simulating concurrent cache operations)
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			mu.Lock()
-			counter++
-			mu.Unlock()
-		}()
-	}
+// TestCacheWarmingService_warmExchangeConfig tests exchange config warming
+func TestCacheWarmingService_warmExchangeConfig(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	wg.Wait()
+	ctx := context.Background()
+	err := service.warmExchangeConfig(ctx)
 	
-	// Verify all operations completed
-	assert.Equal(t, int64(10), counter)
+	// The function should handle nil dependencies gracefully
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "nil")
 }
 
-func TestCacheWarmingService_ErrorHandling(t *testing.T) {
-	// Test error handling patterns for cache warming operations
+// TestCacheWarmingService_warmSupportedExchanges tests supported exchanges warming
+func TestCacheWarmingService_warmSupportedExchanges(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	// Test context cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx := context.Background()
+	err := service.warmSupportedExchanges(ctx)
 	
-	time.Sleep(10 * time.Millisecond)
-	
-	// Context should be cancelled
-	select {
-	case <-ctx.Done():
-		assert.Equal(t, context.Canceled, ctx.Err())
-	default:
-		t.Error("Context should have been cancelled")
-	}
+	// The function should handle nil dependencies gracefully
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "nil")
 }
 
-func TestCacheWarmingService_TimeHandling(t *testing.T) {
-	// Test time handling for cache warming operations
-	now := time.Now()
+// TestCacheWarmingService_warmTradingPairs tests trading pairs warming
+func TestCacheWarmingService_warmTradingPairs(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	// Test that timestamps are properly recorded
-	assert.False(t, now.IsZero())
-	assert.True(t, now.After(time.Time{}))
+	ctx := context.Background()
+	err := service.warmTradingPairs(ctx)
 	
-	// Test time calculations for cache operations
-	interval := 5 * time.Minute
-	nextCacheWarming := now.Add(interval)
-	
-	assert.True(t, nextCacheWarming.After(now))
-	assert.Equal(t, interval, nextCacheWarming.Sub(now))
+	// The function should handle nil dependencies gracefully
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "nil")
 }
 
-func TestCacheWarmingService_StateManagement(t *testing.T) {
-	// Test state management for cache warming operations
-	type CacheWarmingState int
-	const (
-		Idle CacheWarmingState = iota
-		Running
-		Completed
-		Failed
-	)
+// TestCacheWarmingService_warmExchanges tests exchanges warming
+func TestCacheWarmingService_warmExchanges(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	var currentState CacheWarmingState
-	var mu sync.RWMutex
+	ctx := context.Background()
+	err := service.warmExchanges(ctx)
 	
-	// Test state transitions
-	setState := func(newState CacheWarmingState) {
-		mu.Lock()
-		defer mu.Unlock()
-		currentState = newState
-	}
-	
-	getState := func() CacheWarmingState {
-		mu.RLock()
-		defer mu.RUnlock()
-		return currentState
-	}
-	
-	// Test initial state
-	assert.Equal(t, Idle, getState())
-	
-	// Test state changes
-	setState(Running)
-	assert.Equal(t, Running, getState())
-	
-	setState(Completed)
-	assert.Equal(t, Completed, getState())
-	
-	setState(Failed)
-	assert.Equal(t, Failed, getState())
+	// The function should handle nil dependencies gracefully
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "nil")
 }
 
-func TestCacheWarmingService_MultipleOperations(t *testing.T) {
-	// Test multiple operations with different contexts
-	for i := 0; i < 3; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-		
-		// Verify context is properly set up
-		assert.NotNil(t, ctx)
-		assert.NotNil(t, cancel)
-		
-		// Cancel the context
-		cancel()
-		
-		// Verify context was cancelled
-		select {
-		case <-ctx.Done():
-			assert.Equal(t, context.Canceled, ctx.Err())
-		default:
-			t.Error("Context should have been cancelled")
-		}
-	}
+// TestCacheWarmingService_warmFundingRates tests funding rates warming
+func TestCacheWarmingService_warmFundingRates(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
+	
+	ctx := context.Background()
+	err := service.warmFundingRates(ctx)
+	
+	// The function should handle nil dependencies gracefully
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "nil")
 }
 
-func TestCacheWarmingService_ResourceManagement(t *testing.T) {
-	// Test resource management for cache warming operations
-	type ResourceManager struct {
-		activeOperations map[string]context.CancelFunc
-		maxOperations   int
-		mu              sync.RWMutex
-	}
+// TestCacheWarmingService_errorHandling tests error handling
+func TestCacheWarmingService_errorHandling(t *testing.T) {
+	// Create service with nil dependencies to test error handling
+	service := NewCacheWarmingService(nil, nil, nil)
 	
-	manager := &ResourceManager{
-		activeOperations: make(map[string]context.CancelFunc),
-		maxOperations:   5,
-	}
+	ctx := context.Background()
+	err := service.WarmCache(ctx)
 	
-	// Test adding operations
-	addOperation := func(id string, cancel context.CancelFunc) bool {
-		manager.mu.Lock()
-		defer manager.mu.Unlock()
-		
-		if len(manager.activeOperations) >= manager.maxOperations {
-			return false
-		}
-		
-		manager.activeOperations[id] = cancel
-		return true
-	}
-	
-	removeOperation := func(id string) {
-		manager.mu.Lock()
-		defer manager.mu.Unlock()
-		delete(manager.activeOperations, id)
-	}
-	
-	getOperationCount := func() int {
-		manager.mu.RLock()
-		defer manager.mu.RUnlock()
-		return len(manager.activeOperations)
-	}
-	
-	// Add operations
-	for i := 0; i < 3; i++ {
-		_, cancel := context.WithCancel(context.Background())
-		assert.True(t, addOperation(fmt.Sprintf("cache-op-%d", i), cancel))
-		cancel()
-	}
-	
-	assert.Equal(t, 3, getOperationCount())
-	
-	// Remove operations
-	removeOperation("cache-op-1")
-	removeOperation("cache-op-2")
-	assert.Equal(t, 1, getOperationCount())
+	// The function should handle nil dependencies gracefully and return nil
+	// Individual warming operations will fail and log warnings, but overall function succeeds
+	assert.Nil(t, err)
 }
