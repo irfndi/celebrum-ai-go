@@ -88,6 +88,13 @@ type ArbitrageSignalInput struct {
 	BaseAmount    decimal.Decimal `json:"base_amount"` // For profit calculation (e.g., $20,000)
 }
 
+// SignalQualityScorerInterface defines the interface for signal quality assessment
+type SignalQualityScorerInterface interface {
+	AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error)
+	IsSignalQualityAcceptable(metrics *SignalQualityMetrics, thresholds *QualityThresholds) bool
+	GetDefaultQualityThresholds() *QualityThresholds
+}
+
 // SignalAggregatorConfig holds configuration for the signal aggregator
 type SignalAggregatorConfig struct {
 	MinConfidence       decimal.Decimal `json:"min_confidence"`
@@ -104,7 +111,7 @@ type SignalAggregator struct {
 	db            *database.PostgresDB
 	logger        *logrus.Logger
 	sigConfig     SignalAggregatorConfig
-	qualityScorer *SignalQualityScorer
+	qualityScorer SignalQualityScorerInterface
 	cache         map[string]*AggregatedSignal
 }
 

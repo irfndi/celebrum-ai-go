@@ -41,7 +41,7 @@ func TestSignalAggregator_NewSignalAggregator(t *testing.T) {
 	sa := NewSignalAggregator(nil, nil, logger)
 	
 	assert.NotNil(t, sa)
-	assert.NotNil(t, sa.QualityScorer)
+	assert.NotNil(t, sa.qualityScorer)
 	assert.NotNil(t, sa.cache)
 	assert.Equal(t, decimal.NewFromFloat(0.6), sa.sigConfig.MinConfidence)
 	assert.Equal(t, decimal.NewFromFloat(0.5), sa.sigConfig.MinProfitThreshold)
@@ -54,7 +54,7 @@ func TestSignalAggregator_AggregateArbitrageSignals_Basic(t *testing.T) {
 	
 	// Replace the QualityScorer with a mock for testing
 	mockScorer := &MockSignalQualityScorer{}
-	sa.QualityScorer = mockScorer
+	sa.qualityScorer = mockScorer
 	
 	// Configure mock to return acceptable quality metrics
 	qualityMetrics := &SignalQualityMetrics{
@@ -225,6 +225,37 @@ func TestSignalAggregator_AggregateArbitrageSignals_QualityFilter(t *testing.T) 
 func TestSignalAggregator_AggregateArbitrageSignals_MultipleOpportunities(t *testing.T) {
 	logger := logrus.New()
 	sa := NewSignalAggregator(nil, nil, logger)
+	
+	// Replace the QualityScorer with a mock for testing
+	mockScorer := &MockSignalQualityScorer{}
+	sa.qualityScorer = mockScorer
+	
+	// Configure mock to return acceptable quality metrics
+	qualityMetrics := &SignalQualityMetrics{
+		OverallScore:         decimal.NewFromFloat(0.8),
+		ExchangeScore:        decimal.NewFromFloat(0.8),
+		VolumeScore:          decimal.NewFromFloat(0.8),
+		LiquidityScore:       decimal.NewFromFloat(0.8),
+		VolatilityScore:      decimal.NewFromFloat(0.7),
+		TimingScore:          decimal.NewFromFloat(0.9),
+		ConfidenceScore:      decimal.NewFromFloat(0.8),
+		RiskScore:            decimal.NewFromFloat(0.2),
+		DataFreshnessScore:   decimal.NewFromFloat(0.9),
+		MarketConditionScore: decimal.NewFromFloat(0.8),
+	}
+	
+	thresholds := &QualityThresholds{
+		MinOverallScore:   decimal.NewFromFloat(0.6),
+		MinExchangeScore:  decimal.NewFromFloat(0.7),
+		MinVolumeScore:    decimal.NewFromFloat(0.5),
+		MinLiquidityScore: decimal.NewFromFloat(0.6),
+		MaxRiskScore:      decimal.NewFromFloat(0.4),
+		MinDataFreshness:  5 * time.Minute,
+	}
+	
+	mockScorer.On("AssessSignalQuality", mock.Anything, mock.Anything).Return(qualityMetrics, nil)
+	mockScorer.On("IsSignalQualityAcceptable", qualityMetrics, thresholds).Return(true)
+	mockScorer.On("GetDefaultQualityThresholds").Return(thresholds)
 	
 	// Create test opportunities with different profit levels
 	now := time.Now()
