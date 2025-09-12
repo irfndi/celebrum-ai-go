@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
-	"github.com/irfndi/celebrum-ai-go/pkg/interfaces"
+	"github.com/irfandi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfandi/celebrum-ai-go/pkg/interfaces"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 )
@@ -67,6 +67,26 @@ type ResourceOptimizerConfig struct {
 
 // NewResourceOptimizer creates a new resource optimizer
 func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
+	// Apply default values if not provided
+	if config.OptimizationInterval == 0 {
+		config.OptimizationInterval = 5 * time.Minute
+	}
+	if config.MaxHistorySize == 0 {
+		config.MaxHistorySize = 100
+	}
+	if config.CPUThreshold == 0 {
+		config.CPUThreshold = 80.0
+	}
+	if config.MemoryThreshold == 0 {
+		config.MemoryThreshold = 85.0
+	}
+	if config.MinWorkers == 0 {
+		config.MinWorkers = 2
+	}
+	if config.MaxWorkers == 0 {
+		config.MaxWorkers = 20
+	}
+
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
 	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
@@ -80,7 +100,7 @@ func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
 		optimizationInterval: config.OptimizationInterval,
 		maxHistorySize:       config.MaxHistorySize,
 		adaptiveMode:         config.AdaptiveMode,
-		performanceHistory:   make([]PerformanceSnapshot, 0, config.MaxHistorySize),
+		performanceHistory:   make([]PerformanceSnapshot, 0), // Don't pre-allocate for tests
 		logger:               logger,
 	}
 
@@ -139,11 +159,22 @@ func (ro *ResourceOptimizer) calculateOptimalConcurrency(config ResourceOptimize
 		maxWorkers = config.MinWorkers
 	}
 
+	// Calculate concurrent limits with proper bounds
+	maxConcurrentBackfill := maxWorkers / 2
+	if maxConcurrentBackfill > 10 {
+		maxConcurrentBackfill = 10
+	}
+	
+	maxConcurrentWrites := maxWorkers / 3
+	if maxConcurrentWrites > 15 {
+		maxConcurrentWrites = 15
+	}
+
 	ro.optimalConcurrency = OptimalConcurrency{
 		MaxWorkers:             maxWorkers,
 		MaxConcurrentSymbols:   maxWorkers,            // Same as workers for symbol fetching
-		MaxConcurrentBackfill:  min(maxWorkers/2, 10), // Half of workers, max 10
-		MaxConcurrentWrites:    min(maxWorkers/3, 15), // Third of workers, max 15
+		MaxConcurrentBackfill:  maxConcurrentBackfill,  // Half of workers, max 10
+		MaxConcurrentWrites:    maxConcurrentWrites,     // Third of workers, max 15
 		MaxCircuitBreakerCalls: maxWorkers * 2,        // 2x workers for circuit breaker
 		WorkerPoolUtilization:  0.8,                   // Target 80% utilization
 		MemoryThreshold:        config.MemoryThreshold,

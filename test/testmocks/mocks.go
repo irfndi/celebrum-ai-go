@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfandi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"

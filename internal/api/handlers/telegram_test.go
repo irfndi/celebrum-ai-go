@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-telegram/bot/models"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

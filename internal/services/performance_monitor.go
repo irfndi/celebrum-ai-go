@@ -143,7 +143,12 @@ func (pm *PerformanceMonitor) Start() {
 
 // Stop stops performance monitoring
 func (pm *PerformanceMonitor) Stop() {
-	close(pm.stopChan)
+	select {
+	case <-pm.stopChan:
+		// Channel already closed
+	default:
+		close(pm.stopChan)
+	}
 }
 
 // collectMetrics gathers all performance metrics

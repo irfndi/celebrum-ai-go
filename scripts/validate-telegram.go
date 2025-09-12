@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/go-telegram/bot"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/joho/godotenv"
 )
 

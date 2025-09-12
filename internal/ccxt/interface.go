@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 )
 

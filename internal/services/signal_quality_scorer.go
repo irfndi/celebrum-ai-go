@@ -8,8 +8,8 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
 
 // SignalQualityScorer provides signal quality assessment capabilities

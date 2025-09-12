@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
 func TestTelemetryMiddleware(t *testing.T) {

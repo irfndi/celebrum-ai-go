@@ -15,7 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
 // Helper function to convert mock opportunity to model type

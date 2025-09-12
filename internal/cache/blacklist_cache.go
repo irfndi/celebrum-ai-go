@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/redis/go-redis/v9"
 )
 

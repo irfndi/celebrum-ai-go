@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"log/slog"
 
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
 // TestSignalProcessor is a minimal version for testing

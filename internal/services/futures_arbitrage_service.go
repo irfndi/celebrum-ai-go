@@ -6,13 +6,13 @@ import (
 	"fmt"
 	// removed: "log"
 
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"sync"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )

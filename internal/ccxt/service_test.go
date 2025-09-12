@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/cache"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

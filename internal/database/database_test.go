@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"

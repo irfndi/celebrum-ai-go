@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/pkg/interfaces"
+	"github.com/irfandi/celebrum-ai-go/pkg/interfaces"
 )
 
 // Client represents the CCXT HTTP client

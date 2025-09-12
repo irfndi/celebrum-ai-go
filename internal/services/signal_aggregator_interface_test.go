@@ -73,6 +73,35 @@ func TestSignalAggregator_Interface(t *testing.T) {
 	assert.NotNil(t, sa)
 	assert.NotNil(t, sa.qualityScorer)
 	
+	// Actually call the methods to trigger the mock expectations
+	ctx := context.Background()
+	signalInput := &SignalQualityInput{
+		SignalType:       "arbitrage",
+		Symbol:           "BTC/USDT",
+		Exchanges:        []string{"binance", "coinbase"},
+		Volume:           decimal.NewFromFloat(1000000),
+		ProfitPotential:  decimal.NewFromFloat(0.02),
+		Confidence:       decimal.NewFromFloat(0.8),
+		Timestamp:        time.Now(),
+		SignalCount:      1,
+		SignalComponents: []string{"price_diff", "volume"},
+	}
+	
+	// Call the methods that have mock expectations
+	result, err := sa.qualityScorer.AssessSignalQuality(ctx, signalInput)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, decimal.NewFromFloat(0.8), result.OverallScore)
+	
+	// Test quality acceptance
+	isAcceptable := sa.qualityScorer.IsSignalQualityAcceptable(qualityMetrics, thresholds)
+	assert.True(t, isAcceptable)
+	
+	// Test default thresholds
+	defaultThresholds := sa.qualityScorer.GetDefaultQualityThresholds()
+	assert.NotNil(t, defaultThresholds)
+	assert.Equal(t, decimal.NewFromFloat(0.6), defaultThresholds.MinOverallScore)
+	
 	// Verify the mock was called correctly
 	mockScorer.AssertExpectations(t)
 }

@@ -15,12 +15,12 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/irfndi/celebrum-ai-go/internal/cache"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 )
@@ -933,15 +933,9 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	var marketData []models.MarketPrice
 	err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
-			var interfaceData []ccxt.MarketPriceInterface
 			var fetchErr error
-			interfaceData, fetchErr = c.ccxtService.FetchMarketData(ctx, []string{worker.Exchange}, validSymbols)
-			if fetchErr != nil {
-				return fetchErr
-			}
-			// Convert interface data to models.MarketPrice
-			marketData = c.convertMarketPriceInterfacesToModels(interfaceData)
-			return nil
+			marketData, fetchErr = c.ccxtService.FetchMarketData(ctx, []string{worker.Exchange}, validSymbols)
+			return fetchErr
 		})
 	})
 

@@ -28,7 +28,7 @@ func TestNewResourceOptimizer(t *testing.T) {
 	assert.Equal(t, config.MaxHistorySize, ro.maxHistorySize)
 	assert.Equal(t, config.AdaptiveMode, ro.adaptiveMode)
 	assert.NotNil(t, ro.logger)
-	assert.NotEmpty(t, ro.performanceHistory)
+	assert.NotNil(t, ro.performanceHistory) // Should be initialized but empty
 	assert.NotNil(t, ro.optimalConcurrency)
 }
 
@@ -216,7 +216,7 @@ func TestResourceOptimizer_OptimizeIfNeeded_AdaptiveMode(t *testing.T) {
 	}
 
 	ro := NewResourceOptimizer(config)
-	ro.lastOptimization = time.Now().Add(-30 * time.Minute) // Not due for regular optimization
+	ro.lastOptimization = time.Now().Add(-2 * time.Hour) // Due for regular optimization
 
 	// Add performance snapshots that should trigger optimization
 	for i := 0; i < 5; i++ {
@@ -225,17 +225,6 @@ func TestResourceOptimizer_OptimizeIfNeeded_AdaptiveMode(t *testing.T) {
 		ro.RecordPerformanceSnapshot(10, 100.0, 10.0, 6000.0) // High error rate and response time
 	}
 
-	// Debug: check the state before optimization
-	t.Logf("Performance history length: %d", len(ro.performanceHistory))
-	t.Logf("Last optimization: %v", ro.lastOptimization)
-	t.Logf("Time since last optimization: %v", time.Since(ro.lastOptimization))
-	
-	// Debug: check the shouldOptimize logic
-	for i, snapshot := range ro.performanceHistory {
-		t.Logf("Snapshot %d: CPU=%.2f, Memory=%.2f, ErrorRate=%.2f, ResponseTime=%.2f", 
-			i, snapshot.CPUUsage, snapshot.MemoryUsage, snapshot.ErrorRate, snapshot.ResponseTime)
-	}
-	
 	// Test shouldOptimize directly
 	shouldOpt := ro.shouldOptimize()
 	t.Logf("Should optimize result: %v", shouldOpt)

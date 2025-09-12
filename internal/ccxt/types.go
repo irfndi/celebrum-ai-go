@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/cache"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 )

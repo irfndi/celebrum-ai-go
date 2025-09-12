@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"log/slog"
 )
 
@@ -35,7 +35,7 @@ func NewCleanupService(db *database.PostgresDB, errorRecoveryManager *ErrorRecov
 		errorRecoveryManager: errorRecoveryManager,
 		resourceManager:      resourceManager,
 		performanceMonitor:   performanceMonitor,
-		logger:               telemetry.GetLogger().Logger(),
+		logger:               telemetry.Logger(),
 	}
 }
 
@@ -224,6 +224,11 @@ func (c *CleanupService) cleanupMarketData(ctx context.Context, retentionHours i
 
 // cleanupMarketDataSmart removes oldest data while keeping a buffer
 func (c *CleanupService) cleanupMarketDataSmart(ctx context.Context, retentionHours, deletionHours int) error {
+	// Check if database pool is available
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
@@ -252,6 +257,11 @@ func (c *CleanupService) cleanupFundingRates(ctx context.Context, retentionHours
 
 // cleanupFundingRatesSmart removes oldest funding rates while keeping a buffer
 func (c *CleanupService) cleanupFundingRatesSmart(ctx context.Context, retentionHours, deletionHours int) error {
+	// Check if database pool is available
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
@@ -275,6 +285,11 @@ func (c *CleanupService) cleanupFundingRatesSmart(ctx context.Context, retention
 
 // cleanupArbitrageOpportunities removes old arbitrage opportunities
 func (c *CleanupService) cleanupArbitrageOpportunities(ctx context.Context, retentionHours int) error {
+	// Check if database pool is available
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
 	result, err := c.db.Pool.Exec(ctx,
@@ -296,6 +311,11 @@ func (c *CleanupService) cleanupArbitrageOpportunities(ctx context.Context, rete
 
 // cleanupFundingArbitrageOpportunities removes old funding arbitrage opportunities
 func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Context, retentionHours int) error {
+	// Check if database pool is available
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
 	result, err := c.db.Pool.Exec(ctx,
@@ -318,6 +338,11 @@ func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Contex
 // GetDataStats returns statistics about current data storage
 func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	stats := make(map[string]int64)
+
+	// Check if database pool is available
+	if c.db.Pool == nil {
+		return nil, fmt.Errorf("database pool is not available")
+	}
 
 	// Count market data records
 	var marketDataCount int64

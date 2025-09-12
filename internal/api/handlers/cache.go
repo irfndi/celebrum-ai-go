@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
 // CacheAnalyticsInterface defines the interface for cache analytics operations

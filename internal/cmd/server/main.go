@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/api"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
-	"github.com/irfndi/celebrum-ai-go/pkg/interfaces"
+	"github.com/irfandi/celebrum-ai-go/internal/api"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -30,7 +31,7 @@ func main() {
 
 func run() error {
 	// Load configuration
-	cfg, err := interfaces.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
@@ -85,15 +86,11 @@ func run() error {
 	}
 	defer redis.Close()
 
-	// Initialize blacklist cache using mock implementation from interfaces
-	blacklistCache := interfaces.NewInMemoryBlacklistCache()
+	// Initialize blacklist cache using mock implementation from cache
+	blacklistCache := cache.NewInMemoryBlacklistCache()
 
 	// Initialize CCXT service with blacklist cache
-	ccxtConfig := &interfaces.CCXTConfig{
-		ServiceURL: cfg.CCXT.ServiceURL,
-		Timeout:    cfg.CCXT.Timeout,
-	}
-	ccxtService := ccxt.NewService(ccxtConfig, logrusLogger, blacklistCache)
+	ccxtService := ccxt.NewService(&cfg.CCXT, logrusLogger, blacklistCache)
 
 	// Initialize cache analytics service
 	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
