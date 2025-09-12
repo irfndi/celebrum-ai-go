@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -512,6 +513,76 @@ func TestAnalysisHandler_simulateOHLCVFromTickers(t *testing.T) {
 	_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", 50)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to query ticker data")
+
+	t.Run("various symbols", func(t *testing.T) {
+		symbols := []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "XRP/USDT"}
+		for _, symbol := range symbols {
+			t.Run(symbol, func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), symbol, "binance", 50)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("various exchanges", func(t *testing.T) {
+		exchanges := []string{"binance", "coinbase", "kraken", "kucoin", "bitfinex"}
+		for _, exchange := range exchanges {
+			t.Run(exchange, func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", exchange, 50)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("various limits", func(t *testing.T) {
+		limits := []int{0, 1, 10, 50, 100, 1000}
+		for _, limit := range limits {
+			t.Run(fmt.Sprintf("limit %d", limit), func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", limit)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("negative limit", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", -10)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("empty symbol", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("empty exchange", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := handler.simulateOHLCVFromTickers(ctx, "BTC/USDT", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("timeout context", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+		time.Sleep(time.Millisecond)
+
+		_, err := handler.simulateOHLCVFromTickers(ctx, "BTC/USDT", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
 }
 
 func TestAnalysisHandler_generateTradingSignal(t *testing.T) {
