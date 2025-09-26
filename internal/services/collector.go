@@ -27,7 +27,11 @@ import (
 
 // convertMarketPriceInterfacesToModels converts CCXT MarketPriceInterface to models.MarketPrice
 func (c *CollectorService) convertMarketPriceInterfacesToModels(interfaceData []ccxt.MarketPriceInterface) []models.MarketPrice {
-	var marketData []models.MarketPrice
+	if interfaceData == nil {
+		return make([]models.MarketPrice, 0)
+	}
+	
+	marketData := make([]models.MarketPrice, 0, len(interfaceData))
 	for _, item := range interfaceData {
 		marketData = append(marketData, models.MarketPrice{
 			ExchangeID:   0, // Will be filled later

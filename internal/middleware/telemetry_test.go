@@ -157,11 +157,11 @@ func TestRecordError(t *testing.T) {
 
 	t.Run("record error with valid context", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// Create a real span for testing
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
@@ -169,7 +169,7 @@ func TestRecordError(t *testing.T) {
 
 		testErr := assert.AnError
 		description := "test error description"
-		
+
 		// This should not panic
 		RecordError(c, testErr, description)
 		span.End()
@@ -177,50 +177,78 @@ func TestRecordError(t *testing.T) {
 
 	t.Run("record error with nil context", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		testErr := assert.AnError
 		description := "test error description"
-		
+
 		// This should not panic even with nil context
 		RecordError(c, testErr, description)
 	})
 
 	t.Run("record error with non-recording span", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// Create a non-recording span context
 		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
-		
+
 		testErr := assert.AnError
 		description := "test error description"
-		
+
 		// This should not panic even with non-recording span
 		RecordError(c, testErr, description)
 	})
 
-	t.Run("record error with non-recording span", func(t *testing.T) {
+	t.Run("record error with recording span", func(t *testing.T) {
+		gin.SetMode(gin.TestMode)
+
+		// Initialize telemetry with enabled flag for this test
+		config := telemetry.DefaultConfig()
+		config.Enabled = true
+		err := telemetry.InitTelemetry(*config)
+		require.NoError(t, err)
+
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
+		// Create a real recording span for testing
+		tracer := telemetry.GetHTTPTracer()
+		ctx, span := tracer.Start(c.Request.Context(), "test_span")
+		c.Request = c.Request.WithContext(ctx)
+
+		testErr := assert.AnError
+		description := "test error description"
+
+		// This should work with recording span
+		RecordError(c, testErr, description)
+		span.End()
+	})
+
+	t.Run("record error with non-recording span", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+		// Create a proper request with context
+		req := httptest.NewRequest("GET", "/test", nil)
+		c.Request = req
+
 		// Create a non-recording span context
 		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
-		
+
 		testErr := assert.AnError
 		description := "test error description"
-		
+
 		// This should not panic even with non-recording span
 		RecordError(c, testErr, description)
 	})
@@ -237,11 +265,11 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add string attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// Create a real span for testing
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
@@ -254,10 +282,10 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add int attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
 		c.Request = c.Request.WithContext(ctx)
@@ -268,10 +296,10 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add int64 attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
 		c.Request = c.Request.WithContext(ctx)
@@ -282,10 +310,10 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add float64 attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
 		c.Request = c.Request.WithContext(ctx)
@@ -296,10 +324,10 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add bool attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
 		c.Request = c.Request.WithContext(ctx)
@@ -310,10 +338,10 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add unknown type attribute", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		tracer := telemetry.GetHTTPTracer()
 		ctx, span := tracer.Start(c.Request.Context(), "test_span")
 		c.Request = c.Request.WithContext(ctx)
@@ -324,28 +352,59 @@ func TestAddSpanAttribute(t *testing.T) {
 
 	t.Run("add attribute with nil context", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// This should not panic even with nil context
 		AddSpanAttribute(c, "test_key", "test_value")
 	})
 
 	t.Run("add attribute with non-recording span", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// Create a non-recording span context
 		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
-		
+
 		// This should not panic even with non-recording span
 		AddSpanAttribute(c, "test_key", "test_value")
+	})
+
+	t.Run("add attribute with recording span", func(t *testing.T) {
+		gin.SetMode(gin.TestMode)
+
+		// Initialize telemetry with enabled flag for this test
+		config := telemetry.DefaultConfig()
+		config.Enabled = true
+		err := telemetry.InitTelemetry(*config)
+		require.NoError(t, err)
+
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+		// Create a proper request with context
+		req := httptest.NewRequest("GET", "/test", nil)
+		c.Request = req
+
+		// Create a real recording span for testing
+		tracer := telemetry.GetHTTPTracer()
+		ctx, span := tracer.Start(c.Request.Context(), "test_span")
+		c.Request = c.Request.WithContext(ctx)
+
+		// Test different types with recording span
+		AddSpanAttribute(c, "string_key", "string_value")
+		AddSpanAttribute(c, "int_key", 42)
+		AddSpanAttribute(c, "int64_key", int64(64))
+		AddSpanAttribute(c, "float64_key", 3.14)
+		AddSpanAttribute(c, "bool_key", true)
+		AddSpanAttribute(c, "unknown_key", struct{ field string }{field: "test"})
+
+		span.End()
 	})
 }
 
@@ -360,14 +419,14 @@ func TestStartSpan(t *testing.T) {
 
 	t.Run("start new span", func(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		
+
 		// Create a proper request with context
 		req := httptest.NewRequest("GET", "/test", nil)
 		c.Request = req
-		
+
 		// This should not panic and should return valid context and span
 		ctx, span := StartSpan(c, "test_span")
-		
+
 		assert.NotNil(t, ctx)
 		assert.NotNil(t, span)
 		assert.Equal(t, ctx, c.Request.Context())

@@ -24,7 +24,7 @@ func TestNewClient(t *testing.T) {
 
 	client := ccxt.NewClient(cfg)
 	assert.NotNil(t, client)
-	assert.Equal(t, cfg.ServiceURL, client.BaseURL)
+	assert.Equal(t, cfg.ServiceURL, client.BaseURL())
 	assert.NotNil(t, client.HTTPClient)
 }
 

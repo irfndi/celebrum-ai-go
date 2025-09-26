@@ -950,3 +950,423 @@ func TestCollectorService_CollectFundingRatesBulk_Concurrent(t *testing.T) {
 	mockCCXT.AssertExpectations(t)
 }
 
+// Test SymbolCache Get method (currently 0% coverage)
+func TestSymbolCache_Get(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test getting from empty cache
+	symbols, found := cache.Get("binance")
+	assert.False(t, found)
+	assert.Nil(t, symbols)
+
+	// Set some data first
+	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT"})
+
+	// Test getting existing data
+	symbols, found = cache.Get("binance")
+	assert.True(t, found)
+	assert.Equal(t, []string{"BTC/USDT", "ETH/USDT"}, symbols)
+
+	// Test getting non-existent data
+	symbols, found = cache.Get("coinbase")
+	assert.False(t, found)
+	assert.Nil(t, symbols)
+
+	// Test with empty exchange ID
+	symbols, found = cache.Get("")
+	assert.False(t, found)
+	assert.Nil(t, symbols)
+}
+
+// Test SymbolCache Set method (currently 0% coverage)
+func TestSymbolCache_Set(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test setting new data
+	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT"})
+	
+	// Verify data was set
+	symbols, found := cache.Get("binance")
+	assert.True(t, found)
+	assert.Equal(t, []string{"BTC/USDT", "ETH/USDT"}, symbols)
+
+	// Test updating existing data
+	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT", "SOL/USDT"})
+	
+	// Verify data was updated
+	symbols, found = cache.Get("binance")
+	assert.True(t, found)
+	assert.Equal(t, []string{"BTC/USDT", "ETH/USDT", "SOL/USDT"}, symbols)
+
+	// Test setting empty slice
+	cache.Set("coinbase", []string{})
+	
+	// Verify empty slice was set
+	symbols, found = cache.Get("coinbase")
+	assert.True(t, found)
+	assert.Equal(t, []string{}, symbols)
+
+	// Test setting nil slice
+	cache.Set("kucoin", nil)
+	
+	// Verify nil slice was set
+	symbols, found = cache.Get("kucoin")
+	assert.True(t, found)
+	assert.Nil(t, symbols)
+
+	// Test with empty exchange ID
+	cache.Set("", []string{"TEST/USDT"})
+	
+	// Verify empty exchange ID was handled
+	symbols, found = cache.Get("")
+	assert.True(t, found)
+	assert.Equal(t, []string{"TEST/USDT"}, symbols)
+}
+
+// Test SymbolCache Stats methods (currently 0% coverage)
+func TestSymbolCache_GetStats(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test initial stats
+	stats := cache.GetStats()
+	assert.Equal(t, int64(0), stats.Hits)
+	assert.Equal(t, int64(0), stats.Misses)
+	assert.Equal(t, int64(0), stats.Sets)
+
+	// Perform some operations
+	cache.Set("binance", []string{"BTC/USDT"})
+	cache.Get("binance") // Hit
+	cache.Get("coinbase") // Miss
+	cache.Get("coinbase") // Miss
+
+	// Test updated stats
+	stats = cache.GetStats()
+	assert.Equal(t, int64(1), stats.Hits)
+	assert.Equal(t, int64(2), stats.Misses)
+	assert.Equal(t, int64(1), stats.Sets)
+}
+
+// Test SymbolCache concurrent operations
+func TestSymbolCache_ConcurrentOperations(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test concurrent Set operations
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			exchangeID := fmt.Sprintf("exchange%d", id)
+			cache.Set(exchangeID, []string{fmt.Sprintf("SYMBOL%d/USDT", id)})
+			done <- true
+		}(i)
+	}
+
+	// Wait for all Set operations to complete
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Verify all data was set correctly
+	for i := 0; i < 10; i++ {
+		exchangeID := fmt.Sprintf("exchange%d", i)
+		expectedSymbol := fmt.Sprintf("SYMBOL%d/USDT", i)
+		
+		symbols, found := cache.Get(exchangeID)
+		assert.True(t, found)
+		assert.Equal(t, []string{expectedSymbol}, symbols)
+		// Verify cache state through GetStats instead of IsInitialized
+	stats := cache.GetStats()
+	assert.Equal(t, int64(10), stats.Sets) // We Set 10 entries
+	}
+
+	// Test concurrent Get operations
+	done = make(chan bool, 20)
+	for i := 0; i < 20; i++ {
+		go func(id int) {
+			exchangeID := fmt.Sprintf("exchange%d", id%10) // Access existing exchanges
+			cache.Get(exchangeID)
+			cache.GetStats() // Use GetStats instead of IsInitialized
+			done <- true
+		}(i)
+	}
+
+	// Wait for all Get operations to complete
+	for i := 0; i < 20; i++ {
+		<-done
+	}
+}
+
+// Test SymbolCache edge cases
+func TestSymbolCache_EdgeCases(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test multiple updates to same key
+	cache.Set("binance", []string{"BTC/USDT"})
+	cache.Set("binance", []string{"ETH/USDT"})
+	cache.Set("binance", []string{"SOL/USDT"})
+
+	// Verify final value
+	symbols, found := cache.Get("binance")
+	assert.True(t, found)
+	assert.Equal(t, []string{"SOL/USDT"}, symbols)
+
+	// Test setting and getting very long symbol lists
+	longList := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		longList[i] = fmt.Sprintf("SYMBOL%d/USDT", i)
+	}
+	
+	cache.Set("large_exchange", longList)
+	symbols, found = cache.Get("large_exchange")
+	assert.True(t, found)
+	assert.Equal(t, longList, symbols)
+	assert.Equal(t, 1000, len(symbols))
+
+	// Test setting and getting special characters in exchange IDs
+	cache.Set("exchange-with.dash", []string{"BTC/USDT"})
+	cache.Set("exchange_with_underscore", []string{"ETH/USDT"})
+	cache.Set("exchange.with.dots", []string{"SOL/USDT"})
+
+	symbols, found = cache.Get("exchange-with.dash")
+	assert.True(t, found)
+	assert.Equal(t, []string{"BTC/USDT"}, symbols)
+
+	symbols, found = cache.Get("exchange_with_underscore")
+	assert.True(t, found)
+	assert.Equal(t, []string{"ETH/USDT"}, symbols)
+
+	symbols, found = cache.Get("exchange.with.dots")
+	assert.True(t, found)
+	assert.Equal(t, []string{"SOL/USDT"}, symbols)
+}
+
+// Test SymbolCache LogStats method (currently 0% coverage)
+func TestSymbolCache_LogStats(t *testing.T) {
+	cache := NewSymbolCache(5 * time.Minute)
+
+	// Test LogStats doesn't panic and logs properly
+	// Since LogStats just logs to the logger, we just ensure it doesn't panic
+	assert.NotPanics(t, func() {
+		cache.LogStats()
+	})
+
+	// Perform some operations to generate stats
+	cache.Set("binance", []string{"BTC/USDT"})
+	cache.Get("binance") // Hit
+	cache.Get("coinbase") // Miss
+
+	// Test LogStats with actual data
+	assert.NotPanics(t, func() {
+		cache.LogStats()
+	})
+}
+
+// TestCollectorService_ConvertMarketPriceInterfacesToModels tests the convertMarketPriceInterfacesToModels function
+func TestCollectorService_ConvertMarketPriceInterfacesToModels(t *testing.T) {
+	// Create a collector service instance
+	service := &CollectorService{}
+
+	// Test with empty slice
+	result := service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{})
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with nil slice
+	result = service.convertMarketPriceInterfacesToModels(nil)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with single item
+	singleItem := &MockMarketPriceInterface{
+		exchangeName: "binance",
+		symbol:       "BTC/USDT",
+		price:        50000.0,
+		volume:       1000.0,
+		timestamp:    time.Now(),
+	}
+	
+	result = service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{singleItem})
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+	
+	convertedItem := result[0]
+	assert.Equal(t, 0, convertedItem.ExchangeID) // Should be 0 as per implementation
+	assert.Equal(t, "binance", convertedItem.ExchangeName)
+	assert.Equal(t, "BTC/USDT", convertedItem.Symbol)
+	assert.Equal(t, "50000", convertedItem.Price.String())
+	assert.Equal(t, "1000", convertedItem.Volume.String())
+	assert.Equal(t, singleItem.GetTimestamp(), convertedItem.Timestamp)
+
+	// Test with multiple items
+	multipleItems := []ccxt.MarketPriceInterface{
+		singleItem,
+		&MockMarketPriceInterface{
+			exchangeName: "coinbase",
+			symbol:       "ETH/USD",
+			price:        3000.0,
+			volume:       500.0,
+			timestamp:    time.Now().Add(-1 * time.Hour),
+		},
+	}
+	
+	result = service.convertMarketPriceInterfacesToModels(multipleItems)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 2)
+	
+	// Verify first item
+	assert.Equal(t, "binance", result[0].ExchangeName)
+	assert.Equal(t, "BTC/USDT", result[0].Symbol)
+	
+	// Verify second item
+	assert.Equal(t, "coinbase", result[1].ExchangeName)
+	assert.Equal(t, "ETH/USD", result[1].Symbol)
+	assert.Equal(t, "3000", result[1].Price.String())
+	assert.Equal(t, "500", result[1].Volume.String())
+
+	// Test with decimal precision
+	preciseItem := &MockMarketPriceInterface{
+		exchangeName: "kraken",
+		symbol:       "BTC/USD",
+		price:        50000.12345678,
+		volume:       1000.98765432,
+		timestamp:    time.Now(),
+	}
+	
+	result = service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{preciseItem})
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+	
+	preciseResult := result[0]
+	assert.Equal(t, "50000.12345678", preciseResult.Price.String())
+	assert.Equal(t, "1000.98765432", preciseResult.Volume.String())
+}
+
+// TestCollectorService_ConvertMarketPriceInterfaceToModel tests the convertMarketPriceInterfaceToModel function
+func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
+	// Create a collector service instance
+	service := &CollectorService{}
+
+	// Test with nil input
+	result := service.convertMarketPriceInterfaceToModel(nil)
+	assert.Nil(t, result)
+
+	// Test with valid input
+	input := &MockMarketPriceInterface{
+		exchangeName: "binance",
+		symbol:       "BTC/USDT",
+		price:        50000.0,
+		volume:       1000.0,
+		timestamp:    time.Now(),
+	}
+	
+	result = service.convertMarketPriceInterfaceToModel(input)
+	assert.NotNil(t, result)
+	
+	// Verify all fields are properly converted
+	assert.Equal(t, 0, result.ExchangeID) // Should be 0 as per implementation
+	assert.Equal(t, "binance", result.ExchangeName)
+	assert.Equal(t, "BTC/USDT", result.Symbol)
+	assert.Equal(t, "50000", result.Price.String())
+	assert.Equal(t, "1000", result.Volume.String())
+	assert.Equal(t, input.GetTimestamp(), result.Timestamp)
+
+	// Test with zero values
+	zeroInput := &MockMarketPriceInterface{
+		exchangeName: "",
+		symbol:       "",
+		price:        0.0,
+		volume:       0.0,
+		timestamp:    time.Time{},
+	}
+	
+	result = service.convertMarketPriceInterfaceToModel(zeroInput)
+	assert.NotNil(t, result)
+	assert.Equal(t, "", result.ExchangeName)
+	assert.Equal(t, "", result.Symbol)
+	assert.Equal(t, "0", result.Price.String())
+	assert.Equal(t, "0", result.Volume.String())
+	assert.Equal(t, time.Time{}, result.Timestamp)
+
+	// Test with negative values (should still work)
+	negativeInput := &MockMarketPriceInterface{
+		exchangeName: "test",
+		symbol:       "TEST/USD",
+		price:        -100.0,
+		volume:       -50.0,
+		timestamp:    time.Now(),
+	}
+	
+	result = service.convertMarketPriceInterfaceToModel(negativeInput)
+	assert.NotNil(t, result)
+	assert.Equal(t, "-100", result.Price.String())
+	assert.Equal(t, "-50", result.Volume.String())
+
+	// Test with very large numbers
+	largeInput := &MockMarketPriceInterface{
+		exchangeName: "test",
+		symbol:       "LARGE/USD",
+		price:        999999999.999,
+		volume:       888888888.888,
+		timestamp:    time.Now(),
+	}
+	
+	result = service.convertMarketPriceInterfaceToModel(largeInput)
+	assert.NotNil(t, result)
+	assert.Equal(t, "999999999.999", result.Price.String())
+	assert.Equal(t, "888888888.888", result.Volume.String())
+}
+
+// TestCollectorService_ConvertMarketPriceInterfaceToModel_FunctionalInterface tests with functional interface implementation
+func TestCollectorService_ConvertMarketPriceInterfaceToModel_FunctionalInterface(t *testing.T) {
+	// Create a collector service instance
+	service := &CollectorService{}
+
+	// Test with functional interface implementation
+	input := &MockMarketPriceInterface{
+		exchangeName: "functional",
+		symbol:       "FUNC/USD",
+		price:        123.45,
+		volume:       67.89,
+		timestamp:    time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+	
+	result := service.convertMarketPriceInterfaceToModel(input)
+	assert.NotNil(t, result)
+	
+	// Verify all fields are properly converted
+	assert.Equal(t, 0, result.ExchangeID)
+	assert.Equal(t, "functional", result.ExchangeName)
+	assert.Equal(t, "FUNC/USD", result.Symbol)
+	assert.Equal(t, "123.45", result.Price.String())
+	assert.Equal(t, "67.89", result.Volume.String())
+	assert.Equal(t, time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC), result.Timestamp)
+}
+
+// MockMarketPriceInterface is a mock implementation of MarketPriceInterface for testing
+type MockMarketPriceInterface struct {
+	exchangeName string
+	symbol       string
+	price        float64
+	volume       float64
+	timestamp    time.Time
+}
+
+func (m *MockMarketPriceInterface) GetExchangeName() string {
+	return m.exchangeName
+}
+
+func (m *MockMarketPriceInterface) GetSymbol() string {
+	return m.symbol
+}
+
+func (m *MockMarketPriceInterface) GetPrice() float64 {
+	return m.price
+}
+
+func (m *MockMarketPriceInterface) GetVolume() float64 {
+	return m.volume
+}
+
+func (m *MockMarketPriceInterface) GetTimestamp() time.Time {
+	return m.timestamp
+}
+

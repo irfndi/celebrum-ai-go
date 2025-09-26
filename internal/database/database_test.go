@@ -1221,8 +1221,9 @@ func TestRedisClient_Close_ErrorScenarios(t *testing.T) {
 // Test NewPostgresConnection with valid DATABASE_URL that builds DSN
 func TestNewPostgresConnection_DatabaseURLDSN(t *testing.T) {
 	// Test with DATABASE_URL that triggers DSN building path
+	// Use an invalid URL to avoid connection timeout - this should fail at parsing stage
 	cfg := &config.DatabaseConfig{
-		DatabaseURL: "postgres://user:pass@host:1234/dbname",
+		DatabaseURL: "invalid-database-url",
 		Host:        "localhost",
 		Port:        5432,
 		User:        "user",
@@ -1232,9 +1233,10 @@ func TestNewPostgresConnection_DatabaseURLDSN(t *testing.T) {
 	}
 
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
+	// We expect this to fail quickly at parsing stage
 	assert.Error(t, err)
 	assert.Nil(t, db)
+	assert.Contains(t, err.Error(), "failed to parse database config")
 }
 
 // Test NewPostgresConnection with minimal config to test all code paths
@@ -1258,7 +1260,7 @@ func TestNewPostgresConnection_MinimalConfig(t *testing.T) {
 // Test NewPostgresConnection with connection pool edge cases
 func TestNewPostgresConnection_ConnectionPoolEdgeCases(t *testing.T) {
 	cfg := &config.DatabaseConfig{
-		Host:         "localhost",
+		Host:         "nonexistent-host",
 		Port:         5432,
 		User:         "test",
 		Password:     "test",
@@ -1269,9 +1271,10 @@ func TestNewPostgresConnection_ConnectionPoolEdgeCases(t *testing.T) {
 	}
 
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
+	// We expect this to fail quickly due to DNS resolution
 	assert.Error(t, err)
 	assert.Nil(t, db)
+	assert.Contains(t, err.Error(), "hostname resolving error")
 }
 
 // Test NewPostgresConnection with connection pool bounds checking

@@ -179,3 +179,34 @@ func TestMetricsCollector_SpecialCharacters(t *testing.T) {
 	}
 	collector.RecordCounter("special_chars", 1.0, tags)
 }
+
+func TestMetricsCollector_RecordSystemMetrics(t *testing.T) {
+	logger := logging.NewStandardLogger("debug", "development")
+	collector := NewMetricsCollector(logger, "test-service")
+
+	// Test with normal values
+	collector.RecordSystemMetrics(1024, 100, 75.5)
+
+	// Test with zero values
+	collector.RecordSystemMetrics(0, 0, 0.0)
+
+	// Test with high values
+	collector.RecordSystemMetrics(8192, 1000, 99.9)
+}
+
+func TestMetricsCollector_RecordNotificationMetrics(t *testing.T) {
+	logger := logging.NewStandardLogger("debug", "development")
+	collector := NewMetricsCollector(logger, "test-service")
+
+	// Test successful notification
+	collector.RecordNotificationMetrics("telegram", "user123", true)
+
+	// Test failed notification
+	collector.RecordNotificationMetrics("email", "user456", false)
+
+	// Test with empty user ID
+	collector.RecordNotificationMetrics("webhook", "", true)
+
+	// Test with different notification types
+	collector.RecordNotificationMetrics("sms", "user789", false)
+}

@@ -291,6 +291,10 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 		ORDER BY e.name, tp.symbol, fr.timestamp DESC
 	`
 
+	if s.db == nil || s.db.Pool == nil {
+		return nil, fmt.Errorf("database pool is not available")
+	}
+	
 	rows, err := s.db.Pool.Query(ctx, query)
 	if err != nil {
 		telemetry.Logger().Error("Database query failed", "error", err)
@@ -341,6 +345,10 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 
 // storeOpportunity stores a calculated opportunity in the database
 func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportunity *models.FuturesArbitrageOpportunity) error {
+	if s.db == nil || s.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+	
 	telemetry.Logger().Debug("Storing opportunity",
 		"symbol", opportunity.Symbol, "long_exchange", opportunity.LongExchange, "short_exchange", opportunity.ShortExchange,
 		"net_funding_rate", opportunity.NetFundingRate.String(), "apy", opportunity.APY.String(), "active", opportunity.IsActive)
@@ -419,7 +427,15 @@ func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportun
 
 // cleanupExpiredOpportunities removes expired opportunities from the database
 func (s *FuturesArbitrageService) cleanupExpiredOpportunities(ctx context.Context) error {
-	telemetry.Logger().Info("Starting cleanup of expired opportunities")
+	if s.db == nil || s.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+	
+	logger := telemetry.Logger()
+	if logger == nil {
+		return fmt.Errorf("logger is not available")
+	}
+	logger.Info("Starting cleanup of expired opportunities")
 	query := `
 		DELETE FROM futures_arbitrage_opportunities 
 		WHERE expires_at < NOW() OR detected_at < NOW() - INTERVAL '1 hour'

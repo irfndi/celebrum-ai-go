@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 )
@@ -89,4 +91,16 @@ func (db *PostgresDB) Close() {
 
 func (db *PostgresDB) HealthCheck(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
+}
+
+func (db *PostgresDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return db.Pool.Query(ctx, sql, args...)
+}
+
+func (db *PostgresDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return db.Pool.QueryRow(ctx, sql, args...)
+}
+
+func (db *PostgresDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return db.Pool.Exec(ctx, sql, args...)
 }

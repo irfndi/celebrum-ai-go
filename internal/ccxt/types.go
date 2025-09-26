@@ -15,7 +15,7 @@ import (
 
 // Service provides high-level CCXT operations
 type Service struct {
-	client             *Client
+	client             CCXTClient
 	supportedExchanges map[string]ExchangeInfo
 	blacklistCache     cache.BlacklistCache
 	mu                 sync.RWMutex
@@ -418,7 +418,7 @@ func (s *Service) Close() error {
 // GetServiceURL returns the CCXT service URL for health checks
 func (s *Service) GetServiceURL() string {
 	if s.client != nil {
-		return s.client.BaseURL
+		return s.client.BaseURL()
 	}
 	return ""
 }

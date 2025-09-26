@@ -89,8 +89,16 @@ type CCXTClient interface {
 	GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error)
 	GetMarkets(ctx context.Context, exchange string) (*MarketsResponse, error)
 
+	// Funding rate operations
+	GetFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error)
+	GetFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error)
+	GetAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error)
+
 	// Lifecycle
 	Close() error
+
+	// Base URL for service identification
+	BaseURL() string
 }
 
 // Ensure our implementations satisfy the interfaces

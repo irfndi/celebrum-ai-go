@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"syscall"
 	"testing"
@@ -428,6 +429,12 @@ func BenchmarkContextCreation(b *testing.B) {
 
 // Test main function with mock environment
 func TestMainFunction(t *testing.T) {
+	if os.Getenv("TEST_MAIN_FUNCTION") == "1" {
+		// This is the child process that will call main()
+		main()
+		return
+	}
+	
 	// Save original environment variables
 	originalEnv := make(map[string]string)
 	
@@ -436,13 +443,13 @@ func TestMainFunction(t *testing.T) {
 		"ENVIRONMENT":                          "test",
 		"LOG_LEVEL":                           "error",
 		"SERVER_PORT":                         "8081",
-		"DATABASE_HOST":                       "localhost",
+		"DATABASE_HOST":                       "nonexistent-host",
 		"DATABASE_PORT":                       "5432",
 		"DATABASE_USER":                       "testuser",
 		"DATABASE_PASSWORD":                   "testpass",
 		"DATABASE_DBNAME":                     "testdb",
 		"DATABASE_SSLMODE":                    "disable",
-		"REDIS_HOST":                         "localhost",
+		"REDIS_HOST":                         "nonexistent-host",
 		"REDIS_PORT":                         "6379",
 		"REDIS_PASSWORD":                     "",
 		"REDIS_DB":                           "0",
@@ -468,6 +475,7 @@ func TestMainFunction(t *testing.T) {
 		"BLACKLIST_LONG_TTL":                 "24h",
 		"BLACKLIST_USE_REDIS":               "false",
 		"BLACKLIST_RETRY_AFTER_CLEAR":       "false",
+		"TEST_MAIN_FUNCTION":                "1", // Signal this is the test process
 	}
 	
 	// Backup and set test environment
@@ -490,40 +498,39 @@ func TestMainFunction(t *testing.T) {
 		}
 	}()
 	
-	// Test that main function handles errors gracefully
-	// We call main() but expect it to exit with error code 1
-	// This exercises the actual main() function code path for coverage
+	// Test that main function handles errors gracefully by running it in a separate process
+	// We use exec.Command to run the test binary with the TEST_MAIN_FUNCTION flag
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFunction")
+	cmd.Env = append(os.Environ(), "TEST_MAIN_FUNCTION=1")
 	
-	// Capture exit by testing in a separate goroutine
-	done := make(chan bool, 1)
+	// Capture output
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Test passed - main() called os.Exit() as expected
-				done <- true
-				return
-			}
-		}()
-		
-		// This should panic due to os.Exit() call
-		main()
-		done <- false
-	}()
+	// Run the command
+	err := cmd.Run()
 	
-	// Wait for completion with timeout
-	select {
-	case success := <-done:
-		if !success {
-			t.Error("main() should have called os.Exit()")
-		}
-	case <-time.After(5 * time.Second):
-		t.Error("Test timed out - main() should have exited quickly")
+	// The command should fail with exit code 1
+	if err == nil {
+		t.Error("Expected main() to exit with error code 1, but it succeeded")
+		return
 	}
 	
-	// The test passes if main() exercises the code path and exits
-	// We can't easily capture the exact error message from os.Exit
-	assert.True(t, true)
+	// Check if it's an exit error with code 1
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr.ExitCode() != 1 {
+			t.Errorf("Expected exit code 1, got %d", exitErr.ExitCode())
+		}
+	} else {
+		t.Errorf("Expected exec.ExitError, got %T: %v", err, err)
+	}
+	
+	// Check that the error message contains our expected output
+	output := stderr.String()
+	if !strings.Contains(output, "Application failed: failed to connect to database") {
+		t.Errorf("Expected error message about database connection failure, got: %s", output)
+	}
 }
 
 // Test run function with test configuration
@@ -531,18 +538,18 @@ func TestRunFunction(t *testing.T) {
 	// Save original environment variables
 	originalEnv := make(map[string]string)
 	
-	// Set up minimal test environment
+	// Set up minimal test environment with invalid database to fail fast
 	testEnv := map[string]string{
 		"ENVIRONMENT":       "test",
 		"LOG_LEVEL":        "error",
 		"SERVER_PORT":      "8082",
-		"DATABASE_HOST":    "localhost",
+		"DATABASE_HOST":    "invalid-host",
 		"DATABASE_PORT":    "5432",
 		"DATABASE_USER":    "testuser",
 		"DATABASE_PASSWORD": "testpass",
 		"DATABASE_DBNAME":  "testdb",
 		"DATABASE_SSLMODE": "disable",
-		"REDIS_HOST":       "localhost",
+		"REDIS_HOST":       "invalid-host",
 		"REDIS_PORT":       "6379",
 		"REDIS_PASSWORD":   "",
 		"REDIS_DB":         "0",
@@ -585,7 +592,8 @@ func TestRunFunction(t *testing.T) {
 		strings.Contains(err.Error(), "database") || 
 		strings.Contains(err.Error(), "redis") ||
 		strings.Contains(err.Error(), "timeout") ||
-		strings.Contains(err.Error(), "refused"))
+		strings.Contains(err.Error(), "refused") ||
+		strings.Contains(err.Error(), "invalid"))
 	
 	// Test with invalid configuration to exercise error paths
 	testCases := []struct {

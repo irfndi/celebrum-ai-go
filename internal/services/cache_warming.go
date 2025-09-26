@@ -243,6 +243,9 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 	if c.db == nil {
 		return fmt.Errorf("database is nil")
 	}
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
 	if c.redisClient == nil {
 		return fmt.Errorf("Redis client is nil")
 	}

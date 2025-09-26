@@ -15,6 +15,74 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
+// ArbitrageCalculator defines the interface for calculating arbitrage opportunities
+type ArbitrageCalculator interface {
+	CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error)
+}
+
+// SpotArbitrageCalculator implements arbitrage calculations for spot markets
+type SpotArbitrageCalculator struct{}
+
+// NewSpotArbitrageCalculator creates a new spot arbitrage calculator
+func NewSpotArbitrageCalculator() *SpotArbitrageCalculator {
+	return &SpotArbitrageCalculator{}
+}
+
+// CalculateArbitrageOpportunities calculates arbitrage opportunities from market data
+func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
+	var opportunities []models.ArbitrageOpportunity
+	
+	// For each symbol, find arbitrage opportunities between exchanges
+	for _, exchangeData := range marketData {
+		if len(exchangeData) < 2 {
+			continue
+		}
+		
+		// Find the lowest and highest prices for this symbol
+		var lowestPrice, highestPrice decimal.Decimal
+		var lowestExchange, highestExchange *models.Exchange
+		var lowestPair *models.TradingPair
+		
+		for _, data := range exchangeData {
+			if lowestExchange == nil || data.LastPrice.LessThan(lowestPrice) {
+				lowestPrice = data.LastPrice
+				lowestExchange = data.Exchange
+				lowestPair = data.TradingPair
+			}
+			if highestExchange == nil || data.LastPrice.GreaterThan(highestPrice) {
+				highestPrice = data.LastPrice
+				highestExchange = data.Exchange
+			}
+		}
+		
+		// Calculate profit percentage
+		if !lowestPrice.IsZero() {
+			profitPercentage := highestPrice.Sub(lowestPrice).Div(lowestPrice).Mul(decimal.NewFromInt(100))
+			
+			// Only consider opportunities with meaningful profit
+			if profitPercentage.GreaterThan(decimal.NewFromFloat(0.1)) {
+				opportunity := models.ArbitrageOpportunity{
+					ID:               uuid.New().String(),
+					BuyExchangeID:   lowestExchange.ID,
+					SellExchangeID:  highestExchange.ID,
+					TradingPairID:   lowestPair.ID,
+					BuyPrice:         lowestPrice,
+					SellPrice:        highestPrice,
+					ProfitPercentage: profitPercentage,
+					DetectedAt:       time.Now(),
+					ExpiresAt:        time.Now().Add(5 * time.Minute),
+					BuyExchange:      lowestExchange,
+					SellExchange:     highestExchange,
+					TradingPair:      lowestPair,
+				}
+				opportunities = append(opportunities, opportunity)
+			}
+		}
+	}
+	
+	return opportunities, nil
+}
+
 // ArbitrageServiceConfig holds configuration for the arbitrage service
 type ArbitrageServiceConfig struct {
 	IntervalSeconds int     `mapstructure:"interval_seconds"`
@@ -29,7 +97,7 @@ type ArbitrageService struct {
 	db                *database.PostgresDB
 	config            *config.Config
 	arbitrageConfig   ArbitrageServiceConfig
-	calculator        *FuturesArbitrageCalculator
+	calculator        ArbitrageCalculator
 	ctx               context.Context
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
@@ -41,7 +109,7 @@ type ArbitrageService struct {
 }
 
 // NewArbitrageService creates a new arbitrage service instance
-func NewArbitrageService(db *database.PostgresDB, cfg *config.Config, calculator *FuturesArbitrageCalculator) *ArbitrageService {
+func NewArbitrageService(db *database.PostgresDB, cfg *config.Config, calculator ArbitrageCalculator) *ArbitrageService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Parse configuration with defaults
@@ -142,7 +210,10 @@ func (s *ArbitrageService) GetStatus() (bool, time.Time, int) {
 
 // calculationLoop runs the periodic arbitrage calculation
 func (s *ArbitrageService) calculationLoop() {
-	defer s.wg.Done()
+	// Only call Done() if Add() was called (prevents negative WaitGroup counter)
+	if s.isRunning {
+		defer s.wg.Done()
+	}
 
 	// Perform initial calculation immediately
 	if err := s.calculateAndStoreOpportunities(); err != nil {
@@ -219,6 +290,11 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 
 // getLatestMarketData retrieves the latest market data for all exchanges
 func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData, error) {
+	// Check if database pool is available
+	if s.db == nil || s.db.Pool == nil {
+		return nil, fmt.Errorf("database pool is not available")
+	}
+
 	// Query to get the latest market data for each trading pair on each exchange
 	query := `
 		SELECT DISTINCT ON (md.exchange_id, md.trading_pair_id)
@@ -325,6 +401,10 @@ func (s *ArbitrageService) storeOpportunities(opportunities []models.ArbitrageOp
 
 // storeOpportunityBatch stores a batch of arbitrage opportunities
 func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.ArbitrageOpportunity) error {
+	if s.db == nil || s.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+	
 	tx, err := s.db.Pool.Begin(s.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -379,6 +459,11 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 
 // cleanupOldOpportunities removes expired arbitrage opportunities
 func (s *ArbitrageService) cleanupOldOpportunities() error {
+	// Check if database pool is available
+	if s.db == nil || s.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+	
 	// Since the table uses expires_at instead of is_active, we can just delete expired opportunities
 	// or we can leave them for historical analysis. For now, let's just log expired ones.
 	
@@ -412,6 +497,11 @@ func (s *ArbitrageService) countTotalTradingPairs(marketData map[string][]models
 
 // GetActiveOpportunities retrieves currently active arbitrage opportunities
 func (s *ArbitrageService) GetActiveOpportunities(ctx context.Context, limit int) ([]models.ArbitrageOpportunity, error) {
+	// Check if database pool is available
+	if s.db == nil || s.db.Pool == nil {
+		return nil, fmt.Errorf("database pool is not available")
+	}
+	
 	query := `
 		SELECT 
 			ao.id, ao.buy_exchange_id, ao.sell_exchange_id, ao.trading_pair_id,

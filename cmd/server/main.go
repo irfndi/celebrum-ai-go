@@ -81,7 +81,7 @@ func run() error {
 	// Initialize database
 	db, err := database.NewPostgresConnection(&cfg.Database)
 	if err != nil {
-		logrusLogger.WithError(err).Fatal("Failed to connect to database")
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer db.Close()
 

@@ -19,7 +19,7 @@ import (
 // Client represents the CCXT HTTP client
 type Client struct {
 	HTTPClient *http.Client
-	BaseURL    string
+	baseURL    string
 	timeout    time.Duration
 }
 
@@ -34,7 +34,7 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 		HTTPClient: &http.Client{
 			Timeout: timeout,
 		},
-		BaseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
+		baseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
 		timeout: timeout,
 	}
 }
@@ -228,7 +228,7 @@ func (c *Client) formatSymbolForExchange(exchange, symbol string) string {
 
 // makeRequest is a helper method to make HTTP requests to the CCXT service
 func (c *Client) makeRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	url := c.BaseURL + path
+	url := c.baseURL + path
 
 	var reqBody io.Reader
 	if body != nil {
@@ -287,4 +287,9 @@ func (c *Client) Close() error {
 	// HTTP client doesn't need explicit closing, but this method
 	// is provided for interface compatibility
 	return nil
+}
+
+// BaseURL returns the base URL of the CCXT service
+func (c *Client) BaseURL() string {
+	return c.baseURL
 }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
@@ -32,7 +32,7 @@ func TestNewCleanupService(t *testing.T) {
 
 	// Test creating cleanup service (ResourceManager and PerformanceMonitor are not used)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to avoid type casting issues
+		nil, // Use nil interface to test error handling paths
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -42,7 +42,7 @@ func TestNewCleanupService(t *testing.T) {
 	assert.NotNil(t, service)
 	assert.NotNil(t, service.ctx)
 	assert.NotNil(t, service.cancel)
-	assert.Nil(t, service.db.Pool) // Pool should be nil as set above
+	assert.Nil(t, service.db) // db should be nil as set above
 	assert.Equal(t, errorRecoveryManager, service.errorRecoveryManager)
 	assert.Nil(t, service.resourceManager) // Should be nil as passed
 	assert.Nil(t, service.performanceMonitor) // Should be nil as passed
@@ -56,7 +56,7 @@ func TestCleanupService_Start(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -103,7 +103,7 @@ func TestCleanupService_RunCleanup(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -136,17 +136,12 @@ func TestCleanupService_RunCleanup(t *testing.T) {
 
 // TestCleanupService_GetDataStats tests the GetDataStats method
 func TestCleanupService_GetDataStats(t *testing.T) {
-	// Create mock database
-	mockPool, err := pgxmock.NewPool()
-	assert.NoError(t, err)
-	defer mockPool.Close()
-
 	// Create real ErrorRecoveryManager for testing
 	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
 
-	// Create cleanup service (ResourceManager and PerformanceMonitor are not used)
+	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -162,28 +157,34 @@ func TestCleanupService_GetDataStats(t *testing.T) {
 
 // TestCleanupService_GetDataStats_WithError tests GetDataStats with database error
 func TestCleanupService_GetDataStats_WithError(t *testing.T) {
-	// Create mock database
+	// Create mock database that returns errors
 	mockPool, err := pgxmock.NewPool()
 	assert.NoError(t, err)
 	defer mockPool.Close()
 
+	// Configure mock to return error for QueryRow calls
+	mockPool.ExpectQuery("SELECT COUNT\\(\\*\\) FROM market_data").WillReturnError(errors.New("connection failed"))
+
 	// Create real ErrorRecoveryManager for testing
 	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
 
-	// Create cleanup service (ResourceManager and PerformanceMonitor are not used)
+	// Create cleanup service with mock database
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		mockPool,
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
 	)
 
-	// Test getting data stats with nil database
+	// Test getting data stats with database error
 	ctx := context.Background()
 	stats, err := service.GetDataStats(ctx)
 	assert.Error(t, err)
 	assert.Nil(t, stats)
-	assert.Contains(t, err.Error(), "database pool is not available")
+	assert.Contains(t, err.Error(), "failed to count market data")
+
+	// Ensure all expectations were met
+	assert.NoError(t, mockPool.ExpectationsWereMet())
 }
 
 // TestCleanupService_CleanupMarketDataSmart tests the cleanupMarketDataSmart method
@@ -193,7 +194,7 @@ func TestCleanupService_CleanupMarketDataSmart(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -213,7 +214,7 @@ func TestCleanupService_CleanupFundingRatesSmart(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -233,7 +234,7 @@ func TestCleanupService_CleanupArbitrageOpportunities(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -253,7 +254,7 @@ func TestCleanupService_CleanupFundingArbitrageOpportunities(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -266,6 +267,196 @@ func TestCleanupService_CleanupFundingArbitrageOpportunities(t *testing.T) {
 	assert.Contains(t, err.Error(), "database pool is not available")
 }
 
+// TestCleanupService_CleanupMarketData tests the cleanupMarketData method
+func TestCleanupService_CleanupMarketData(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test cleanup market data with nil database - should handle errors gracefully
+	ctx := context.Background()
+	err := service.cleanupMarketData(ctx, 36)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupFundingRates tests the cleanupFundingRates method
+func TestCleanupService_CleanupFundingRates(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test cleanup funding rates with nil database - should handle errors gracefully
+	ctx := context.Background()
+	err := service.cleanupFundingRates(ctx, 36)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupMarketData_WithRealDatabase tests cleanupMarketData with actual database operations
+func TestCleanupService_CleanupMarketData_WithRealDatabase(t *testing.T) {
+	// Create mock database
+	mockPool, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mockPool.Close()
+
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with mock database
+	service := NewCleanupService(
+		mockPool,
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Expect the DELETE call with proper parameters
+	mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+		WithArgs(pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("DELETE", 5)) // Simulate 5 rows deleted
+
+	// Test cleanup market data with real database - should succeed
+	ctx := context.Background()
+	err = service.cleanupMarketData(ctx, 36)
+	assert.NoError(t, err)
+
+	// Ensure all expectations were met
+	assert.NoError(t, mockPool.ExpectationsWereMet())
+}
+
+// TestCleanupService_CleanupFundingRates_WithRealDatabase tests cleanupFundingRates with actual database operations
+func TestCleanupService_CleanupFundingRates_WithRealDatabase(t *testing.T) {
+	// Create mock database
+	mockPool, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mockPool.Close()
+
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with mock database
+	service := NewCleanupService(
+		mockPool,
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Expect the DELETE call with proper parameters
+	mockPool.ExpectExec("DELETE FROM funding_rates WHERE created_at < \\$1").
+		WithArgs(pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("DELETE", 3)) // Simulate 3 rows deleted
+
+	// Test cleanup funding rates with real database - should succeed
+	ctx := context.Background()
+	err = service.cleanupFundingRates(ctx, 36)
+	assert.NoError(t, err)
+
+	// Ensure all expectations were met
+	assert.NoError(t, mockPool.ExpectationsWereMet())
+}
+
+// TestCleanupService_CleanupMarketData_ContextCancellation tests cleanupMarketData with context cancellation
+func TestCleanupService_CleanupMarketData_ContextCancellation(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test with cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Test cleanup market data with cancelled context - should return database error first
+	err := service.cleanupMarketData(ctx, 36)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupFundingRates_ContextCancellation tests cleanupFundingRates with context cancellation
+func TestCleanupService_CleanupFundingRates_ContextCancellation(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test with cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Test cleanup funding rates with cancelled context - should return database error first
+	err := service.cleanupFundingRates(ctx, 36)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupMarketData_NegativeRetention tests cleanupMarketData with negative retention hours
+func TestCleanupService_CleanupMarketData_NegativeRetention(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test cleanup market data with negative retention - should handle gracefully
+	ctx := context.Background()
+	err := service.cleanupMarketData(ctx, -1)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupFundingRates_ZeroRetention tests cleanupFundingRates with zero retention hours
+func TestCleanupService_CleanupFundingRates_ZeroRetention(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Create cleanup service with nil database (tests error handling paths)
+	service := NewCleanupService(
+		nil, // Use nil interface to test error handling
+		errorRecoveryManager,
+		nil, // ResourceManager not used by CleanupService
+		nil, // PerformanceMonitor not used by CleanupService
+	)
+
+	// Test cleanup funding rates with zero retention - should handle gracefully
+	ctx := context.Background()
+	err := service.cleanupFundingRates(ctx, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
 // TestCleanupService_CleanupMarketDataSmart_WithError tests cleanupMarketDataSmart with database error
 func TestCleanupService_CleanupMarketDataSmart_WithError(t *testing.T) {
 	// Create real ErrorRecoveryManager for testing
@@ -273,7 +464,7 @@ func TestCleanupService_CleanupMarketDataSmart_WithError(t *testing.T) {
 
 	// Create cleanup service with nil database (tests error handling paths)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to test error handling
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -298,7 +489,7 @@ func TestCleanupService_Stop(t *testing.T) {
 
 	// Create cleanup service (ResourceManager and PerformanceMonitor are not used)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to avoid type casting issues
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
@@ -322,7 +513,7 @@ func TestCleanupService_ContextCancellation(t *testing.T) {
 
 	// Create cleanup service (ResourceManager and PerformanceMonitor are not used)
 	service := NewCleanupService(
-		&database.PostgresDB{Pool: nil}, // Use nil Pool to avoid type casting issues
+		nil, // Use nil interface to test error handling
 		errorRecoveryManager,
 		nil, // ResourceManager not used by CleanupService
 		nil, // PerformanceMonitor not used by CleanupService
