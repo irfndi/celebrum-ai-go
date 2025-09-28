@@ -83,6 +83,10 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 		poolConfig.MinConns = clampToSafePoolSize(cfg.MaxIdleConns)
 	}
 
+	if poolConfig.MinConns > 0 && poolConfig.MaxConns > 0 && poolConfig.MinConns > poolConfig.MaxConns {
+		return nil, fmt.Errorf("invalid pool sizing: min_conns (%d) > max_conns (%d)", poolConfig.MinConns, poolConfig.MaxConns)
+	}
+
 	if cfg.ConnMaxLifetime != "" {
 		duration, err := time.ParseDuration(cfg.ConnMaxLifetime)
 		if err != nil {

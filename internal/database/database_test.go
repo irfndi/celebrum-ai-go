@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -163,33 +165,33 @@ func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
 }
 
 func TestBuildPGXPoolConfig_BuildsFromComponents(t *testing.T) {
-        // Test DSN building from individual components without attempting a real connection
-        cfg := &config.DatabaseConfig{
-                Host:         "localhost",
-                Port:         5432,
-                User:         "testuser",
-                Password:     "testpass",
-                DBName:       "testdb",
-                SSLMode:      "disable",
-                MaxOpenConns: 10,
-                MaxIdleConns: 5,
-                // Leave DatabaseURL empty to test component-based DSN
-        }
+	// Test DSN building from individual components without attempting a real connection
+	cfg := &config.DatabaseConfig{
+		Host:         "localhost",
+		Port:         5432,
+		User:         "testuser",
+		Password:     "testpass",
+		DBName:       "testdb",
+		SSLMode:      "disable",
+		MaxOpenConns: 10,
+		MaxIdleConns: 5,
+		// Leave DatabaseURL empty to test component-based DSN
+	}
 
-        poolConfig, err := buildPGXPoolConfig(cfg)
-        require.NoError(t, err)
-        require.NotNil(t, poolConfig)
+	poolConfig, err := buildPGXPoolConfig(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, poolConfig)
 
-        assert.Equal(t, int32(10), poolConfig.MaxConns)
-        assert.Equal(t, int32(5), poolConfig.MinConns)
+	assert.Equal(t, int32(10), poolConfig.MaxConns)
+	assert.Equal(t, int32(5), poolConfig.MinConns)
 
-        connString := poolConfig.ConnString()
-        assert.Contains(t, connString, "host=localhost")
-        assert.Contains(t, connString, "port=5432")
-        assert.Contains(t, connString, "user=testuser")
-        assert.Contains(t, connString, "password=testpass")
-        assert.Contains(t, connString, "dbname=testdb")
-        assert.Contains(t, connString, "sslmode=disable")
+	connString := poolConfig.ConnString()
+	assert.Contains(t, connString, "host=localhost")
+	assert.Contains(t, connString, "port=5432")
+	assert.Contains(t, connString, "user=testuser")
+	assert.Contains(t, connString, "password=testpass")
+	assert.Contains(t, connString, "dbname=testdb")
+	assert.Contains(t, connString, "sslmode=disable")
 }
 
 // Test NewRedisConnection with invalid config
@@ -1076,6 +1078,14 @@ func TestBuildPGXPoolConfig_EdgeCases(t *testing.T) {
 
 // Test buildPGXPoolConfig with connection pool bounds checking
 func TestBuildPGXPoolConfig_ConnectionPoolBounds(t *testing.T) {
+	t.Parallel()
+
+	if strconv.IntSize == 32 {
+		t.Skip("skipping bounds test on 32-bit architectures")
+	}
+
+	tooLarge := int64(math.MaxInt32) + 1
+
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1083,8 +1093,8 @@ func TestBuildPGXPoolConfig_ConnectionPoolBounds(t *testing.T) {
 		Password:        "test",
 		DBName:          "test",
 		SSLMode:         "disable",
-		MaxOpenConns:    2147483648,
-		MaxIdleConns:    2147483648,
+		MaxOpenConns:    int(tooLarge),
+		MaxIdleConns:    int(tooLarge),
 		ConnMaxLifetime: "1h",
 		ConnMaxIdleTime: "30m",
 	}
@@ -1122,6 +1132,24 @@ func TestBuildPGXPoolConfig_InvalidDurations(t *testing.T) {
 	assert.Nil(t, poolCfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse ConnMaxIdleTime")
+}
+
+func TestBuildPGXPoolConfig_InvalidPoolSizing(t *testing.T) {
+	cfg := &config.DatabaseConfig{
+		Host:         "localhost",
+		Port:         5432,
+		User:         "test",
+		Password:     "test",
+		DBName:       "test",
+		SSLMode:      "disable",
+		MaxOpenConns: 5,
+		MaxIdleConns: 10,
+	}
+
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid pool sizing")
 }
 
 // Test RedisClient Close with actual Redis client mock

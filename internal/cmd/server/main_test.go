@@ -11,11 +11,13 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/irfndi/celebrum-ai-go/internal/config"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -131,15 +133,11 @@ func TestHTTPServerTimeouts(t *testing.T) {
 
 // Test configuration loading
 func TestConfigurationLoading(t *testing.T) {
-	// Test environment variable parsing
-	testConfig := struct {
-		ServerPort int    `env:"SERVER_PORT" envDefault:"8080"`
-		LogLevel   string `env:"LOG_LEVEL" envDefault:"info"`
-	}{}
+	cfg, err := config.Load()
+	require.NoError(t, err)
 
-	// Test default values
-	assert.Equal(t, 8080, testConfig.ServerPort)
-	assert.Equal(t, "info", testConfig.LogLevel)
+	assert.Equal(t, 8080, cfg.Server.Port)
+	assert.Equal(t, "info", cfg.LogLevel)
 }
 
 // Test Redis connection mock
@@ -268,7 +266,7 @@ func TestConfigurationValidation(t *testing.T) {
 func TestHTTPMethodsAndRoutes(t *testing.T) {
 	// Test router with basic routes
 	router := gin.New()
-	
+
 	// Test GET route
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "GET test"})
@@ -286,7 +284,7 @@ func TestHTTPMethodsAndRoutes(t *testing.T) {
 func TestMiddlewareChain(t *testing.T) {
 	// Test middleware order
 	router := gin.New()
-	
+
 	// Add middleware in order
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
