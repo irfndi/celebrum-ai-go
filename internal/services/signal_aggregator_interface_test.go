@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/shopspring/decimal"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/irfndi/celebrum-ai-go/internal/models"
 )
 
 // TestMockSignalQualityScorer implements SignalQualityScorerInterface for testing
@@ -34,14 +36,14 @@ func (m *TestMockSignalQualityScorer) GetDefaultQualityThresholds() *QualityThre
 // TestSignalAggregator_Interface tests the interface design
 func TestSignalAggregator_Interface(t *testing.T) {
 	logger := logrus.New()
-	
+
 	// Test that we can create a SignalAggregator with a mock quality scorer
 	sa := NewSignalAggregator(nil, nil, logger)
-	
+
 	// Replace the QualityScorer with a mock for testing
 	mockScorer := &TestMockSignalQualityScorer{}
 	sa.qualityScorer = mockScorer
-	
+
 	// Configure mock to return acceptable quality metrics
 	qualityMetrics := &SignalQualityMetrics{
 		OverallScore:         decimal.NewFromFloat(0.8),
@@ -55,7 +57,7 @@ func TestSignalAggregator_Interface(t *testing.T) {
 		DataFreshnessScore:   decimal.NewFromFloat(0.9),
 		MarketConditionScore: decimal.NewFromFloat(0.8),
 	}
-	
+
 	thresholds := &QualityThresholds{
 		MinOverallScore:   decimal.NewFromFloat(0.6),
 		MinExchangeScore:  decimal.NewFromFloat(0.7),
@@ -64,15 +66,36 @@ func TestSignalAggregator_Interface(t *testing.T) {
 		MaxRiskScore:      decimal.NewFromFloat(0.4),
 		MinDataFreshness:  5 * time.Minute,
 	}
-	
+
 	mockScorer.On("AssessSignalQuality", mock.Anything, mock.Anything).Return(qualityMetrics, nil)
 	mockScorer.On("IsSignalQualityAcceptable", qualityMetrics, thresholds).Return(true)
 	mockScorer.On("GetDefaultQualityThresholds").Return(thresholds)
-	
+
 	// Test that the interface is working correctly
 	assert.NotNil(t, sa)
 	assert.NotNil(t, sa.qualityScorer)
-	
+
+	// Trigger an aggregation to exercise the quality scorer interactions
+	input := ArbitrageSignalInput{
+		Opportunities: []models.ArbitrageOpportunity{
+			{
+				TradingPair:      &models.TradingPair{Symbol: "BTC/USDT"},
+				ProfitPercentage: decimal.NewFromFloat(0.8),
+				BuyPrice:         decimal.NewFromFloat(100),
+				SellPrice:        decimal.NewFromFloat(101),
+				BuyExchanges:     []string{"Binance"},
+				SellExchanges:    []string{"Coinbase"},
+				DetectedAt:       time.Now(),
+				ExpiresAt:        time.Now().Add(5 * time.Minute),
+				MinVolume:        decimal.NewFromFloat(10000),
+			},
+		},
+		MinVolume:  decimal.NewFromFloat(10000),
+		BaseAmount: decimal.NewFromFloat(20000),
+	}
+
+	_, _ = sa.AggregateArbitrageSignals(context.Background(), input)
+
 	// Verify the mock was called correctly
 	mockScorer.AssertExpectations(t)
 }
@@ -80,11 +103,11 @@ func TestSignalAggregator_Interface(t *testing.T) {
 // TestSignalAggregator_QualityAssessment tests quality assessment functionality
 func TestSignalAggregator_QualityAssessment(t *testing.T) {
 	logger := logrus.New()
-	
+
 	sa := NewSignalAggregator(nil, nil, logger)
 	mockScorer := &TestMockSignalQualityScorer{}
 	sa.qualityScorer = mockScorer
-	
+
 	// Test data
 	qualityInput := SignalQualityInput{
 		SignalType:       "arbitrage",
@@ -97,7 +120,7 @@ func TestSignalAggregator_QualityAssessment(t *testing.T) {
 		SignalCount:      1,
 		SignalComponents: []string{"price_diff", "volume"},
 	}
-	
+
 	qualityMetrics := &SignalQualityMetrics{
 		OverallScore:         decimal.NewFromFloat(0.8),
 		ExchangeScore:        decimal.NewFromFloat(0.8),
@@ -110,7 +133,7 @@ func TestSignalAggregator_QualityAssessment(t *testing.T) {
 		DataFreshnessScore:   decimal.NewFromFloat(0.9),
 		MarketConditionScore: decimal.NewFromFloat(0.8),
 	}
-	
+
 	thresholds := &QualityThresholds{
 		MinOverallScore:   decimal.NewFromFloat(0.6),
 		MinExchangeScore:  decimal.NewFromFloat(0.7),
@@ -119,27 +142,27 @@ func TestSignalAggregator_QualityAssessment(t *testing.T) {
 		MaxRiskScore:      decimal.NewFromFloat(0.4),
 		MinDataFreshness:  5 * time.Minute,
 	}
-	
+
 	mockScorer.On("AssessSignalQuality", mock.Anything, &qualityInput).Return(qualityMetrics, nil)
 	mockScorer.On("IsSignalQualityAcceptable", qualityMetrics, thresholds).Return(true)
 	mockScorer.On("GetDefaultQualityThresholds").Return(thresholds)
-	
+
 	// Test quality assessment
 	ctx := context.Background()
 	result, err := sa.qualityScorer.AssessSignalQuality(ctx, &qualityInput)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, decimal.NewFromFloat(0.8), result.OverallScore)
-	
+
 	// Test quality acceptance
 	isAcceptable := sa.qualityScorer.IsSignalQualityAcceptable(qualityMetrics, thresholds)
 	assert.True(t, isAcceptable)
-	
+
 	// Test default thresholds
 	defaultThresholds := sa.qualityScorer.GetDefaultQualityThresholds()
 	assert.NotNil(t, defaultThresholds)
 	assert.Equal(t, decimal.NewFromFloat(0.6), defaultThresholds.MinOverallScore)
-	
+
 	mockScorer.AssertExpectations(t)
 }

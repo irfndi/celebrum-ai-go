@@ -7,6 +7,7 @@ import (
 
 	"github.com/irfndi/celebrum-ai-go/internal/cache"
 	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfndi/celebrum-ai-go/internal/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,9 +87,12 @@ func TestService_FetchSingleTicker(t *testing.T) {
 	marketPrice, err := service.FetchSingleTicker(ctx, "binance", "BTC/USDT")
 	assert.NoError(t, err)
 	assert.NotNil(t, marketPrice)
-	assert.Equal(t, "binance", marketPrice.ExchangeName)
-	assert.Equal(t, "BTC/USDT", marketPrice.Symbol)
-	assert.True(t, marketPrice.Price.IsPositive())
+
+	mp, ok := marketPrice.(*models.MarketPrice)
+	require.True(t, ok)
+	assert.Equal(t, "binance", mp.ExchangeName)
+	assert.Equal(t, "BTC/USDT", mp.Symbol)
+	assert.True(t, mp.Price.IsPositive())
 }
 
 func TestService_FetchMarketData(t *testing.T) {
@@ -120,8 +124,10 @@ func TestService_FetchMarketData(t *testing.T) {
 
 	// Should have data for each exchange-symbol combination
 	for _, data := range marketData {
-		assert.Contains(t, exchanges, data.ExchangeName)
-		assert.Contains(t, symbols, data.Symbol)
-		assert.True(t, data.Price.IsPositive())
+		mp, ok := data.(*models.MarketPrice)
+		require.True(t, ok)
+		assert.Contains(t, exchanges, mp.ExchangeName)
+		assert.Contains(t, symbols, mp.Symbol)
+		assert.True(t, mp.Price.IsPositive())
 	}
 }
