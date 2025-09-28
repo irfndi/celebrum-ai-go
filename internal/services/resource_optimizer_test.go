@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-				"github.com/stretchr/testify/assert"
-	)
+	"github.com/stretchr/testify/assert"
+)
 
 func TestNewResourceOptimizer(t *testing.T) {
 	config := ResourceOptimizerConfig{
@@ -41,8 +41,8 @@ func TestNewResourceOptimizer_WithDefaults(t *testing.T) {
 	assert.Greater(t, ro.cpuCores, 0)
 	assert.Greater(t, ro.memoryGB, 0.0)
 	assert.Equal(t, 5*time.Minute, ro.optimizationInterval) // Default value
-	assert.Equal(t, 100, ro.maxHistorySize)                // Default value
-	assert.False(t, ro.adaptiveMode)                         // Default value
+	assert.Equal(t, 100, ro.maxHistorySize)                 // Default value
+	assert.False(t, ro.adaptiveMode)                        // Default value
 }
 
 func TestResourceOptimizer_calculateOptimalConcurrency(t *testing.T) {
@@ -166,16 +166,19 @@ func TestResourceOptimizer_RecordPerformanceSnapshot(t *testing.T) {
 	}
 	ro := NewResourceOptimizer(config)
 
+	initialLen := len(ro.performanceHistory)
+
 	// Record initial snapshot
 	ro.RecordPerformanceSnapshot(10, 100.0, 1.0, 50.0)
 
-	assert.Equal(t, 1, len(ro.performanceHistory))
-	snapshot := ro.performanceHistory[0]
-	assert.Equal(t, 10, snapshot.ActiveOperations)
-	assert.Equal(t, 100.0, snapshot.Throughput)
-	assert.Equal(t, 1.0, snapshot.ErrorRate)
-	assert.Equal(t, 50.0, snapshot.ResponseTime)
-	assert.False(t, snapshot.Timestamp.IsZero())
+	if assert.Equal(t, initialLen+1, len(ro.performanceHistory)) {
+		snapshot := ro.performanceHistory[len(ro.performanceHistory)-1]
+		assert.Equal(t, 10, snapshot.ActiveOperations)
+		assert.Equal(t, 100.0, snapshot.Throughput)
+		assert.Equal(t, 1.0, snapshot.ErrorRate)
+		assert.Equal(t, 50.0, snapshot.ResponseTime)
+		assert.False(t, snapshot.Timestamp.IsZero())
+	}
 
 	// Record multiple snapshots
 	for i := 0; i < 10; i++ {
@@ -228,7 +231,7 @@ func TestResourceOptimizer_OptimizeIfNeeded_AdaptiveMode(t *testing.T) {
 	// Test shouldOptimize directly
 	shouldOpt := ro.shouldOptimize()
 	t.Logf("Should optimize result: %v", shouldOpt)
-	
+
 	// Try with the original config
 	optimized := ro.OptimizeIfNeeded(config)
 	t.Logf("Optimization result: %v", optimized)
@@ -294,7 +297,7 @@ func TestResourceOptimizer_shouldOptimize(t *testing.T) {
 		snapshot := PerformanceSnapshot{
 			CPUUsage:     60.0,
 			MemoryUsage:  60.0,
-			ErrorRate:   1.0,
+			ErrorRate:    1.0,
 			ResponseTime: 6000.0, // High response time
 		}
 		ro.performanceHistory = append(ro.performanceHistory, snapshot)
@@ -309,6 +312,8 @@ func TestResourceOptimizer_GetPerformanceHistory(t *testing.T) {
 	}
 	ro := NewResourceOptimizer(config)
 
+	initialLen := len(ro.performanceHistory)
+
 	// Add some snapshots
 	for i := 0; i < 5; i++ {
 		ro.RecordPerformanceSnapshot(i+1, float64(i*10), float64(i), float64(i*5))
@@ -316,7 +321,7 @@ func TestResourceOptimizer_GetPerformanceHistory(t *testing.T) {
 
 	// Get all history
 	history := ro.GetPerformanceHistory(0)
-	assert.Equal(t, 5, len(history))
+	assert.Equal(t, initialLen+5, len(history))
 
 	// Get limited history
 	limited := ro.GetPerformanceHistory(3)
@@ -324,7 +329,7 @@ func TestResourceOptimizer_GetPerformanceHistory(t *testing.T) {
 
 	// Get more than available
 	overflow := ro.GetPerformanceHistory(10)
-	assert.Equal(t, 5, len(overflow))
+	assert.Equal(t, initialLen+5, len(overflow))
 }
 
 func TestResourceOptimizer_GetSystemInfo(t *testing.T) {

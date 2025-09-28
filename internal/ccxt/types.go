@@ -100,7 +100,7 @@ func (s *Service) GetExchangeInfo(exchangeID string) (ExchangeInfo, bool) {
 }
 
 // FetchMarketData fetches market data for multiple exchanges and symbols
-func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
+func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]MarketPriceInterface, error) {
 	if len(exchanges) == 0 || len(symbols) == 0 {
 		return nil, fmt.Errorf("exchanges and symbols cannot be empty")
 	}
@@ -116,9 +116,9 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 		return nil, fmt.Errorf("failed to fetch tickers: %w", err)
 	}
 
-	marketData := make([]models.MarketPrice, 0, len(resp.Tickers))
+	marketData := make([]MarketPriceInterface, 0, len(resp.Tickers))
 	for _, tickerData := range resp.Tickers {
-		md := models.MarketPrice{
+		md := &models.MarketPrice{
 			ExchangeName: tickerData.Exchange,
 			Symbol:       tickerData.Ticker.Symbol,
 			Price:        tickerData.Ticker.Last,
@@ -132,7 +132,7 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 }
 
 // FetchSingleTicker fetches ticker data for a single exchange and symbol
-func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
+func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string) (MarketPriceInterface, error) {
 	resp, err := s.client.GetTicker(ctx, exchange, symbol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch ticker for %s:%s: %w", exchange, symbol, err)

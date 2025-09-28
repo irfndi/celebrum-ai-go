@@ -1,16 +1,16 @@
 package testmocks
 
 import (
-	"context"
-	"time"
+    "context"
+    "time"
 
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
-	"github.com/irfandi/celebrum-ai-go/internal/models"
-	"github.com/redis/go-redis/v9"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/mock"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+    "github.com/irfandi/celebrum-ai-go/internal/ccxt"
+    "github.com/irfandi/celebrum-ai-go/internal/models"
+    "github.com/redis/go-redis/v9"
+    "github.com/shopspring/decimal"
+    "github.com/stretchr/testify/mock"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
 )
 
 // MockCCXTService implements ccxt.CCXTService for testing
@@ -406,14 +406,17 @@ func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*cc
 	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
 }
 
-func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
+func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchanges, symbols)
-	return args.Get(0).([]models.MarketPrice), args.Error(1)
+	return args.Get(0).([]ccxt.MarketPriceInterface), args.Error(1)
 }
 
-func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
+func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchange, symbol)
-	return args.Get(0).(*models.MarketPrice), args.Error(1)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
 }
 
 func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {
@@ -502,15 +505,15 @@ func (m *MockCacheAnalyticsService) RecordCacheHit(category string) {
 }
 
 func (m *MockCacheAnalyticsService) RecordCacheMiss(category string) {
-	m.Called(category)
+    m.Called(category)
 }
 
 // MockSpotArbitrageCalculator implements ArbitrageCalculator for testing
 type MockSpotArbitrageCalculator struct {
-	mock.Mock
+    mock.Mock
 }
 
 func (m *MockSpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
-	args := m.Called(ctx, marketData)
-	return args.Get(0).([]models.ArbitrageOpportunity), args.Error(1)
+    args := m.Called(ctx, marketData)
+    return args.Get(0).([]models.ArbitrageOpportunity), args.Error(1)
 }

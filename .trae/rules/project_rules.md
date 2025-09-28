@@ -10,10 +10,10 @@
 
 ### **Interaction & Research**
 
-* this project deploy on server using docker compose, you can access the servers via `ssh root@194.233.73.250` , we manually rsync and rebuild for any changes code change on our local env.
+* this project deploys via Docker Compose. Access credentials and host details are stored in the private runbook—use the documented non-root deploy user and SSH keys (no passwords).
 * if theres any database problem, dont directly change on server, but must through sql files (edit or create new) on `database/migrations` to ensure consistency when rebuild (theres docker migration will run automatically when rebuild).
-* if theres any problem with the server, you can check the logs on `docker logs -f <container_name>` via `ssh root@194.233.73.250` on correct dir .
-* if theres any problem with the database, you can check the logs on `docker logs -f postgres` via `ssh root@194.233.73.250` on correct dir.
+* if theres any problem with the server, you can check the logs on `docker logs -f <container_name>` via the documented SSH host alias in the runbook.
+* if theres any problem with the database, you can check the logs on `docker logs -f postgres` via the documented SSH host alias in the runbook.
 *   **Verify, Don't Assume:** Always find the latest/correct version of documentation and best practices by consulting `context7` or search on web, leverage other MCP tools, and official web resources.
 
 ### **Reference Locations**
