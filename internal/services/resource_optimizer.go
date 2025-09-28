@@ -67,6 +67,25 @@ type ResourceOptimizerConfig struct {
 
 // NewResourceOptimizer creates a new resource optimizer
 func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
+	if config.OptimizationInterval == 0 {
+		config.OptimizationInterval = 5 * time.Minute
+	}
+	if config.MaxHistorySize == 0 {
+		config.MaxHistorySize = 100
+	}
+	if config.MinWorkers == 0 {
+		config.MinWorkers = 2
+	}
+	if config.MaxWorkers == 0 {
+		config.MaxWorkers = 20
+	}
+	if config.CPUThreshold == 0 {
+		config.CPUThreshold = 80.0
+	}
+	if config.MemoryThreshold == 0 {
+		config.MemoryThreshold = 85.0
+	}
+
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
 	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
@@ -94,6 +113,9 @@ func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
 
 	// Calculate initial optimal concurrency
 	ro.calculateOptimalConcurrency(config)
+
+	// Seed performance history with an initial snapshot for baseline metrics
+	ro.RecordPerformanceSnapshot(0, 0, 0, 0)
 
 	ro.logger.Info("Resource Optimizer initialized",
 		"cpu_cores", ro.cpuCores,
@@ -222,12 +244,9 @@ func (ro *ResourceOptimizer) OptimizeIfNeeded(config ResourceOptimizerConfig) bo
 	adaptive := ro.adaptiveMode
 	ro.mu.RUnlock()
 
-	// Check if enough time has passed
-	if time.Since(lastOpt) < ro.optimizationInterval {
-		return false
-	}
+	elapsed := time.Since(lastOpt)
 
-	// Check if adaptive optimization is needed
+	// Check if adaptive optimization is needed regardless of interval
 	if adaptive && ro.shouldOptimize() {
 		ro.logger.Info("Adaptive optimization triggered due to performance changes")
 		ro.calculateOptimalConcurrency(config)
@@ -237,17 +256,17 @@ func (ro *ResourceOptimizer) OptimizeIfNeeded(config ResourceOptimizerConfig) bo
 		return true
 	}
 
-	// Regular optimization interval
-	if time.Since(lastOpt) >= ro.optimizationInterval {
-		ro.logger.Info("Regular optimization triggered", "interval", ro.optimizationInterval)
-		ro.calculateOptimalConcurrency(config)
-		ro.mu.Lock()
-		ro.lastOptimization = time.Now()
-		ro.mu.Unlock()
-		return true
+	// Respect the regular optimization interval
+	if elapsed < ro.optimizationInterval {
+		return false
 	}
 
-	return false
+	ro.logger.Info("Regular optimization triggered", "interval", ro.optimizationInterval)
+	ro.calculateOptimalConcurrency(config)
+	ro.mu.Lock()
+	ro.lastOptimization = time.Now()
+	ro.mu.Unlock()
+	return true
 }
 
 // shouldOptimize determines if adaptive optimization should be triggered

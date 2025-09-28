@@ -3,8 +3,8 @@ package handlers
 import (
 	"context"
 
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfandi/celebrum-ai-go/pkg/ccxt"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
 )
@@ -39,17 +39,17 @@ func (m *MockCCXTService) GetExchangeInfo(exchangeID string) (ccxt.ExchangeInfo,
 	return args.Get(0).(ccxt.ExchangeInfo), args.Bool(1)
 }
 
-func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
+func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchanges, symbols)
-	return args.Get(0).([]models.MarketPrice), args.Error(1)
+	return args.Get(0).([]ccxt.MarketPriceInterface), args.Error(1)
 }
 
-func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
+func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchange, symbol)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.MarketPrice), args.Error(1)
+	return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
 }
 
 func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {
