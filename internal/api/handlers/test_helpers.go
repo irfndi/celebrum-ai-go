@@ -3,8 +3,8 @@ package handlers
 import (
 	"context"
 
+	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfandi/celebrum-ai-go/pkg/ccxt"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
 )

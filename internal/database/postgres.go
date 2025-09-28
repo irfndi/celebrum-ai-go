@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/irfndi/celebrum-ai-go/internal/config"
@@ -14,43 +15,12 @@ type PostgresDB struct {
 	Pool *pgxpool.Pool
 }
 
+const maxAllowedPoolConns int32 = 10000
+
 func NewPostgresConnection(cfg *config.DatabaseConfig) (*PostgresDB, error) {
-	var dsn string
-
-	// Use DATABASE_URL if provided (common for cloud deployments like Digital Ocean)
-	if cfg.DatabaseURL != "" {
-		dsn = cfg.DatabaseURL
-	} else {
-		// Build DSN from individual components
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
-	}
-
-	// Parse and configure connection pool
-	poolConfig, err := pgxpool.ParseConfig(dsn)
+	poolConfig, err := buildPGXPoolConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse database config: %w", err)
-	}
-
-	// Configure connection pool settings with bounds checking
-	if cfg.MaxOpenConns > 0 && cfg.MaxOpenConns <= 2147483647 {
-		poolConfig.MaxConns = int32(cfg.MaxOpenConns)
-	}
-	if cfg.MaxIdleConns > 0 && cfg.MaxIdleConns <= 2147483647 {
-		poolConfig.MinConns = int32(cfg.MaxIdleConns)
-	}
-
-	// Parse duration strings
-	if cfg.ConnMaxLifetime != "" {
-		if duration, err := time.ParseDuration(cfg.ConnMaxLifetime); err == nil {
-			poolConfig.MaxConnLifetime = duration
-		}
-	}
-
-	if cfg.ConnMaxIdleTime != "" {
-		if duration, err := time.ParseDuration(cfg.ConnMaxIdleTime); err == nil {
-			poolConfig.MaxConnIdleTime = duration
-		}
+		return nil, err
 	}
 
 	// Create connection pool with retry logic
@@ -89,4 +59,60 @@ func (db *PostgresDB) Close() {
 
 func (db *PostgresDB) HealthCheck(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
+}
+
+func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
+	var dsn string
+
+	if cfg.DatabaseURL != "" {
+		dsn = cfg.DatabaseURL
+	} else {
+		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse database config: %w", err)
+	}
+
+	if cfg.MaxOpenConns > 0 {
+		poolConfig.MaxConns = clampToSafePoolSize(cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns > 0 {
+		poolConfig.MinConns = clampToSafePoolSize(cfg.MaxIdleConns)
+	}
+
+	if cfg.ConnMaxLifetime != "" {
+		if duration, err := time.ParseDuration(cfg.ConnMaxLifetime); err == nil {
+			poolConfig.MaxConnLifetime = duration
+		}
+	}
+
+	if cfg.ConnMaxIdleTime != "" {
+		if duration, err := time.ParseDuration(cfg.ConnMaxIdleTime); err == nil {
+			poolConfig.MaxConnIdleTime = duration
+		}
+	}
+
+	return poolConfig, nil
+}
+
+func clampToSafePoolSize(value int) int32 {
+	requested := int64(value)
+	if requested <= 0 {
+		return 0
+	}
+
+	if requested > int64(math.MaxInt32) {
+		logrus.Warnf("Configured pool size %d exceeds int32 limit; clamping to %d", value, maxAllowedPoolConns)
+		return maxAllowedPoolConns
+	}
+
+	if requested > int64(maxAllowedPoolConns) {
+		logrus.Warnf("Configured pool size %d exceeds safe limit %d; clamping", value, maxAllowedPoolConns)
+		return maxAllowedPoolConns
+	}
+
+	return int32(requested)
 }
