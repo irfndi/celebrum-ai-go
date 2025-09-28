@@ -84,15 +84,19 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	}
 
 	if cfg.ConnMaxLifetime != "" {
-		if duration, err := time.ParseDuration(cfg.ConnMaxLifetime); err == nil {
-			poolConfig.MaxConnLifetime = duration
+		duration, err := time.ParseDuration(cfg.ConnMaxLifetime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ConnMaxLifetime: %w", err)
 		}
+		poolConfig.MaxConnLifetime = duration
 	}
 
 	if cfg.ConnMaxIdleTime != "" {
-		if duration, err := time.ParseDuration(cfg.ConnMaxIdleTime); err == nil {
-			poolConfig.MaxConnIdleTime = duration
+		duration, err := time.ParseDuration(cfg.ConnMaxIdleTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ConnMaxIdleTime: %w", err)
 		}
+		poolConfig.MaxConnIdleTime = duration
 	}
 
 	return poolConfig, nil

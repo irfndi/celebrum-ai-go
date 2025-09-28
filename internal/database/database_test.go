@@ -156,14 +156,10 @@ func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
 		ConnMaxIdleTime: "invalid-duration",
 	}
 
-	// This should still work as invalid durations are ignored
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	// but it should fail at connection, not at config parsing
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	// The error should be about connection failure
-	assert.Contains(t, err.Error(), "failed to ping database")
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
 }
 
 func TestNewPostgresConnection_BuildDSNFromComponents(t *testing.T) {
@@ -1092,6 +1088,33 @@ func TestBuildPGXPoolConfig_ConnectionPoolBounds(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, poolCfg.MaxConnIdleTime)
 }
 
+func TestBuildPGXPoolConfig_InvalidDurations(t *testing.T) {
+	cfg := &config.DatabaseConfig{
+		Host:            "localhost",
+		Port:            5432,
+		User:            "test",
+		Password:        "test",
+		DBName:          "test",
+		SSLMode:         "disable",
+		MaxOpenConns:    10,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: "oops",
+	}
+
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
+
+	cfg.ConnMaxLifetime = "1h"
+	cfg.ConnMaxIdleTime = "still-bad"
+
+	poolCfg, err = buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxIdleTime")
+}
+
 // Test RedisClient Close with actual Redis client mock
 func TestRedisClient_Close_WithRealClient(t *testing.T) {
 	// Since we can't create a real Redis client without Redis running,
@@ -1468,7 +1491,7 @@ func TestNewPostgresConnection_ExcessivePoolValues(t *testing.T) {
 
 // Test NewPostgresConnection with invalid duration formats
 func TestNewPostgresConnection_InvalidDurations(t *testing.T) {
-	// Test with invalid duration formats (should be ignored)
+	// Test with invalid duration formats (should error)
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1483,8 +1506,7 @@ func TestNewPostgresConnection_InvalidDurations(t *testing.T) {
 	}
 
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
 }
