@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/internal/testutil"
+	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheIntegrationProblem(t *testing.T) {
 	// Setup
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	mockRedisClient := testutil.GetTestRedisClient()
 	mockRedis := &database.RedisClient{Client: mockRedisClient}
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)
@@ -42,7 +43,7 @@ func TestCacheIntegrationProblem(t *testing.T) {
 // TestCacheAnalyticsIntegration tests comprehensive cache analytics integration
 func TestCacheAnalyticsIntegration(t *testing.T) {
 	// Setup
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	mockRedisClient := testutil.GetTestRedisClient()
 	mockRedis := &database.RedisClient{Client: mockRedisClient}
 	cacheAnalytics := services.NewCacheAnalyticsService(mockRedisClient)

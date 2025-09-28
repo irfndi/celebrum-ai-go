@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -242,6 +242,9 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 	// Check for nil dependencies
 	if c.db == nil {
 		return fmt.Errorf("database is nil")
+	}
+	if c.db.Pool == nil {
+		return fmt.Errorf("database pool is not available")
 	}
 	if c.redisClient == nil {
 		return fmt.Errorf("Redis client is nil")

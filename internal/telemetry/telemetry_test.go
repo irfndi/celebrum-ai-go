@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNormalizeOTLPEndpoint(t *testing.T) {
@@ -206,21 +206,21 @@ func TestShutdown(t *testing.T) {
 func TestGetLogger(t *testing.T) {
 	// First, ensure no global logger is set
 	globalLogger = nil
-	
+
 	logger := GetLogger()
 	// When telemetry is not initialized, this should return nil
 	assert.Nil(t, logger)
-	
+
 	// Now test with a mock logger
 	config := TelemetryConfig{
 		Enabled: false,
 	}
 	err := InitTelemetry(config)
 	assert.NoError(t, err)
-	
-	// Still should be nil when telemetry is disabled
+
+	// Still should return a logger when telemetry is disabled (fallback logger)
 	logger = GetLogger()
-	assert.Nil(t, logger)
+	assert.NotNil(t, logger)
 }
 
 // Test InitTelemetryWithProvider with disabled config

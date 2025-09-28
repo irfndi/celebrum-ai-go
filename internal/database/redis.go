@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )

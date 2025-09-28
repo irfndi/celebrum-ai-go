@@ -1,9 +1,11 @@
 package services
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -344,4 +346,423 @@ func TestNotificationService_formatArbitrageMessage_MoreThanThree(t *testing.T) 
 	message := ns.formatArbitrageMessage(fourOpps)
 	assert.Contains(t, message, "Found 4 profitable opportunities")
 	assert.Contains(t, message, "...and 1 more opportunities") // Should show "and more" for 4
+}
+
+func TestNotificationService_PublishOpportunityUpdate(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	ns.PublishOpportunityUpdate(context.Background(), []ArbitrageOpportunity{})
+	// Should not panic
+}
+
+func TestNotificationService_GetCacheStats(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	stats := ns.GetCacheStats(context.Background())
+	
+	assert.False(t, stats["redis_available"].(bool))
+	assert.NotContains(t, stats, "users_cached")
+	assert.NotContains(t, stats, "opportunities_cached")
+}
+
+func TestNotificationService_cacheArbitrageOpportunities(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	opportunities := []ArbitrageOpportunity{
+		{
+			Symbol:        "BTC/USDT",
+			BuyExchange:   "binance",
+			SellExchange:  "coinbase",
+			BuyPrice:      50000.0,
+			SellPrice:     50500.0,
+			ProfitPercent: 1.0,
+		},
+	}
+	
+	// Should not panic with nil Redis
+	ns.cacheArbitrageOpportunities(context.Background(), opportunities)
+}
+
+func TestNotificationService_CacheMarketData(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	data := map[string]interface{}{
+		"symbol": "BTC/USDT",
+		"price":  50000.0,
+	}
+	
+	// Should not panic with nil Redis
+	ns.CacheMarketData(context.Background(), "binance", data)
+}
+
+func TestNotificationService_GetCachedMarketData(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	var result map[string]interface{}
+	err := ns.GetCachedMarketData(context.Background(), "binance", &result)
+	
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis not available")
+}
+
+func TestNotificationService_InvalidateUserCache(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	// Should not panic with nil Redis
+	ns.InvalidateUserCache(context.Background())
+}
+
+func TestNotificationService_InvalidateOpportunityCache(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	// Should not panic with nil Redis
+	ns.InvalidateOpportunityCache(context.Background())
+}
+
+func TestNotificationService_formatTechnicalSignalMessage(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	// Test with empty signals
+	message := ns.formatTechnicalSignalMessage([]TechnicalSignalNotification{})
+	assert.Equal(t, "No technical analysis signals found.", message)
+
+	// Test with single signal
+	signals := []TechnicalSignalNotification{
+		{
+			Symbol:       "BTC/USDT",
+			SignalType:   "buy",
+			Action:       "buy",
+			SignalText:   "RSI oversold",
+			CurrentPrice: 50000.0,
+			EntryRange:   "$49900.0 - $50100.0",
+			Targets: []Target{
+				{Price: 51000.0, Profit: 2.0},
+				{Price: 52000.0, Profit: 4.0},
+			},
+			StopLoss: StopLoss{Price: 49500.0, Risk: 1.0},
+			RiskReward: "1:2",
+			Exchanges: []string{"binance", "coinbase"},
+			Timeframe: "4H",
+			Confidence: 0.85,
+			Timestamp: time.Now(),
+		},
+	}
+
+	message = ns.formatTechnicalSignalMessage(signals)
+	assert.Contains(t, message, "📊 *Technical Analysis Signals*")
+	assert.Contains(t, message, "BTC/USDT")
+	assert.Contains(t, message, "RSI oversold")
+	assert.Contains(t, message, "85.0%")
+}
+
+func TestNotificationService_ConvertAggregatedSignalToNotification(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	// Test with buy signal
+	signal := &AggregatedSignal{
+		Symbol:         "BTC/USDT",
+		SignalType:     SignalTypeTechnical,
+		Action:         "buy",
+		ProfitPotential: decimal.NewFromFloat(5.0),
+		RiskLevel:      decimal.NewFromFloat(0.02),
+		Confidence:     decimal.NewFromFloat(0.85),
+		Exchanges:      []string{"binance", "coinbase"},
+		Indicators:     []string{"RSI", "MACD"},
+		Metadata: map[string]interface{}{
+			"current_price": 50000.0,
+			"timeframe":    "4H",
+		},
+		CreatedAt:      time.Now(),
+	}
+
+	notification := ns.ConvertAggregatedSignalToNotification(signal)
+	assert.NotNil(t, notification)
+	assert.Equal(t, "BTC/USDT", notification.Symbol)
+	assert.Equal(t, "buy", notification.Action)
+	assert.Equal(t, 0.85, notification.Confidence)
+	assert.Equal(t, "RSI + MACD", notification.SignalText)
+	assert.Equal(t, "4H", notification.Timeframe)
+	assert.Len(t, notification.Targets, 2)
+	assert.Equal(t, 49000.0, notification.StopLoss.Price)
+}
+
+func TestNotificationService_generateOpportunityHash(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	opportunities := []ArbitrageOpportunity{
+		{
+			Symbol:        "BTC/USDT",
+			BuyExchange:   "binance",
+			SellExchange:  "coinbase",
+			BuyPrice:      50000.0,
+			SellPrice:     50500.0,
+			ProfitPercent: 1.0,
+		},
+	}
+
+	hash := ns.generateOpportunityHash(opportunities)
+	assert.NotEmpty(t, hash)
+	assert.Len(t, hash, 32) // MD5 hash length
+
+	// Same opportunities should produce same hash
+	hash2 := ns.generateOpportunityHash(opportunities)
+	assert.Equal(t, hash, hash2)
+}
+
+func TestNotificationService_generateTechnicalSignalsHash(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	signals := []TechnicalSignalNotification{
+		{
+			Symbol:       "BTC/USDT",
+			SignalType:   "buy",
+			Action:       "buy",
+			CurrentPrice: 50000.0,
+			Confidence:   0.85,
+		},
+	}
+
+	hash := ns.generateTechnicalSignalsHash(signals)
+	assert.NotEmpty(t, hash)
+	assert.Len(t, hash, 32) // MD5 hash length
+
+	// Same signals should produce same hash
+	hash2 := ns.generateTechnicalSignalsHash(signals)
+	assert.Equal(t, hash, hash2)
+}
+
+func TestNotificationService_getCachedMessage(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	message, found := ns.getCachedMessage(context.Background(), "test", "testhash")
+	assert.Empty(t, message)
+	assert.False(t, found)
+}
+
+func TestNotificationService_setCachedMessage(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	// Should not panic with nil Redis
+	ns.setCachedMessage(context.Background(), "test", "testhash", "test message")
+}
+
+func TestNotificationService_checkRateLimit(t *testing.T) {
+	// Test with nil Redis
+	ns := NewNotificationService(nil, nil, "")
+	
+	allowed, err := ns.checkRateLimit(context.Background(), "testuser")
+	assert.NoError(t, err)
+	assert.True(t, allowed) // Should allow when Redis is not available
+}
+
+func TestNotificationService_logNotification(t *testing.T) {
+	// Test with nil database - expect panic due to nil database access
+	ns := NewNotificationService(nil, nil, "")
+	
+	assert.Panics(t, func() {
+		err := ns.logNotification(context.Background(), "testuser", "telegram", "test message")
+		if err != nil {
+			t.Log("Error:", err)
+		}
+	})
+}
+
+func TestNotificationService_CheckUserNotificationPreferences(t *testing.T) {
+	// Test with nil database and Redis - expect panic due to nil database access
+	ns := NewNotificationService(nil, nil, "")
+	
+	assert.Panics(t, func() {
+		enabled, err := ns.CheckUserNotificationPreferences(context.Background(), "testuser")
+		if err != nil {
+			t.Log("Error:", err)
+		}
+		t.Log("Enabled:", enabled)
+	})
+}
+
+func TestNotificationService_generateAggregatedSignalsHash(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	signals := []*AggregatedSignal{
+		{
+			Symbol:         "BTC/USDT",
+			SignalType:     SignalTypeTechnical,
+			Action:         "buy",
+			Strength:       SignalStrengthStrong,
+			Confidence:     decimal.NewFromFloat(0.85),
+		},
+		{
+			Symbol:         "ETH/USDT",
+			SignalType:     SignalTypeTechnical,
+			Action:         "sell",
+			Strength:       SignalStrengthWeak,
+			Confidence:     decimal.NewFromFloat(0.65),
+		},
+	}
+
+	hash := ns.generateAggregatedSignalsHash(signals)
+	assert.NotEmpty(t, hash)
+	assert.Len(t, hash, 64) // SHA256 hash length
+
+	// Same signals should produce same hash
+	hash2 := ns.generateAggregatedSignalsHash(signals)
+	assert.Equal(t, hash, hash2)
+
+	// Different order should produce same hash (signals are sorted internally)
+	reversedSignals := []*AggregatedSignal{signals[1], signals[0]}
+	hash3 := ns.generateAggregatedSignalsHash(reversedSignals)
+	assert.Equal(t, hash, hash3)
+}
+
+func TestNotificationService_formatEnhancedArbitrageMessage(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	// Test with nil signal
+	message := ns.formatEnhancedArbitrageMessage(nil)
+	assert.Equal(t, "No arbitrage signal found.", message)
+
+	// Test with non-arbitrage signal
+	nonArbitrageSignal := &AggregatedSignal{
+		Symbol:     "BTC/USDT",
+		SignalType: SignalTypeTechnical,
+	}
+	
+	message = ns.formatEnhancedArbitrageMessage(nonArbitrageSignal)
+	assert.Equal(t, "No arbitrage signal found.", message)
+
+	// Test with arbitrage signal
+	signal := &AggregatedSignal{
+		Symbol:     "BTC/USDT",
+		SignalType: SignalTypeArbitrage,
+		Confidence: decimal.NewFromFloat(0.85),
+		Metadata: map[string]interface{}{
+			"buy_price_range": map[string]interface{}{
+				"min": decimal.NewFromFloat(49900.0),
+				"max": decimal.NewFromFloat(50100.0),
+			},
+			"sell_price_range": map[string]interface{}{
+				"min": decimal.NewFromFloat(50400.0),
+				"max": decimal.NewFromFloat(50600.0),
+			},
+			"profit_range": map[string]interface{}{
+				"min_percent": decimal.NewFromFloat(0.5),
+				"max_percent": decimal.NewFromFloat(1.5),
+				"min_dollar":  decimal.NewFromFloat(250.0),
+				"max_dollar":  decimal.NewFromFloat(750.0),
+				"base_amount": decimal.NewFromFloat(50000.0),
+			},
+			"buy_exchanges": []string{"binance", "coinbase"},
+			"sell_exchanges": []string{"kraken", "bitfinex"},
+			"opportunity_count": 4,
+			"min_volume": decimal.NewFromFloat(10000.0),
+			"validity_minutes": 5,
+		},
+	}
+
+	message = ns.formatEnhancedArbitrageMessage(signal)
+	assert.Contains(t, message, "ARBITRAGE ALERT: BTC/USDT")
+	assert.Contains(t, message, "0.50% - 1.50%")
+	assert.Contains(t, message, "$250 - $750")
+	assert.Contains(t, message, "binance, coinbase")
+	assert.Contains(t, message, "kraken, bitfinex")
+	assert.Contains(t, message, "85.0%")
+	assert.Contains(t, message, "5 minutes")
+}
+
+func TestNotificationService_formatAggregatedArbitrageMessage(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	// Test with empty signals
+	message := ns.formatAggregatedArbitrageMessage([]*AggregatedSignal{})
+	assert.Equal(t, "🔍 No arbitrage opportunities available", message)
+
+	// Test with signals
+	signals := []*AggregatedSignal{
+		{
+			Symbol:         "BTC/USDT",
+			SignalType:     SignalTypeArbitrage,
+			Action:         "buy",
+			ProfitPotential: decimal.NewFromFloat(2.5),
+			Confidence:     decimal.NewFromFloat(0.85),
+			Exchanges:      []string{"binance", "coinbase"},
+			Metadata: map[string]interface{}{
+				"buy_price":  49900.0,
+				"sell_price": 50500.0,
+			},
+		},
+		{
+			Symbol:         "ETH/USDT",
+			SignalType:     SignalTypeArbitrage,
+			Action:         "sell",
+			ProfitPotential: decimal.NewFromFloat(1.8),
+			Confidence:     decimal.NewFromFloat(0.75),
+			Exchanges:      []string{"kraken", "bitfinex"},
+		},
+	}
+
+	message = ns.formatAggregatedArbitrageMessage(signals)
+	assert.Contains(t, message, "🚀 *Aggregated Arbitrage Opportunities*")
+	assert.Contains(t, message, "BTC/USDT")
+	assert.Contains(t, message, "ETH/USDT")
+	assert.Contains(t, message, "2.50%")
+	assert.Contains(t, message, "1.80%")
+	assert.Contains(t, message, "0.8%")
+	// Both confidence values might round to 0.8% due to InexactFloat64()
+}
+
+func TestNotificationService_formatAggregatedTechnicalMessage(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "")
+
+	// Test with empty signals
+	message := ns.formatAggregatedTechnicalMessage([]*AggregatedSignal{})
+	assert.Equal(t, "📊 No technical analysis signals available", message)
+
+	// Test with signals
+	signals := []*AggregatedSignal{
+		{
+			Symbol:         "BTC/USDT",
+			SignalType:     SignalTypeTechnical,
+			Action:         "buy",
+			Strength:       SignalStrengthStrong,
+			ProfitPotential: decimal.NewFromFloat(5.0),
+			Confidence:     decimal.NewFromFloat(0.85),
+			RiskLevel:      decimal.NewFromFloat(0.02),
+			Exchanges:      []string{"binance", "coinbase"},
+			Indicators:     []string{"RSI", "MACD", "BB"},
+			Metadata: map[string]interface{}{
+				"entry_price": 49900.0,
+				"stop_loss":   49500.0,
+				"target":      52000.0,
+			},
+		},
+		{
+			Symbol:         "ETH/USDT",
+			SignalType:     SignalTypeTechnical,
+			Action:         "sell",
+			Strength:       SignalStrengthWeak,
+			ProfitPotential: decimal.NewFromFloat(3.0),
+			Confidence:     decimal.NewFromFloat(0.65),
+			RiskLevel:      decimal.NewFromFloat(0.03),
+			Exchanges:      []string{"kraken", "bitfinex"},
+			Indicators:     []string{"EMA", "STOCH"},
+		},
+	}
+
+	message = ns.formatAggregatedTechnicalMessage(signals)
+	assert.Contains(t, message, "📊 *Aggregated Technical Analysis*")
+	assert.Contains(t, message, "BTC/USDT")
+	assert.Contains(t, message, "ETH/USDT")
+	assert.Contains(t, message, "strong")
+	assert.Contains(t, message, "weak")
+	assert.Contains(t, message, "RSI, MACD, BB")
+	assert.Contains(t, message, "EMA, STOCH")
+	assert.Contains(t, message, "0.02%")
+	assert.Contains(t, message, "0.03%")
 }

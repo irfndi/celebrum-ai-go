@@ -17,7 +17,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated
+.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated
 
 # Default target
 all: build
@@ -55,6 +55,12 @@ test-coverage: ## Run tests with coverage report
 	go test -v -coverprofile=coverage.out ./cmd/... ./internal/... ./pkg/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
+
+coverage-check: ## Run coverage gate (warn by default, STRICT=true to fail)
+	@echo "$(GREEN)Running coverage check (threshold $${MIN_COVERAGE:-80}%)...$(NC)"
+	MIN_COVERAGE=$${MIN_COVERAGE:-80} \
+	STRICT=$${STRICT:-false} \
+	bash scripts/coverage-check.sh
 
 # E2E trace validation script (requires SigNoz collector running)
 test-traces: ## Verify OTLP traces end-to-end using Bun script

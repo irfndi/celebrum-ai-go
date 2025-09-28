@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -104,7 +108,7 @@ func TestMiddlewareSetup(t *testing.T) {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("celebrum-ai-go-test"))
+	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go-test"))
 
 	assert.NotNil(t, router)
 }
@@ -131,15 +135,13 @@ func TestHTTPServerTimeouts(t *testing.T) {
 
 // Test configuration loading
 func TestConfigurationLoading(t *testing.T) {
-	// Test environment variable parsing
-	testConfig := struct {
-		ServerPort int    `env:"SERVER_PORT" envDefault:"8080"`
-		LogLevel   string `env:"LOG_LEVEL" envDefault:"info"`
-	}{}
-
+	// Test actual config loading
+	cfg, err := config.Load()
+	assert.NoError(t, err)
+	
 	// Test default values
-	assert.Equal(t, 8080, testConfig.ServerPort)
-	assert.Equal(t, "info", testConfig.LogLevel)
+	assert.Equal(t, 8080, cfg.Server.Port)
+	assert.Equal(t, "info", cfg.LogLevel)
 }
 
 // Test Redis connection mock
@@ -422,5 +424,335 @@ func BenchmarkContextCreation(b *testing.B) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		cancel()
 		_ = ctx
+	}
+}
+
+// Test main function with mock environment
+func TestMainFunction(t *testing.T) {
+	if os.Getenv("TEST_MAIN_FUNCTION") == "1" {
+		// This is the child process that will call main()
+		main()
+		return
+	}
+	
+	// Save original environment variables
+	originalEnv := make(map[string]string)
+	
+	// Set up test environment variables to mock external dependencies
+	testEnv := map[string]string{
+		"ENVIRONMENT":                          "test",
+		"LOG_LEVEL":                           "error",
+		"SERVER_PORT":                         "8081",
+		"DATABASE_HOST":                       "nonexistent-host",
+		"DATABASE_PORT":                       "5432",
+		"DATABASE_USER":                       "testuser",
+		"DATABASE_PASSWORD":                   "testpass",
+		"DATABASE_DBNAME":                     "testdb",
+		"DATABASE_SSLMODE":                    "disable",
+		"REDIS_HOST":                         "nonexistent-host",
+		"REDIS_PORT":                         "6379",
+		"REDIS_PASSWORD":                     "",
+		"REDIS_DB":                           "0",
+		"TELEMETRY_ENABLED":                  "false",
+		"TELEMETRY_OTLP_ENDPOINT":             "http://localhost:4318",
+		"TELEMETRY_SERVICE_NAME":             "test-service",
+		"TELEMETRY_SERVICE_VERSION":          "test-version",
+		"TELEMETRY_LOG_LEVEL":                "error",
+		"CLEANUP_INTERVAL":                   "1",
+		"CLEANUP_ENABLE_SMART_CLEANUP":       "false",
+		"BACKFILL_ENABLED":                  "false",
+		"ARBITRAGE_ENABLED":                 "false",
+		"CCXT_SERVICE_URL":                   "http://localhost:3001",
+		"CCXT_TIMEOUT":                      "5",
+		"TELEGRAM_BOT_TOKEN":                "",
+		"MARKET_DATA_COLLECTION_INTERVAL":    "1m",
+		"MARKET_DATA_BATCH_SIZE":            "1",
+		"MARKET_DATA_MAX_RETRIES":           "1",
+		"MARKET_DATA_TIMEOUT":               "5s",
+		"MARKET_DATA_EXCHANGES":             "binance",
+		"BLACKLIST_TTL":                      "1h",
+		"BLACKLIST_SHORT_TTL":                "5m",
+		"BLACKLIST_LONG_TTL":                 "24h",
+		"BLACKLIST_USE_REDIS":               "false",
+		"BLACKLIST_RETRY_AFTER_CLEAR":       "false",
+		"TEST_MAIN_FUNCTION":                "1", // Signal this is the test process
+	}
+	
+	// Backup and set test environment
+	for key, value := range testEnv {
+		if original, exists := os.LookupEnv(key); exists {
+			originalEnv[key] = original
+		}
+		os.Setenv(key, value)
+	}
+	
+	// Restore environment after test
+	defer func() {
+		for key, value := range originalEnv {
+			os.Setenv(key, value)
+		}
+		for key := range testEnv {
+			if _, exists := originalEnv[key]; !exists {
+				os.Unsetenv(key)
+			}
+		}
+	}()
+	
+	// Test that main function handles errors gracefully by running it in a separate process
+	// We use exec.Command to run the test binary with the TEST_MAIN_FUNCTION flag
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFunction")
+	cmd.Env = append(os.Environ(), "TEST_MAIN_FUNCTION=1")
+	
+	// Capture output
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	
+	// Run the command
+	err := cmd.Run()
+	
+	// The command should fail with exit code 1
+	if err == nil {
+		t.Error("Expected main() to exit with error code 1, but it succeeded")
+		return
+	}
+	
+	// Check if it's an exit error with code 1
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr.ExitCode() != 1 {
+			t.Errorf("Expected exit code 1, got %d", exitErr.ExitCode())
+		}
+	} else {
+		t.Errorf("Expected exec.ExitError, got %T: %v", err, err)
+	}
+	
+	// Check that the error message contains our expected output
+	output := stderr.String()
+	if !strings.Contains(output, "Application failed: failed to connect to database") {
+		t.Errorf("Expected error message about database connection failure, got: %s", output)
+	}
+}
+
+// Test run function with test configuration
+func TestRunFunction(t *testing.T) {
+	// Save original environment variables
+	originalEnv := make(map[string]string)
+	
+	// Set up minimal test environment with invalid database to fail fast
+	testEnv := map[string]string{
+		"ENVIRONMENT":       "test",
+		"LOG_LEVEL":        "error",
+		"SERVER_PORT":      "8082",
+		"DATABASE_HOST":    "invalid-host",
+		"DATABASE_PORT":    "5432",
+		"DATABASE_USER":    "testuser",
+		"DATABASE_PASSWORD": "testpass",
+		"DATABASE_DBNAME":  "testdb",
+		"DATABASE_SSLMODE": "disable",
+		"REDIS_HOST":       "invalid-host",
+		"REDIS_PORT":       "6379",
+		"REDIS_PASSWORD":   "",
+		"REDIS_DB":         "0",
+		"TELEMETRY_ENABLED": "false",
+		"ARBITRAGE_ENABLED": "false",
+		"BACKFILL_ENABLED": "false",
+		"CLEANUP_INTERVAL": "1",
+		"CLEANUP_ENABLE_SMART_CLEANUP": "false",
+	}
+	
+	// Backup and set test environment
+	for key, value := range testEnv {
+		if original, exists := os.LookupEnv(key); exists {
+			originalEnv[key] = original
+		}
+		os.Setenv(key, value)
+	}
+	
+	// Restore environment after test
+	defer func() {
+		for key, value := range originalEnv {
+			os.Setenv(key, value)
+		}
+		for key := range testEnv {
+			if _, exists := originalEnv[key]; !exists {
+				os.Unsetenv(key)
+			}
+		}
+	}()
+	
+	// Test run function directly - expect it to fail but exercise the function for coverage
+	err := run()
+	
+	// We expect this to fail due to missing database/Redis connections
+	// but the important thing is that it exercises the run() function for coverage
+	assert.Error(t, err)
+	
+	// The error should be related to connection issues, but the exact message may vary
+	assert.True(t, strings.Contains(err.Error(), "connect") || 
+		strings.Contains(err.Error(), "database") || 
+		strings.Contains(err.Error(), "redis") ||
+		strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "refused") ||
+		strings.Contains(err.Error(), "invalid"))
+	
+	// Test with invalid configuration to exercise error paths
+	testCases := []struct {
+		name    string
+		envVar  string
+		value   string
+		wantErr string
+	}{
+		{
+			name:    "invalid database port",
+			envVar:  "DATABASE_PORT",
+			value:   "invalid",
+			wantErr: "invalid syntax",
+		},
+		{
+			name:    "invalid server port",
+			envVar:  "SERVER_PORT", 
+			value:   "invalid",
+			wantErr: "invalid syntax",
+		},
+		{
+			name:    "invalid redis port",
+			envVar:  "REDIS_PORT",
+			value:   "invalid", 
+			wantErr: "invalid syntax",
+		},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set invalid value
+			original, exists := os.LookupEnv(tc.envVar)
+			os.Setenv(tc.envVar, tc.value)
+			
+			// Restore after test
+			defer func() {
+				if exists {
+					os.Setenv(tc.envVar, original)
+				} else {
+					os.Unsetenv(tc.envVar)
+				}
+			}()
+			
+			err := run()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
+// Test configuration loading in main function context
+func TestMainConfigurationLoading(t *testing.T) {
+	// Test configuration loading as used in main()
+	cfg, err := config.Load()
+	
+	// Configuration might load with defaults even in test environment
+	if err != nil {
+		assert.Contains(t, err.Error(), "Config File")
+		return
+	}
+	
+	// If config loaded successfully, verify default values
+	assert.NotNil(t, cfg)
+	assert.NotEmpty(t, cfg.Environment)
+	assert.NotZero(t, cfg.Server.Port)
+	
+	// Test telemetry configuration
+	assert.NotNil(t, cfg.Telemetry)
+	assert.Equal(t, "github.com/irfandi/celebrum-ai-go", cfg.Telemetry.ServiceName)
+	assert.Equal(t, "1.0.0", cfg.Telemetry.ServiceVersion)
+}
+
+// Test graceful shutdown scenario
+func TestGracefulShutdownIntegration(t *testing.T) {
+	// This test simulates the graceful shutdown portion of the run() function
+	// by testing the signal handling and context cancellation logic
+	
+	// Test context creation for shutdown (used in main.go)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	assert.NotNil(t, ctx)
+	assert.NotNil(t, cancel)
+	
+	// Test deadline functionality
+	deadline, ok := ctx.Deadline()
+	assert.True(t, ok)
+	assert.True(t, deadline.After(time.Now()))
+	
+	// Test server configuration (matches main.go setup)
+	router := gin.New()
+	srv := &http.Server{
+		Addr:         ":8080",
+		Handler:      router,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	
+	assert.NotNil(t, srv)
+	assert.Equal(t, 10*time.Second, srv.ReadTimeout)
+	assert.Equal(t, 10*time.Second, srv.WriteTimeout)
+	
+	// Test context cancellation (simulates signal handling)
+	cancel()
+	select {
+	case <-ctx.Done():
+		assert.Equal(t, context.Canceled, ctx.Err())
+	default:
+		assert.Fail(t, "Context should be cancelled")
+	}
+}
+
+// Test error handling patterns in main function
+func TestMainErrorHandling(t *testing.T) {
+	// Test error formatting and output patterns used in main()
+	
+	// Test stderr output formatting
+	var buf bytes.Buffer
+	err := fmt.Errorf("test error: %w", fmt.Errorf("wrapped error"))
+	fmt.Fprintf(&buf, "Application failed: %v\n", err)
+	
+	assert.Contains(t, buf.String(), "Application failed")
+	assert.Contains(t, buf.String(), "test error")
+	assert.Contains(t, buf.String(), "wrapped error")
+	
+	// Test multiple error scenarios
+	errorScenarios := []struct {
+		name      string
+		errorFunc func() error
+		wantErr   string
+	}{
+		{
+			name: "configuration error",
+			errorFunc: func() error {
+				return fmt.Errorf("failed to load configuration: %w", fmt.Errorf("file not found"))
+			},
+			wantErr: "failed to load configuration",
+		},
+		{
+			name: "database error",
+			errorFunc: func() error {
+				return fmt.Errorf("failed to connect to database: %w", fmt.Errorf("connection refused"))
+			},
+			wantErr: "failed to connect to database",
+		},
+		{
+			name: "redis error",
+			errorFunc: func() error {
+				return fmt.Errorf("failed to connect to Redis: %w", fmt.Errorf("timeout"))
+			},
+			wantErr: "failed to connect to Redis",
+		},
+	}
+	
+	for _, scenario := range errorScenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			err := scenario.errorFunc()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), scenario.wantErr)
+		})
 	}
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
-	"github.com/irfndi/celebrum-ai-go/pkg/interfaces"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
@@ -251,20 +251,38 @@ func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*cc
 	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
 }
 
-func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]interfaces.MarketPriceInterface, error) {
-	args := m.Called(ctx, exchanges, symbols)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]interfaces.MarketPriceInterface), args.Error(1)
+func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]ccxt.MarketPriceInterface, error) {
+    args := m.Called(ctx, exchanges, symbols)
+    if args.Get(0) == nil {
+        return nil, args.Error(1)
+    }
+    // Support multiple input types for convenience in tests
+    switch v := args.Get(0).(type) {
+    case []ccxt.MarketPriceInterface:
+        return v, args.Error(1)
+    case []models.MarketPrice:
+        converted := make([]ccxt.MarketPriceInterface, len(v))
+        for i := range v {
+            converted[i] = &v[i]
+        }
+        return converted, args.Error(1)
+    case []*models.MarketPrice:
+        converted := make([]ccxt.MarketPriceInterface, len(v))
+        for i := range v {
+            converted[i] = v[i]
+        }
+        return converted, args.Error(1)
+    default:
+        return nil, args.Error(1)
+    }
 }
 
-func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (interfaces.MarketPriceInterface, error) {
-	args := m.Called(ctx, exchange, symbol)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(interfaces.MarketPriceInterface), args.Error(1)
+func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (ccxt.MarketPriceInterface, error) {
+    args := m.Called(ctx, exchange, symbol)
+    if args.Get(0) == nil {
+        return nil, args.Error(1)
+    }
+    return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
 }
 
 func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {
@@ -323,12 +341,12 @@ func (m *MockCCXTService) FetchAllFundingRates(ctx context.Context, exchange str
 	return args.Get(0).([]ccxt.FundingRate), args.Error(1)
 }
 
-func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]interfaces.ArbitrageOpportunityInterface, error) {
+func (m *MockCCXTService) CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]models.ArbitrageOpportunityResponse, error) {
 	args := m.Called(ctx, exchanges, symbols, minProfitPercent)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]interfaces.ArbitrageOpportunityInterface), args.Error(1)
+	return args.Get(0).([]models.ArbitrageOpportunityResponse), args.Error(1)
 }
 
 func (m *MockCCXTService) CalculateFundingRateArbitrage(ctx context.Context, symbols []string, exchanges []string, minProfit float64) ([]ccxt.FundingArbitrageOpportunity, error) {
@@ -352,6 +370,16 @@ func (m *MockCollectorService) Stop() {
 func (m *MockCollectorService) RestartWorker(exchange string) error {
 	args := m.Called(exchange)
 	return args.Error(0)
+}
+
+func (m *MockCollectorService) IsReady() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockCollectorService) IsInitialized() bool {
+	args := m.Called()
+	return args.Bool(0)
 }
 
 // Mock implementations for CacheAnalyticsService

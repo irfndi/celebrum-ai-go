@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -22,7 +23,7 @@ func TestMarketHandler_GetTicker(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 
 	// Create handler with nil database (we'll mock the CCXT service)
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
@@ -68,7 +69,7 @@ func TestMarketHandler_GetWorkerStatus(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 
 	// For testing worker status, we'll pass nil for the collector service
 	// In a real scenario, this would be properly initialized
@@ -99,7 +100,7 @@ func TestMarketHandler_GetTicker_MissingParams(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
@@ -120,7 +121,7 @@ func TestMarketHandler_GetOrderBook_FetchError(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
@@ -150,7 +151,7 @@ func TestMarketHandler_GetOrderBook(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
@@ -198,7 +199,7 @@ func TestMarketHandler_GetOrderBook_MissingParams(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
@@ -219,7 +220,7 @@ func TestMarketHandler_GetOrderBook_ServiceUnavailable(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	// Setup route
@@ -290,7 +291,7 @@ func TestTickerResponse_Struct(t *testing.T) {
 }
 
 func TestNewMarketHandler(t *testing.T) {
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 	assert.NotNil(t, handler)
@@ -301,7 +302,7 @@ func TestNewMarketHandler(t *testing.T) {
 
 func TestGetTicker(t *testing.T) {
 	t.Run("successful ticker fetch", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		expectedPrice := &models.MarketPrice{
 			Symbol:       "BTCUSDT",
 			ExchangeName: "binance",
@@ -335,7 +336,7 @@ func TestGetTicker(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchSingleTicker", mock.Anything, "binance", "BTCUSDT").Return(nil, assert.AnError)
 
@@ -356,7 +357,7 @@ func TestGetTicker(t *testing.T) {
 
 func TestMarketHandler_GetBulkTickers(t *testing.T) {
 	t.Run("successful bulk tickers fetch", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		expectedData := []models.MarketPrice{
 			{
 				Symbol:       "BTCUSDT",
@@ -383,7 +384,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 	})
 
 	t.Run("missing exchange parameter", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		router := gin.New()
@@ -397,7 +398,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 	})
 
 	t.Run("service unavailable", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		mockCCXT.On("IsHealthy", mock.Anything).Return(false)
 
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
@@ -414,7 +415,7 @@ func TestMarketHandler_GetBulkTickers(t *testing.T) {
 	})
 
 	t.Run("fetch error", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		mockCCXT.On("IsHealthy", mock.Anything).Return(true)
 		mockCCXT.On("FetchMarketData", mock.Anything, []string{"binance"}, []string{}).Return([]models.MarketPrice{}, assert.AnError)
 
@@ -441,7 +442,7 @@ func TestMarketHandler_GetWorkerStatus_WithCollectorService(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
+	mockCCXT := &testmocks.MockCCXTService{}
 
 	// Create handler without collector service
 	handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
@@ -467,7 +468,7 @@ func TestMarketHandler_GetWorkerStatus_WithCollectorService(t *testing.T) {
 
 func TestMarketHandler_GetMarketPrices(t *testing.T) {
 	t.Run("nil database causes panic", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		gin.SetMode(gin.TestMode)
@@ -482,7 +483,7 @@ func TestMarketHandler_GetMarketPrices(t *testing.T) {
 	})
 
 	t.Run("valid pagination parameters", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		gin.SetMode(gin.TestMode)
@@ -497,7 +498,7 @@ func TestMarketHandler_GetMarketPrices(t *testing.T) {
 	})
 
 	t.Run("invalid limit parameter", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		gin.SetMode(gin.TestMode)
@@ -512,7 +513,7 @@ func TestMarketHandler_GetMarketPrices(t *testing.T) {
 	})
 
 	t.Run("with exchange filter", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		gin.SetMode(gin.TestMode)
@@ -527,7 +528,7 @@ func TestMarketHandler_GetMarketPrices(t *testing.T) {
 	})
 
 	t.Run("with symbol filter", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		gin.SetMode(gin.TestMode)
@@ -544,7 +545,7 @@ func TestMarketHandler_GetMarketPrices(t *testing.T) {
 
 func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	t.Run("cache market prices with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should not panic with nil redis
@@ -559,7 +560,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("get cached market prices with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should return false with nil redis
@@ -569,7 +570,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("cache ticker with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should not panic with nil redis
@@ -584,7 +585,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("get cached ticker with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should return false with nil redis
@@ -594,7 +595,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("cache bulk tickers with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should not panic with nil redis
@@ -608,7 +609,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("get cached bulk tickers with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should return false with nil redis
@@ -618,7 +619,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("cache order book with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should not panic with nil redis
@@ -634,7 +635,7 @@ func TestMarketHandler_CacheFunctionality(t *testing.T) {
 	})
 
 	t.Run("get cached order book with nil redis", func(t *testing.T) {
-		mockCCXT := &MockCCXTService{}
+		mockCCXT := &testmocks.MockCCXTService{}
 		handler := NewMarketHandler(nil, mockCCXT, nil, nil, nil)
 
 		// Should return false with nil redis

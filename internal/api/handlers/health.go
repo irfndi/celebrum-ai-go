@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

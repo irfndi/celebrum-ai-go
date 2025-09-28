@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/api"
-	"github.com/irfndi/celebrum-ai-go/internal/cache"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/logging"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/api"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -81,7 +81,7 @@ func run() error {
 	// Initialize database
 	db, err := database.NewPostgresConnection(&cfg.Database)
 	if err != nil {
-		logrusLogger.WithError(err).Fatal("Failed to connect to database")
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer db.Close()
 
@@ -228,7 +228,7 @@ func run() error {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("celebrum-ai-go"))
+	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
 
 	// Setup routes
 	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram)
@@ -246,7 +246,7 @@ func run() error {
 	// Start server in a goroutine
 	go func() {
 		logger.Logger().Info("Application startup",
-			"service", "celebrum-ai-go",
+			"service", "github.com/irfandi/celebrum-ai-go",
 			"version", "1.0.0",
 			"port", cfg.Server.Port,
 			"event", "startup",
@@ -261,7 +261,7 @@ func run() error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Logger().Info("Application shutdown",
-		"service", "celebrum-ai-go",
+		"service", "github.com/irfandi/celebrum-ai-go",
 		"event", "shutdown",
 		"reason", "signal received",
 	)

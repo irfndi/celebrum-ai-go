@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 )
 
@@ -49,8 +49,8 @@ type CCXTService interface {
 	AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
 
 	// Market data operations
-	FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error)
-	FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error)
+	FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]MarketPriceInterface, error)
+	FetchSingleTicker(ctx context.Context, exchange, symbol string) (MarketPriceInterface, error)
 	FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error)
 	FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error)
 	FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error)
@@ -89,8 +89,16 @@ type CCXTClient interface {
 	GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error)
 	GetMarkets(ctx context.Context, exchange string) (*MarketsResponse, error)
 
+	// Funding rate operations
+	GetFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error)
+	GetFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error)
+	GetAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error)
+
 	// Lifecycle
 	Close() error
+
+	// Base URL for service identification
+	BaseURL() string
 }
 
 // Ensure our implementations satisfy the interfaces

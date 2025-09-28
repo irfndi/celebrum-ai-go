@@ -1,61 +1,63 @@
 package services
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log/slog"
+    "strconv"
+    "strings"
+    "sync"
+    "sync/atomic"
+    "time"
+    "github.com/redis/go-redis/v9"
+    "golang.org/x/text/cases"
+    "golang.org/x/text/language"
 
-	"github.com/redis/go-redis/v9"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
-	"github.com/irfndi/celebrum-ai-go/internal/cache"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
-	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
+    "github.com/irfandi/celebrum-ai-go/internal/cache"
+    "github.com/irfandi/celebrum-ai-go/internal/ccxt"
+    "github.com/irfandi/celebrum-ai-go/internal/config"
+    "github.com/irfandi/celebrum-ai-go/internal/database"
+    "github.com/irfandi/celebrum-ai-go/internal/models"
+    "github.com/irfandi/celebrum-ai-go/internal/telemetry"
+    "github.com/shopspring/decimal"
+    "github.com/sirupsen/logrus"
 )
 
 // convertMarketPriceInterfacesToModels converts CCXT MarketPriceInterface to models.MarketPrice
 func (c *CollectorService) convertMarketPriceInterfacesToModels(interfaceData []ccxt.MarketPriceInterface) []models.MarketPrice {
-	var marketData []models.MarketPrice
-	for _, item := range interfaceData {
-		marketData = append(marketData, models.MarketPrice{
-			ExchangeID:   0, // Will be filled later
-			ExchangeName: item.GetExchangeName(),
-			Symbol:       item.GetSymbol(),
-			Price:        decimal.NewFromFloat(item.GetPrice()),
-			Volume:       decimal.NewFromFloat(item.GetVolume()),
-			Timestamp:    item.GetTimestamp(),
-		})
-	}
-	return marketData
+    if interfaceData == nil {
+        return make([]models.MarketPrice, 0)
+    }
+
+    marketData := make([]models.MarketPrice, 0, len(interfaceData))
+    for _, item := range interfaceData {
+        marketData = append(marketData, models.MarketPrice{
+            ExchangeID:   0, // Will be filled later
+            ExchangeName: item.GetExchangeName(),
+            Symbol:       item.GetSymbol(),
+            Price:        decimal.NewFromFloat(item.GetPrice()),
+            Volume:       decimal.NewFromFloat(item.GetVolume()),
+            Timestamp:    item.GetTimestamp(),
+        })
+    }
+    return marketData
 }
 
 // convertMarketPriceInterfaceToModel converts a single CCXT MarketPriceInterface to models.MarketPrice
 func (c *CollectorService) convertMarketPriceInterfaceToModel(interfaceData ccxt.MarketPriceInterface) *models.MarketPrice {
-	if interfaceData == nil {
-		return nil
-	}
-	return &models.MarketPrice{
-		ExchangeID:   0, // Will be filled later
-		ExchangeName: interfaceData.GetExchangeName(),
-		Symbol:       interfaceData.GetSymbol(),
-		Price:        decimal.NewFromFloat(interfaceData.GetPrice()),
-		Volume:       decimal.NewFromFloat(interfaceData.GetVolume()),
-		Timestamp:    interfaceData.GetTimestamp(),
-	}
+    if interfaceData == nil {
+        return nil
+    }
+    return &models.MarketPrice{
+        ExchangeID:   0, // Will be filled later
+        ExchangeName: interfaceData.GetExchangeName(),
+        Symbol:       interfaceData.GetSymbol(),
+        Price:        decimal.NewFromFloat(interfaceData.GetPrice()),
+        Volume:       decimal.NewFromFloat(interfaceData.GetVolume()),
+        Timestamp:    interfaceData.GetTimestamp(),
+    }
 }
-
 // CollectorConfig holds configuration for the collector service
 type CollectorConfig struct {
 	IntervalSeconds int `mapstructure:"interval_seconds"`
@@ -508,13 +510,13 @@ func (c *CollectorService) Start() error {
 func (c *CollectorService) getPrioritizedExchanges() []string {
 	// Get all supported exchanges from CCXT
 	allExchanges := c.ccxtService.GetSupportedExchanges()
-	
+
 	// If database is not available, return all exchanges
 	if c.db == nil || c.db.Pool == nil {
 		c.logger.Warn("Database not available, returning all exchanges")
 		return allExchanges
 	}
-	
+
 	// Query database to get exchanges with their priorities
 	query := `
 		SELECT e.name, e.priority, e.is_active, ce.ccxt_id 
@@ -522,41 +524,41 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 		LEFT JOIN ccxt_exchanges ce ON e.id = ce.exchange_id 
 		WHERE e.name = ANY($1) AND e.is_active = true 
 		ORDER BY e.priority ASC, e.name ASC`
-	
+
 	rows, err := c.db.Pool.Query(c.ctx, query, allExchanges)
 	if err != nil {
 		c.logger.Error("Failed to query prioritized exchanges", "error", err)
 		return allExchanges // Fallback to all exchanges
 	}
 	defer rows.Close()
-	
+
 	var prioritizedExchanges []string
 	for rows.Next() {
 		var name string
 		var priority int
 		var isActive bool
 		var ccxtID *string
-		
+
 		if err := rows.Scan(&name, &priority, &isActive, &ccxtID); err != nil {
 			c.logger.Error("Failed to scan exchange row", "error", err)
 			continue
 		}
-		
+
 		// Use CCXT ID if available, otherwise use name
 		exchangeID := name
 		if ccxtID != nil {
 			exchangeID = *ccxtID
 		}
-		
+
 		prioritizedExchanges = append(prioritizedExchanges, exchangeID)
 		c.logger.Debug("Added prioritized exchange", "exchange", exchangeID, "priority", priority)
 	}
-	
+
 	if len(prioritizedExchanges) == 0 {
 		c.logger.Warn("No prioritized exchanges found, using all exchanges")
 		return allExchanges
 	}
-	
+
 	c.logger.Info("Using prioritized exchanges", "total", len(prioritizedExchanges), "priority_count", len(prioritizedExchanges))
 	return prioritizedExchanges
 }
@@ -931,38 +933,9 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 
 	// Use circuit breaker for CCXT service call with retry logic
 	var marketData []models.MarketPrice
-	err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
-		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
-			var interfaceData []ccxt.MarketPriceInterface
-			var fetchErr error
-			interfaceData, fetchErr = c.ccxtService.FetchMarketData(ctx, []string{worker.Exchange}, validSymbols)
-			if fetchErr != nil {
-				return fetchErr
-			}
-			// Convert interface data to models.MarketPrice
-			marketData = c.convertMarketPriceInterfacesToModels(interfaceData)
-			return nil
-		})
-	})
-
-	if err != nil {
-		// If bulk fetch fails, fall back to individual symbol collection
-		// This allows us to identify and blacklist problematic symbols
-		c.logger.Info("Bulk fetch failed, falling back to individual symbol collection", "exchange", worker.Exchange, "error", err)
-		return c.collectTickerDataSequential(worker)
-	}
-
-	c.logger.Info("Fetched tickers", "exchange", worker.Exchange, "count", len(marketData))
-
-	// Cache the bulk ticker data in Redis with 10-second TTL for API performance
-	if c.redisClient != nil && len(marketData) > 0 {
-		c.cacheBulkTickerData(worker.Exchange, marketData)
-	}
-
-	// Process and save each ticker data concurrently for better performance
-	successCount := 0
-	errorChan := make(chan error, len(marketData))
-	successChan := make(chan bool, len(marketData))
+    err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+        return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
+            var fetchErr error
 
 	// Use goroutines for concurrent processing of ticker data
 	for _, ticker := range marketData {
@@ -1223,20 +1196,21 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
-	var ticker *models.MarketPrice
-	cbErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
-		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_single_fetch", func() error {
-			var interfaceData ccxt.MarketPriceInterface
-			var retryErr error
-			interfaceData, retryErr = c.ccxtService.FetchSingleTicker(ctx, exchange, symbol)
-			if retryErr != nil {
-				return retryErr
-			}
-			ticker = c.convertMarketPriceInterfaceToModel(interfaceData)
-			return nil
-		})
-	})
+    // Use circuit breaker for CCXT service call with retry logic
+    var ticker *models.MarketPrice
+    cbErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+        return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_single_fetch", func() error {
+            var retryErr error
+            var resp ccxt.MarketPriceInterface
+            resp, retryErr = c.ccxtService.FetchSingleTicker(ctx, exchange, symbol)
+            if retryErr != nil {
+                return retryErr
+            }
+            // Convert interface response to models.MarketPrice for downstream processing
+            ticker = c.convertMarketPriceInterfaceToModel(resp)
+            return nil
+        })
+    })
 
 	if cbErr != nil {
 		// Check if the error indicates a symbol that should be blacklisted
@@ -2444,21 +2418,21 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 
 // generateHistoricalDataPoints creates synthetic historical data points for backfill
 func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exchangeID, symbol string, startTime time.Time) error {
-	// Get current ticker data as baseline with circuit breaker
-	var ticker *models.MarketPrice
-	err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "api_call", func() error {
-		var interfaceData ccxt.MarketPriceInterface
-		var fetchErr error
-		interfaceData, fetchErr = c.ccxtService.FetchSingleTicker(ctx, exchangeID, symbol)
-		if fetchErr != nil {
-			return fetchErr
-		}
-		ticker = c.convertMarketPriceInterfaceToModel(interfaceData)
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to fetch current ticker for baseline: %w", err)
-	}
+    // Get current ticker data as baseline with circuit breaker
+    var ticker *models.MarketPrice
+    err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "api_call", func() error {
+        var fetchErr error
+        var resp ccxt.MarketPriceInterface
+        resp, fetchErr = c.ccxtService.FetchSingleTicker(ctx, exchangeID, symbol)
+        if fetchErr != nil {
+            return fetchErr
+        }
+        ticker = c.convertMarketPriceInterfaceToModel(resp)
+        return nil
+    })
+    if err != nil {
+        return fmt.Errorf("failed to fetch current ticker for baseline: %w", err)
+    }
 
 	// Get exchange and trading pair IDs
 	exchangeDBID, err := c.getOrCreateExchange(exchangeID)

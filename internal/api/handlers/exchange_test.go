@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -31,8 +32,8 @@ func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}
 }
 
 func TestNewExchangeHandler(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
-	mockCollector := &MockCollectorService{}
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockCollector := &testmocks.MockCollectorService{}
 	mockRedis := &MockRedisClient{}
 
 	handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
@@ -44,8 +45,8 @@ func TestNewExchangeHandler(t *testing.T) {
 func TestExchangeHandler_GetExchangeConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	mockCCXT := &MockCCXTService{}
-	mockCollector := &MockCollectorService{}
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockCollector := &testmocks.MockCollectorService{}
 	mockRedis := &MockRedisClient{}
 
 	handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
@@ -99,9 +100,9 @@ func TestExchangeHandler_AddExchangeToBlacklist(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
-	mockRedis := new(MockRedisClient)
-	mockCollector := new(MockCollectorService)
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockRedis := &MockRedisClient{}
+	mockCollector := &testmocks.MockCollectorService{}
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
@@ -131,9 +132,9 @@ func TestExchangeHandler_RemoveExchangeFromBlacklist(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
-	mockRedis := new(MockRedisClient)
-	mockCollector := new(MockCollectorService)
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockRedis := &MockRedisClient{}
+	mockCollector := &testmocks.MockCollectorService{}
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
@@ -158,8 +159,8 @@ func TestExchangeHandler_RemoveExchangeFromBlacklist(t *testing.T) {
 }
 
 func TestExchangeHandler_RefreshExchanges(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
-	mockCollector := &MockCollectorService{}
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockCollector := &testmocks.MockCollectorService{}
 	mockRedis := &MockRedisClient{}
 
 	handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
@@ -191,9 +192,9 @@ func TestExchangeHandler_AddExchange(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
-	mockRedis := new(MockRedisClient)
-	mockCollector := new(MockCollectorService)
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockRedis := &MockRedisClient{}
+	mockCollector := &testmocks.MockCollectorService{}
 
 	// Setup mock expectations
 	mockResponse := &ccxt.ExchangeManagementResponse{
@@ -224,9 +225,9 @@ func TestExchangeHandler_GetSupportedExchanges(t *testing.T) {
 	router := gin.New()
 
 	// Create mocks
-	mockCCXT := new(MockCCXTService)
-	mockRedis := new(MockRedisClient)
-	mockCollector := new(MockCollectorService)
+	mockCCXT := &testmocks.MockCCXTService{}
+	mockRedis := &MockRedisClient{}
+	mockCollector := &testmocks.MockCollectorService{}
 
 	// Setup mock expectations
 	mockRedis.On("Get", mock.Anything, "exchange:supported").Return(&redis.StringCmd{})
@@ -270,19 +271,19 @@ func TestExchangeHandler_AddExchangeToBlacklist_ErrorScenarios(t *testing.T) {
 		name           string
 		exchange       string
 		expectedStatus int
-		setupMocks     func(*MockCCXTService, *MockCollectorService)
+		setupMocks     func(*testmocks.MockCCXTService, *testmocks.MockCollectorService)
 	}{
 		{
 			name:           "missing exchange parameter",
 			exchange:       "",
 			expectedStatus: http.StatusBadRequest,
-			setupMocks:     func(ccxt *MockCCXTService, collector *MockCollectorService) {},
+			setupMocks:     func(ccxt *testmocks.MockCCXTService, collector *testmocks.MockCollectorService) {},
 		},
 		{
 			name:           "ccxt service error",
 			exchange:       "binance",
 			expectedStatus: http.StatusInternalServerError,
-			setupMocks: func(ccxt *MockCCXTService, collector *MockCollectorService) {
+			setupMocks: func(ccxt *testmocks.MockCCXTService, collector *testmocks.MockCollectorService) {
 				ccxt.On("AddExchangeToBlacklist", mock.Anything, "binance").Return(nil, assert.AnError)
 			},
 		},
@@ -290,9 +291,9 @@ func TestExchangeHandler_AddExchangeToBlacklist_ErrorScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCCXT := new(MockCCXTService)
-			mockRedis := new(MockRedisClient)
-			mockCollector := new(MockCollectorService)
+			mockCCXT := &testmocks.MockCCXTService{}
+			mockRedis := &MockRedisClient{}
+			mockCollector := &testmocks.MockCollectorService{}
 
 			tt.setupMocks(mockCCXT, mockCollector)
 
@@ -316,8 +317,8 @@ func TestExchangeHandler_GetWorkerStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("collector service unavailable", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
 
 		handler := NewExchangeHandler(mockCCXT, nil, mockRedis)
 
@@ -331,9 +332,9 @@ func TestExchangeHandler_GetWorkerStatus(t *testing.T) {
 	})
 
 	t.Run("collector service available", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
-		mockCollector := new(MockCollectorService)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
+		mockCollector := &testmocks.MockCollectorService{}
 
 		handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
 
@@ -351,9 +352,9 @@ func TestExchangeHandler_RestartWorker(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("missing exchange parameter", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
-		mockCollector := new(MockCollectorService)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
+		mockCollector := &testmocks.MockCollectorService{}
 
 		handler := NewExchangeHandler(mockCCXT, mockCollector, mockRedis)
 
@@ -368,8 +369,8 @@ func TestExchangeHandler_RestartWorker(t *testing.T) {
 	})
 
 	t.Run("collector service unavailable", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
 
 		handler := NewExchangeHandler(mockCCXT, nil, mockRedis)
 
@@ -384,9 +385,9 @@ func TestExchangeHandler_RestartWorker(t *testing.T) {
 	})
 
 	t.Run("restart worker error", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
-		mockCollector := new(MockCollectorService)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
+		mockCollector := &testmocks.MockCollectorService{}
 
 		mockCollector.On("RestartWorker", "binance").Return(assert.AnError)
 
@@ -404,9 +405,9 @@ func TestExchangeHandler_RestartWorker(t *testing.T) {
 	})
 
 	t.Run("successful restart", func(t *testing.T) {
-		mockCCXT := new(MockCCXTService)
-		mockRedis := new(MockRedisClient)
-		mockCollector := new(MockCollectorService)
+		mockCCXT := &testmocks.MockCCXTService{}
+		mockRedis := &MockRedisClient{}
+		mockCollector := &testmocks.MockCollectorService{}
 
 		mockCollector.On("RestartWorker", "binance").Return(nil)
 

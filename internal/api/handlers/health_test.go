@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
