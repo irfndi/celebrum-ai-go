@@ -315,7 +315,7 @@ EOF
 
 # Main benchmarking process
 main() {
-    log "🚀 Starting deployment performance benchmark"
+    log "Starting deployment performance benchmark"
     log "Iterations: $ITERATIONS"
     log "Results directory: $BENCHMARK_RESULTS_DIR"
     
@@ -337,7 +337,7 @@ main() {
     log "Raw data: $BENCHMARK_FILE"
     log "Report: benchmark_report_$TIMESTAMP.md"
     log ""
-    log "🎉 Benchmarking completed successfully!"
+    log "Benchmarking completed successfully!"
 }
 
 # Check requirements
