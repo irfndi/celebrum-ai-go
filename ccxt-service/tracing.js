@@ -4,7 +4,7 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-otlp-http');
 const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
 const { BatchSpanProcessor, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { Resource } = require('@opentelemetry/resources');
 const { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION, SEMRESATTRS_SERVICE_NAMESPACE, SEMRESATTRS_DEPLOYMENT_ENVIRONMENT, SEMRESATTRS_SERVICE_INSTANCE_ID } = require('@opentelemetry/semantic-conventions');
 const { resolveOtlpTracesEndpoint } = require('./tracing-utils.js');
 
@@ -49,7 +49,7 @@ const otlpExporter = new OTLPTraceExporter({
 const consoleExporter = new ConsoleSpanExporter();
 
 // Create resource with service information
-const resource = resourceFromAttributes({
+const resource = new Resource({
   [SEMRESATTRS_SERVICE_NAME]: serviceName,
   [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
   [SEMRESATTRS_SERVICE_NAMESPACE]: 'celebrum-ai',
@@ -66,17 +66,25 @@ const instrumentations = getNodeAutoInstrumentations({
   '@opentelemetry/instrumentation-http': {
     enabled: true,
     requestHook: (span, request) => {
-      // Log API key presence for debugging (redacted for security)
-      const apiKey = request.getHeader ? request.getHeader('x-api-key') : request.headers?.['x-api-key'];
+      const headers =
+        typeof request.getHeaders === 'function'
+          ? request.getHeaders()
+          : request.headers || {};
+      const apiKey =
+        (typeof request.getHeader === 'function' && request.getHeader('x-api-key')) || headers['x-api-key'];
+
       span.setAttributes({
-        'http.request.header.user_agent': request.headers['user-agent'] || 'unknown',
-        'http.request.header.x_api_key': apiKey ? '[REDACTED]' : 'absent'
+        'http.request.header.user_agent': headers['user-agent'] || 'unknown',
+        'http.request.header.x_api_key': apiKey ? '[REDACTED]' : 'absent',
       });
     },
     responseHook: (span, response) => {
-      // Add response attributes
+      const contentType =
+        (typeof response.getHeader === 'function' && response.getHeader('content-type')) ||
+        (response.headers && response.headers['content-type']) ||
+        'unknown';
       span.setAttributes({
-        'http.response.header.content_type': response.headers['content-type'] || 'unknown',
+        'http.response.header.content_type': contentType,
       });
     },
   },
