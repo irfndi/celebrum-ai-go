@@ -198,7 +198,8 @@ services:
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
-      - "8888:8888"   # Prometheus metrics
+      - "8888:8888"   # Collector self-metrics
+      - "8889:8889"   # Prometheus exporter
     restart: unless-stopped
     depends_on:
       - query-service
@@ -248,7 +249,7 @@ exporters:
   clickhouse:
     endpoint: tcp://clickhouse:9000?database=signoz_traces
     username: default
-    password: ""
+    password: "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}"
     timeout: 5s
     retry_on_failure:
       enabled: true
@@ -258,6 +259,9 @@ exporters:
 
   prometheus:
     endpoint: "0.0.0.0:8889"
+
+extensions:
+  health_check: {}
 
 service:
   pipelines:
@@ -270,7 +274,7 @@ service:
       receivers: [otlp, prometheus]
       processors: [memory_limiter, batch, resource]
       exporters: [prometheus]
-  
+
   extensions: [health_check]
 ```
 
