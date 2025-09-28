@@ -42,12 +42,12 @@ func TestIntegrationAPI(t *testing.T) {
 	router.GET("/api/v1/market/ticker/:exchange/:symbol", func(c *gin.Context) {
 		exchange := c.Param("exchange")
 		symbol := c.Param("symbol")
-		
+
 		c.JSON(http.StatusOK, gin.H{
-			"exchange": exchange,
-			"symbol":   symbol,
-			"price":    50000.0,
-			"volume":   1000.0,
+			"exchange":  exchange,
+			"symbol":    symbol,
+			"price":     50000.0,
+			"volume":    1000.0,
 			"timestamp": time.Now(),
 		})
 	})
@@ -58,12 +58,12 @@ func TestIntegrationAPI(t *testing.T) {
 			Password string `json:"password"`
 			Email    string `json:"email"`
 		}
-		
+
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "User registered successfully",
 			"user": gin.H{
@@ -112,9 +112,9 @@ func TestIntegrationAPI(t *testing.T) {
 			},
 		},
 		{
-			name:           "User registration endpoint",
-			method:         "POST",
-			path:           "/api/v1/users/register",
+			name:   "User registration endpoint",
+			method: "POST",
+			path:   "/api/v1/users/register",
 			body: map[string]interface{}{
 				"username": "testuser",
 				"password": "testpass123",
@@ -198,8 +198,8 @@ func TestIntegrationMiddleware(t *testing.T) {
 		userID := c.MustGet("user_id").(string)
 		middlewareValue := c.MustGet("middleware_value").(string)
 		c.JSON(http.StatusOK, gin.H{
-			"message":  "Test endpoint",
-			"user_id":  userID,
+			"message":    "Test endpoint",
+			"user_id":    userID,
 			"middleware": middlewareValue,
 		})
 	})
@@ -357,7 +357,7 @@ func TestIntegrationPerformance(t *testing.T) {
 	router.GET("/api/v1/performance", func(c *gin.Context) {
 		// Simulate some processing time
 		time.Sleep(10 * time.Millisecond)
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"message":   "Performance test",
 			"timestamp": time.Now(),
@@ -370,20 +370,20 @@ func TestIntegrationPerformance(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			req, _ := http.NewRequest("GET", "/api/v1/performance", nil)
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			assert.Equal(t, http.StatusOK, w.Code)
-			
+
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			assert.NoError(t, err)
 			assert.Equal(t, "Performance test", response["message"])
 		}(i)
 	}
-	
+
 	wg.Wait()
 }

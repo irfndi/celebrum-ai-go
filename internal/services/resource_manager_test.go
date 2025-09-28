@@ -7,7 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	)
+)
 
 func TestNewResourceManager(t *testing.T) {
 	logger := logrus.New()
@@ -69,7 +69,7 @@ func TestResourceManager_RegisterResource(t *testing.T) {
 	assert.Equal(t, metadata, resource.Metadata)
 	assert.False(t, resource.CreatedAt.IsZero())
 	assert.False(t, resource.LastUsed.IsZero())
-	
+
 	// Verify cleanup function works
 	cleanupErr := resource.CleanupFunc()
 	assert.NoError(t, cleanupErr)
@@ -393,12 +393,12 @@ func TestResourceManager_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			
-			resourceID := string(rune(i%26 + 'a')) + "-resource"
+
+			resourceID := string(rune(i%26+'a')) + "-resource"
 			// Use only predefined resource types to avoid nil pointer dereference
 			resourceTypes := []ResourceType{GoroutineResource, ConnectionResource, ChannelResource, TimerResource, FileResource}
 			resourceType := resourceTypes[i%len(resourceTypes)]
-			
+
 			switch i % 6 {
 			case 0:
 				rm.RegisterResource(resourceID, resourceType, nil, nil)
@@ -459,13 +459,13 @@ func TestResourceManager_MetadataHandling(t *testing.T) {
 	rm := NewResourceManager(logger)
 
 	metadata := map[string]interface{}{
-		"exchange":    "binance",
-		"symbol":      "BTCUSDT",
-		"priority":    1,
-		"timeout":     30 * time.Second,
-		"enabled":     true,
-		"tags":        []string{"crypto", "trading"},
-		"config":      map[string]interface{}{"retry": 3},
+		"exchange": "binance",
+		"symbol":   "BTCUSDT",
+		"priority": 1,
+		"timeout":  30 * time.Second,
+		"enabled":  true,
+		"tags":     []string{"crypto", "trading"},
+		"config":   map[string]interface{}{"retry": 3},
 	}
 
 	rm.RegisterResource("metadata-test", ConnectionResource, nil, metadata)

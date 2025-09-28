@@ -57,7 +57,7 @@ func TestConfigLoading(t *testing.T) {
 
 	// Test with valid token
 	os.Setenv("TELEGRAM_BOT_TOKEN", "valid_test_token")
-	
+
 	cfg, err := config.Load()
 	// Config might load successfully or fail due to missing config file
 	// Either case is acceptable for this test
@@ -76,7 +76,7 @@ func TestEmptyBotTokenCheck(t *testing.T) {
 
 	// Test with empty token
 	os.Setenv("TELEGRAM_BOT_TOKEN", "")
-	
+
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
 		// If config loaded, test the empty token logic
@@ -92,7 +92,7 @@ func TestValidBotTokenLength(t *testing.T) {
 
 	testToken := "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk" // Sample token format
 	os.Setenv("TELEGRAM_BOT_TOKEN", testToken)
-	
+
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
 		assert.Equal(t, testToken, cfg.Telegram.BotToken)
@@ -110,7 +110,7 @@ func TestWebhookURLCheck(t *testing.T) {
 	// Test with empty webhook URL
 	os.Setenv("TELEGRAM_BOT_TOKEN", "test_token")
 	os.Setenv("TELEGRAM_WEBHOOK_URL", "")
-	
+
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
 		assert.True(t, cfg.Telegram.WebhookURL == "")
@@ -118,7 +118,7 @@ func TestWebhookURLCheck(t *testing.T) {
 
 	// Test with valid webhook URL
 	os.Setenv("TELEGRAM_WEBHOOK_URL", "https://example.com/webhook")
-	
+
 	cfg, err = config.Load()
 	if err == nil && cfg != nil {
 		assert.Equal(t, "https://example.com/webhook", cfg.Telegram.WebhookURL)
@@ -150,14 +150,14 @@ func TestBotCreationSuccess(t *testing.T) {
 
 	// Use a dummy token for testing
 	dummyToken := "1234567890:dummy_token_for_testing"
-	
+
 	// This will likely fail, but we test the error handling
 	_, err := bot.New(dummyToken)
 	// Either success (unlikely) or expected error is acceptable
 	if err != nil {
 		errorMsg := err.Error()
-		assert.True(t, strings.Contains(errorMsg, "unauthorized") || 
-			strings.Contains(errorMsg, "token") || 
+		assert.True(t, strings.Contains(errorMsg, "unauthorized") ||
+			strings.Contains(errorMsg, "token") ||
 			strings.Contains(errorMsg, "network"))
 	}
 }
@@ -165,43 +165,43 @@ func TestBotCreationSuccess(t *testing.T) {
 func TestBotAPICallErrorHandling(t *testing.T) {
 	// Test error handling when making API calls to Telegram
 	mockBot := new(MockBot)
-	
+
 	// Mock a failed API call
 	mockBot.On("GetMe", context.Background()).Return(nil, fmt.Errorf("API call failed"))
-	
+
 	_, err := mockBot.GetMe(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "API call failed")
-	
+
 	mockBot.AssertExpectations(t)
 }
 
 func TestBotAPICallSuccess(t *testing.T) {
 	// Test successful API call to Telegram
 	mockBot := new(MockBot)
-	
+
 	expectedUser := &models.User{
 		ID:        12345,
 		FirstName: "Test Bot",
 		Username:  "test_bot",
 	}
-	
+
 	mockBot.On("GetMe", context.Background()).Return(expectedUser, nil)
-	
+
 	user, err := mockBot.GetMe(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.Equal(t, int64(12345), user.ID)
 	assert.Equal(t, "Test Bot", user.FirstName)
 	assert.Equal(t, "test_bot", user.Username)
-	
+
 	mockBot.AssertExpectations(t)
 }
 
 func TestOutputFormatting(t *testing.T) {
 	// Test that the script outputs proper formatted messages
 	var buf bytes.Buffer
-	
+
 	// Test configuration success message
 	fmt.Fprintf(&buf, "✅ TELEGRAM_BOT_TOKEN is configured (length: %d)\n", 46)
 	assert.Contains(t, buf.String(), "✅")
@@ -219,24 +219,24 @@ func TestOutputFormatting(t *testing.T) {
 func TestBotInfoDisplay(t *testing.T) {
 	// Test the display of bot information
 	var buf bytes.Buffer
-	
+
 	// Mock bot info
 	botInfo := struct {
 		FirstName string
-		Username string
-		ID       int64
+		Username  string
+		ID        int64
 	}{
 		FirstName: "Test Bot",
 		Username:  "test_bot",
-		ID:       12345,
+		ID:        12345,
 	}
-	
+
 	// Test success message
 	fmt.Fprintf(&buf, "✅ Bot API connection successful!\n")
 	fmt.Fprintf(&buf, "   Bot Name: %s\n", botInfo.FirstName)
 	fmt.Fprintf(&buf, "   Bot Username: @%s\n", botInfo.Username)
 	fmt.Fprintf(&buf, "   Bot ID: %d\n", botInfo.ID)
-	
+
 	output := buf.String()
 	assert.Contains(t, output, "✅ Bot API connection successful!")
 	assert.Contains(t, output, "Bot Name: Test Bot")
@@ -247,10 +247,10 @@ func TestBotInfoDisplay(t *testing.T) {
 func TestWarningMessageOutput(t *testing.T) {
 	// Test warning message output when .env file is missing
 	var buf bytes.Buffer
-	
+
 	// Test warning message
 	fmt.Fprintf(&buf, "⚠️  Warning: Could not load .env file: %v\n", fmt.Errorf("file not found"))
-	
+
 	output := buf.String()
 	assert.Contains(t, output, "⚠️")
 	assert.Contains(t, output, "Warning:")
@@ -262,10 +262,10 @@ func TestContextCancellation(t *testing.T) {
 	// Test context cancellation handling
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Cancel context before using it
 	cancel()
-	
+
 	// Test that cancelled context is properly detected
 	select {
 	case <-ctx.Done():
@@ -279,22 +279,22 @@ func TestEnvironmentVariableCleanup(t *testing.T) {
 	// Test that environment variables are properly cleaned up after tests
 	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	originalWebhook := os.Getenv("TELEGRAM_WEBHOOK_URL")
-	
+
 	// Set test values
 	os.Setenv("TELEGRAM_BOT_TOKEN", "test_token")
 	os.Setenv("TELEGRAM_WEBHOOK_URL", "https://test.example.com")
-	
+
 	// Restore original values
 	os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
 	os.Setenv("TELEGRAM_WEBHOOK_URL", originalWebhook)
-	
+
 	// Verify restoration
 	if originalToken == "" {
 		assert.Equal(t, "", os.Getenv("TELEGRAM_BOT_TOKEN"))
 	} else {
 		assert.Equal(t, originalToken, os.Getenv("TELEGRAM_BOT_TOKEN"))
 	}
-	
+
 	if originalWebhook == "" {
 		assert.Equal(t, "", os.Getenv("TELEGRAM_WEBHOOK_URL"))
 	} else {
@@ -319,20 +319,20 @@ func TestErrorScenarios(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 			os.Setenv("TELEGRAM_BOT_TOKEN", scenario.token)
-			
+
 			_, err := bot.New(scenario.token)
-			
+
 			if scenario.wantErr {
 				assert.Error(t, err)
 			} else {
 				// Even valid format might fail due to actual API, so we check for specific errors
 				if err != nil {
 					errorMsg := err.Error()
-					assert.True(t, strings.Contains(errorMsg, "unauthorized") || 
+					assert.True(t, strings.Contains(errorMsg, "unauthorized") ||
 						strings.Contains(errorMsg, "network"))
 				}
 			}
-			
+
 			os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
 		})
 	}
@@ -380,13 +380,13 @@ func TestConfigurationValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Setenv("TELEGRAM_BOT_TOKEN", tc.token)
 			os.Setenv("TELEGRAM_WEBHOOK_URL", tc.webhookURL)
-			
+
 			cfg, err := config.Load()
 			if err == nil && cfg != nil {
 				// Check configuration values
 				assert.Equal(t, tc.token, cfg.Telegram.BotToken)
 				assert.Equal(t, tc.webhookURL, cfg.Telegram.WebhookURL)
-				
+
 				// Basic validation
 				if tc.expectValid {
 					assert.True(t, len(cfg.Telegram.BotToken) > 0 || tc.token == "")
@@ -401,10 +401,10 @@ func TestConfigurationValidation(t *testing.T) {
 func TestSuccessMessageGeneration(t *testing.T) {
 	// Test that success messages are properly generated
 	var buf bytes.Buffer
-	
+
 	// Test the final success message
 	fmt.Fprintln(&buf, "\n🎉 All Telegram bot configuration checks passed!")
-	
+
 	output := buf.String()
 	assert.Contains(t, output, "🎉")
 	assert.Contains(t, output, "All Telegram bot configuration checks passed!")
@@ -445,7 +445,7 @@ func TestConcurrentAccess(t *testing.T) {
 func TestMainFunctionWithMockEnvironment(t *testing.T) {
 	// Test main function with controlled environment
 	originalEnv := make(map[string]string)
-	
+
 	// Save current environment
 	envVars := []string{"TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_URL"}
 	for _, env := range envVars {
@@ -453,17 +453,17 @@ func TestMainFunctionWithMockEnvironment(t *testing.T) {
 			originalEnv[env] = val
 		}
 	}
-	
+
 	// Set test environment
 	testEnv := map[string]string{
 		"TELEGRAM_BOT_TOKEN":   "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk",
 		"TELEGRAM_WEBHOOK_URL": "https://test.example.com",
 	}
-	
+
 	for key, value := range testEnv {
 		os.Setenv(key, value)
 	}
-	
+
 	// Restore environment after test
 	defer func() {
 		for key, value := range originalEnv {
@@ -475,7 +475,7 @@ func TestMainFunctionWithMockEnvironment(t *testing.T) {
 			}
 		}
 	}()
-	
+
 	// Test configuration loading with test environment
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
@@ -488,10 +488,10 @@ func TestGracefulShutdown(t *testing.T) {
 	// Test graceful shutdown patterns
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	// Test context cancellation
 	cancel()
-	
+
 	select {
 	case <-ctx.Done():
 		assert.Equal(t, context.Canceled, ctx.Err())
@@ -505,7 +505,7 @@ func TestTimeOperations(t *testing.T) {
 	now := time.Now()
 	assert.True(t, now.After(time.Time{}))
 	assert.True(t, now.Before(now.Add(time.Hour)))
-	
+
 	// Test duration calculations
 	duration := 30 * time.Second
 	assert.True(t, duration > 0)

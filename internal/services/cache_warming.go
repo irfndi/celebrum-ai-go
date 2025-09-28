@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 )
 

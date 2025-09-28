@@ -104,14 +104,14 @@ type MarketDataConfig struct {
 }
 
 type ArbitrageConfig struct {
-	MinProfitThreshold float64 `mapstructure:"min_profit_threshold"`
-	MaxTradeAmount     float64 `mapstructure:"max_trade_amount"`
-	CheckInterval      string  `mapstructure:"check_interval"`
+	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
+	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
+	CheckInterval      string   `mapstructure:"check_interval"`
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
-	Enabled            bool    `mapstructure:"enabled"`
-	IntervalSeconds    int     `mapstructure:"interval_seconds"`
-	MaxAgeMinutes      int     `mapstructure:"max_age_minutes"`
-	BatchSize          int     `mapstructure:"batch_size"`
+	Enabled            bool     `mapstructure:"enabled"`
+	IntervalSeconds    int      `mapstructure:"interval_seconds"`
+	MaxAgeMinutes      int      `mapstructure:"max_age_minutes"`
+	BatchSize          int      `mapstructure:"batch_size"`
 }
 
 type BlacklistConfig struct {

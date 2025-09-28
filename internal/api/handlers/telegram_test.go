@@ -279,14 +279,14 @@ func TestTelegramHandler_SendAggregatedSignalsMessage(t *testing.T) {
 
 		signals := []*services.AggregatedSignal{
 			{
-				Symbol:           "BTC/USDT",
-				SignalType:       "arbitrage",
-				Action:           "buy",
-				Strength:         "high",
-				Confidence:       decimal.NewFromFloat(0.85),
-				ProfitPotential:  decimal.NewFromFloat(0.02),
-				RiskLevel:        decimal.NewFromFloat(0.3),
-				CreatedAt:        time.Now(),
+				Symbol:          "BTC/USDT",
+				SignalType:      "arbitrage",
+				Action:          "buy",
+				Strength:        "high",
+				Confidence:      decimal.NewFromFloat(0.85),
+				ProfitPotential: decimal.NewFromFloat(0.02),
+				RiskLevel:       decimal.NewFromFloat(0.3),
+				CreatedAt:       time.Now(),
 			},
 		}
 

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -547,141 +547,141 @@ func TestClient_GetAllFundingRates(t *testing.T) {
 }
 
 func TestClient_GetExchangeConfig(t *testing.T) {
-    expectedConfig := ccxt.ExchangeConfigResponse{
-        ActiveExchanges:    []string{"binance", "coinbase"},
-        AvailableExchanges: []string{"binance", "coinbase", "ftx"},
-        Config: ccxt.ExchangeConfig{
-            BlacklistedExchanges: []string{"ftx"},
-            PriorityExchanges:    []string{"binance"},
-        },
-        Timestamp: time.Now().Format(time.RFC3339),
-    }
+	expectedConfig := ccxt.ExchangeConfigResponse{
+		ActiveExchanges:    []string{"binance", "coinbase"},
+		AvailableExchanges: []string{"binance", "coinbase", "ftx"},
+		Config: ccxt.ExchangeConfig{
+			BlacklistedExchanges: []string{"ftx"},
+			PriorityExchanges:    []string{"binance"},
+		},
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        assert.Equal(t, "/api/admin/exchanges/config", r.URL.Path)
-        assert.Equal(t, "GET", r.Method)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/exchanges/config", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
 
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        if err := json.NewEncoder(w).Encode(expectedConfig); err != nil {
-            t.Errorf("Failed to encode response: %v", err)
-        }
-    }))
-    defer server.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedConfig); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
 
-    cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
-    client := ccxt.NewClient(cfg)
-    ctx := context.Background()
-    resp, err := client.GetExchangeConfig(ctx)
-    require.NoError(t, err)
-    require.NotNil(t, resp)
-    assert.Len(t, resp.ActiveExchanges, 2)
-    assert.Len(t, resp.Config.BlacklistedExchanges, 1)
-    assert.Contains(t, resp.ActiveExchanges, "binance")
+	cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
+	client := ccxt.NewClient(cfg)
+	ctx := context.Background()
+	resp, err := client.GetExchangeConfig(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Len(t, resp.ActiveExchanges, 2)
+	assert.Len(t, resp.Config.BlacklistedExchanges, 1)
+	assert.Contains(t, resp.ActiveExchanges, "binance")
 }
 
 func TestClient_AddExchangeToBlacklist(t *testing.T) {
-    expectedResponse := ccxt.ExchangeManagementResponse{
-        Message:   "Exchange added to blacklist",
-        Timestamp: time.Now().Format(time.RFC3339),
-    }
+	expectedResponse := ccxt.ExchangeManagementResponse{
+		Message:   "Exchange added to blacklist",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
-        assert.Equal(t, "POST", r.Method)
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
-            t.Errorf("Failed to encode response: %v", err)
-        }
-    }))
-    defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
 
-    cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
-    client := ccxt.NewClient(cfg)
-    ctx := context.Background()
-    resp, err := client.AddExchangeToBlacklist(ctx, "ftx")
-    require.NoError(t, err)
-    require.NotNil(t, resp)
-    assert.Equal(t, "Exchange added to blacklist", resp.Message)
+	cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
+	client := ccxt.NewClient(cfg)
+	ctx := context.Background()
+	resp, err := client.AddExchangeToBlacklist(ctx, "ftx")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "Exchange added to blacklist", resp.Message)
 }
 
 func TestClient_RemoveExchangeFromBlacklist(t *testing.T) {
-    expectedResponse := ccxt.ExchangeManagementResponse{
-        Message:   "Exchange removed from blacklist",
-        Timestamp: time.Now().Format(time.RFC3339),
-    }
+	expectedResponse := ccxt.ExchangeManagementResponse{
+		Message:   "Exchange removed from blacklist",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
-        assert.Equal(t, "DELETE", r.Method)
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
-            t.Errorf("Failed to encode response: %v", err)
-        }
-    }))
-    defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/exchanges/blacklist/ftx", r.URL.Path)
+		assert.Equal(t, "DELETE", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
 
-    cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
-    client := ccxt.NewClient(cfg)
-    ctx := context.Background()
-    resp, err := client.RemoveExchangeFromBlacklist(ctx, "ftx")
-    require.NoError(t, err)
-    require.NotNil(t, resp)
-    assert.Equal(t, "Exchange removed from blacklist", resp.Message)
+	cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
+	client := ccxt.NewClient(cfg)
+	ctx := context.Background()
+	resp, err := client.RemoveExchangeFromBlacklist(ctx, "ftx")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "Exchange removed from blacklist", resp.Message)
 }
 
 func TestClient_RefreshExchanges(t *testing.T) {
-    expectedResponse := ccxt.ExchangeManagementResponse{
-        Message:   "Exchanges refreshed successfully",
-        Timestamp: time.Now().Format(time.RFC3339),
-    }
+	expectedResponse := ccxt.ExchangeManagementResponse{
+		Message:   "Exchanges refreshed successfully",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        assert.Equal(t, "/api/admin/exchanges/refresh", r.URL.Path)
-        assert.Equal(t, "POST", r.Method)
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
-            t.Errorf("Failed to encode response: %v", err)
-        }
-    }))
-    defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/exchanges/refresh", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
 
-    cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
-    client := ccxt.NewClient(cfg)
-    ctx := context.Background()
-    resp, err := client.RefreshExchanges(ctx)
-    require.NoError(t, err)
-    require.NotNil(t, resp)
-    assert.Equal(t, "Exchanges refreshed successfully", resp.Message)
+	cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
+	client := ccxt.NewClient(cfg)
+	ctx := context.Background()
+	resp, err := client.RefreshExchanges(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "Exchanges refreshed successfully", resp.Message)
 }
 
 func TestClient_AddExchange(t *testing.T) {
-    expectedResponse := ccxt.ExchangeManagementResponse{
-        Message:   "Exchange added successfully",
-        Timestamp: time.Now().Format(time.RFC3339),
-    }
+	expectedResponse := ccxt.ExchangeManagementResponse{
+		Message:   "Exchange added successfully",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        assert.Equal(t, "/api/admin/exchanges/add/kraken", r.URL.Path)
-        assert.Equal(t, "POST", r.Method)
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
-            t.Errorf("Failed to encode response: %v", err)
-        }
-    }))
-    defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/exchanges/add/kraken", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(expectedResponse); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
+	}))
+	defer server.Close()
 
-    cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
-    client := ccxt.NewClient(cfg)
-    ctx := context.Background()
-    resp, err := client.AddExchange(ctx, "kraken")
-    require.NoError(t, err)
-    require.NotNil(t, resp)
-    assert.Equal(t, "Exchange added successfully", resp.Message)
+	cfg := &config.CCXTConfig{ServiceURL: server.URL, Timeout: 30}
+	client := ccxt.NewClient(cfg)
+	ctx := context.Background()
+	resp, err := client.AddExchange(ctx, "kraken")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "Exchange added successfully", resp.Message)
 }
 
 func TestClient_FormatSymbolForExchange(t *testing.T) {

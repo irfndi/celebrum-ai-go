@@ -10,10 +10,10 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
-	"github.com/irfandi/celebrum-ai-go/internal/config"
 )
 
 // TestMainFunctionBasic tests the main function in a controlled environment
@@ -39,31 +39,31 @@ func TestMainFunctionBasic(t *testing.T) {
 
 	// Set test environment
 	testEnv := map[string]string{
-		"ENVIRONMENT":                    "test",
-		"LOG_LEVEL":                     "error",
-		"SERVER_PORT":                   "8083",
-		"DATABASE_HOST":                 "localhost",
-		"DATABASE_PORT":                 "5432",
-		"DATABASE_USER":                 "testuser",
-		"DATABASE_PASSWORD":             "testpass",
-		"DATABASE_DBNAME":               "testdb",
-		"DATABASE_SSLMODE":              "disable",
-		"REDIS_HOST":                    "localhost",
-		"REDIS_PORT":                    "6379",
-		"REDIS_PASSWORD":                "",
-		"REDIS_DB":                      "0",
+		"ENVIRONMENT":                  "test",
+		"LOG_LEVEL":                    "error",
+		"SERVER_PORT":                  "8083",
+		"DATABASE_HOST":                "localhost",
+		"DATABASE_PORT":                "5432",
+		"DATABASE_USER":                "testuser",
+		"DATABASE_PASSWORD":            "testpass",
+		"DATABASE_DBNAME":              "testdb",
+		"DATABASE_SSLMODE":             "disable",
+		"REDIS_HOST":                   "localhost",
+		"REDIS_PORT":                   "6379",
+		"REDIS_PASSWORD":               "",
+		"REDIS_DB":                     "0",
 		"TELEMETRY_ENABLED":            "false",
-		"TELEMETRY_OTLP_ENDPOINT":       "http://localhost:4318",
-		"TELEMETRY_SERVICE_NAME":        "test-service",
-		"TELEMETRY_SERVICE_VERSION":     "test-version",
-		"TELEMETRY_LOG_LEVEL":           "error",
-		"CLEANUP_INTERVAL":              "1",
-		"CLEANUP_ENABLE_SMART_CLEANUP":  "false",
+		"TELEMETRY_OTLP_ENDPOINT":      "http://localhost:4318",
+		"TELEMETRY_SERVICE_NAME":       "test-service",
+		"TELEMETRY_SERVICE_VERSION":    "test-version",
+		"TELEMETRY_LOG_LEVEL":          "error",
+		"CLEANUP_INTERVAL":             "1",
+		"CLEANUP_ENABLE_SMART_CLEANUP": "false",
 		"BACKFILL_ENABLED":             "false",
 		"ARBITRAGE_ENABLED":            "false",
-		"CCXT_SERVICE_URL":              "http://localhost:3001",
+		"CCXT_SERVICE_URL":             "http://localhost:3001",
 		"CCXT_TIMEOUT":                 "5",
-		"TELEGRAM_BOT_TOKEN":            "",
+		"TELEGRAM_BOT_TOKEN":           "",
 	}
 
 	// Set test environment
@@ -182,7 +182,7 @@ func TestServerComponents(t *testing.T) {
 func TestConfigurationLoadingDirect(t *testing.T) {
 	// Test with default configuration
 	cfg, err := config.Load()
-	
+
 	// In test environment, this might fail due to missing config file
 	if err != nil {
 		assert.Contains(t, err.Error(), "Config File")

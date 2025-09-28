@@ -556,42 +556,42 @@ func (h *FuturesArbitrageHandler) getFuturesStrategyFromDB(strategyID string) (*
 	var positionSize, leverage, entryPrice, stopLoss, takeProfit, riskScore, expectedProfit decimal.Decimal
 	var durationHours int
 	var createdAt time.Time
-	
+
 	err := h.db.QueryRow(context.Background(), query, strategyID).Scan(
 		&strategy.ID, &opportunityID, &positionSize, &leverage, &entryPrice, &stopLoss,
 		&takeProfit, &riskScore, &expectedProfit, &durationHours, &createdAt,
 	)
-	
+
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, pgx.ErrNoRows
 		}
 		return nil, err
 	}
-	
+
 	// Create a basic strategy structure for testing
 	strategy.Name = "Test Strategy"
 	strategy.Description = "Test strategy description"
 	strategy.CreatedAt = createdAt
 	strategy.UpdatedAt = createdAt
 	strategy.IsActive = true
-	
+
 	// Set some basic opportunity data
 	strategy.Opportunity = models.FuturesArbitrageOpportunity{
-		ID:              opportunityID,
-		Symbol:          "BTC/USDT",
-		BaseCurrency:    "BTC",
-		QuoteCurrency:   "USDT",
-		LongExchange:    "Binance",
-		ShortExchange:   "Bybit",
+		ID:                      opportunityID,
+		Symbol:                  "BTC/USDT",
+		BaseCurrency:            "BTC",
+		QuoteCurrency:           "USDT",
+		LongExchange:            "Binance",
+		ShortExchange:           "Bybit",
 		RecommendedPositionSize: positionSize,
-		MaxLeverage:     leverage,
-		RiskScore:       riskScore,
-		DetectedAt:      createdAt,
-		ExpiresAt:       createdAt.Add(time.Hour * 24),
-		IsActive:        true,
+		MaxLeverage:             leverage,
+		RiskScore:               riskScore,
+		DetectedAt:              createdAt,
+		ExpiresAt:               createdAt.Add(time.Hour * 24),
+		IsActive:                true,
 	}
-	
+
 	// Set basic position sizing
 	strategy.PositionSizing = models.FuturesPositionSizing{
 		KellyPercentage:   decimal.NewFromFloat(0.1),
@@ -599,12 +599,12 @@ func (h *FuturesArbitrageHandler) getFuturesStrategyFromDB(strategyID string) (*
 		ConservativeSize:  positionSize.Div(decimal.NewFromInt(2)),
 		ModerateSize:      positionSize,
 		AggressiveSize:    positionSize.Mul(decimal.NewFromFloat(1.5)),
-		OptimalLeverage:  leverage,
-		MaxSafeLeverage:  leverage.Mul(decimal.NewFromFloat(0.8)),
-		StopLossPrice:    stopLoss,
-		TakeProfitPrice:  takeProfit,
+		OptimalLeverage:   leverage,
+		MaxSafeLeverage:   leverage.Mul(decimal.NewFromFloat(0.8)),
+		StopLossPrice:     stopLoss,
+		TakeProfitPrice:   takeProfit,
 	}
-	
+
 	return &strategy, nil
 }
 

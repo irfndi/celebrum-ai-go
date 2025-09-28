@@ -22,7 +22,6 @@ import (
 
 // MockResult already implements pgconn.CommandTag in testmocks package
 
-
 func TestArbitrageService_ConfigParsing(t *testing.T) {
 	// Test configuration parsing logic
 	type ArbitrageServiceConfig struct {
@@ -32,16 +31,16 @@ func TestArbitrageService_ConfigParsing(t *testing.T) {
 		BatchSize       int     `mapstructure:"batch_size"`
 		Enabled         bool    `mapstructure:"enabled"`
 	}
-	
+
 	// Test default values
 	config := ArbitrageServiceConfig{
-		IntervalSeconds: 60, // 1 minute default
+		IntervalSeconds: 60,  // 1 minute default
 		MinProfit:       0.5, // 0.5% minimum profit
-		MaxAgeMinutes:   30, // 30 minutes default
+		MaxAgeMinutes:   30,  // 30 minutes default
 		BatchSize:       100, // 100 items default
 		Enabled:         true,
 	}
-	
+
 	assert.Equal(t, 60, config.IntervalSeconds)
 	assert.Equal(t, 0.5, config.MinProfit)
 	assert.Equal(t, 30, config.MaxAgeMinutes)
@@ -52,17 +51,17 @@ func TestArbitrageService_ConfigParsing(t *testing.T) {
 func TestArbitrageService_ContextManagement(t *testing.T) {
 	// Test context management for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Test that context is properly initialized
 	assert.NotNil(t, ctx)
 	assert.NotNil(t, cancel)
-	
+
 	// Test context cancellation
 	cancel()
-	
+
 	// Wait for cancellation to propagate
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// Context should be cancelled
 	select {
 	case <-ctx.Done():
@@ -78,7 +77,7 @@ func TestArbitrageService_ConcurrentOperations(t *testing.T) {
 	var wg sync.WaitGroup
 	var counter int64
 	var mu sync.Mutex
-	
+
 	// Test concurrent increment operations
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
@@ -89,9 +88,9 @@ func TestArbitrageService_ConcurrentOperations(t *testing.T) {
 			mu.Unlock()
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify that all operations completed
 	assert.Equal(t, int64(100), counter)
 }
@@ -99,15 +98,15 @@ func TestArbitrageService_ConcurrentOperations(t *testing.T) {
 func TestArbitrageService_TimeHandling(t *testing.T) {
 	// Test time handling for arbitrage calculations
 	now := time.Now()
-	
+
 	// Test that timestamps are properly recorded
 	assert.False(t, now.IsZero())
 	assert.True(t, now.After(time.Time{}))
-	
+
 	// Test time calculations
 	interval := time.Minute
 	nextTime := now.Add(interval)
-	
+
 	assert.True(t, nextTime.After(now))
 	assert.Equal(t, interval, nextTime.Sub(now))
 }
@@ -117,7 +116,7 @@ func TestArbitrageService_ErrorHandling(t *testing.T) {
 	testError := func() error {
 		return assert.AnError
 	}
-	
+
 	// Test error return
 	err := testError()
 	assert.Error(t, err)
@@ -133,36 +132,36 @@ func TestArbitrageService_StateTransitions(t *testing.T) {
 		Running
 		Stopping
 	)
-	
+
 	var currentState ServiceState
 	var mu sync.RWMutex
-	
+
 	// Test state transitions
 	setState := func(newState ServiceState) {
 		mu.Lock()
 		defer mu.Unlock()
 		currentState = newState
 	}
-	
+
 	getState := func() ServiceState {
 		mu.RLock()
 		defer mu.RUnlock()
 		return currentState
 	}
-	
+
 	// Test initial state
 	assert.Equal(t, Stopped, getState())
-	
+
 	// Test state changes
 	setState(Starting)
 	assert.Equal(t, Starting, getState())
-	
+
 	setState(Running)
 	assert.Equal(t, Running, getState())
-	
+
 	setState(Stopping)
 	assert.Equal(t, Stopping, getState())
-	
+
 	setState(Stopped)
 	assert.Equal(t, Stopped, getState())
 }
@@ -171,14 +170,14 @@ func TestArbitrageService_MetricsCollection(t *testing.T) {
 	// Test metrics collection functionality
 	type Metrics struct {
 		OpportunitiesFound int
-		TotalCalculations int
+		TotalCalculations  int
 		FailedCalculations int
-		LastCalculation time.Time
-		mu sync.RWMutex
+		LastCalculation    time.Time
+		mu                 sync.RWMutex
 	}
-	
+
 	metrics := &Metrics{}
-	
+
 	// Test metrics recording
 	recordOpportunity := func() {
 		metrics.mu.Lock()
@@ -187,7 +186,7 @@ func TestArbitrageService_MetricsCollection(t *testing.T) {
 		metrics.TotalCalculations++
 		metrics.LastCalculation = time.Now()
 	}
-	
+
 	recordFailure := func() {
 		metrics.mu.Lock()
 		defer metrics.mu.Unlock()
@@ -195,16 +194,16 @@ func TestArbitrageService_MetricsCollection(t *testing.T) {
 		metrics.TotalCalculations++
 		metrics.LastCalculation = time.Now()
 	}
-	
+
 	// Test recording opportunities
 	recordOpportunity()
 	recordOpportunity()
-	
+
 	// Test recording failures
 	recordFailure()
 	recordFailure()
 	recordFailure()
-	
+
 	// Verify metrics
 	metrics.mu.RLock()
 	assert.Equal(t, 2, metrics.OpportunitiesFound)
@@ -218,41 +217,41 @@ func TestArbitrageService_BatchProcessing(t *testing.T) {
 	// Test batch processing functionality
 	type BatchProcessor struct {
 		batchSize int
-		items []interface{}
-		mu sync.Mutex
+		items     []interface{}
+		mu        sync.Mutex
 	}
-	
+
 	processor := &BatchProcessor{
 		batchSize: 10,
-		items: make([]interface{}, 0),
+		items:     make([]interface{}, 0),
 	}
-	
+
 	// Test adding items to batch
 	addItem := func(item interface{}) {
 		processor.mu.Lock()
 		defer processor.mu.Unlock()
 		processor.items = append(processor.items, item)
 	}
-	
+
 	getBatchSize := func() int {
 		processor.mu.Lock()
 		defer processor.mu.Unlock()
 		return len(processor.items)
 	}
-	
+
 	// Add items to batch
 	for i := 0; i < 25; i++ {
 		addItem(i)
 	}
-	
+
 	// Verify batch size
 	assert.Equal(t, 25, getBatchSize())
-	
+
 	// Test batch processing logic
 	processBatch := func() [][]interface{} {
 		processor.mu.Lock()
 		defer processor.mu.Unlock()
-		
+
 		var batches [][]interface{}
 		for i := 0; i < len(processor.items); i += processor.batchSize {
 			end := i + processor.batchSize
@@ -263,7 +262,7 @@ func TestArbitrageService_BatchProcessing(t *testing.T) {
 		}
 		return batches
 	}
-	
+
 	batches := processBatch()
 	assert.Equal(t, 3, len(batches)) // 25 items with batch size 10 = 3 batches
 	assert.Equal(t, 10, len(batches[0]))
@@ -276,18 +275,18 @@ func TestNewArbitrageService(t *testing.T) {
 	var mockDB *database.PostgresDB // Using nil for testing service logic
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
-			Enabled:             true,
+			Enabled:            true,
 			IntervalSeconds:    30,
-			MinProfitThreshold:  1.0,
+			MinProfitThreshold: 1.0,
 			MaxAgeMinutes:      60,
 			BatchSize:          50,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	assert.NotNil(t, service)
 	assert.Equal(t, mockDB, service.db)
 	assert.Equal(t, mockConfig, service.config)
@@ -308,16 +307,16 @@ func TestNewArbitrageService_DefaultValues(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	assert.NotNil(t, service)
 	assert.Equal(t, 60, service.arbitrageConfig.IntervalSeconds) // default
-	assert.Equal(t, 0.5, service.arbitrageConfig.MinProfit)     // default
-	assert.Equal(t, 30, service.arbitrageConfig.MaxAgeMinutes)  // default
-	assert.Equal(t, 100, service.arbitrageConfig.BatchSize)     // default
+	assert.Equal(t, 0.5, service.arbitrageConfig.MinProfit)      // default
+	assert.Equal(t, 30, service.arbitrageConfig.MaxAgeMinutes)   // default
+	assert.Equal(t, 100, service.arbitrageConfig.BatchSize)      // default
 	assert.False(t, service.arbitrageConfig.Enabled)
 }
 
@@ -329,18 +328,18 @@ func TestArbitrageService_StartStop(t *testing.T) {
 			Enabled: false, // Test with disabled to avoid database issues
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Test initial state
 	assert.False(t, service.IsRunning())
-	
+
 	// Test starting when disabled - should not error but not start
 	err := service.Start()
 	assert.NoError(t, err)
 	assert.False(t, service.IsRunning()) // Should not start when disabled
-	
+
 	// Test stopping when disabled - should not panic
 	service.Stop()
 	assert.False(t, service.IsRunning())
@@ -354,10 +353,10 @@ func TestArbitrageService_StartDisabled(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Test starting when disabled
 	err := service.Start()
 	assert.NoError(t, err)
@@ -368,14 +367,14 @@ func TestArbitrageService_StartDisabled(t *testing.T) {
 func TestArbitrageService_Start(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	testCases := []struct {
-		name          string
-		config        *config.Config
-		expectStart   bool
-		expectError   bool
-		setupService  func(*ArbitrageService)
-		verifyState   func(*testing.T, *ArbitrageService)
+		name         string
+		config       *config.Config
+		expectStart  bool
+		expectError  bool
+		setupService func(*ArbitrageService)
+		verifyState  func(*testing.T, *ArbitrageService)
 	}{
 		{
 			name: "disabled_config",
@@ -398,10 +397,10 @@ func TestArbitrageService_Start(t *testing.T) {
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
 					Enabled:            false, // Changed to false to prevent goroutine panic
-					IntervalSeconds:  30,
+					IntervalSeconds:    30,
 					MinProfitThreshold: 0.5,
-					MaxAgeMinutes:     30,
-					BatchSize:         100,
+					MaxAgeMinutes:      30,
+					BatchSize:          100,
 				},
 			},
 			expectStart: false, // Changed to false since config is disabled
@@ -419,10 +418,10 @@ func TestArbitrageService_Start(t *testing.T) {
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
 					Enabled:            false, // Changed to false to prevent goroutine panic
-					IntervalSeconds:  60,
+					IntervalSeconds:    60,
 					MinProfitThreshold: 1.0,
-					MaxAgeMinutes:     60,
-					BatchSize:         200,
+					MaxAgeMinutes:      60,
+					BatchSize:          200,
 				},
 			},
 			expectStart: false, // Changed to false since config is disabled to prevent goroutine panic
@@ -436,7 +435,7 @@ func TestArbitrageService_Start(t *testing.T) {
 				assert.Equal(t, 200, s.arbitrageConfig.BatchSize)
 			},
 		},
-			{
+		{
 			name: "default_config_values",
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
@@ -450,7 +449,7 @@ func TestArbitrageService_Start(t *testing.T) {
 				assert.False(t, s.IsRunning(), "Service should not be marked as running when disabled")
 				// Verify default values are applied
 				assert.Equal(t, 60, s.arbitrageConfig.IntervalSeconds) // Default from config
-				assert.Equal(t, 0.5, s.arbitrageConfig.MinProfit)       // Default from config
+				assert.Equal(t, 0.5, s.arbitrageConfig.MinProfit)      // Default from config
 			},
 		},
 	}
@@ -460,22 +459,22 @@ func TestArbitrageService_Start(t *testing.T) {
 			var mockDB *database.PostgresDB // Using nil for testing service logic
 			calculator := NewSpotArbitrageCalculator()
 			service := NewArbitrageService(mockDB, tc.config, calculator)
-			
+
 			// Store initial context values for comparison
 			initialCtx := service.ctx
 			_ = service.cancel // Store but don't use to avoid unused variable error
-			
+
 			// Setup service state if needed
 			if tc.setupService != nil {
 				tc.setupService(service)
 			}
-			
+
 			// Test initial state
 			assert.False(t, service.IsRunning(), "Service should not be running initially")
-			
+
 			// Call Start method
 			err := service.Start()
-			
+
 			// Verify error expectation
 			if tc.expectError {
 				assert.Error(t, err, "Expected error when starting service")
@@ -483,12 +482,12 @@ func TestArbitrageService_Start(t *testing.T) {
 			} else {
 				assert.NoError(t, err, "Should not error when starting service")
 			}
-			
+
 			// Verify state using custom verifier
 			if tc.verifyState != nil {
 				tc.verifyState(t, service)
 			}
-			
+
 			// Additional verification for disabled config
 			if tc.name == "disabled_config" {
 				// For disabled config, context should remain unchanged
@@ -496,7 +495,7 @@ func TestArbitrageService_Start(t *testing.T) {
 				// Note: We can't compare cancel functions directly, so we just check it's still set
 				assert.NotNil(t, service.cancel, "Cancel function should remain set when disabled")
 			}
-			
+
 			// Clean up - stop service if it was started (without causing panic)
 			if service.IsRunning() && tc.name != "already_running" {
 				// Stop without waiting for goroutine to avoid panic
@@ -515,31 +514,31 @@ func TestArbitrageService_Start(t *testing.T) {
 func TestArbitrageService_Start_ContextHandling(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:            false, // Keep disabled to prevent goroutine panic with nil DB
-			IntervalSeconds:  1, // Short interval for testing
+			IntervalSeconds:    1,     // Short interval for testing
 			MinProfitThreshold: 0.1,
-			MaxAgeMinutes:     5,
-			BatchSize:         10,
+			MaxAgeMinutes:      5,
+			BatchSize:          10,
 		},
 	}
-	
+
 	var mockDB *database.PostgresDB // Using nil for testing service logic
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Test that Start creates a context - context is initialized in constructor
 	assert.NotNil(t, service.ctx, "Context should be initialized in constructor")
-	
+
 	// Start the service (will be disabled due to config)
 	err := service.Start()
 	assert.NoError(t, err, "Should not error when starting service")
 	assert.False(t, service.IsRunning(), "Service should not be running when disabled")
 	assert.NotNil(t, service.ctx, "Context should exist after constructor")
 	assert.NotNil(t, service.cancel, "Cancel function should exist after constructor")
-	
+
 	// Test that the context can be cancelled
 	select {
 	case <-service.ctx.Done():
@@ -547,11 +546,11 @@ func TestArbitrageService_Start_ContextHandling(t *testing.T) {
 	default:
 		// Expected - context should not be cancelled yet
 	}
-	
+
 	// Stop the service and verify context cancellation
 	service.Stop()
 	assert.False(t, service.IsRunning(), "Service should not be running after stop")
-	
+
 	// Test context cancellation by manually calling cancel
 	service.cancel()
 	time.Sleep(10 * time.Millisecond) // Give context time to cancel
@@ -567,28 +566,28 @@ func TestArbitrageService_Start_ContextHandling(t *testing.T) {
 func TestArbitrageService_Start_GoroutineLaunch(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:            false, // Keep disabled to prevent panic
-			IntervalSeconds:  1,
+			IntervalSeconds:    1,
 			MinProfitThreshold: 0.1,
-			MaxAgeMinutes:     5,
-			BatchSize:         10,
+			MaxAgeMinutes:      5,
+			BatchSize:          10,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Test initial state
 	assert.False(t, service.IsRunning(), "Service should not be running initially")
-	
+
 	// Start the service - this will not launch goroutine since disabled
 	err := service.Start()
 	assert.NoError(t, err, "Start should not return an error")
 	assert.False(t, service.IsRunning(), "Service should not be running when disabled")
-	
+
 	// Stop the service to clean up
 	service.Stop()
 	assert.False(t, service.IsRunning(), "Service should not be running after stop")
@@ -598,33 +597,33 @@ func TestArbitrageService_Start_GoroutineLaunch(t *testing.T) {
 func TestArbitrageService_Start_Logging(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:            false, // Keep disabled to prevent panic
-			IntervalSeconds:  30,
+			IntervalSeconds:    30,
 			MinProfitThreshold: 0.5,
-			MaxAgeMinutes:     30,
-			BatchSize:         100,
+			MaxAgeMinutes:      30,
+			BatchSize:          100,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Test that logger is properly initialized
 	assert.NotNil(t, service.logger, "Logger should be initialized")
-	
+
 	// Start the service - should log startup information
 	err := service.Start()
 	assert.NoError(t, err)
-	
+
 	// Verify that the service state changed appropriately
 	assert.False(t, service.IsRunning(), "Service should not be running when disabled")
-	
-	// Wait a short time 
+
+	// Wait a short time
 	time.Sleep(50 * time.Millisecond)
-	
+
 	// Clean up
 	service.Stop()
 }
@@ -633,27 +632,27 @@ func TestArbitrageService_Start_Logging(t *testing.T) {
 func TestArbitrageService_Start_MutexBehavior(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: false, // Disabled to prevent goroutine from starting
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Test concurrent access to Start method
 	var wg sync.WaitGroup
 	startCount := 0
 	successCount := 0
 	errorCount := 0
-	
+
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			
+
 			err := service.Start()
 			if err == nil {
 				successCount++
@@ -663,19 +662,19 @@ func TestArbitrageService_Start_MutexBehavior(t *testing.T) {
 			startCount++
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Since service is disabled, Start should succeed but not start the goroutine
 	assert.Equal(t, 10, startCount, "All Start calls should complete")
 	// Since the service is disabled, all calls should succeed
 	assert.Equal(t, 10, successCount, "All Start calls should succeed when disabled")
 	assert.Equal(t, 0, errorCount, "No errors should occur when disabled")
-	
+
 	// Verify only one Start operation actually marked the service as running
 	assert.False(t, service.IsRunning(), "Service should not be running when disabled")
 }
-	
+
 func TestArbitrageService_GetStatus(t *testing.T) {
 	// Test getting service status
 	mockConfig := &config.Config{
@@ -683,10 +682,10 @@ func TestArbitrageService_GetStatus(t *testing.T) {
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Test initial status
 	isRunning, lastCalculation, opportunitiesFound := service.GetStatus()
 	assert.False(t, isRunning)
@@ -702,12 +701,12 @@ func TestArbitrageService_ConcurrentAccess(t *testing.T) {
 			Enabled: false, // Disabled to avoid database issues
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	var wg sync.WaitGroup
-	
+
 	// Test concurrent status checks (safe operation)
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -716,9 +715,9 @@ func TestArbitrageService_ConcurrentAccess(t *testing.T) {
 			_, _, _ = service.GetStatus()
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify service is still not running
 	assert.False(t, service.IsRunning())
 }
@@ -733,18 +732,18 @@ func TestArbitrageService_ConfigValidation(t *testing.T) {
 		{
 			name: "All values provided",
 			config: config.ArbitrageConfig{
-				Enabled:             true,
+				Enabled:            true,
 				IntervalSeconds:    120,
-				MinProfitThreshold:  2.5,
+				MinProfitThreshold: 2.5,
 				MaxAgeMinutes:      90,
 				BatchSize:          200,
 			},
 			expected: ArbitrageServiceConfig{
-				Enabled:           true,
-				IntervalSeconds:   120,
-				MinProfit:         2.5,
-				MaxAgeMinutes:     90,
-				BatchSize:         200,
+				Enabled:         true,
+				IntervalSeconds: 120,
+				MinProfit:       2.5,
+				MaxAgeMinutes:   90,
+				BatchSize:       200,
 			},
 		},
 		{
@@ -753,40 +752,40 @@ func TestArbitrageService_ConfigValidation(t *testing.T) {
 				Enabled: true,
 			},
 			expected: ArbitrageServiceConfig{
-				Enabled:           true,
-				IntervalSeconds:   60,  // default
-				MinProfit:         0.5,  // default
-				MaxAgeMinutes:     30,  // default
-				BatchSize:         100, // default
+				Enabled:         true,
+				IntervalSeconds: 60,  // default
+				MinProfit:       0.5, // default
+				MaxAgeMinutes:   30,  // default
+				BatchSize:       100, // default
 			},
 		},
 		{
 			name: "Partial configuration",
 			config: config.ArbitrageConfig{
-				Enabled:             false,
+				Enabled:            false,
 				IntervalSeconds:    45,
-				MinProfitThreshold:  1.0,
+				MinProfitThreshold: 1.0,
 			},
 			expected: ArbitrageServiceConfig{
-				Enabled:           false,
-				IntervalSeconds:   45,
-				MinProfit:         1.0,
-				MaxAgeMinutes:     30,  // default
-				BatchSize:         100, // default
+				Enabled:         false,
+				IntervalSeconds: 45,
+				MinProfit:       1.0,
+				MaxAgeMinutes:   30,  // default
+				BatchSize:       100, // default
 			},
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var mockDB *database.PostgresDB // Using nil for testing service logic
 			mockConfig := &config.Config{
 				Arbitrage: tc.config,
 			}
-			
+
 			calculator := NewSpotArbitrageCalculator()
 			service := NewArbitrageService(mockDB, mockConfig, calculator)
-			
+
 			assert.Equal(t, tc.expected.Enabled, service.arbitrageConfig.Enabled)
 			assert.Equal(t, tc.expected.IntervalSeconds, service.arbitrageConfig.IntervalSeconds)
 			assert.Equal(t, tc.expected.MinProfit, service.arbitrageConfig.MinProfit)
@@ -796,13 +795,11 @@ func TestArbitrageService_ConfigValidation(t *testing.T) {
 	}
 }
 
-
-
 // TestArbitrageService_calculationLoop tests the calculationLoop function
 func TestArbitrageService_calculationLoop(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	// Test scenario 1: Context cancellation handling
 	t.Run("context cancellation", func(t *testing.T) {
 		mockConfig := &config.Config{
@@ -810,14 +807,14 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				Enabled: false, // Disabled to avoid actual calculation
 			},
 		}
-		
+
 		calculator := NewSpotArbitrageCalculator()
 		service := NewArbitrageService(nil, mockConfig, calculator)
-		
+
 		// Test that calculationLoop exits when context is cancelled
 		ctx, cancel := context.WithCancel(context.Background())
 		service.ctx = ctx
-		
+
 		// Start the calculation loop in a goroutine with panic recovery
 		done := make(chan bool)
 		go func() {
@@ -828,13 +825,13 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				}
 				done <- true
 			}()
-			
+
 			service.calculationLoop()
 		}()
-		
+
 		// Cancel context to stop the loop
 		cancel()
-		
+
 		// Wait for the loop to exit
 		select {
 		case <-done:
@@ -843,22 +840,22 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 			t.Error("calculationLoop did not exit within expected time")
 		}
 	})
-	
+
 	// Test scenario 2: Different interval configurations
 	t.Run("interval configuration", func(t *testing.T) {
 		testConfigs := []struct {
-			name    string
-			config  *config.Config
+			name   string
+			config *config.Config
 		}{
 			{
 				name: "short interval",
 				config: &config.Config{
 					Arbitrage: config.ArbitrageConfig{
 						Enabled:            false,
-						IntervalSeconds:  5,
+						IntervalSeconds:    5,
 						MinProfitThreshold: 0.1,
-						MaxAgeMinutes:     15,
-						BatchSize:         50,
+						MaxAgeMinutes:      15,
+						BatchSize:          50,
 					},
 				},
 			},
@@ -867,10 +864,10 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				config: &config.Config{
 					Arbitrage: config.ArbitrageConfig{
 						Enabled:            false,
-						IntervalSeconds:  300,
+						IntervalSeconds:    300,
 						MinProfitThreshold: 1.0,
-						MaxAgeMinutes:     60,
-						BatchSize:         200,
+						MaxAgeMinutes:      60,
+						BatchSize:          200,
 					},
 				},
 			},
@@ -879,24 +876,24 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				config: &config.Config{
 					Arbitrage: config.ArbitrageConfig{
 						Enabled:            false,
-						IntervalSeconds:  60,
+						IntervalSeconds:    60,
 						MinProfitThreshold: 0.5,
-						MaxAgeMinutes:     30,
-						BatchSize:         100,
+						MaxAgeMinutes:      30,
+						BatchSize:          100,
 					},
 				},
 			},
 		}
-		
+
 		for _, tc := range testConfigs {
 			t.Run(tc.name, func(t *testing.T) {
 				calculator := NewSpotArbitrageCalculator()
 				service := NewArbitrageService(nil, tc.config, calculator)
-				
+
 				// Set up context with cancellation
 				ctx, cancel := context.WithCancel(context.Background())
 				service.ctx = ctx
-				
+
 				// Start the calculation loop
 				done := make(chan bool)
 				go func() {
@@ -906,14 +903,14 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 						}
 						done <- true
 					}()
-					
+
 					service.calculationLoop()
 				}()
-				
+
 				// Let it run briefly then cancel
 				time.Sleep(10 * time.Millisecond)
 				cancel()
-				
+
 				select {
 				case <-done:
 					// Loop exited successfully
@@ -923,26 +920,26 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 			})
 		}
 	})
-	
+
 	// Test scenario 3: Error handling in calculation
 	t.Run("error handling", func(t *testing.T) {
 		mockConfig := &config.Config{
 			Arbitrage: config.ArbitrageConfig{
 				Enabled:            false, // Changed to false to prevent goroutine panic
-				IntervalSeconds:  1,
+				IntervalSeconds:    1,
 				MinProfitThreshold: 0.5,
-				MaxAgeMinutes:     30,
-				BatchSize:         100,
+				MaxAgeMinutes:      30,
+				BatchSize:          100,
 			},
 		}
-		
+
 		calculator := NewSpotArbitrageCalculator()
 		service := NewArbitrageService(nil, mockConfig, calculator)
-		
+
 		// Set up context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
 		service.ctx = ctx
-		
+
 		// Start the calculation loop
 		done := make(chan bool)
 		go func() {
@@ -953,14 +950,14 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				}
 				done <- true
 			}()
-			
+
 			service.calculationLoop()
 		}()
-		
+
 		// Let it attempt calculations then cancel
 		time.Sleep(50 * time.Millisecond)
 		cancel()
-		
+
 		select {
 		case <-done:
 			// Loop handled errors and exited
@@ -968,29 +965,29 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 			t.Error("calculationLoop did not exit within expected time")
 		}
 	})
-	
+
 	// Test scenario 4: Immediate calculation on start
 	t.Run("immediate calculation", func(t *testing.T) {
 		mockConfig := &config.Config{
 			Arbitrage: config.ArbitrageConfig{
 				Enabled:            false, // Disabled to prevent actual calculation
-				IntervalSeconds:  60,
+				IntervalSeconds:    60,
 				MinProfitThreshold: 0.5,
-				MaxAgeMinutes:     30,
-				BatchSize:         100,
+				MaxAgeMinutes:      30,
+				BatchSize:          100,
 			},
 		}
-		
+
 		calculator := NewSpotArbitrageCalculator()
 		service := NewArbitrageService(nil, mockConfig, calculator)
-		
+
 		// Set up wait group
 		service.wg.Add(1)
-		
+
 		// Set up context with immediate cancellation
 		ctx, cancel := context.WithCancel(context.Background())
 		service.ctx = ctx
-		
+
 		// Start the calculation loop
 		done := make(chan bool)
 		go func() {
@@ -1000,13 +997,13 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 				}
 				done <- true
 			}()
-			
+
 			service.calculationLoop()
 		}()
-		
+
 		// Cancel immediately to test initial calculation
 		cancel()
-		
+
 		select {
 		case <-done:
 			// Initial calculation attempted
@@ -1016,26 +1013,25 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 	})
 }
 
-
 // TestArbitrageService_calculateAndStoreOpportunities tests the calculateAndStoreOpportunities function
 func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	// Test with nil database - should return error
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
-			Enabled:          true,
-			IntervalSeconds:  60,
+			Enabled:            true,
+			IntervalSeconds:    60,
 			MinProfitThreshold: 0.5,
-			MaxAgeMinutes:    30,
-			BatchSize:        100,
+			MaxAgeMinutes:      30,
+			BatchSize:          100,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Call the function - expect error due to nil database
 	err := service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
@@ -1045,7 +1041,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 	t.Run("nil database scenario", func(t *testing.T) {
 		var mockDB *database.PostgresDB // Using nil to test error handling
 		service := NewArbitrageService(mockDB, mockConfig, calculator)
-		
+
 		// Should return error due to nil database
 		err := service.calculateAndStoreOpportunities()
 		assert.Error(t, err)
@@ -1056,29 +1052,29 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 		configs := []*config.Config{
 			{
 				Arbitrage: config.ArbitrageConfig{
-					Enabled:          true,
-					IntervalSeconds:  30,
+					Enabled:            true,
+					IntervalSeconds:    30,
 					MinProfitThreshold: 0.1,
-					MaxAgeMinutes:    15,
-					BatchSize:        50,
+					MaxAgeMinutes:      15,
+					BatchSize:          50,
 				},
 			},
 			{
 				Arbitrage: config.ArbitrageConfig{
-					Enabled:          true,
-					IntervalSeconds:  120,
+					Enabled:            true,
+					IntervalSeconds:    120,
 					MinProfitThreshold: 1.0,
-					MaxAgeMinutes:    60,
-					BatchSize:        200,
+					MaxAgeMinutes:      60,
+					BatchSize:          200,
 				},
 			},
 			{
 				Arbitrage: config.ArbitrageConfig{
-					Enabled:          false,
-					IntervalSeconds:  60,
+					Enabled:            false,
+					IntervalSeconds:    60,
 					MinProfitThreshold: 0.5,
-					MaxAgeMinutes:    30,
-					BatchSize:        100,
+					MaxAgeMinutes:      30,
+					BatchSize:          100,
 				},
 			},
 		}
@@ -1087,7 +1083,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 			t.Run(fmt.Sprintf("config_%d", i), func(t *testing.T) {
 				var mockDB *database.PostgresDB = nil
 				service := NewArbitrageService(mockDB, cfg, calculator)
-				
+
 				// Should return error due to nil database
 				err := service.calculateAndStoreOpportunities()
 				assert.Error(t, err)
@@ -1098,14 +1094,14 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 
 	t.Run("context cancellation scenario", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		
+
 		// Cancel context immediately
 		cancel()
 
 		var mockDB *database.PostgresDB = nil
 		service := NewArbitrageService(mockDB, mockConfig, calculator)
 		service.ctx = ctx // Replace with cancelled context
-		
+
 		// Should return error due to nil database (context cancellation happens later in the function)
 		err := service.calculateAndStoreOpportunities()
 		assert.Error(t, err)
@@ -1114,7 +1110,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 
 	t.Run("edge cases", func(t *testing.T) {
 		edgeCases := []struct {
-			name string
+			name  string
 			setup func() *database.PostgresDB
 		}{
 			{
@@ -1129,7 +1125,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				mockDB := tc.setup()
 				service := NewArbitrageService(mockDB, mockConfig, calculator)
-				
+
 				// Should return error due to nil database
 				err := service.calculateAndStoreOpportunities()
 				assert.Error(t, err)
@@ -1143,17 +1139,17 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 func TestArbitrageService_calculateAndStoreOpportunities_NoMarketData(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	// Test with nil database for simplicity
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Call the function - expect error due to nil database
 	err := service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
@@ -1164,13 +1160,13 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoMarketData(t *testing
 func TestArbitrageService_calculateAndStoreOpportunities_SuccessPath(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	// For now, test error handling with nil pool
 	// TODO: Create proper integration test with real database setup
 	var realDB *database.PostgresDB // nil for error handling test
-	
+
 	calculator := NewSpotArbitrageCalculator()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:            true,
@@ -1180,9 +1176,9 @@ func TestArbitrageService_calculateAndStoreOpportunities_SuccessPath(t *testing.
 			BatchSize:          100,
 		},
 	}
-	
+
 	service := NewArbitrageService(realDB, mockConfig, calculator)
-	
+
 	// Since pool is nil, expect error
 	err := service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
@@ -1192,21 +1188,21 @@ func TestArbitrageService_calculateAndStoreOpportunities_SuccessPath(t *testing.
 // TestArbitrageService_calculateAndStoreOpportunities_CleanupError tests error handling during cleanup
 func TestArbitrageService_calculateAndStoreOpportunities_CleanupError(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Create real PostgresDB with nil pool (will be mocked at service level)
 	mockDB := &database.PostgresDB{
 		Pool: nil, // We'll mock the service methods instead
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Since we now have nil checks that return early, this test will get a database error
 	// instead of reaching the cleanup logic. Update the expectation accordingly.
 	err := service.calculateAndStoreOpportunities()
@@ -1217,24 +1213,24 @@ func TestArbitrageService_calculateAndStoreOpportunities_CleanupError(t *testing
 // TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError tests error handling when getting market data fails
 func TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Create real PostgresDB with nil pool (will be mocked at service level)
 	mockDB := &database.PostgresDB{
 		Pool: nil, // We'll mock the service methods instead
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Note: getLatestMarketData is a private method, so we can't mock it directly
 	// The test relies on database errors to test this path
-	
+
 	err := service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get market data")
@@ -1243,24 +1239,24 @@ func TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError(t *t
 // TestArbitrageService_calculateAndStoreOpportunities_CalculateError tests error handling when calculator fails
 func TestArbitrageService_calculateAndStoreOpportunities_CalculateError(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Create real PostgresDB with nil pool (will be mocked at service level)
 	mockDB := &database.PostgresDB{
 		Pool: nil, // We'll mock the service methods instead
 	}
-	
+
 	// Create calculator that returns error
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
 	calculator.On("CalculateArbitrageOpportunities", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("calculation failed"))
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Note: getLatestMarketData is a private method, so we can't mock it directly
 	// Since we now have nil checks that return early, this test will get a database error
 	// instead of reaching the calculator logic. Update the expectation accordingly.
@@ -1272,12 +1268,12 @@ func TestArbitrageService_calculateAndStoreOpportunities_CalculateError(t *testi
 // TestArbitrageService_calculateAndStoreOpportunities_StoreError tests error handling when storing opportunities fails
 func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Create real PostgresDB with nil pool (will be mocked at service level)
 	mockDB := &database.PostgresDB{
 		Pool: nil, // We'll mock the service methods instead
 	}
-	
+
 	// Create calculator that returns valid opportunities
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
 	calculator.On("CalculateArbitrageOpportunities", mock.Anything, mock.Anything).Return([]models.ArbitrageOpportunity{
@@ -1293,13 +1289,13 @@ func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T
 			ExpiresAt:        time.Now().Add(5 * time.Minute),
 		},
 	}, nil)
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	// Mock the database to return valid market data through Query method
 	mockPool := &testmocks.MockPool{}
 	mockPool.QueryFunc = func(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
@@ -1346,13 +1342,13 @@ func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T
 		mockRows.ErrFunc = func() error { return nil }
 		return mockRows, nil
 	}
-	
+
 	// Since we can't use MockPool directly with PostgresDB, we'll use a nil pool
 	// and mock the calculator to return opportunities for this test case
 	// mockDB is already declared above on line 1356
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Since we now have nil checks that return early, this test will get a database error
 	// instead of reaching the store logic. Update the expectation accordingly.
 	err := service.calculateAndStoreOpportunities()
@@ -1363,10 +1359,10 @@ func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T
 // TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities tests behavior when no opportunities pass filtering
 func TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Use nil database since we're mocking the service method directly
 	var mockDB *database.PostgresDB
-	
+
 	// Create calculator that returns opportunities below profit threshold
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
 	calculator.On("CalculateArbitrageOpportunities", mock.Anything, mock.Anything).Return([]models.ArbitrageOpportunity{
@@ -1382,25 +1378,25 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities(t 
 			ExpiresAt:        time.Now().Add(5 * time.Minute),
 		},
 	}, nil)
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:            true,
 			MinProfitThreshold: 0.5, // Higher than 0.01%
 		},
 	}
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Start the service to ensure it's running
 	err := service.Start()
 	assert.NoError(t, err)
-	
+
 	// With nil database, should get error before reaching calculator logic
 	err = service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
-	
+
 	// Verify status shows service is running but no calculation occurred due to early error
 	isRunning, lastCalc, oppFound := service.GetStatus()
 	assert.True(t, isRunning)
@@ -1411,10 +1407,10 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities(t 
 // TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation tests context cancellation handling
 func TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation(t *testing.T) {
 	_ = telemetry.Logger()
-	
+
 	// Use nil database since we're mocking the calculator directly
 	var mockDB *database.PostgresDB
-	
+
 	// Create calculator with mock data for cancellation test
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
 	calculator.On("CalculateArbitrageOpportunities", mock.Anything, mock.Anything).Return([]models.ArbitrageOpportunity{
@@ -1430,19 +1426,19 @@ func TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation(t *
 			ExpiresAt:        time.Now().Add(5 * time.Minute),
 		},
 	}, nil)
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(mockDB, mockConfig, calculator)
-	
+
 	// Cancel context before calling function
 	service.ctx, service.cancel = context.WithCancel(context.Background())
 	service.cancel()
-	
+
 	err := service.calculateAndStoreOpportunities()
 	// With nil database, should get database error before context cancellation is checked
 	assert.Error(t, err)
@@ -1453,18 +1449,18 @@ func TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation(t *
 func TestArbitrageService_getLatestMarketData(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
-	
+
 	// Test with nil database - should return error
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Call the function and expect error
 	_, err := service.getLatestMarketData()
 	assert.Error(t, err)
@@ -1475,15 +1471,15 @@ func TestArbitrageService_getLatestMarketData(t *testing.T) {
 func TestArbitrageService_getLatestMarketData_Context(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(nil, mockConfig, nil)
-	
+
 	// With nil database, should return error when calling getLatestMarketData
 	_, err := service.getLatestMarketData()
 	assert.Error(t, err)
@@ -1494,19 +1490,19 @@ func TestArbitrageService_getLatestMarketData_Context(t *testing.T) {
 func TestArbitrageService_getLatestMarketData_ConfigVariations(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	testConfigs := []struct {
-		name    string
-		config  *config.Config
+		name   string
+		config *config.Config
 	}{
 		{
 			name: "enabled arbitrage",
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
 					Enabled:            false, // Changed to false to prevent goroutine panic
-					IntervalSeconds:  30,
+					IntervalSeconds:    30,
 					MinProfitThreshold: 0.1,
-					MaxAgeMinutes:     15,
+					MaxAgeMinutes:      15,
 				},
 			},
 		},
@@ -1515,9 +1511,9 @@ func TestArbitrageService_getLatestMarketData_ConfigVariations(t *testing.T) {
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
 					Enabled:            false,
-					IntervalSeconds:  60,
+					IntervalSeconds:    60,
 					MinProfitThreshold: 0.5,
-					MaxAgeMinutes:     30,
+					MaxAgeMinutes:      30,
 				},
 			},
 		},
@@ -1526,18 +1522,18 @@ func TestArbitrageService_getLatestMarketData_ConfigVariations(t *testing.T) {
 			config: &config.Config{
 				Arbitrage: config.ArbitrageConfig{
 					Enabled:            false, // Changed to false to prevent goroutine panic
-					IntervalSeconds:  5,
+					IntervalSeconds:    5,
 					MinProfitThreshold: 0.01,
-					MaxAgeMinutes:     5,
+					MaxAgeMinutes:      5,
 				},
 			},
 		},
 	}
-	
+
 	for _, tc := range testConfigs {
 		t.Run(tc.name, func(t *testing.T) {
 			service := NewArbitrageService(nil, tc.config, nil)
-			
+
 			// All scenarios should return error due to nil database
 			_, err := service.getLatestMarketData()
 			assert.Error(t, err)
@@ -1550,15 +1546,15 @@ func TestArbitrageService_getLatestMarketData_ConfigVariations(t *testing.T) {
 func TestArbitrageService_getLatestMarketData_ErrorScenarios(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	service := NewArbitrageService(nil, mockConfig, nil)
-	
+
 	// Test multiple calls - all should return error consistently
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("call_%d", i), func(t *testing.T) {
@@ -1573,38 +1569,38 @@ func TestArbitrageService_getLatestMarketData_ErrorScenarios(t *testing.T) {
 func TestArbitrageService_filterOpportunities(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
-			Enabled:          true,
+			Enabled:            true,
 			MinProfitThreshold: 1.0, // 1% threshold
 			MaxAgeMinutes:      60,  // 1 hour max age
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Create test opportunities
 	now := time.Now()
 	opportunities := []models.ArbitrageOpportunity{
 		{
 			ProfitPercentage: decimal.NewFromFloat(2.0), // Above threshold
-			DetectedAt:      now,
+			DetectedAt:       now,
 		},
 		{
 			ProfitPercentage: decimal.NewFromFloat(0.5), // Below threshold
-			DetectedAt:      now,
+			DetectedAt:       now,
 		},
 		{
 			ProfitPercentage: decimal.NewFromFloat(1.5), // Above threshold but too old
-			DetectedAt:      now.Add(-2 * time.Hour),
+			DetectedAt:       now.Add(-2 * time.Hour),
 		},
 	}
-	
+
 	// Filter opportunities
 	filtered := service.filterOpportunities(opportunities)
-	
+
 	// Should only include opportunities above threshold and not too old
 	assert.Len(t, filtered, 1)
 	assert.Equal(t, decimal.NewFromFloat(2.0), filtered[0].ProfitPercentage)
@@ -1614,17 +1610,17 @@ func TestArbitrageService_filterOpportunities(t *testing.T) {
 func TestArbitrageService_storeOpportunities(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled:   true,
 			BatchSize: 10,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Create test opportunities
 	opportunities := []models.ArbitrageOpportunity{
 		{
@@ -1639,7 +1635,7 @@ func TestArbitrageService_storeOpportunities(t *testing.T) {
 			ExpiresAt:        time.Now().Add(time.Hour),
 		},
 	}
-	
+
 	// Store opportunities - should return error due to nil database
 	err := service.storeOpportunities(opportunities)
 	assert.Error(t, err)
@@ -1650,19 +1646,19 @@ func TestArbitrageService_storeOpportunities(t *testing.T) {
 func TestArbitrageService_storeOpportunities_Empty(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Store empty opportunities
 	err := service.storeOpportunities([]models.ArbitrageOpportunity{})
-	
+
 	// Should not return error
 	assert.NoError(t, err)
 }
@@ -1671,16 +1667,16 @@ func TestArbitrageService_storeOpportunities_Empty(t *testing.T) {
 func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Test Case 1: Single opportunity with nil database - should return error
 	t.Run("SingleOpportunityNilDB", func(t *testing.T) {
 		opportunity := models.ArbitrageOpportunity{
@@ -1694,12 +1690,12 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 			DetectedAt:       time.Now(),
 			ExpiresAt:        time.Now().Add(time.Hour),
 		}
-		
+
 		err := service.storeOpportunityBatch([]models.ArbitrageOpportunity{opportunity})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "database pool is not available")
 	})
-	
+
 	// Test Case 2: Empty batch - should return early without error
 	t.Run("EmptyBatch", func(t *testing.T) {
 		// Empty batch should return early without accessing database
@@ -1708,7 +1704,7 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 		assert.Error(t, err, "Empty batch should return error when database is nil")
 		assert.Contains(t, err.Error(), "database pool is not available")
 	})
-	
+
 	// Test Case 3: Multiple opportunities with different configurations
 	t.Run("MultipleOpportunities", func(t *testing.T) {
 		now := time.Now()
@@ -1747,21 +1743,21 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 				ExpiresAt:        now.Add(30 * time.Minute),
 			},
 		}
-		
+
 		err := service.storeOpportunityBatch(opportunities)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "database pool is not available")
 	})
-	
+
 	// Test Case 4: Test with different config batch sizes
 	t.Run("DifferentBatchSizes", func(t *testing.T) {
 		testBatchSizes := []int{1, 10, 50, 100}
-		
+
 		for _, batchSize := range testBatchSizes {
 			t.Run(fmt.Sprintf("BatchSize_%d", batchSize), func(t *testing.T) {
 				opportunities := make([]models.ArbitrageOpportunity, batchSize)
 				now := time.Now()
-				
+
 				for i := 0; i < batchSize; i++ {
 					opportunities[i] = models.ArbitrageOpportunity{
 						ID:               uuid.New().String(),
@@ -1775,14 +1771,14 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 						ExpiresAt:        now.Add(time.Duration(i+1) * time.Hour),
 					}
 				}
-				
+
 				err := service.storeOpportunityBatch(opportunities)
 				assert.Error(t, err, "Expected error due to nil database")
 				assert.Contains(t, err.Error(), "database pool is not available")
 			})
 		}
 	})
-	
+
 	// Test Case 5: Test with minimal valid opportunity
 	t.Run("MinimalOpportunity", func(t *testing.T) {
 		opportunity := models.ArbitrageOpportunity{
@@ -1796,12 +1792,12 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 			DetectedAt:       time.Now(),
 			ExpiresAt:        time.Now().Add(time.Minute),
 		}
-		
+
 		err := service.storeOpportunityBatch([]models.ArbitrageOpportunity{opportunity})
 		assert.Error(t, err, "Expected error due to nil database with minimal opportunity")
 		assert.Contains(t, err.Error(), "database pool is not available")
 	})
-	
+
 	// Test Case 6: Test with zero and negative values
 	t.Run("EdgeCaseValues", func(t *testing.T) {
 		opportunity := models.ArbitrageOpportunity{
@@ -1815,7 +1811,7 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 			DetectedAt:       time.Now(),
 			ExpiresAt:        time.Now().Add(time.Hour),
 		}
-		
+
 		err := service.storeOpportunityBatch([]models.ArbitrageOpportunity{opportunity})
 		assert.Error(t, err, "Expected error due to nil database with edge case values")
 		assert.Contains(t, err.Error(), "database pool is not available")
@@ -1826,16 +1822,16 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 func TestArbitrageService_cleanupOldOpportunities(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Cleanup old opportunities - should return error due to nil database
 	err := service.cleanupOldOpportunities()
 	assert.Error(t, err)
@@ -1846,16 +1842,16 @@ func TestArbitrageService_cleanupOldOpportunities(t *testing.T) {
 func TestArbitrageService_countTotalTradingPairs(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Create test market data
 	marketData := map[string][]models.MarketData{
 		"binance": {
@@ -1866,10 +1862,10 @@ func TestArbitrageService_countTotalTradingPairs(t *testing.T) {
 			{ID: "3", ExchangeID: 2, TradingPairID: 1},
 		},
 	}
-	
+
 	// Count total trading pairs
 	total := service.countTotalTradingPairs(marketData)
-	
+
 	// Should return 3
 	assert.Equal(t, 3, total)
 }
@@ -1878,16 +1874,16 @@ func TestArbitrageService_countTotalTradingPairs(t *testing.T) {
 func TestArbitrageService_GetActiveOpportunities(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Get active opportunities - should return error due to nil database
 	_, err := service.GetActiveOpportunities(context.Background(), 10)
 	assert.Error(t, err)
@@ -1898,16 +1894,16 @@ func TestArbitrageService_GetActiveOpportunities(t *testing.T) {
 func TestArbitrageService_GetActiveOpportunities_WithData(t *testing.T) {
 	// Initialize logger to avoid nil pointer
 	_ = telemetry.Logger()
-	
+
 	mockConfig := &config.Config{
 		Arbitrage: config.ArbitrageConfig{
 			Enabled: true,
 		},
 	}
-	
+
 	calculator := NewSpotArbitrageCalculator()
 	service := NewArbitrageService(nil, mockConfig, calculator)
-	
+
 	// Get active opportunities - should return error due to nil database
 	_, err := service.GetActiveOpportunities(context.Background(), 10)
 	assert.Error(t, err)
@@ -1957,7 +1953,7 @@ func TestArbitrageService_Stop(t *testing.T) {
 			name: "stop_with_nil_context",
 			setupService: func(s *ArbitrageService) {
 				s.isRunning = true
-				s.ctx = nil // Test with nil context
+				s.ctx = nil          // Test with nil context
 				s.cancel = func() {} // No-op cancel function
 				// Don't add to wait group in test since no goroutine will call Done()
 			},
@@ -2133,43 +2129,43 @@ func TestArbitrageService_Stop_MutexBehavior(t *testing.T) {
 func TestArbitrageService_storeOpportunityBatch_Success(t *testing.T) {
 	// Create a real config for testing
 	cfg := &config.Config{}
-	
+
 	// Create a service with calculator but use mock for specific operations
 	calculator := NewSpotArbitrageCalculator()
-	
+
 	// Use nil database for now, we'll test the batch logic directly
 	service := NewArbitrageService(nil, cfg, calculator)
 
 	// Create test opportunities
 	opportunities := []models.ArbitrageOpportunity{
 		{
-			ID:             uuid.New().String(),
-			BuyExchangeID:  1,
-			SellExchangeID: 2,
-			TradingPairID:   1,
-			BuyPrice:        decimal.NewFromFloat(50000.0),
-			SellPrice:       decimal.NewFromFloat(50100.0),
+			ID:               uuid.New().String(),
+			BuyExchangeID:    1,
+			SellExchangeID:   2,
+			TradingPairID:    1,
+			BuyPrice:         decimal.NewFromFloat(50000.0),
+			SellPrice:        decimal.NewFromFloat(50100.0),
 			ProfitPercentage: decimal.NewFromFloat(0.2),
-			DetectedAt:      time.Now(),
-			ExpiresAt:       time.Now().Add(30 * time.Minute),
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(30 * time.Minute),
 		},
 		{
-			ID:             uuid.New().String(),
-			BuyExchangeID:  2,
-			SellExchangeID: 3,
-			TradingPairID:   2,
-			BuyPrice:        decimal.NewFromFloat(30000.0),
-			SellPrice:       decimal.NewFromFloat(30150.0),
+			ID:               uuid.New().String(),
+			BuyExchangeID:    2,
+			SellExchangeID:   3,
+			TradingPairID:    2,
+			BuyPrice:         decimal.NewFromFloat(30000.0),
+			SellPrice:        decimal.NewFromFloat(30150.0),
 			ProfitPercentage: decimal.NewFromFloat(0.5),
-			DetectedAt:      time.Now(),
-			ExpiresAt:       time.Now().Add(30 * time.Minute),
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(30 * time.Minute),
 		},
 	}
 
 	// Test the storeOpportunityBatch method directly
 	// Since we're using nil database, this will test the error handling path
 	err := service.storeOpportunityBatch(opportunities)
-	
+
 	// With nil database, we expect an error
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
@@ -2203,15 +2199,15 @@ func TestArbitrageService_storeOpportunityBatch_BeginTransactionError(t *testing
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
 		{
-			ID:             uuid.New().String(),
-			BuyExchangeID:  1,
-			SellExchangeID: 2,
-			TradingPairID:   1,
-			BuyPrice:        decimal.NewFromFloat(50000.0),
-			SellPrice:       decimal.NewFromFloat(50100.0),
+			ID:               uuid.New().String(),
+			BuyExchangeID:    1,
+			SellExchangeID:   2,
+			TradingPairID:    1,
+			BuyPrice:         decimal.NewFromFloat(50000.0),
+			SellPrice:        decimal.NewFromFloat(50100.0),
 			ProfitPercentage: decimal.NewFromFloat(0.2),
-			DetectedAt:      time.Now(),
-			ExpiresAt:       time.Now().Add(30 * time.Minute),
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(30 * time.Minute),
 		},
 	}
 
@@ -2233,15 +2229,15 @@ func TestArbitrageService_storeOpportunityBatch_InsertError(t *testing.T) {
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
 		{
-			ID:             uuid.New().String(),
-			BuyExchangeID:  1,
-			SellExchangeID:  2,
-			TradingPairID:   1,
-			BuyPrice:        decimal.NewFromFloat(50000.0),
-			SellPrice:       decimal.NewFromFloat(50100.0),
+			ID:               uuid.New().String(),
+			BuyExchangeID:    1,
+			SellExchangeID:   2,
+			TradingPairID:    1,
+			BuyPrice:         decimal.NewFromFloat(50000.0),
+			SellPrice:        decimal.NewFromFloat(50100.0),
 			ProfitPercentage: decimal.NewFromFloat(0.2),
-			DetectedAt:      time.Now(),
-			ExpiresAt:       time.Now().Add(30 * time.Minute),
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(30 * time.Minute),
 		},
 	}
 
@@ -2263,15 +2259,15 @@ func TestArbitrageService_storeOpportunityBatch_CommitError(t *testing.T) {
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
 		{
-			ID:             uuid.New().String(),
-			BuyExchangeID:  1,
-			SellExchangeID: 2,
-			TradingPairID:   1,
-			BuyPrice:        decimal.NewFromFloat(50000.0),
-			SellPrice:       decimal.NewFromFloat(50100.0),
+			ID:               uuid.New().String(),
+			BuyExchangeID:    1,
+			SellExchangeID:   2,
+			TradingPairID:    1,
+			BuyPrice:         decimal.NewFromFloat(50000.0),
+			SellPrice:        decimal.NewFromFloat(50100.0),
 			ProfitPercentage: decimal.NewFromFloat(0.2),
-			DetectedAt:      time.Now(),
-			ExpiresAt:       time.Now().Add(30 * time.Minute),
+			DetectedAt:       time.Now(),
+			ExpiresAt:        time.Now().Add(30 * time.Minute),
 		},
 	}
 
@@ -2292,15 +2288,15 @@ func TestArbitrageService_storeOpportunityBatch_EmptyID(t *testing.T) {
 
 	// Create test opportunity with empty ID
 	opportunity := models.ArbitrageOpportunity{
-		ID:             "", // Empty ID should be filled with UUID
-		BuyExchangeID:  1,
-		SellExchangeID: 2,
-		TradingPairID:   1,
-		BuyPrice:        decimal.NewFromFloat(50000.0),
-		SellPrice:       decimal.NewFromFloat(50100.0),
+		ID:               "", // Empty ID should be filled with UUID
+		BuyExchangeID:    1,
+		SellExchangeID:   2,
+		TradingPairID:    1,
+		BuyPrice:         decimal.NewFromFloat(50000.0),
+		SellPrice:        decimal.NewFromFloat(50100.0),
 		ProfitPercentage: decimal.NewFromFloat(0.2),
-		DetectedAt:      time.Now(),
-		ExpiresAt:       time.Now().Add(30 * time.Minute),
+		DetectedAt:       time.Now(),
+		ExpiresAt:        time.Now().Add(30 * time.Minute),
 	}
 
 	// Execute the function with nil database

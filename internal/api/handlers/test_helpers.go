@@ -1,11 +1,11 @@
 package handlers
 
 import (
-    "context"
-    "github.com/irfandi/celebrum-ai-go/internal/ccxt"
-    "github.com/irfandi/celebrum-ai-go/internal/models"
-    "github.com/shopspring/decimal"
-    "github.com/stretchr/testify/mock"
+	"context"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/mock"
 )
 
 // MockCCXTService for testing
@@ -150,11 +150,11 @@ func (m *MockCCXTService) RefreshExchanges(ctx context.Context) (*ccxt.ExchangeM
 }
 
 func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
-    args := m.Called(ctx, exchange)
-    if args.Get(0) == nil {
-        return nil, args.Error(1)
-    }
-    return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
 }
 
 // MockCollectorService is a mock implementation of CollectorInterface for testing
@@ -187,6 +187,6 @@ func (m *MockCollectorService) IsInitialized() bool {
 }
 
 func (m *MockCollectorService) GetStatus() map[string]interface{} {
-    args := m.Called()
-    return args.Get(0).(map[string]interface{})
+	args := m.Called()
+	return args.Get(0).(map[string]interface{})
 }

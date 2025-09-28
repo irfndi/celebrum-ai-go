@@ -1,7 +1,7 @@
 services:
   # PHASE 1: Database Services
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: celebrum-postgres
     restart: unless-stopped
     environment:
@@ -26,7 +26,7 @@ services:
 
   # Migration Service - Runs automatically to sync all environments
   migrate:
-    image: postgres:17
+    image: postgres:18
     container_name: celebrum-migrate
     environment:
       # SECURITY: Database credentials must be provided via environment variables

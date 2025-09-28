@@ -744,7 +744,7 @@ func (sp *SignalProcessor) aggregateSignals(arbitrageSignals []ArbitrageSignalIn
 	// Use market data to enhance signal aggregation
 	marketVolatility := sp.calculateMarketVolatility(data)
 	marketTrend := sp.calculateMarketTrend(data)
-	
+
 	_ = fmt.Sprintf("Signal aggregation: arbitrage_count=%d, technical_count=%d, market_volatility=%.2f, market_trend=%s",
 		len(arbitrageSignals), len(technicalSignals), marketVolatility, marketTrend)
 
@@ -803,23 +803,23 @@ func (sp *SignalProcessor) calculateMarketVolatility(data models.MarketData) flo
 	if data.LastPrice.IsZero() {
 		return 0.02 // Default 2% volatility
 	}
-	
+
 	// Use bid-ask spread as a volatility indicator
 	if !data.Bid.IsZero() && !data.Ask.IsZero() {
 		spread := data.Ask.Sub(data.Bid).Div(data.LastPrice)
 		spreadFloat, _ := spread.Float64()
-		
+
 		// Convert spread to volatility (higher spread = higher volatility)
 		return math.Max(0.005, spreadFloat*10) // Minimum 0.5% volatility
 	}
-	
+
 	// Use 24h high-low range as volatility indicator
 	if !data.High24h.IsZero() && !data.Low24h.IsZero() {
 		rangePercent := data.High24h.Sub(data.Low24h).Div(data.LastPrice)
 		rangeFloat, _ := rangePercent.Float64()
 		return math.Max(0.01, rangeFloat/4) // Scale down the range
 	}
-	
+
 	return 0.02 // Default volatility
 }
 
@@ -828,20 +828,20 @@ func (sp *SignalProcessor) calculateMarketTrend(data models.MarketData) string {
 	if data.LastPrice.IsZero() || data.High24h.IsZero() || data.Low24h.IsZero() {
 		return "neutral"
 	}
-	
+
 	// Simple trend calculation using current price vs 24h range
 	lastPriceFloat, _ := data.LastPrice.Float64()
 	highFloat, _ := data.High24h.Float64()
 	lowFloat, _ := data.Low24h.Float64()
-	
+
 	// Calculate position in 24h range
 	rangeSize := highFloat - lowFloat
 	if rangeSize == 0 {
 		return "neutral"
 	}
-	
+
 	position := (lastPriceFloat - lowFloat) / rangeSize
-	
+
 	// Determine trend based on position in range
 	if position > 0.7 {
 		return "bullish"
@@ -850,7 +850,6 @@ func (sp *SignalProcessor) calculateMarketTrend(data models.MarketData) string {
 	}
 	return "neutral"
 }
-
 
 // assessSignalQuality evaluates the quality of an aggregated signal using comprehensive scoring
 func (sp *SignalProcessor) assessSignalQuality(signal *AggregatedSignal, data models.MarketData) (float64, error) {
@@ -1274,28 +1273,28 @@ func (sp *SignalProcessor) passesRateLimiting(result ProcessingResult) bool {
 	// Implement actual rate limiting logic
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	
+
 	// Initialize rate limiting map if not exists
 	if sp.rateLimitCache == nil {
 		sp.rateLimitCache = make(map[string]time.Time)
 	}
-	
+
 	// Create rate limit key based on symbol and signal type
 	rateLimitKey := fmt.Sprintf("%s:%s", result.Symbol, result.SignalType)
-	
+
 	// Check if this symbol/signal type was processed recently
 	if lastProcessedTime, exists := sp.rateLimitCache[rateLimitKey]; exists {
 		// Calculate minimum time between signals (1 minute for same symbol/type)
 		minInterval := 1 * time.Minute
-		
+
 		if time.Since(lastProcessedTime) < minInterval {
 			return false // Rate limited
 		}
 	}
-	
+
 	// Update the last processed time
 	sp.rateLimitCache[rateLimitKey] = time.Now()
-	
+
 	// Clean up old entries (older than 5 minutes)
 	cleanupThreshold := 5 * time.Minute
 	for key, timestamp := range sp.rateLimitCache {
@@ -1303,7 +1302,7 @@ func (sp *SignalProcessor) passesRateLimiting(result ProcessingResult) bool {
 			delete(sp.rateLimitCache, key)
 		}
 	}
-	
+
 	return true
 }
 

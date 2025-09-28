@@ -15,9 +15,9 @@ func TestFuturesArbitrageCalculator_calculateLiquidityScore(t *testing.T) {
 
 	// Test with tight spread (high liquidity)
 	input := models.FuturesArbitrageCalculationInput{
-		LongExchange:  "binance",
-		ShortExchange: "binance",
-		LongMarkPrice: decimal.NewFromFloat(50000),
+		LongExchange:   "binance",
+		ShortExchange:  "binance",
+		LongMarkPrice:  decimal.NewFromFloat(50000),
 		ShortMarkPrice: decimal.NewFromFloat(50000.5), // 0.001% spread
 		BaseAmount:     decimal.NewFromInt(10000),
 	}
@@ -30,9 +30,9 @@ func TestFuturesArbitrageCalculator_calculateLiquidityScore(t *testing.T) {
 
 	// Test with wide spread (low liquidity)
 	input = models.FuturesArbitrageCalculationInput{
-		LongExchange:  "binance",
-		ShortExchange: "coinbase",
-		LongMarkPrice: decimal.NewFromFloat(50000),
+		LongExchange:   "binance",
+		ShortExchange:  "coinbase",
+		LongMarkPrice:  decimal.NewFromFloat(50000),
 		ShortMarkPrice: decimal.NewFromFloat(50500), // 1% spread
 		BaseAmount:     decimal.NewFromInt(10000),
 	}
@@ -45,9 +45,9 @@ func TestFuturesArbitrageCalculator_calculateLiquidityScore(t *testing.T) {
 
 	// Test with large amount (reduces liquidity score)
 	input = models.FuturesArbitrageCalculationInput{
-		LongExchange:  "binance",
-		ShortExchange: "binance",
-		LongMarkPrice: decimal.NewFromFloat(50000),
+		LongExchange:   "binance",
+		ShortExchange:  "binance",
+		LongMarkPrice:  decimal.NewFromFloat(50000),
 		ShortMarkPrice: decimal.NewFromFloat(50000.5),
 		BaseAmount:     decimal.NewFromInt(200000), // Large amount
 	}
@@ -60,9 +60,9 @@ func TestFuturesArbitrageCalculator_calculateLiquidityScore(t *testing.T) {
 
 	// Test with small amount (good liquidity score)
 	input = models.FuturesArbitrageCalculationInput{
-		LongExchange:  "binance",
-		ShortExchange: "binance",
-		LongMarkPrice: decimal.NewFromFloat(50000),
+		LongExchange:   "binance",
+		ShortExchange:  "binance",
+		LongMarkPrice:  decimal.NewFromFloat(50000),
 		ShortMarkPrice: decimal.NewFromFloat(50000.5),
 		BaseAmount:     decimal.NewFromInt(1000), // Small amount
 	}
@@ -80,10 +80,10 @@ func TestFuturesArbitrageCalculator_calculateNextFundingTime(t *testing.T) {
 	// Test with 8-hour interval
 	fundingTime := calculator.calculateNextFundingTime(8)
 	assert.NotNil(t, fundingTime)
-	
+
 	// Should be in the future
 	assert.True(t, fundingTime.After(time.Now()))
-	
+
 	// Should be at one of the standard funding times (00:00, 08:00, 16:00 UTC)
 	hour := fundingTime.Hour()
 	assert.Contains(t, []int{0, 8, 16}, hour)
@@ -94,7 +94,7 @@ func TestFuturesArbitrageCalculator_calculateNextFundingTime(t *testing.T) {
 	fundingTime = calculator.calculateNextFundingTime(4)
 	assert.NotNil(t, fundingTime)
 	assert.True(t, fundingTime.After(time.Now()))
-	
+
 	// Should be at one of the 4-hour interval times
 	hour = fundingTime.Hour()
 	assert.Contains(t, []int{0, 4, 8, 12, 16, 20}, hour)

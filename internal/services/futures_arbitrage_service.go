@@ -294,7 +294,7 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 	if s.db == nil || s.db.Pool == nil {
 		return nil, fmt.Errorf("database pool is not available")
 	}
-	
+
 	rows, err := s.db.Pool.Query(ctx, query)
 	if err != nil {
 		telemetry.Logger().Error("Database query failed", "error", err)
@@ -348,7 +348,7 @@ func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportun
 	if s.db == nil || s.db.Pool == nil {
 		return fmt.Errorf("database pool is not available")
 	}
-	
+
 	telemetry.Logger().Debug("Storing opportunity",
 		"symbol", opportunity.Symbol, "long_exchange", opportunity.LongExchange, "short_exchange", opportunity.ShortExchange,
 		"net_funding_rate", opportunity.NetFundingRate.String(), "apy", opportunity.APY.String(), "active", opportunity.IsActive)
@@ -430,7 +430,7 @@ func (s *FuturesArbitrageService) cleanupExpiredOpportunities(ctx context.Contex
 	if s.db == nil || s.db.Pool == nil {
 		return fmt.Errorf("database pool is not available")
 	}
-	
+
 	logger := telemetry.Logger()
 	if logger == nil {
 		return fmt.Errorf("logger is not available")

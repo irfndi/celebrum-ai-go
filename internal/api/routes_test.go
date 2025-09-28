@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-
 // Test HealthResponse struct
 func TestHealthResponse_Struct(t *testing.T) {
 	now := time.Now()
@@ -346,15 +345,15 @@ func TestSetupRoutes_Comprehensive(t *testing.T) {
 
 	// Create a new router
 	router := gin.New()
-	
+
 	// Test that SetupRoutes function exists and is callable
 	// This provides basic coverage for the SetupRoutes function
 	assert.NotNil(t, SetupRoutes)
-	
+
 	// Test that the function signature is correct by checking if it can be referenced
 	// This ensures the SetupRoutes function is properly accessible
 	_ = SetupRoutes
-	
+
 	// Test router initialization
 	assert.NotNil(t, router)
 	assert.True(t, len(router.Routes()) == 0) // Initially no routes
@@ -365,7 +364,7 @@ func TestSetupRoutes_FunctionSignature(t *testing.T) {
 	// Test that SetupRoutes is a function with the expected signature
 	// This provides coverage for the function declaration
 	assert.NotNil(t, SetupRoutes)
-	
+
 	// Test that the function signature is correct by checking if it can be referenced
 	// This ensures the SetupRoutes function is properly accessible
 	_ = SetupRoutes
@@ -413,19 +412,19 @@ func TestSetupRoutes_RouteRegistration(t *testing.T) {
 	// Use nil values for dependencies - SetupRoutes should handle this gracefully
 	// This provides coverage for the function signature and basic execution
 	router := gin.New()
-	
+
 	// Test that SetupRoutes doesn't panic with valid dependencies
 	// For testing purposes, we'll create minimal working instances
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	// Create a minimal Redis client that won't panic
 	mockRedis := &database.RedisClient{
 		Client: redis.NewClient(&redis.Options{
 			Addr: "localhost:6379", // This won't actually connect in tests
 		}),
 	}
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -474,7 +473,7 @@ func TestSetupRoutes_RouteGroups(t *testing.T) {
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -537,7 +536,7 @@ func TestSetupRoutes_HttpMethods(t *testing.T) {
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -603,7 +602,7 @@ func TestSetupRoutes_Middleware(t *testing.T) {
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -654,7 +653,7 @@ func TestSetupRoutes_MissingAdminKey(t *testing.T) {
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -665,12 +664,12 @@ func TestSetupRoutes_MissingAdminKey(t *testing.T) {
 	// Test that SetupRoutes works with valid admin key
 	assert.NotPanics(t, func() {
 		// Create a minimal Redis client that won't panic
-	mockRedis := &database.RedisClient{
-		Client: redis.NewClient(&redis.Options{
-			Addr: "localhost:6379", // This won't actually connect in tests
-		}),
-	}
-	SetupRoutes(router, nil, mockRedis, mockCCXT, nil, nil, nil, nil, mockTelegramConfig)
+		mockRedis := &database.RedisClient{
+			Client: redis.NewClient(&redis.Options{
+				Addr: "localhost:6379", // This won't actually connect in tests
+			}),
+		}
+		SetupRoutes(router, nil, mockRedis, mockCCXT, nil, nil, nil, nil, mockTelegramConfig)
 	}, "SetupRoutes should handle missing admin key gracefully")
 }
 
@@ -696,7 +695,7 @@ func TestSetupRoutes_MissingTelegramConfig(t *testing.T) {
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
 	mockCCXT.On("GetServiceURL").Return("test-url")
-	
+
 	mockTelegramConfig := &config.TelegramConfig{
 		BotToken: "test-token",
 	}
@@ -707,16 +706,15 @@ func TestSetupRoutes_MissingTelegramConfig(t *testing.T) {
 	// Test that SetupRoutes still works when telegram config is missing (but logs warning)
 	assert.NotPanics(t, func() {
 		// Create a minimal Redis client that won't panic
-	mockRedis := &database.RedisClient{
-		Client: redis.NewClient(&redis.Options{
-			Addr: "localhost:6379", // This won't actually connect in tests
-		}),
-	}
-	SetupRoutes(router, nil, mockRedis, mockCCXT, nil, nil, nil, nil, mockTelegramConfig)
+		mockRedis := &database.RedisClient{
+			Client: redis.NewClient(&redis.Options{
+				Addr: "localhost:6379", // This won't actually connect in tests
+			}),
+		}
+		SetupRoutes(router, nil, mockRedis, mockCCXT, nil, nil, nil, nil, mockTelegramConfig)
 	}, "SetupRoutes should not panic when telegram config is missing")
 
 	// Verify routes were still registered
 	routes := router.Routes()
 	assert.Greater(t, len(routes), 0, "Routes should be registered even without telegram config")
 }
-

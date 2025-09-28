@@ -21,10 +21,10 @@ func BenchmarkAPIPerformance(b *testing.B) {
 
 	// Create a simple router
 	router := gin.New()
-	
+
 	// Add middleware
 	router.Use(gin.Recovery())
-	
+
 	// Define benchmark routes
 	router.GET("/api/v1/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -35,10 +35,10 @@ func BenchmarkAPIPerformance(b *testing.B) {
 
 	router.GET("/api/v1/market/ticker/:exchange/:symbol", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"exchange": c.Param("exchange"),
-			"symbol":   c.Param("symbol"),
-			"price":    50000.0,
-			"volume":   1000.0,
+			"exchange":  c.Param("exchange"),
+			"symbol":    c.Param("symbol"),
+			"price":     50000.0,
+			"volume":    1000.0,
 			"timestamp": time.Now(),
 		})
 	})
@@ -50,12 +50,12 @@ func BenchmarkAPIPerformance(b *testing.B) {
 			Symbol    string  `json:"symbol"`
 			Profit    float64 `json:"profit"`
 		}
-		
+
 		if err := c.ShouldBindJSON(&data); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Opportunity calculated",
 			"data":    data,
@@ -71,18 +71,18 @@ func BenchmarkAPIPerformance(b *testing.B) {
 		req, _ := http.NewRequest("GET", "/api/v1/health", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		// Test ticker endpoint
 		req, _ = http.NewRequest("GET", "/api/v1/market/ticker/binance/BTCUSDT", nil)
 		w = httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		// Test arbitrage endpoint
 		data := map[string]interface{}{
 			"exchange_a": "binance",
 			"exchange_b": "coinbase",
-			"symbol":    "BTCUSDT",
-			"profit":    1.5,
+			"symbol":     "BTCUSDT",
+			"profit":     1.5,
 		}
 		jsonData, _ := json.Marshal(data)
 		req, _ = http.NewRequest("POST", "/api/v1/arbitrage/opportunities", bytes.NewBuffer(jsonData))
@@ -128,18 +128,18 @@ func BenchmarkMiddleware(b *testing.B) {
 
 	// Create a router with middleware
 	router := gin.New()
-	
+
 	// Add multiple middleware
 	router.Use(func(c *gin.Context) {
 		c.Header("X-Middleware-1", "value1")
 		c.Next()
 	})
-	
+
 	router.Use(func(c *gin.Context) {
 		c.Header("X-Middleware-2", "value2")
 		c.Next()
 	})
-	
+
 	router.Use(func(c *gin.Context) {
 		c.Set("user_id", "12345")
 		c.Next()
@@ -214,17 +214,17 @@ func BenchmarkContextOperations(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Create context
 		ctx := context.Background()
-		
+
 		// Add values to context
 		ctx = context.WithValue(ctx, "user_id", "12345")
 		ctx = context.WithValue(ctx, "request_id", "req-123")
 		ctx = context.WithValue(ctx, "timestamp", time.Now())
-		
+
 		// Retrieve values from context
 		userID := ctx.Value("user_id").(string)
 		requestID := ctx.Value("request_id").(string)
 		timestamp := ctx.Value("timestamp").(time.Time)
-		
+
 		// Use values to avoid optimization
 		if userID == "" || requestID == "" || timestamp.IsZero() {
 			b.Fatal("Context values are missing")
@@ -247,12 +247,12 @@ func BenchmarkMutexOperations(b *testing.B) {
 			mu.Lock()
 			counter++
 			mu.Unlock()
-			
+
 			// Read operation
 			mu.RLock()
 			value := counter
 			mu.RUnlock()
-			
+
 			// Use value to avoid optimization
 			if value < 0 {
 				b.Fatal("Counter should not be negative")
@@ -271,7 +271,7 @@ func BenchmarkChannelOperations(b *testing.B) {
 		// Create channels
 		ch := make(chan int, 100)
 		done := make(chan bool)
-		
+
 		// Start goroutine
 		go func() {
 			for j := 0; j < 10; j++ {
@@ -280,12 +280,12 @@ func BenchmarkChannelOperations(b *testing.B) {
 			close(ch)
 			done <- true
 		}()
-		
+
 		// Read from channel
 		for range ch {
 			// Consume values
 		}
-		
+
 		// Wait for completion
 		<-done
 	}
@@ -300,7 +300,7 @@ func BenchmarkErrorHandling(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Create error
 		err := fmt.Errorf("test error %d", i)
-		
+
 		// Check error
 		if err != nil {
 			// Handle error
@@ -321,19 +321,19 @@ func BenchmarkTimeOperations(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Get current time
 		now := time.Now()
-		
+
 		// Format time
 		formatted := now.Format(time.RFC3339)
 		if formatted == "" {
 			b.Fatal("Formatted time should not be empty")
 		}
-		
+
 		// Parse time
 		parsed, err := time.Parse(time.RFC3339, formatted)
 		if err != nil {
 			b.Fatal(err)
 		}
-		
+
 		// Calculate duration
 		duration := parsed.Sub(now)
 		if duration < 0 {

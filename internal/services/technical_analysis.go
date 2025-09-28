@@ -522,7 +522,7 @@ func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []floa
 	if len(validResults) < dPeriod {
 		return nil
 	}
-	
+
 	dValues := make([]float64, len(validResults)-dPeriod+1)
 	for i := dPeriod - 1; i < len(validResults); i++ {
 		sum := 0.0
@@ -592,30 +592,30 @@ func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, per
 	prevSMA := sma[len(sma)-2]
 
 	// Calculate distance from SMA as percentage
-	distanceFromSMA := math.Abs(currentPrice - currentSMA) / currentSMA
-	
+	distanceFromSMA := math.Abs(currentPrice-currentSMA) / currentSMA
+
 	// Adjust signal strength based on period (longer periods = stronger signals)
 	periodMultiplier := math.Min(1.5, float64(period)/20.0) // Scale based on period
-	
+
 	// Price crossing above SMA
 	if currentPrice > currentSMA && prevPrice <= prevSMA {
-		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.8, 0.6+(distanceFromSMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price crossing below SMA
 	if currentPrice < currentSMA && prevPrice >= prevSMA {
-		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.8, 0.6+(distanceFromSMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
-	
+
 	// Price above SMA (bullish) - adjust strength based on period and distance
 	if currentPrice > currentSMA {
-		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.7, 0.4+(distanceFromSMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price below SMA (bearish) - adjust strength based on period and distance
 	if currentPrice < currentSMA {
-		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.7, 0.4+(distanceFromSMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -635,30 +635,30 @@ func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, per
 	prevEMA := ema[len(ema)-2]
 
 	// Calculate distance from EMA as percentage
-	distanceFromEMA := math.Abs(currentPrice - currentEMA) / currentEMA
-	
+	distanceFromEMA := math.Abs(currentPrice-currentEMA) / currentEMA
+
 	// EMA is more sensitive than SMA, so use higher base strength
 	// Adjust signal strength based on period
 	periodMultiplier := math.Min(1.3, float64(period)/15.0) // EMA periods typically shorter
 
 	// Price crossing above EMA (stronger signal due to EMA sensitivity)
 	if currentPrice > currentEMA && prevPrice <= prevEMA {
-		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.85, 0.7+(distanceFromEMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price crossing below EMA (stronger signal due to EMA sensitivity)
 	if currentPrice < currentEMA && prevPrice >= prevEMA {
-		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.85, 0.7+(distanceFromEMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 	// Price above EMA (bullish)
 	if currentPrice > currentEMA {
-		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.75, 0.5+(distanceFromEMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price below EMA (bearish)
 	if currentPrice < currentEMA {
-		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.75, 0.5+(distanceFromEMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -732,19 +732,19 @@ func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValu
 	bandWidth := currentUpper - currentLower
 	distanceFromSMA := math.Abs(currentPrice - currentSMA)
 	positionInBand := (currentPrice - currentLower) / bandWidth
-	
+
 	// Adjust signal strength based on period (longer periods = more reliable signals)
 	periodMultiplier := math.Min(1.4, float64(period)/25.0) // BB typically use longer periods
 
 	// Price near lower band (potential buy) - stronger signal for longer periods
 	if currentPrice <= currentLower*1.02 {
-		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		strength := math.Min(0.8, 0.6+(periodMultiplier*0.2))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 
 	// Price near upper band (potential sell) - stronger signal for longer periods
 	if currentPrice >= currentUpper*0.98 {
-		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		strength := math.Min(0.8, 0.6+(periodMultiplier*0.2))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -756,11 +756,11 @@ func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValu
 	// Price between bands - use position and period to determine signal
 	if positionInBand < 0.3 {
 		// Lower half of bands - slightly bearish unless momentum suggests otherwise
-		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		strength := math.Min(0.6, 0.4+(periodMultiplier*0.15))
 		return "sell", decimal.NewFromFloat(strength)
 	} else if positionInBand > 0.7 {
 		// Upper half of bands - slightly bullish unless momentum suggests otherwise
-		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		strength := math.Min(0.6, 0.4+(periodMultiplier*0.15))
 		return "buy", decimal.NewFromFloat(strength)
 	} else {
 		// Middle range - neutral

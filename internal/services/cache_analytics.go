@@ -162,7 +162,7 @@ func (c *CacheAnalyticsService) GetMetrics(ctx context.Context) (*CacheMetrics, 
 // parseRedisInfo parses Redis INFO command output
 func (c *CacheAnalyticsService) parseRedisInfo(info string) map[string]string {
 	result := make(map[string]string)
-	
+
 	if info == "" {
 		return result
 	}

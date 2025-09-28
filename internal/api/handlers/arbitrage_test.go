@@ -42,7 +42,7 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 			volume    float64
 			timestamp time.Time
 		})
-		
+
 		opportunities := handler.findCrossExchangeArbitrage("BTC/USDT", exchanges, 1.0)
 		assert.Empty(t, opportunities)
 	})
@@ -55,7 +55,7 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 		}{
 			"binance": {45000, 100, time.Now()},
 		}
-		
+
 		opportunities := handler.findCrossExchangeArbitrage("BTC/USDT", exchanges, 1.0)
 		assert.Empty(t, opportunities)
 	})
@@ -70,10 +70,10 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 			"binance":  {45000, 100, now},
 			"coinbase": {45500, 80, now},
 		}
-		
+
 		opportunities := handler.findCrossExchangeArbitrage("BTC/USDT", exchanges, 1.0)
 		assert.Len(t, opportunities, 1)
-		
+
 		opp := opportunities[0]
 		assert.Equal(t, "BTC/USDT", opp.Symbol)
 		assert.Equal(t, "binance", opp.BuyExchange)
@@ -91,7 +91,7 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 			"binance":  {45000, 100, now},
 			"coinbase": {45050, 80, now}, // Only 0.11% difference
 		}
-		
+
 		opportunities := handler.findCrossExchangeArbitrage("BTC/USDT", exchanges, 1.0)
 		assert.Empty(t, opportunities)
 	})
@@ -108,11 +108,11 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 			"binance":  {45000, 100, oldTime},
 			"coinbase": {45500, 80, time.Now()},
 		}
-		
+
 		opportunities := handler.findCrossExchangeArbitrage("BTC/USDT", exchanges, 1.0)
 		// Current implementation doesn't filter by timestamp, so we expect an opportunity
 		assert.Len(t, opportunities, 1)
-		
+
 		opp := opportunities[0]
 		assert.Equal(t, "BTC/USDT", opp.Symbol)
 		assert.Equal(t, "binance", opp.BuyExchange)
@@ -221,10 +221,10 @@ func TestArbitrageHandler_DecimalCalculations(t *testing.T) {
 	t.Run("profit calculation with decimal precision", func(t *testing.T) {
 		buyPrice := decimal.NewFromFloat(45000.50)
 		sellPrice := decimal.NewFromFloat(45500.75)
-		
+
 		profitAmount := sellPrice.Sub(buyPrice)
 		profitPercent := profitAmount.Div(buyPrice).Mul(decimal.NewFromFloat(100))
-		
+
 		assert.True(t, profitAmount.GreaterThan(decimal.NewFromFloat(500)))
 		assert.True(t, profitPercent.GreaterThan(decimal.NewFromFloat(1.0)))
 	})
@@ -233,7 +233,7 @@ func TestArbitrageHandler_DecimalCalculations(t *testing.T) {
 		price := decimal.NewFromFloat(45000)
 		volume := decimal.NewFromFloat(100)
 		expectedVolume := price.Mul(volume)
-		
+
 		assert.Equal(t, decimal.NewFromFloat(4500000), expectedVolume)
 	})
 }
@@ -246,14 +246,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("valid request with default parameters", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -264,14 +264,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("custom min_profit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities?min_profit=1.5", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -281,14 +281,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("custom limit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities?limit=25", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -298,14 +298,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("symbol filter parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities?symbol=BTC/USDT", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -315,14 +315,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("invalid min_profit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities?min_profit=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -332,14 +332,14 @@ func TestArbitrageHandler_GetArbitrageOpportunities(t *testing.T) {
 	t.Run("invalid limit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/opportunities?limit=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageOpportunities(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -355,14 +355,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("valid request with default parameters", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageHistoryResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -374,14 +374,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("custom pagination parameters", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history?page=2&limit=10", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageHistoryResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -393,14 +393,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("symbol filter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history?symbol=BTC/USDT", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response ArbitrageHistoryResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -410,14 +410,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("invalid page parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history?page=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -427,14 +427,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("invalid limit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history?limit=0", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -444,14 +444,14 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 	t.Run("limit too high", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/history?limit=150", nil)
 		c.Request = req
-		
+
 		handler.GetArbitrageHistory(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -463,7 +463,7 @@ func TestArbitrageHandler_GetArbitrageHistory(t *testing.T) {
 func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	// Helper function to handle expected panics due to nil ccxtService
 	callWithPanicRecovery := func(fn func()) {
 		defer func() {
@@ -478,10 +478,10 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("valid request with default parameters", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate", nil)
 		c.Request = req
-		
+
 		callWithPanicRecovery(func() {
 			handler.GetFundingRateArbitrage(c)
 		})
@@ -490,10 +490,10 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("custom parameters", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?min_profit=0.02&max_risk=2.5&limit=15", nil)
 		c.Request = req
-		
+
 		callWithPanicRecovery(func() {
 			handler.GetFundingRateArbitrage(c)
 		})
@@ -502,10 +502,10 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("custom symbols and exchanges", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?symbols=BTC/USDT:USDT&symbols=ETH/USDT:USDT&exchanges=binance&exchanges=bybit", nil)
 		c.Request = req
-		
+
 		callWithPanicRecovery(func() {
 			handler.GetFundingRateArbitrage(c)
 		})
@@ -514,14 +514,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("invalid min_profit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?min_profit=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -531,14 +531,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("negative min_profit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?min_profit=-0.01", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -548,14 +548,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("invalid max_risk parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?max_risk=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -565,14 +565,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("max_risk too low", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?max_risk=0.5", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -582,14 +582,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("max_risk too high", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?max_risk=6.0", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -599,14 +599,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("invalid limit parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?limit=invalid", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -616,14 +616,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("limit too low", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?limit=0", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -633,14 +633,14 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 	t.Run("limit too high", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rate?limit=150", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRateArbitrage(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -652,7 +652,7 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 func TestArbitrageHandler_GetFundingRates(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	// Helper function to handle expected panics due to nil ccxtService
 	callWithPanicRecovery := func(fn func()) {
 		defer func() {
@@ -667,14 +667,14 @@ func TestArbitrageHandler_GetFundingRates(t *testing.T) {
 	t.Run("missing exchange parameter", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rates", nil)
 		c.Request = req
-		
+
 		handler.GetFundingRates(c)
-		
+
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		
+
 		var errorResponse map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 		assert.NoError(t, err)
@@ -685,13 +685,13 @@ func TestArbitrageHandler_GetFundingRates(t *testing.T) {
 	t.Run("valid exchange parameter without symbols", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rates/binance", nil)
 		c.Request = req
-		
+
 		// Set the exchange parameter
 		c.Params = gin.Params{gin.Param{Key: "exchange", Value: "binance"}}
-		
+
 		callWithPanicRecovery(func() {
 			handler.GetFundingRates(c)
 		})
@@ -700,13 +700,13 @@ func TestArbitrageHandler_GetFundingRates(t *testing.T) {
 	t.Run("valid exchange with symbols", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		req, _ := http.NewRequest("GET", "/api/arbitrage/funding-rates/binance?symbols=BTC/USDT:USDT&symbols=ETH/USDT:USDT", nil)
 		c.Request = req
-		
+
 		// Set the exchange parameter
 		c.Params = gin.Params{gin.Param{Key: "exchange", Value: "binance"}}
-		
+
 		callWithPanicRecovery(func() {
 			handler.GetFundingRates(c)
 		})
@@ -750,7 +750,7 @@ func TestArbitrageHandler_TechnicalAnalysisOpportunities(t *testing.T) {
 	t.Run("context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
-		
+
 		opportunities, err := handler.findTechnicalAnalysisOpportunities(ctx, 1.0, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities) // Empty due to nil database
@@ -858,9 +858,9 @@ func TestArbitrageHandler_VolatilityOpportunities(t *testing.T) {
 
 	t.Run("edge cases", func(t *testing.T) {
 		testCases := []struct {
-			name     string
+			name      string
 			threshold float64
-			symbol   string
+			symbol    string
 		}{
 			{"very high threshold", 100.0, ""},
 			{"empty symbol filter", 1.0, ""},
@@ -946,9 +946,9 @@ func TestArbitrageHandler_SpreadOpportunities(t *testing.T) {
 
 	t.Run("edge cases", func(t *testing.T) {
 		testCases := []struct {
-			name     string
+			name      string
 			threshold float64
-			symbol   string
+			symbol    string
 		}{
 			{"very high threshold", 100.0, ""},
 			{"empty symbol filter", 1.0, ""},
@@ -1054,8 +1054,8 @@ func TestArbitrageHandler_GetArbitrageHistory_Internal(t *testing.T) {
 
 	t.Run("edge case combinations", func(t *testing.T) {
 		testCases := []struct {
-			name  string
-			limit int
+			name   string
+			limit  int
 			offset int
 			symbol string
 		}{
@@ -1188,15 +1188,15 @@ func TestArbitrageHandler_SendArbitrageNotifications_NilService(t *testing.T) {
 
 		opportunities := []ArbitrageOpportunity{
 			{
-				Symbol:        "BTC/USDT",
-				BuyExchange:   "binance",
-				SellExchange:  "coinbase",
-				BuyPrice:      45000.0,
-				SellPrice:     45500.0,
-				ProfitPercent: 1.2, // Above 1% threshold
-				ProfitAmount:  500.0,
-				Volume:        1.0,
-				Timestamp:     time.Now(),
+				Symbol:          "BTC/USDT",
+				BuyExchange:     "binance",
+				SellExchange:    "coinbase",
+				BuyPrice:        45000.0,
+				SellPrice:       45500.0,
+				ProfitPercent:   1.2, // Above 1% threshold
+				ProfitAmount:    500.0,
+				Volume:          1.0,
+				Timestamp:       time.Now(),
 				OpportunityType: "cross_exchange",
 			},
 		}
@@ -1217,23 +1217,23 @@ func TestArbitrageHandler_SendArbitrageNotifications_Filtering(t *testing.T) {
 
 		opportunities := []ArbitrageOpportunity{
 			{
-				Symbol:        "BTC/USDT",
-				BuyExchange:   "binance",
-				SellExchange:  "coinbase",
-				ProfitPercent: 0.5, // Below 1% threshold - should be filtered out
-				ProfitAmount:  500.0,
-				Volume:        1.0,
-				Timestamp:     time.Now(),
+				Symbol:          "BTC/USDT",
+				BuyExchange:     "binance",
+				SellExchange:    "coinbase",
+				ProfitPercent:   0.5, // Below 1% threshold - should be filtered out
+				ProfitAmount:    500.0,
+				Volume:          1.0,
+				Timestamp:       time.Now(),
 				OpportunityType: "cross_exchange",
 			},
 			{
-				Symbol:        "ETH/USDT",
-				BuyExchange:   "binance",
-				SellExchange:  "kraken",
-				ProfitPercent: 1.8, // Above 1% threshold - should be included
-				ProfitAmount:  60.0,
-				Volume:        1.0,
-				Timestamp:     time.Now(),
+				Symbol:          "ETH/USDT",
+				BuyExchange:     "binance",
+				SellExchange:    "kraken",
+				ProfitPercent:   1.8, // Above 1% threshold - should be included
+				ProfitAmount:    60.0,
+				Volume:          1.0,
+				Timestamp:       time.Now(),
 				OpportunityType: "cross_exchange",
 			},
 		}
@@ -1294,7 +1294,7 @@ func TestArbitrageHandler_ParameterParsing(t *testing.T) {
 func TestArbitrageHandler_FindArbitrageOpportunities_ErrorCases(t *testing.T) {
 	t.Run("nil database returns empty slice", func(t *testing.T) {
 		handler := NewArbitrageHandler(nil, nil, nil, nil)
-		
+
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
@@ -1304,25 +1304,25 @@ func TestArbitrageHandler_FindArbitrageOpportunities_ErrorCases(t *testing.T) {
 // TestArbitrageHandler_FindArbitrageOpportunities_ParameterValidation tests input parameter scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_ParameterValidation(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	t.Run("zero profit threshold", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 0.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities) // Empty due to nil database
 	})
-	
+
 	t.Run("negative profit threshold", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), -1.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities) // Empty due to nil database
 	})
-	
+
 	t.Run("zero limit", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 0, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities) // Empty due to nil database
 	})
-	
+
 	t.Run("negative limit", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, -5, "")
 		assert.NoError(t, err)
@@ -1333,19 +1333,19 @@ func TestArbitrageHandler_FindArbitrageOpportunities_ParameterValidation(t *test
 // TestArbitrageHandler_FindArbitrageOpportunities_SymbolFiltering tests symbol filter scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_SymbolFiltering(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	t.Run("empty symbol filter", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
 	})
-	
+
 	t.Run("specific symbol filter", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 10, "BTC/USDT")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
 	})
-	
+
 	t.Run("different symbol filters", func(t *testing.T) {
 		symbols := []string{"ETH/USDT", "BNB/USDT", "ADA/USDT"}
 		for _, symbol := range symbols {
@@ -1359,9 +1359,9 @@ func TestArbitrageHandler_FindArbitrageOpportunities_SymbolFiltering(t *testing.
 // TestArbitrageHandler_FindArbitrageOpportunities_ProfitThresholds tests different profit threshold scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_ProfitThresholds(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	profitThresholds := []float64{0.1, 0.5, 1.0, 2.0, 5.0, 10.0}
-	
+
 	for _, threshold := range profitThresholds {
 		t.Run(fmt.Sprintf("profit threshold %.1f%%", threshold), func(t *testing.T) {
 			opportunities, err := handler.FindArbitrageOpportunities(context.Background(), threshold, 10, "")
@@ -1374,9 +1374,9 @@ func TestArbitrageHandler_FindArbitrageOpportunities_ProfitThresholds(t *testing
 // TestArbitrageHandler_FindArbitrageOpportunities_Limits tests different limit scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_Limits(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	limits := []int{0, 1, 5, 10, 50, 100}
-	
+
 	for _, limit := range limits {
 		t.Run(fmt.Sprintf("limit %d", limit), func(t *testing.T) {
 			opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, limit, "")
@@ -1390,7 +1390,7 @@ func TestArbitrageHandler_FindArbitrageOpportunities_Limits(t *testing.T) {
 type TestArbitrageHandlerForSorting struct {
 	*ArbitrageHandler
 	mockOpportunities []ArbitrageOpportunity
-	mockError        error
+	mockError         error
 }
 
 // MockFindArbitrageOpportunities tests the sorting and limiting logic
@@ -1398,7 +1398,7 @@ func TestArbitrageHandler_FindArbitrageOpportunities_SortingAndLimiting(t *testi
 	// We can't easily mock the internal find* methods without complex setup,
 	// but we can test that the function handles the nil database case gracefully
 	// which exercises the error handling path
-	
+
 	t.Run("nil database returns empty slice", func(t *testing.T) {
 		handler := NewArbitrageHandler(nil, nil, nil, nil)
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 10, "")
@@ -1410,20 +1410,20 @@ func TestArbitrageHandler_FindArbitrageOpportunities_SortingAndLimiting(t *testi
 // TestArbitrageHandler_FindArbitrageOpportunities_ContextHandling tests context cancellation scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_ContextHandling(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	t.Run("cancelled context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel the context immediately
-		
+
 		opportunities, err := handler.FindArbitrageOpportunities(ctx, 1.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
 	})
-	
+
 	t.Run("deadline exceeded context", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), -time.Hour) // Already expired
 		defer cancel()
-		
+
 		opportunities, err := handler.FindArbitrageOpportunities(ctx, 1.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
@@ -1433,19 +1433,19 @@ func TestArbitrageHandler_FindArbitrageOpportunities_ContextHandling(t *testing.
 // TestArbitrageHandler_FindArbitrageOpportunities_EdgeCases tests edge case scenarios
 func TestArbitrageHandler_FindArbitrageOpportunities_EdgeCases(t *testing.T) {
 	handler := NewArbitrageHandler(nil, nil, nil, nil)
-	
+
 	t.Run("very high profit threshold", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1000.0, 10, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
 	})
-	
+
 	t.Run("very large limit", func(t *testing.T) {
 		opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 0.1, 1000000, "")
 		assert.NoError(t, err)
 		assert.Empty(t, opportunities)
 	})
-	
+
 	t.Run("special characters in symbol filter", func(t *testing.T) {
 		specialSymbols := []string{"BTC/USDT", "ETH/BTC", "XRP/USDT", "DOT/USDT", "ADA/USDT"}
 		for _, symbol := range specialSymbols {
@@ -1462,7 +1462,7 @@ func TestArbitrageHandler_FindArbitrageOpportunities_EdgeCases(t *testing.T) {
 			"btc/USDT", // mixed
 			"BTC/usdt", // mixed
 		}
-		
+
 		for _, symbol := range testCases {
 			opportunities, err := handler.FindArbitrageOpportunities(context.Background(), 1.0, 5, symbol)
 			assert.NoError(t, err)

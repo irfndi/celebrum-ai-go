@@ -25,7 +25,7 @@ func TestBusinessTracer_TraceArbitrageDetection(t *testing.T) {
 
 	_, span := bt.TraceArbitrageDetection(ctx, symbol, exchanges)
 	require.NotNil(t, span)
-	
+
 	// End the span to avoid resource leaks
 	span.End()
 }
@@ -67,7 +67,7 @@ func TestBusinessTracer_TraceSignalProcessing(t *testing.T) {
 	_, span := bt.TraceSignalProcessing(ctx, signalType, symbol)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -105,7 +105,7 @@ func TestBusinessTracer_TraceTechnicalAnalysis(t *testing.T) {
 	_, span := bt.TraceTechnicalAnalysis(ctx, indicator, symbol, timeframe)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -141,7 +141,7 @@ func TestBusinessTracer_TraceMarketDataCollection(t *testing.T) {
 	_, span := bt.TraceMarketDataCollection(ctx, exchange, symbols)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -177,7 +177,7 @@ func TestBusinessTracer_TraceRiskAssessment(t *testing.T) {
 	_, span := bt.TraceRiskAssessment(ctx, assessmentType, symbol)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -213,7 +213,7 @@ func TestBusinessTracer_TraceNotification(t *testing.T) {
 	_, span := bt.TraceNotification(ctx, notificationType, channel)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -232,7 +232,7 @@ func TestBusinessTracer_RecordNotificationResult(t *testing.T) {
 	// Test failed notification
 	_, span = bt.TraceNotification(ctx, "arbitrage_opportunity", "telegram")
 	require.NotNil(t, span)
-	
+
 	testErr := assert.AnError
 	bt.RecordNotificationResult(span, false, 0, testErr)
 	span.End()
@@ -249,7 +249,7 @@ func TestBusinessTracer_TraceArbitrageDetectionEmptyExchanges(t *testing.T) {
 	_, span := bt.TraceArbitrageDetection(ctx, symbol, exchanges)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -264,7 +264,7 @@ func TestBusinessTracer_TraceMarketDataCollectionEmptySymbols(t *testing.T) {
 	_, span := bt.TraceMarketDataCollection(ctx, exchange, symbols)
 	require.NotNil(t, span)
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
 
@@ -406,14 +406,13 @@ func TestBusinessTracer_ContextCancellation(t *testing.T) {
 	require.NotNil(t, bt)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Cancel the context
 	cancel()
-	
+
 	// The tracer should still work even with cancelled context
 	_, span := bt.TraceArbitrageDetection(ctx, "BTC/USDT", []string{"binance", "bybit"})
 	require.NotNil(t, span)
-	
+
 	span.End()
 }
-

@@ -14,7 +14,7 @@ import (
 func TestSignalAggregator_BasicFunctionality(t *testing.T) {
 	// This test focuses on basic signal aggregation logic
 	// without complex database mocking
-	
+
 	// Test data
 	arbitrageOpportunity := models.ArbitrageOpportunity{
 		TradingPair:      &models.TradingPair{Symbol: "BTC/USDT"},
@@ -25,12 +25,12 @@ func TestSignalAggregator_BasicFunctionality(t *testing.T) {
 		ProfitPercentage: decimal.NewFromFloat(1.1),
 		DetectedAt:       time.Now(),
 	}
-	
+
 	// Test basic calculations
 	profitAmount := arbitrageOpportunity.SellPrice.Sub(arbitrageOpportunity.BuyPrice)
 	assert.True(t, profitAmount.GreaterThan(decimal.NewFromFloat(0)))
 	assert.Equal(t, decimal.NewFromFloat(500), profitAmount)
-	
+
 	// Test profit percentage calculation
 	expectedProfitPercent := profitAmount.Div(arbitrageOpportunity.BuyPrice).Mul(decimal.NewFromFloat(100))
 	assert.True(t, expectedProfitPercent.GreaterThanOrEqual(decimal.NewFromFloat(1.0)))
@@ -69,13 +69,13 @@ func TestSignalAggregator_SignalStrengthCalculation(t *testing.T) {
 			expected:   SignalStrengthStrong,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simple strength calculation based on confidence and profit
 			// Adjust thresholds to match expected results
 			combinedScore := tt.confidence.Add(tt.profit.Mul(decimal.NewFromFloat(10))) // Scale profit more
-			
+
 			var result SignalStrength
 			switch {
 			case combinedScore.GreaterThanOrEqual(decimal.NewFromFloat(1.1)):
@@ -85,7 +85,7 @@ func TestSignalAggregator_SignalStrengthCalculation(t *testing.T) {
 			default:
 				result = SignalStrengthWeak
 			}
-			
+
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -107,11 +107,11 @@ func TestSignalAggregator_PriceRangeCalculation(t *testing.T) {
 			SellPrice: decimal.NewFromFloat(45400),
 		},
 	}
-	
+
 	// Calculate price ranges
 	var minBuyPrice, maxBuyPrice decimal.Decimal
 	var minSellPrice, maxSellPrice decimal.Decimal
-	
+
 	for i, opp := range opportunities {
 		if i == 0 {
 			minBuyPrice = opp.BuyPrice
@@ -133,13 +133,13 @@ func TestSignalAggregator_PriceRangeCalculation(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Verify price ranges
 	assert.Equal(t, decimal.NewFromFloat(44900), minBuyPrice)
 	assert.Equal(t, decimal.NewFromFloat(45100), maxBuyPrice)
 	assert.Equal(t, decimal.NewFromFloat(45400), minSellPrice)
 	assert.Equal(t, decimal.NewFromFloat(45600), maxSellPrice)
-	
+
 	// Verify spread
 	minSpread := minSellPrice.Sub(maxBuyPrice)
 	maxSpread := maxSellPrice.Sub(minBuyPrice)
@@ -155,7 +155,7 @@ func TestSignalAggregator_ErrorScenarios(t *testing.T) {
 		MinVolume:     decimal.NewFromFloat(10000),
 		BaseAmount:    decimal.NewFromFloat(20000),
 	}
-	
+
 	// Should handle empty input gracefully
 	assert.Empty(t, emptyInput.Opportunities)
 	assert.True(t, emptyInput.MinVolume.GreaterThan(decimal.NewFromFloat(0)))
@@ -166,10 +166,10 @@ func TestSignalAggregator_ErrorScenarios(t *testing.T) {
 func TestSignalAggregator_ConcurrentSafety(t *testing.T) {
 	// Test concurrent data structure access
 	// This simulates concurrent access to shared resources
-	
+
 	done := make(chan bool, 10)
 	results := make(chan int, 10)
-	
+
 	// Start multiple goroutines
 	for i := 0; i < 10; i++ {
 		go func(id int) {
@@ -179,7 +179,7 @@ func TestSignalAggregator_ConcurrentSafety(t *testing.T) {
 			done <- true
 		}(i)
 	}
-	
+
 	// Collect all results first, then verify completion
 	receivedResults := make([]int, 0, 10)
 	for i := 0; i < 10; i++ {
@@ -190,7 +190,7 @@ func TestSignalAggregator_ConcurrentSafety(t *testing.T) {
 			t.Fatal("Test timed out waiting for results")
 		}
 	}
-	
+
 	// Now verify all goroutines completed
 	completed := 0
 	for i := 0; i < 10; i++ {
@@ -201,24 +201,24 @@ func TestSignalAggregator_ConcurrentSafety(t *testing.T) {
 			t.Fatal("Test timed out waiting for completion")
 		}
 	}
-	
+
 	// Verify all goroutines completed and we got all results
 	assert.Equal(t, 10, completed)
 	assert.Len(t, receivedResults, 10)
-	
+
 	// Verify all unique IDs were received (order doesn't matter)
 	expectedIDs := make(map[int]bool)
 	for i := 0; i < 10; i++ {
 		expectedIDs[i] = true
 	}
-	
+
 	for _, result := range receivedResults {
 		if !expectedIDs[result] {
 			t.Errorf("Unexpected result ID: %d", result)
 		}
 		delete(expectedIDs, result)
 	}
-	
+
 	if len(expectedIDs) > 0 {
 		t.Errorf("Missing result IDs: %v", expectedIDs)
 	}

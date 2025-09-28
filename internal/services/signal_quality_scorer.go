@@ -590,7 +590,7 @@ func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Cont
 func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (map[string]*ExchangeMetrics, error) {
 	// Query database for exchange statistics
 	stats := make(map[string]*ExchangeMetrics)
-	
+
 	// In a real implementation, this would query the database
 	// For now, we'll use default values for common exchanges
 	defaultStats := map[string]*ExchangeMetrics{

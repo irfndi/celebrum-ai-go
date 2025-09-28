@@ -11,71 +11,71 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
 // Helper function to convert mock opportunity to model type
 func convertMockToModelOpportunity(mock *MockFuturesArbitrageOpportunity) *models.FuturesArbitrageOpportunity {
 	return &models.FuturesArbitrageOpportunity{
-		ID:                     mock.ID,
-		Symbol:                 mock.Symbol,
-		BaseCurrency:           mock.BaseCurrency,
-		QuoteCurrency:          mock.QuoteCurrency,
-		LongExchange:           mock.LongExchange,
-		ShortExchange:          mock.ShortExchange,
-		LongExchangeID:         int(mock.LongExchangeID),
-		ShortExchangeID:        int(mock.ShortExchangeID),
-		LongFundingRate:        mock.LongFundingRate,
-		ShortFundingRate:       mock.ShortFundingRate,
-		NetFundingRate:         mock.NetFundingRate,
-		FundingInterval:        mock.FundingInterval,
-		LongMarkPrice:          mock.LongMarkPrice,
-		ShortMarkPrice:         mock.ShortMarkPrice,
-		PriceDifference:        mock.PriceDifference,
+		ID:                        mock.ID,
+		Symbol:                    mock.Symbol,
+		BaseCurrency:              mock.BaseCurrency,
+		QuoteCurrency:             mock.QuoteCurrency,
+		LongExchange:              mock.LongExchange,
+		ShortExchange:             mock.ShortExchange,
+		LongExchangeID:            int(mock.LongExchangeID),
+		ShortExchangeID:           int(mock.ShortExchangeID),
+		LongFundingRate:           mock.LongFundingRate,
+		ShortFundingRate:          mock.ShortFundingRate,
+		NetFundingRate:            mock.NetFundingRate,
+		FundingInterval:           mock.FundingInterval,
+		LongMarkPrice:             mock.LongMarkPrice,
+		ShortMarkPrice:            mock.ShortMarkPrice,
+		PriceDifference:           mock.PriceDifference,
 		PriceDifferencePercentage: mock.PriceDifferencePercentage,
-		HourlyRate:             mock.HourlyRate,
-		DailyRate:              mock.DailyRate,
-		APY:                    mock.APY,
-		EstimatedProfit8h:      mock.EstimatedProfit8h,
-		EstimatedProfitDaily:   mock.EstimatedProfitDaily,
-		EstimatedProfitWeekly:  mock.EstimatedProfitWeekly,
-		EstimatedProfitMonthly: mock.EstimatedProfitMonthly,
-		RiskScore:              mock.RiskScore,
-		VolatilityScore:        mock.VolatilityScore,
-		LiquidityScore:         mock.LiquidityScore,
-		RecommendedPositionSize: mock.RecommendedPositionSize,
-		MaxLeverage:            mock.MaxLeverage,
-		RecommendedLeverage:    mock.RecommendedLeverage,
-		StopLossPercentage:     mock.StopLossPercentage,
-		MinPositionSize:        mock.MinPositionSize,
-		MaxPositionSize:        mock.MaxPositionSize,
-		OptimalPositionSize:    mock.OptimalPositionSize,
-		DetectedAt:             mock.DetectedAt,
-		ExpiresAt:              mock.ExpiresAt,
-		NextFundingTime:        mock.NextFundingTime,
-		TimeToNextFunding:     mock.TimeToNextFunding,
-		IsActive:               mock.IsActive,
-		MarketTrend:            mock.MarketTrend,
-		Volume24h:              mock.Volume24h,
-		OpenInterest:           mock.OpenInterest,
+		HourlyRate:                mock.HourlyRate,
+		DailyRate:                 mock.DailyRate,
+		APY:                       mock.APY,
+		EstimatedProfit8h:         mock.EstimatedProfit8h,
+		EstimatedProfitDaily:      mock.EstimatedProfitDaily,
+		EstimatedProfitWeekly:     mock.EstimatedProfitWeekly,
+		EstimatedProfitMonthly:    mock.EstimatedProfitMonthly,
+		RiskScore:                 mock.RiskScore,
+		VolatilityScore:           mock.VolatilityScore,
+		LiquidityScore:            mock.LiquidityScore,
+		RecommendedPositionSize:   mock.RecommendedPositionSize,
+		MaxLeverage:               mock.MaxLeverage,
+		RecommendedLeverage:       mock.RecommendedLeverage,
+		StopLossPercentage:        mock.StopLossPercentage,
+		MinPositionSize:           mock.MinPositionSize,
+		MaxPositionSize:           mock.MaxPositionSize,
+		OptimalPositionSize:       mock.OptimalPositionSize,
+		DetectedAt:                mock.DetectedAt,
+		ExpiresAt:                 mock.ExpiresAt,
+		NextFundingTime:           mock.NextFundingTime,
+		TimeToNextFunding:         mock.TimeToNextFunding,
+		IsActive:                  mock.IsActive,
+		MarketTrend:               mock.MarketTrend,
+		Volume24h:                 mock.Volume24h,
+		OpenInterest:              mock.OpenInterest,
 	}
 }
 
 // Helper function to convert mock risk metrics to model type
 func convertMockToModelRiskMetrics(mock *MockFuturesArbitrageRiskMetrics) *models.FuturesArbitrageRiskMetrics {
 	return &models.FuturesArbitrageRiskMetrics{
-		PriceCorrelation:       mock.PriceCorrelation,
+		PriceCorrelation:      mock.PriceCorrelation,
 		PriceVolatility:       mock.PriceVolatility,
 		MaxDrawdown:           mock.MaxDrawdown,
 		FundingRateVolatility: mock.FundingRateVolatility,
 		FundingRateStability:  mock.FundingRateStability,
 		BidAskSpread:          mock.BidAskSpread,
 		MarketDepth:           mock.MarketDepth,
-		SlippageRisk:         mock.SlippageRisk,
+		SlippageRisk:          mock.SlippageRisk,
 		ExchangeReliability:   mock.ExchangeReliability,
 		CounterpartyRisk:      mock.CounterpartyRisk,
 		OverallRiskScore:      mock.OverallRiskScore,
@@ -131,47 +131,47 @@ func convertMockToModelOpportunities(mocks []MockFuturesArbitrageOpportunity) []
 
 // Mock models to avoid circular dependency
 type MockFuturesArbitrageOpportunity struct {
-	ID                     string          `json:"id"`
-	Symbol                 string          `json:"symbol"`
-	BaseCurrency           string          `json:"base_currency"`
-	QuoteCurrency          string          `json:"quote_currency"`
-	LongExchange           string          `json:"long_exchange"`
-	ShortExchange          string          `json:"short_exchange"`
-	LongExchangeID         int64           `json:"long_exchange_id"`
-	ShortExchangeID        int64           `json:"short_exchange_id"`
-	LongFundingRate        decimal.Decimal `json:"long_funding_rate"`
-	ShortFundingRate       decimal.Decimal `json:"short_funding_rate"`
-	NetFundingRate         decimal.Decimal `json:"net_funding_rate"`
-	FundingInterval        int             `json:"funding_interval"`
-	LongMarkPrice          decimal.Decimal `json:"long_mark_price"`
-	ShortMarkPrice         decimal.Decimal `json:"short_mark_price"`
-	PriceDifference        decimal.Decimal `json:"price_difference"`
+	ID                        string          `json:"id"`
+	Symbol                    string          `json:"symbol"`
+	BaseCurrency              string          `json:"base_currency"`
+	QuoteCurrency             string          `json:"quote_currency"`
+	LongExchange              string          `json:"long_exchange"`
+	ShortExchange             string          `json:"short_exchange"`
+	LongExchangeID            int64           `json:"long_exchange_id"`
+	ShortExchangeID           int64           `json:"short_exchange_id"`
+	LongFundingRate           decimal.Decimal `json:"long_funding_rate"`
+	ShortFundingRate          decimal.Decimal `json:"short_funding_rate"`
+	NetFundingRate            decimal.Decimal `json:"net_funding_rate"`
+	FundingInterval           int             `json:"funding_interval"`
+	LongMarkPrice             decimal.Decimal `json:"long_mark_price"`
+	ShortMarkPrice            decimal.Decimal `json:"short_mark_price"`
+	PriceDifference           decimal.Decimal `json:"price_difference"`
 	PriceDifferencePercentage decimal.Decimal `json:"price_difference_percentage"`
-	HourlyRate             decimal.Decimal `json:"hourly_rate"`
-	DailyRate              decimal.Decimal `json:"daily_rate"`
-	APY                    decimal.Decimal `json:"apy"`
-	EstimatedProfit8h      decimal.Decimal `json:"estimated_profit_8h"`
-	EstimatedProfitDaily   decimal.Decimal `json:"estimated_profit_daily"`
-	EstimatedProfitWeekly  decimal.Decimal `json:"estimated_profit_weekly"`
-	EstimatedProfitMonthly decimal.Decimal `json:"estimated_profit_monthly"`
-	RiskScore              decimal.Decimal `json:"risk_score"`
-	VolatilityScore        decimal.Decimal `json:"volatility_score"`
-	LiquidityScore         decimal.Decimal `json:"liquidity_score"`
-	RecommendedPositionSize decimal.Decimal `json:"recommended_position_size"`
-	MaxLeverage            decimal.Decimal `json:"max_leverage"`
-	RecommendedLeverage    decimal.Decimal `json:"recommended_leverage"`
-	StopLossPercentage     decimal.Decimal `json:"stop_loss_percentage"`
-	MinPositionSize        decimal.Decimal `json:"min_position_size"`
-	MaxPositionSize        decimal.Decimal `json:"max_position_size"`
-	OptimalPositionSize    decimal.Decimal `json:"optimal_position_size"`
-	DetectedAt             time.Time       `json:"detected_at"`
-	ExpiresAt              time.Time       `json:"expires_at"`
-	NextFundingTime        time.Time       `json:"next_funding_time"`
-	TimeToNextFunding     int             `json:"time_to_next_funding"`
-	IsActive               bool            `json:"is_active"`
-	MarketTrend            string          `json:"market_trend"`
-	Volume24h              decimal.Decimal `json:"volume_24h"`
-	OpenInterest           decimal.Decimal `json:"open_interest"`
+	HourlyRate                decimal.Decimal `json:"hourly_rate"`
+	DailyRate                 decimal.Decimal `json:"daily_rate"`
+	APY                       decimal.Decimal `json:"apy"`
+	EstimatedProfit8h         decimal.Decimal `json:"estimated_profit_8h"`
+	EstimatedProfitDaily      decimal.Decimal `json:"estimated_profit_daily"`
+	EstimatedProfitWeekly     decimal.Decimal `json:"estimated_profit_weekly"`
+	EstimatedProfitMonthly    decimal.Decimal `json:"estimated_profit_monthly"`
+	RiskScore                 decimal.Decimal `json:"risk_score"`
+	VolatilityScore           decimal.Decimal `json:"volatility_score"`
+	LiquidityScore            decimal.Decimal `json:"liquidity_score"`
+	RecommendedPositionSize   decimal.Decimal `json:"recommended_position_size"`
+	MaxLeverage               decimal.Decimal `json:"max_leverage"`
+	RecommendedLeverage       decimal.Decimal `json:"recommended_leverage"`
+	StopLossPercentage        decimal.Decimal `json:"stop_loss_percentage"`
+	MinPositionSize           decimal.Decimal `json:"min_position_size"`
+	MaxPositionSize           decimal.Decimal `json:"max_position_size"`
+	OptimalPositionSize       decimal.Decimal `json:"optimal_position_size"`
+	DetectedAt                time.Time       `json:"detected_at"`
+	ExpiresAt                 time.Time       `json:"expires_at"`
+	NextFundingTime           time.Time       `json:"next_funding_time"`
+	TimeToNextFunding         int             `json:"time_to_next_funding"`
+	IsActive                  bool            `json:"is_active"`
+	MarketTrend               string          `json:"market_trend"`
+	Volume24h                 decimal.Decimal `json:"volume_24h"`
+	OpenInterest              decimal.Decimal `json:"open_interest"`
 }
 
 type MockFuturesArbitrageRequest struct {
@@ -190,7 +190,7 @@ type MockFuturesArbitrageRequest struct {
 }
 
 type MockFuturesArbitrageRiskMetrics struct {
-	PriceCorrelation       decimal.Decimal `json:"price_correlation"`
+	PriceCorrelation      decimal.Decimal `json:"price_correlation"`
 	PriceVolatility       decimal.Decimal `json:"price_volatility"`
 	MaxDrawdown           decimal.Decimal `json:"max_drawdown"`
 	FundingRateVolatility decimal.Decimal `json:"funding_rate_volatility"`
@@ -206,15 +206,15 @@ type MockFuturesArbitrageRiskMetrics struct {
 }
 
 type MockFuturesMarketSummary struct {
-	TotalOpportunities    int             `json:"total_opportunities"`
-	ActiveOpportunities   int             `json:"active_opportunities"`
-	AverageAPY            decimal.Decimal `json:"average_apy"`
-	HighestAPY            decimal.Decimal `json:"highest_apy"`
-	AverageRiskScore      decimal.Decimal `json:"average_risk_score"`
-	MarketVolatility      decimal.Decimal `json:"market_volatility"`
-	FundingRateTrend      string          `json:"funding_rate_trend"`
-	RecommendedStrategy   string          `json:"recommended_strategy"`
-	MarketCondition       string          `json:"market_condition"`
+	TotalOpportunities  int             `json:"total_opportunities"`
+	ActiveOpportunities int             `json:"active_opportunities"`
+	AverageAPY          decimal.Decimal `json:"average_apy"`
+	HighestAPY          decimal.Decimal `json:"highest_apy"`
+	AverageRiskScore    decimal.Decimal `json:"average_risk_score"`
+	MarketVolatility    decimal.Decimal `json:"market_volatility"`
+	FundingRateTrend    string          `json:"funding_rate_trend"`
+	RecommendedStrategy string          `json:"recommended_strategy"`
+	MarketCondition     string          `json:"market_condition"`
 }
 
 type MockFuturesArbitrageCalculationInput struct {
@@ -233,23 +233,23 @@ type MockFuturesArbitrageCalculationInput struct {
 }
 
 type MockFuturesPositionSizing struct {
-	RecommendedSize     decimal.Decimal `json:"recommended_size"`
-	MaxSize             decimal.Decimal `json:"max_size"`
-	RiskAmount          decimal.Decimal `json:"risk_amount"`
-	LeverageUsed        decimal.Decimal `json:"leverage_used"`
-	ExpectedReturn      decimal.Decimal `json:"expected_return"`
-	PotentialLoss       decimal.Decimal `json:"potential_loss"`
-	RiskRewardRatio     decimal.Decimal `json:"risk_reward_ratio"`
-	ConfidenceLevel     decimal.Decimal `json:"confidence_level"`
+	RecommendedSize decimal.Decimal `json:"recommended_size"`
+	MaxSize         decimal.Decimal `json:"max_size"`
+	RiskAmount      decimal.Decimal `json:"risk_amount"`
+	LeverageUsed    decimal.Decimal `json:"leverage_used"`
+	ExpectedReturn  decimal.Decimal `json:"expected_return"`
+	PotentialLoss   decimal.Decimal `json:"potential_loss"`
+	RiskRewardRatio decimal.Decimal `json:"risk_reward_ratio"`
+	ConfidenceLevel decimal.Decimal `json:"confidence_level"`
 }
 
 type MockFuturesArbitrageResponse struct {
-	Success      bool                             `json:"success"`
-	Opportunity  *MockFuturesArbitrageOpportunity `json:"opportunity"`
-	RiskMetrics  *MockFuturesArbitrageRiskMetrics `json:"risk_metrics"`
-	PositionSizing MockFuturesPositionSizing     `json:"position_sizing"`
-	Message      string                           `json:"message"`
-	Timestamp    time.Time                        `json:"timestamp"`
+	Success        bool                             `json:"success"`
+	Opportunity    *MockFuturesArbitrageOpportunity `json:"opportunity"`
+	RiskMetrics    *MockFuturesArbitrageRiskMetrics `json:"risk_metrics"`
+	PositionSizing MockFuturesPositionSizing        `json:"position_sizing"`
+	Message        string                           `json:"message"`
+	Timestamp      time.Time                        `json:"timestamp"`
 }
 
 func setupTestHandler(t *testing.T) (*FuturesArbitrageHandler, pgxmock.PgxPoolIface) {
@@ -337,7 +337,7 @@ func TestCalculateFuturesArbitrage(t *testing.T) {
 				var response struct {
 					Opportunity *MockFuturesArbitrageOpportunity `json:"opportunity"`
 					RiskMetrics *MockFuturesArbitrageRiskMetrics `json:"risk_metrics"`
-					Timestamp   time.Time                           `json:"timestamp"`
+					Timestamp   time.Time                        `json:"timestamp"`
 				}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -552,7 +552,7 @@ func TestNewFuturesArbitrageHandler(t *testing.T) {
 	// Note: This function requires a real pgxpool.Pool, not a mock
 	// Since we can't easily create a real pgxpool.Pool in unit tests,
 	// we'll skip this test and rely on integration tests for coverage
-	
+
 	t.Skip("NewFuturesArbitrageHandler requires real pgxpool.Pool, test in integration suite")
 }
 
@@ -563,7 +563,7 @@ func TestNewFuturesArbitrageHandlerWithQuerier(t *testing.T) {
 	defer mock.Close()
 
 	handler := NewFuturesArbitrageHandlerWithQuerier(mock)
-	
+
 	// Verify handler is properly initialized
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.db)
@@ -593,7 +593,7 @@ func TestGetFuturesArbitrageStrategy(t *testing.T) {
 					"id", "opportunity_id", "position_size", "leverage", "entry_price", "stop_loss",
 					"take_profit", "risk_score", "expected_profit", "duration_hours", "created_at",
 				}).AddRow(
-					"test-strategy-123", "opp-123", 
+					"test-strategy-123", "opp-123",
 					decimal.NewFromFloat(1000), decimal.NewFromFloat(5),
 					decimal.NewFromFloat(50000), decimal.NewFromFloat(49000),
 					decimal.NewFromFloat(51000), decimal.NewFromFloat(0.3),
@@ -721,8 +721,8 @@ func TestGetPositionSizingRecommendation(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var response struct {
 					PositionSizing MockFuturesPositionSizing `json:"position_sizing"`
-					RiskScore      decimal.Decimal            `json:"risk_score"`
-					Timestamp      time.Time                  `json:"timestamp"`
+					RiskScore      decimal.Decimal           `json:"risk_score"`
+					Timestamp      time.Time                 `json:"timestamp"`
 				}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -748,8 +748,8 @@ func TestParseArbitrageRequest(t *testing.T) {
 		expectedResult MockFuturesArbitrageRequest
 	}{
 		{
-			name:           "default values",
-			queryParams:    "",
+			name:        "default values",
+			queryParams: "",
 			expectedResult: MockFuturesArbitrageRequest{
 				Limit: 50,
 				Page:  1,
@@ -759,8 +759,8 @@ func TestParseArbitrageRequest(t *testing.T) {
 			name:        "with symbol filter",
 			queryParams: "?symbols=BTC/USDT",
 			expectedResult: MockFuturesArbitrageRequest{
-				Limit:  50,
-				Page:   1,
+				Limit:   50,
+				Page:    1,
 				Symbols: []string{"BTC/USDT"},
 			},
 		},
@@ -777,8 +777,8 @@ func TestParseArbitrageRequest(t *testing.T) {
 			name:        "with min APY",
 			queryParams: "?min_apy=10.5",
 			expectedResult: MockFuturesArbitrageRequest{
-				Limit: 50,
-				Page:  1,
+				Limit:  50,
+				Page:   1,
 				MinAPY: decimal.NewFromFloat(10.5),
 			},
 		},
@@ -786,9 +786,9 @@ func TestParseArbitrageRequest(t *testing.T) {
 			name:        "with risk tolerance",
 			queryParams: "?risk_tolerance=high",
 			expectedResult: MockFuturesArbitrageRequest{
-				Limit:          50,
-				Page:           1,
-				RiskTolerance:  "high",
+				Limit:         50,
+				Page:          1,
+				RiskTolerance: "high",
 			},
 		},
 		{
@@ -831,27 +831,27 @@ func TestParseArbitrageRequest(t *testing.T) {
 			// Verify the result
 			assert.Equal(t, tt.expectedResult.Limit, result.Limit)
 			assert.Equal(t, tt.expectedResult.Page, result.Page)
-			
+
 			if tt.expectedResult.Symbols != nil {
 				assert.Equal(t, tt.expectedResult.Symbols, result.Symbols)
 			}
-			
+
 			if tt.expectedResult.Exchanges != nil {
 				assert.Equal(t, tt.expectedResult.Exchanges, result.Exchanges)
 			}
-			
+
 			if !tt.expectedResult.MinAPY.IsZero() {
 				assert.True(t, tt.expectedResult.MinAPY.Equal(result.MinAPY))
 			}
-			
+
 			if tt.expectedResult.RiskTolerance != "" {
 				assert.Equal(t, tt.expectedResult.RiskTolerance, result.RiskTolerance)
 			}
-			
+
 			if tt.expectedResult.IncludeRiskMetrics {
 				assert.True(t, result.IncludeRiskMetrics)
 			}
-			
+
 			if tt.expectedResult.IncludePositionSizing {
 				assert.True(t, result.IncludePositionSizing)
 			}
@@ -884,60 +884,60 @@ func TestValidateCalculationInput(t *testing.T) {
 		{
 			name: "missing symbol",
 			input: MockFuturesArbitrageCalculationInput{
-				Symbol:          "",
-				LongExchange:    "binance",
-				ShortExchange:   "okx",
-				LongMarkPrice:   decimal.NewFromFloat(50000),
-				ShortMarkPrice:  decimal.NewFromFloat(50100),
-				BaseAmount:      decimal.NewFromFloat(1.0),
+				Symbol:         "",
+				LongExchange:   "binance",
+				ShortExchange:  "okx",
+				LongMarkPrice:  decimal.NewFromFloat(50000),
+				ShortMarkPrice: decimal.NewFromFloat(50100),
+				BaseAmount:     decimal.NewFromFloat(1.0),
 			},
 			expectError: true,
 		},
 		{
 			name: "missing long exchange",
 			input: MockFuturesArbitrageCalculationInput{
-				Symbol:          "BTC/USDT",
-				LongExchange:    "",
-				ShortExchange:   "okx",
-				LongMarkPrice:   decimal.NewFromFloat(50000),
-				ShortMarkPrice:  decimal.NewFromFloat(50100),
-				BaseAmount:      decimal.NewFromFloat(1.0),
+				Symbol:         "BTC/USDT",
+				LongExchange:   "",
+				ShortExchange:  "okx",
+				LongMarkPrice:  decimal.NewFromFloat(50000),
+				ShortMarkPrice: decimal.NewFromFloat(50100),
+				BaseAmount:     decimal.NewFromFloat(1.0),
 			},
 			expectError: true,
 		},
 		{
 			name: "missing short exchange",
 			input: MockFuturesArbitrageCalculationInput{
-				Symbol:          "BTC/USDT",
-				LongExchange:    "binance",
-				ShortExchange:   "",
-				LongMarkPrice:   decimal.NewFromFloat(50000),
-				ShortMarkPrice:  decimal.NewFromFloat(50100),
-				BaseAmount:      decimal.NewFromFloat(1.0),
+				Symbol:         "BTC/USDT",
+				LongExchange:   "binance",
+				ShortExchange:  "",
+				LongMarkPrice:  decimal.NewFromFloat(50000),
+				ShortMarkPrice: decimal.NewFromFloat(50100),
+				BaseAmount:     decimal.NewFromFloat(1.0),
 			},
 			expectError: true,
 		},
 		{
 			name: "zero mark prices",
 			input: MockFuturesArbitrageCalculationInput{
-				Symbol:          "BTC/USDT",
-				LongExchange:    "binance",
-				ShortExchange:   "okx",
-				LongMarkPrice:   decimal.Zero,
-				ShortMarkPrice:  decimal.Zero,
-				BaseAmount:      decimal.NewFromFloat(1.0),
+				Symbol:         "BTC/USDT",
+				LongExchange:   "binance",
+				ShortExchange:  "okx",
+				LongMarkPrice:  decimal.Zero,
+				ShortMarkPrice: decimal.Zero,
+				BaseAmount:     decimal.NewFromFloat(1.0),
 			},
 			expectError: true,
 		},
 		{
 			name: "zero base amount",
 			input: MockFuturesArbitrageCalculationInput{
-				Symbol:          "BTC/USDT",
-				LongExchange:    "binance",
-				ShortExchange:   "okx",
-				LongMarkPrice:   decimal.NewFromFloat(50000),
-				ShortMarkPrice:  decimal.NewFromFloat(50100),
-				BaseAmount:      decimal.Zero,
+				Symbol:         "BTC/USDT",
+				LongExchange:   "binance",
+				ShortExchange:  "okx",
+				LongMarkPrice:  decimal.NewFromFloat(50000),
+				ShortMarkPrice: decimal.NewFromFloat(50100),
+				BaseAmount:     decimal.Zero,
 			},
 			expectError: true,
 		},
@@ -959,7 +959,7 @@ func TestValidateCalculationInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := handler.validateCalculationInput(convertMockToModelInput(tt.input))
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -974,8 +974,8 @@ func TestCalculateMarketSummary(t *testing.T) {
 	defer mockDB.Close()
 
 	tests := []struct {
-		name             string
-		opportunities    []MockFuturesArbitrageOpportunity
+		name            string
+		opportunities   []MockFuturesArbitrageOpportunity
 		expectedSummary MockFuturesMarketSummary
 	}{
 		{
@@ -991,18 +991,18 @@ func TestCalculateMarketSummary(t *testing.T) {
 			name: "favorable market conditions",
 			opportunities: []MockFuturesArbitrageOpportunity{
 				{
-					APY:           decimal.NewFromFloat(20),
-					RiskScore:     decimal.NewFromFloat(30),
+					APY:             decimal.NewFromFloat(20),
+					RiskScore:       decimal.NewFromFloat(30),
 					VolatilityScore: decimal.NewFromFloat(25),
 				},
 				{
-					APY:           decimal.NewFromFloat(25),
-					RiskScore:     decimal.NewFromFloat(35),
+					APY:             decimal.NewFromFloat(25),
+					RiskScore:       decimal.NewFromFloat(35),
 					VolatilityScore: decimal.NewFromFloat(30),
 				},
 			},
 			expectedSummary: MockFuturesMarketSummary{
-				TotalOpportunities: 2,
+				TotalOpportunities:  2,
 				AverageAPY:          decimal.NewFromFloat(22.5),
 				HighestAPY:          decimal.NewFromFloat(25),
 				AverageRiskScore:    decimal.NewFromFloat(32.5),
@@ -1016,13 +1016,13 @@ func TestCalculateMarketSummary(t *testing.T) {
 			name: "unfavorable market conditions",
 			opportunities: []MockFuturesArbitrageOpportunity{
 				{
-					APY:           decimal.NewFromFloat(3),
-					RiskScore:     decimal.NewFromFloat(80),
+					APY:             decimal.NewFromFloat(3),
+					RiskScore:       decimal.NewFromFloat(80),
 					VolatilityScore: decimal.NewFromFloat(75),
 				},
 			},
 			expectedSummary: MockFuturesMarketSummary{
-				TotalOpportunities: 1,
+				TotalOpportunities:  1,
 				AverageAPY:          decimal.NewFromFloat(3),
 				HighestAPY:          decimal.NewFromFloat(3),
 				AverageRiskScore:    decimal.NewFromFloat(80),
@@ -1036,13 +1036,13 @@ func TestCalculateMarketSummary(t *testing.T) {
 			name: "neutral market conditions - moderate strategy",
 			opportunities: []MockFuturesArbitrageOpportunity{
 				{
-					APY:           decimal.NewFromFloat(10),
-					RiskScore:     decimal.NewFromFloat(60),
+					APY:             decimal.NewFromFloat(10),
+					RiskScore:       decimal.NewFromFloat(60),
 					VolatilityScore: decimal.NewFromFloat(50),
 				},
 			},
 			expectedSummary: MockFuturesMarketSummary{
-				TotalOpportunities: 1,
+				TotalOpportunities:  1,
 				AverageAPY:          decimal.NewFromFloat(10),
 				HighestAPY:          decimal.NewFromFloat(10),
 				AverageRiskScore:    decimal.NewFromFloat(60),
@@ -1057,12 +1057,12 @@ func TestCalculateMarketSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := handler.calculateMarketSummary(convertMockToModelOpportunities(tt.opportunities))
-			
+
 			assert.Equal(t, tt.expectedSummary.TotalOpportunities, result.TotalOpportunities)
 			assert.Equal(t, tt.expectedSummary.MarketCondition, result.MarketCondition)
 			assert.Equal(t, tt.expectedSummary.FundingRateTrend, result.FundingRateTrend)
 			assert.Equal(t, tt.expectedSummary.RecommendedStrategy, result.RecommendedStrategy)
-			
+
 			if tt.expectedSummary.TotalOpportunities > 0 {
 				assert.True(t, tt.expectedSummary.AverageAPY.Equal(result.AverageAPY))
 				assert.True(t, tt.expectedSummary.HighestAPY.Equal(result.HighestAPY))
@@ -1187,7 +1187,7 @@ func TestGetFuturesMarketSummary(t *testing.T) {
 
 func TestStoreFuturesOpportunity(t *testing.T) {
 	testTime := time.Now()
-	
+
 	tests := []struct {
 		name         string
 		setupMock    func(mock pgxmock.PgxPoolIface)
@@ -1253,46 +1253,46 @@ func TestStoreFuturesOpportunity(t *testing.T) {
 
 			// Create test opportunity
 			mockOpportunity := &MockFuturesArbitrageOpportunity{
-				Symbol:                   "BTC/USDT",
-				BaseCurrency:             "BTC",
-				QuoteCurrency:            "USDT",
-				LongExchange:             "Binance",
-				ShortExchange:            "Bybit",
-				LongExchangeID:           int64(1),
-				ShortExchangeID:          int64(2),
-				LongFundingRate:          decimal.NewFromFloat(0.01),
-				ShortFundingRate:         decimal.NewFromFloat(-0.005),
-				NetFundingRate:           decimal.NewFromFloat(0.015),
-				FundingInterval:          8,
-				LongMarkPrice:            decimal.NewFromFloat(50000),
-				ShortMarkPrice:           decimal.NewFromFloat(49950),
-				PriceDifference:          decimal.NewFromFloat(50),
+				Symbol:                    "BTC/USDT",
+				BaseCurrency:              "BTC",
+				QuoteCurrency:             "USDT",
+				LongExchange:              "Binance",
+				ShortExchange:             "Bybit",
+				LongExchangeID:            int64(1),
+				ShortExchangeID:           int64(2),
+				LongFundingRate:           decimal.NewFromFloat(0.01),
+				ShortFundingRate:          decimal.NewFromFloat(-0.005),
+				NetFundingRate:            decimal.NewFromFloat(0.015),
+				FundingInterval:           8,
+				LongMarkPrice:             decimal.NewFromFloat(50000),
+				ShortMarkPrice:            decimal.NewFromFloat(49950),
+				PriceDifference:           decimal.NewFromFloat(50),
 				PriceDifferencePercentage: decimal.NewFromFloat(0.1),
-				HourlyRate:               decimal.NewFromFloat(0.1875),
-				DailyRate:                decimal.NewFromFloat(4.5),
-				APY:                      decimal.NewFromFloat(54.75),
-				EstimatedProfit8h:        decimal.NewFromFloat(100),
-				EstimatedProfitDaily:     decimal.NewFromFloat(1000),
-				EstimatedProfitWeekly:    decimal.NewFromFloat(10000),
-				EstimatedProfitMonthly:   decimal.NewFromFloat(100000),
-				RiskScore:                decimal.NewFromFloat(25),
-				VolatilityScore:          decimal.NewFromFloat(30),
-				LiquidityScore:           decimal.NewFromFloat(80),
-				RecommendedPositionSize:  decimal.NewFromFloat(1000),
-				MaxLeverage:              decimal.NewFromFloat(10),
-				RecommendedLeverage:     decimal.NewFromFloat(5),
-				StopLossPercentage:       decimal.NewFromFloat(2),
+				HourlyRate:                decimal.NewFromFloat(0.1875),
+				DailyRate:                 decimal.NewFromFloat(4.5),
+				APY:                       decimal.NewFromFloat(54.75),
+				EstimatedProfit8h:         decimal.NewFromFloat(100),
+				EstimatedProfitDaily:      decimal.NewFromFloat(1000),
+				EstimatedProfitWeekly:     decimal.NewFromFloat(10000),
+				EstimatedProfitMonthly:    decimal.NewFromFloat(100000),
+				RiskScore:                 decimal.NewFromFloat(25),
+				VolatilityScore:           decimal.NewFromFloat(30),
+				LiquidityScore:            decimal.NewFromFloat(80),
+				RecommendedPositionSize:   decimal.NewFromFloat(1000),
+				MaxLeverage:               decimal.NewFromFloat(10),
+				RecommendedLeverage:       decimal.NewFromFloat(5),
+				StopLossPercentage:        decimal.NewFromFloat(2),
 				MinPositionSize:           decimal.NewFromFloat(100),
 				MaxPositionSize:           decimal.NewFromFloat(10000),
 				OptimalPositionSize:       decimal.NewFromFloat(5000),
-				DetectedAt:               testTime,
-				ExpiresAt:                testTime.Add(time.Hour * 24),
-				NextFundingTime:          testTime.Add(time.Hour * 8),
-				TimeToNextFunding:       int(time.Hour*8) / int(time.Minute),
-				IsActive:                 true,
-				MarketTrend:              "bullish",
-				Volume24h:                decimal.NewFromFloat(1000000),
-				OpenInterest:             decimal.NewFromFloat(50000),
+				DetectedAt:                testTime,
+				ExpiresAt:                 testTime.Add(time.Hour * 24),
+				NextFundingTime:           testTime.Add(time.Hour * 8),
+				TimeToNextFunding:         int(time.Hour*8) / int(time.Minute),
+				IsActive:                  true,
+				MarketTrend:               "bullish",
+				Volume24h:                 decimal.NewFromFloat(1000000),
+				OpenInterest:              decimal.NewFromFloat(50000),
 			}
 
 			// Create test risk metrics
@@ -1304,7 +1304,7 @@ func TestStoreFuturesOpportunity(t *testing.T) {
 				FundingRateStability:  decimal.NewFromFloat(0.85),
 				BidAskSpread:          decimal.NewFromFloat(0.001),
 				MarketDepth:           decimal.NewFromFloat(1000000),
-				SlippageRisk:         decimal.NewFromFloat(0.005),
+				SlippageRisk:          decimal.NewFromFloat(0.005),
 				ExchangeReliability:   decimal.NewFromFloat(0.95),
 				CounterpartyRisk:      decimal.NewFromFloat(0.1),
 				OverallRiskScore:      decimal.NewFromFloat(25),

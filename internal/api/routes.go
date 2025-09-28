@@ -7,12 +7,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api/handlers"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	futuresHandlers "github.com/irfandi/celebrum-ai-go/internal/handlers"
 	"github.com/irfandi/celebrum-ai-go/internal/middleware"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 )
 
 type HealthResponse struct {

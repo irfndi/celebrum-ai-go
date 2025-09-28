@@ -60,23 +60,23 @@ func (db *PostgresDB) Close() {
 }
 
 func (db *PostgresDB) HealthCheck(ctx context.Context) error {
-    return db.Pool.Ping(ctx)
+	return db.Pool.Ping(ctx)
 }
 
 func (db *PostgresDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-    return db.Pool.Query(ctx, sql, args...)
+	return db.Pool.Query(ctx, sql, args...)
 }
 
 func (db *PostgresDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
-    return db.Pool.QueryRow(ctx, sql, args...)
+	return db.Pool.QueryRow(ctx, sql, args...)
 }
 
 func (db *PostgresDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-    return db.Pool.Exec(ctx, sql, args...)
+	return db.Pool.Exec(ctx, sql, args...)
 }
 
 func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
-    var dsn string
+	var dsn string
 
 	if cfg.DatabaseURL != "" {
 		dsn = cfg.DatabaseURL
@@ -117,14 +117,14 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 		poolConfig.MaxConnIdleTime = duration
 	}
 
-    return poolConfig, nil
+	return poolConfig, nil
 }
 
 func clampToSafePoolSize(value int) int32 {
-    requested := int64(value)
-    if requested <= 0 {
-        return 0
-    }
+	requested := int64(value)
+	if requested <= 0 {
+		return 0
+	}
 
 	if requested > int64(math.MaxInt32) {
 		logrus.Warnf("Configured pool size %d exceeds int32 limit; clamping to %d", value, maxAllowedPoolConns)
@@ -134,7 +134,7 @@ func clampToSafePoolSize(value int) int32 {
 	if requested > int64(maxAllowedPoolConns) {
 		logrus.Warnf("Configured pool size %d exceeds safe limit %d; clamping", value, maxAllowedPoolConns)
 		return maxAllowedPoolConns
-    }
+	}
 
-    return int32(requested)
+	return int32(requested)
 }

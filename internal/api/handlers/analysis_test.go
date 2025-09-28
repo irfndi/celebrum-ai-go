@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTechnicalIndicator_Struct(t *testing.T) {
@@ -498,7 +498,7 @@ func TestAnalysisHandler_calculateIndicators(t *testing.T) {
 func TestAnalysisHandler_getOHLCVData(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
-	
+
 	// Test with nil database - should return error
 	_, err := handler.getOHLCVData(context.Background(), "BTC/USDT", "binance", "1h", 50)
 	assert.Error(t, err)
@@ -508,7 +508,7 @@ func TestAnalysisHandler_getOHLCVData(t *testing.T) {
 func TestAnalysisHandler_simulateOHLCVFromTickers(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
-	
+
 	// Test with nil database - should return error
 	_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", 50)
 	assert.Error(t, err)
@@ -588,7 +588,7 @@ func TestAnalysisHandler_simulateOHLCVFromTickers(t *testing.T) {
 func TestAnalysisHandler_generateTradingSignal(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
-	
+
 	// Test with database error (nil db)
 	_, err := handler.generateTradingSignal(context.Background(), "BTC/USDT", "binance", "1h")
 	assert.Error(t, err)
@@ -598,7 +598,7 @@ func TestAnalysisHandler_generateTradingSignal(t *testing.T) {
 func TestAnalysisHandler_getAllTradingSignals(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
-	
+
 	// Test with database error (nil db)
 	_, err := handler.getAllTradingSignals(context.Background(), "1h", 0.6)
 	assert.Error(t, err)

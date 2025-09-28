@@ -1,16 +1,16 @@
 package testmocks
 
 import (
-    "context"
-    "time"
+	"context"
+	"time"
 
-    "github.com/irfandi/celebrum-ai-go/internal/ccxt"
-    "github.com/irfandi/celebrum-ai-go/internal/models"
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgconn"
-    "github.com/redis/go-redis/v9"
-    "github.com/shopspring/decimal"
-    "github.com/stretchr/testify/mock"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/mock"
 )
 
 // MockCCXTService implements ccxt.CCXTService for testing
@@ -41,7 +41,7 @@ type MockRedisClient struct {
 // MockPostgresDB implements database.PostgresDB for testing
 type MockPostgresDB struct {
 	mock.Mock
-	PoolFunc func() interface{}
+	PoolFunc  func() interface{}
 	QueryFunc func(ctx context.Context, query string, args ...interface{}) (pgx.Rows, error)
 }
 
@@ -75,15 +75,15 @@ func (m *MockPostgresDB) Query(ctx context.Context, query string, args ...interf
 // MockRows implements pgx.Rows for testing
 type MockRows struct {
 	mock.Mock
-	CloseFunc func()
-	NextFunc func() bool
-	ScanFunc func(dest ...interface{}) error
-	ErrFunc func() error
-	CommandTagFunc func() pgconn.CommandTag
+	CloseFunc             func()
+	NextFunc              func() bool
+	ScanFunc              func(dest ...interface{}) error
+	ErrFunc               func() error
+	CommandTagFunc        func() pgconn.CommandTag
 	FieldDescriptionsFunc func() []pgconn.FieldDescription
-	ValuesFunc func() ([]interface{}, error)
-	RawValuesFunc func() [][]byte
-	ConnFunc func() *pgx.Conn
+	ValuesFunc            func() ([]interface{}, error)
+	RawValuesFunc         func() [][]byte
+	ConnFunc              func() *pgx.Conn
 }
 
 func (m *MockRows) Close() {
@@ -298,16 +298,16 @@ func (m *MockCommandTag) RowsAffected() int64 {
 }
 
 // Additional methods required for pgconn.CommandTag interface
-func (m *MockCommandTag) Insert() bool { return false }
-func (m *MockCommandTag) Update() bool { return false }
-func (m *MockCommandTag) Delete() bool { return false }
-func (m *MockCommandTag) Select() bool { return false }
+func (m *MockCommandTag) Insert() bool   { return false }
+func (m *MockCommandTag) Update() bool   { return false }
+func (m *MockCommandTag) Delete() bool   { return false }
+func (m *MockCommandTag) Select() bool   { return false }
 func (m *MockCommandTag) String() string { return "MOCK" }
-func (m *MockCommandTag) Oid() uint32 { return 0 }
+func (m *MockCommandTag) Oid() uint32    { return 0 }
 
 // MockResult implements pgconn.CommandTag for testing
 type MockResult struct {
-	commandTag     MockCommandTag
+	commandTag       MockCommandTag
 	RowsAffectedFunc func() int64
 }
 
@@ -319,13 +319,12 @@ func (m *MockResult) RowsAffected() int64 {
 }
 
 // Additional methods required for pgconn.CommandTag interface
-func (m *MockResult) Insert() bool { return false }
-func (m *MockResult) Update() bool { return false }
-func (m *MockResult) Delete() bool { return false }
-func (m *MockResult) Select() bool { return false }
+func (m *MockResult) Insert() bool   { return false }
+func (m *MockResult) Update() bool   { return false }
+func (m *MockResult) Delete() bool   { return false }
+func (m *MockResult) Select() bool   { return false }
 func (m *MockResult) String() string { return "MOCK" }
-func (m *MockResult) Oid() uint32 { return 0 }
-
+func (m *MockResult) Oid() uint32    { return 0 }
 
 // MockRow implements pgx.Row for testing
 type MockRow struct {
@@ -506,4 +505,19 @@ func (m *MockCacheAnalyticsService) RecordCacheHit(category string) {
 
 func (m *MockCacheAnalyticsService) RecordCacheMiss(category string) {
 	m.Called(category)
+}
+
+// MockSpotArbitrageCalculator mocks the spot arbitrage calculator
+type MockSpotArbitrageCalculator struct {
+	mock.Mock
+}
+
+func (m *MockSpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
+	args := m.Called(ctx, marketData)
+	return args.Get(0).([]models.ArbitrageOpportunity), args.Error(1)
+}
+
+func (m *MockSpotArbitrageCalculator) GetCalculatorStats() map[string]interface{} {
+	args := m.Called()
+	return args.Get(0).(map[string]interface{})
 }

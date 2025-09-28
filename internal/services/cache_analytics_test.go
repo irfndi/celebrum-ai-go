@@ -43,28 +43,28 @@ func TestCacheAnalyticsService_GetMetrics(t *testing.T) {
 	// Test GetMetrics with mocked Redis responses
 	// We'll test the logic without calling the actual Redis INFO command
 	// This approach avoids miniredis limitations while testing the core functionality
-	
+
 	// Test the stats collection part (without Redis calls)
 	stats := service.GetAllStats()
 	assert.NotNil(t, stats)
 	assert.Contains(t, stats, "key1")
 	assert.Equal(t, int64(2), stats["key1"].Hits)
 	assert.Equal(t, int64(1), stats["key1"].Misses)
-	
+
 	// Test hit rate calculation
 	expectedHitRate := float64(2.0) / float64(3.0) // 2 hits / 3 total
 	assert.Equal(t, expectedHitRate, stats["key1"].HitRate)
-	
+
 	// Now test the actual GetMetrics method with a mock Redis client
 	// We'll create a wrapper test that mocks the Redis calls
 	t.Run("WithRedisMock", func(t *testing.T) {
 		// Create a test-specific service with mock Redis responses
 		testService := service
-		
+
 		// We can't easily mock the Redis client without more complex setup
 		// So we'll test the method behavior by calling it and handling potential errors
 		_, err := testService.GetMetrics(context.Background())
-		
+
 		// Due to miniredis limitations, this will likely fail with Redis errors
 		// But we can at least test that the method doesn't panic and handles errors appropriately
 		if err != nil {
@@ -111,7 +111,7 @@ func TestCacheAnalyticsService_GetMetrics_WithRedisInfo(t *testing.T) {
 	/*metrics, err := service.GetMetrics(ctx)
 	assert.NoError(t, err)
 	assert.NotNil(t, metrics)
-	
+
 	// Check basic metrics
 	assert.NotNil(t, metrics.RedisInfo)
 	assert.Equal(t, int64(0), metrics.KeyCount)
@@ -155,15 +155,15 @@ func TestCacheAnalyticsService_RecordHit(t *testing.T) {
 
 	// Record a hit
 	service.RecordHit("test")
-	
+
 	stats := service.GetStats("test")
 	assert.Equal(t, int64(1), stats.Hits)
 	assert.Equal(t, int64(1), stats.TotalOps)
 	assert.Equal(t, 1.0, stats.HitRate)
-	
+
 	// Record another hit
 	service.RecordHit("test")
-	
+
 	stats = service.GetStats("test")
 	assert.Equal(t, int64(2), stats.Hits)
 	assert.Equal(t, int64(2), stats.TotalOps)
@@ -182,15 +182,15 @@ func TestCacheAnalyticsService_RecordMiss(t *testing.T) {
 
 	// Record a miss
 	service.RecordMiss("test")
-	
+
 	stats := service.GetStats("test")
 	assert.Equal(t, int64(1), stats.Misses)
 	assert.Equal(t, int64(1), stats.TotalOps)
 	assert.Equal(t, 0.0, stats.HitRate)
-	
+
 	// Record a hit
 	service.RecordHit("test")
-	
+
 	stats = service.GetStats("test")
 	assert.Equal(t, int64(1), stats.Hits)
 	assert.Equal(t, int64(2), stats.TotalOps)
@@ -210,11 +210,11 @@ func TestCacheAnalyticsService_GetStats(t *testing.T) {
 	// Get stats for non-existent category
 	stats := service.GetStats("nonexistent")
 	assert.Equal(t, CacheStats{}, stats)
-	
+
 	// Record some data
 	service.RecordHit("test")
 	service.RecordMiss("test")
-	
+
 	// Get stats for existing category
 	stats = service.GetStats("test")
 	assert.Equal(t, int64(1), stats.Hits)
@@ -236,18 +236,18 @@ func TestCacheAnalyticsService_GetAllStats(t *testing.T) {
 	// Get all stats when empty
 	allStats := service.GetAllStats()
 	assert.Empty(t, allStats)
-	
+
 	// Record some data
 	service.RecordHit("test1")
 	service.RecordMiss("test1")
 	service.RecordHit("test2")
-	
+
 	// Get all stats
 	allStats = service.GetAllStats()
 	assert.Contains(t, allStats, "test1")
 	assert.Contains(t, allStats, "test2")
 	assert.Contains(t, allStats, "overall")
-	
+
 	assert.Equal(t, int64(1), allStats["test1"].Hits)
 	assert.Equal(t, int64(1), allStats["test1"].Misses)
 	assert.Equal(t, int64(1), allStats["test2"].Hits)
@@ -316,15 +316,15 @@ func TestCacheAnalyticsService_StartPeriodicReporting(t *testing.T) {
 	service := NewCacheAnalyticsService(redisClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Start periodic reporting with short interval
 	service.StartPeriodicReporting(ctx, 10*time.Millisecond)
-	
+
 	// Let it run for a short time
-	time.Sleep(50*time.Millisecond)
-	
+	time.Sleep(50 * time.Millisecond)
+
 	// Stop the context
 	cancel()
-	
+
 	// The test passes if no panic occurs
 }

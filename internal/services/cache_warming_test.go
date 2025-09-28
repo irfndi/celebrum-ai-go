@@ -1,18 +1,19 @@
 package services
 
 import (
-    "context"
-    "fmt"
-    "testing"
-    "time"
-    "github.com/alicebob/miniredis/v2"
-    "github.com/pashagolub/pgxmock/v4"
-    "github.com/redis/go-redis/v9"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"context"
+	"fmt"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/pashagolub/pgxmock/v4"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
 
-    "github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
+
 // TestCacheWarmingService_NewCacheWarmingService tests service creation
 func TestCacheWarmingService_NewCacheWarmingService(t *testing.T) {
 	// Create service with nil dependencies to test service creation
@@ -122,7 +123,7 @@ func TestCacheWarmingService_warmFundingRates_Success(t *testing.T) {
 	// Mock database response
 	now := time.Now()
 	rows := pgxmock.NewRows([]string{
-		"exchange_name", "symbol", "funding_rate", 
+		"exchange_name", "symbol", "funding_rate",
 		"next_funding_time", "timestamp",
 	}).AddRow(
 		"Binance", "BTC/USDT", 0.0001, now.Add(8*time.Hour), now,
@@ -193,7 +194,7 @@ func TestCacheWarmingService_warmFundingRates_EmptyResults(t *testing.T) {
 
 	// Mock empty database response
 	rows := pgxmock.NewRows([]string{
-		"exchange_name", "symbol", "funding_rate", 
+		"exchange_name", "symbol", "funding_rate",
 		"next_funding_time", "timestamp",
 	})
 
@@ -230,7 +231,7 @@ func TestCacheWarmingService_warmFundingRates_ScanError(t *testing.T) {
 
 	// Mock database response with invalid data types
 	rows := pgxmock.NewRows([]string{
-		"exchange_name", "symbol", "funding_rate", 
+		"exchange_name", "symbol", "funding_rate",
 		"next_funding_time", "timestamp",
 	}).AddRow(
 		"Binance", "BTC/USDT", "invalid_float", "invalid_time", "2024-01-01",
@@ -310,7 +311,7 @@ func TestCacheWarmingService_warmFundingRates_MultipleExchanges(t *testing.T) {
 	// Mock database response with multiple exchanges and pairs
 	now := time.Now()
 	rows := pgxmock.NewRows([]string{
-		"exchange_name", "symbol", "funding_rate", 
+		"exchange_name", "symbol", "funding_rate",
 		"next_funding_time", "timestamp",
 	}).AddRow(
 		"Binance", "BTC/USDT", 0.0001, now.Add(8*time.Hour), now,
@@ -354,9 +355,9 @@ func TestCacheWarmingService_warmFundingRates_TimePrecision(t *testing.T) {
 	// Mock database response with precise timestamps
 	now := time.Now().UTC()
 	nextFunding := now.Add(8 * time.Hour).Truncate(time.Second)
-	
+
 	rows := pgxmock.NewRows([]string{
-		"exchange_name", "symbol", "funding_rate", 
+		"exchange_name", "symbol", "funding_rate",
 		"next_funding_time", "timestamp",
 	}).AddRow(
 		"Binance", "BTC/USDT", 0.000123456789, nextFunding, now.Truncate(time.Microsecond),

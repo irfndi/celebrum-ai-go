@@ -283,7 +283,7 @@ func TestCacheEndpointsWithRealData(t *testing.T) {
 	redisInfo := data["redis_info"].(map[string]interface{})
 	assert.Contains(t, redisInfo, "connected_clients")
 	assert.Contains(t, redisInfo, "used_memory_human")
-	
+
 	// Redis version might not be available in all environments, so make it optional
 	if _, hasVersion := redisInfo["redis_version"]; hasVersion {
 		t.Logf("Redis version available: %v", redisInfo["redis_version"])

@@ -44,7 +44,7 @@ func TestNewCleanupService(t *testing.T) {
 	assert.NotNil(t, service.cancel)
 	assert.Nil(t, service.db) // db should be nil as set above
 	assert.Equal(t, errorRecoveryManager, service.errorRecoveryManager)
-	assert.Nil(t, service.resourceManager) // Should be nil as passed
+	assert.Nil(t, service.resourceManager)    // Should be nil as passed
 	assert.Nil(t, service.performanceMonitor) // Should be nil as passed
 	assert.NotNil(t, service.logger)
 }
@@ -132,7 +132,6 @@ func TestCleanupService_RunCleanup(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
 }
-
 
 // TestCleanupService_GetDataStats tests the GetDataStats method
 func TestCleanupService_GetDataStats(t *testing.T) {
