@@ -2,9 +2,9 @@ name: Lint
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, development ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, development ]
 
 jobs:
   golangci:
@@ -22,8 +22,10 @@ jobs:
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
-        version: v2.4.0
-        args: --timeout=5m --output.text.path=stdout --output.text.colors=true
+        # Use latest stable golangci-lint to ensure Go 1.25 support
+        version: latest
+        # Emit GitHub annotations with a reasonable timeout
+        args: --timeout=5m --out-format=github-actions
         
     - name: Check formatting
       run: make fmt-check

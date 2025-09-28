@@ -2,10 +2,10 @@ name: Celebrum AI CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop, staging ]
+    branches: [ main, develop, development, staging ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, development ]
   workflow_dispatch:
     inputs:
       environment:
@@ -72,6 +72,11 @@ jobs:
             DEPLOYMENT_TYPE="zero-downtime"
           # Push to develop -> staging
           elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="staging"
+            DEPLOYMENT_TYPE="standard"
+          # Push to development -> staging
+          elif [ "${{ github.ref }}" = "refs/heads/development" ]; then
             SHOULD_DEPLOY="true"
             ENVIRONMENT="staging"
             DEPLOYMENT_TYPE="standard"
