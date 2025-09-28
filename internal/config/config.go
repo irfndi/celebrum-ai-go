@@ -194,7 +194,7 @@ func setDefaults() {
 	// Telemetry
 	viper.SetDefault("telemetry.enabled", true)
 	viper.SetDefault("telemetry.otlp_endpoint", "http://localhost:4318")
-	viper.SetDefault("telemetry.service_name", "celebrum-ai-go")
+	viper.SetDefault("telemetry.service_name", "github.com/irfandi/celebrum-ai-go")
 	viper.SetDefault("telemetry.service_version", "1.0.0")
 	viper.SetDefault("telemetry.log_level", "info")
 

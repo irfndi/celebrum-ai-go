@@ -164,6 +164,11 @@ jobs:
           chmod +x scripts/ci-cd-integration.sh
           scripts/ci-cd-integration.sh test
 
+      - name: Coverage Check (non-blocking)
+        run: |
+          make coverage-check
+        continue-on-error: true
+
       - name: Upload test results
         uses: actions/upload-artifact@v3
         if: always()

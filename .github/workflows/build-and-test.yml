@@ -32,12 +32,24 @@ jobs:
         
       - name: Run tests
         run: make test
-        
+
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.4.0
           args: --timeout=5m --output.text.path=stdout --output.text.colors=true
+      
+      - name: Coverage Check (non-blocking)
+        run: |
+          make coverage-check
+        continue-on-error: true
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-artifacts
+          path: ci-artifacts/coverage/
           
       - name: Build Go binary
         run: make build

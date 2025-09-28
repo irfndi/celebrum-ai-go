@@ -1,4 +1,4 @@
-module github.com/irfndi/celebrum-ai-go
+module github.com/irfandi/celebrum-ai-go
 
 go 1.25.0
 
@@ -30,7 +30,6 @@ require (
 	golang.org/x/crypto v0.41.0
 	golang.org/x/text v0.28.0
 )
-
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect
@@ -93,8 +92,3 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-// Local package replacements
-replace github.com/irfndi/celebrum-ai-go/pkg/ccxt => ./pkg/ccxt
-
-

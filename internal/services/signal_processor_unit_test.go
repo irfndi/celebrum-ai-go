@@ -261,6 +261,11 @@ func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 	// Start multiple goroutines
 	for i := 0; i < 10; i++ {
 		go func(id int) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Logf("Recovered from panic in goroutine %d: %v", id, r)
+				}
+			}()
 			results <- id
 			done <- true
 		}(i)
@@ -271,14 +276,22 @@ func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 	receivedResults := make([]int, 0)
 	
 	// We need to receive 20 messages total: 10 results + 10 done signals
-	for completed < 10 {
+	// Use separate loops to ensure we get all messages
+	for len(receivedResults) < 10 {
 		select {
 		case result := <-results:
 			receivedResults = append(receivedResults, result)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Test timed out waiting for results")
+		}
+	}
+	
+	for completed < 10 {
+		select {
 		case <-done:
 			completed++
 		case <-time.After(5 * time.Second):
-			t.Fatal("Test timed out")
+			t.Fatal("Test timed out waiting for completion signals")
 		}
 	}
 	

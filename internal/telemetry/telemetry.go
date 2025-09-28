@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/logging"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -23,15 +23,15 @@ import (
 
 const (
 	// Service information
-	ServiceName    = "celebrum-ai-go"
+	ServiceName    = "github.com/irfandi/celebrum-ai-go"
 	ServiceVersion = "1.0.0"
 
 	// Tracer names
-	HTTPTracerName     = "celebrum-ai-go/http"
-	DatabaseTracerName = "celebrum-ai-go/database"
-	BusinessTracerName = "celebrum-ai-go/business"
-	CacheTracerName    = "celebrum-ai-go/cache"
-	ExternalTracerName = "celebrum-ai-go/external"
+	HTTPTracerName     = "github.com/irfandi/celebrum-ai-go/http"
+	DatabaseTracerName = "github.com/irfandi/celebrum-ai-go/database"
+	BusinessTracerName = "github.com/irfandi/celebrum-ai-go/business"
+	CacheTracerName    = "github.com/irfandi/celebrum-ai-go/cache"
+	ExternalTracerName = "github.com/irfandi/celebrum-ai-go/external"
 )
 
 // TelemetryConfig holds configuration for telemetry
@@ -227,19 +227,20 @@ func InitTelemetry(config TelemetryConfig) error {
 	}
 
 	// Initialize OpenTelemetry logging
-	if config.Enabled {
-		logConfig := logging.OTLPConfig{
-			Endpoint:       config.OTLPEndpoint,
-			ServiceName:    config.ServiceName,
-			ServiceVersion: config.ServiceVersion,
-			Environment:    config.Environment,
-			LogLevel:       config.LogLevel,
-		}
+	logConfig := logging.OTLPConfig{
+		Enabled:        config.Enabled,
+		Endpoint:       config.OTLPEndpoint,
+		ServiceName:    config.ServiceName,
+		ServiceVersion: config.ServiceVersion,
+		Environment:    config.Environment,
+		LogLevel:       config.LogLevel,
+	}
 
-		var err error
-		globalLogger, err = logging.NewOTLPLogger(logConfig)
-		if err != nil {
-			logger.Error("Failed to initialize OTLP logger", "error", err)
+	var logErr error
+	globalLogger, logErr = logging.NewOTLPLogger(logConfig)
+	if config.Enabled {
+		if logErr != nil {
+			logger.Error("Failed to initialize OTLP logger", "error", logErr)
 			// Continue with fallback logger
 		} else {
 			logger.Info("OTLP logger initialized successfully")

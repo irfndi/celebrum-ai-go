@@ -67,6 +67,7 @@ make help              # Show all available commands
 make build             # Build the application
 make test              # Run tests
 make test-coverage     # Run tests with coverage report
+make coverage-check    # Compute coverage across core packages (warn if <80%)
 make lint              # Run linter
 make fmt               # Format code
 make run               # Run the application

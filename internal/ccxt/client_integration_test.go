@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ func TestNewClient(t *testing.T) {
 
 	client := ccxt.NewClient(cfg)
 	assert.NotNil(t, client)
-	assert.Equal(t, cfg.ServiceURL, client.BaseURL)
+	assert.Equal(t, cfg.ServiceURL, client.BaseURL())
 	assert.NotNil(t, client.HTTPClient)
 }
 

@@ -17,24 +17,6 @@ const environment = process.env.NODE_ENV || 'development';
 // Prefer signal-specific env (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT). If only base endpoint is provided (OTEL_EXPORTER_OTLP_ENDPOINT), ensure '/v1/traces' suffix.
 const otlpTracesEnv = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
 const otlpBaseEnv = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-
-
-function ensureTracesPath(url) {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    // If path already points to traces, keep as-is
-    if (/\/v1\/traces\/?$/.test(u.pathname)) return u.toString();
-    u.pathname = `${u.pathname.replace(/\/$/, '')}/v1/traces`;
-    return u.toString();
-  } catch (e) {
-    // Fallback when URL lacks scheme (e.g., collector:4318)
-    if (/\/v1\/traces\/?$/.test(url)) return url;
-    return `${url.replace(/\/$/, '')}/v1/traces`;
-  }
-}
-
-
 const resolvedOtlpEndpoint = resolveOtlpTracesEndpoint(otlpTracesEnv, otlpBaseEnv, 'http://localhost:4318');
 
 // Create OTLP trace exporter
