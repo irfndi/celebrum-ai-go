@@ -221,6 +221,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight]
     if: needs.preflight.outputs.should_deploy == 'true'
+    permissions:
+      packages: write
+      contents: read
     outputs:
       image: ${{ steps.image.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
@@ -275,9 +278,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, test, security, build]
     if: |
+      always() &&
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'staging' &&
-      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
+      (
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
+        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
+      )
     environment:
       name: staging
       url: https://staging.celebrum-ai.com
@@ -313,9 +320,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, test, security, build]
     if: |
+      always() &&
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'production' &&
-      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
+      (
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
+        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
+      )
     environment:
       name: production
       url: https://celebrum-ai.com

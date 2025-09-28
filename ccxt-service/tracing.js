@@ -96,21 +96,23 @@ const sdk = new NodeSDK({
 });
 
 // Start the SDK
-try {
-  sdk.start();
-  console.log('OpenTelemetry tracing initialized successfully for CCXT service');
-  console.log(`Service: ${serviceName} v${serviceVersion}`);
-  if (otlpTracesEnv) {
-    console.log(`OTLP Endpoint (from OTEL_EXPORTER_OTLP_TRACES_ENDPOINT): ${resolvedOtlpEndpoint}`);
-  } else if (otlpBaseEnv) {
-    console.log(`OTLP Endpoint (normalized from OTEL_EXPORTER_OTLP_ENDPOINT): ${resolvedOtlpEndpoint}`);
-  } else {
-    console.log(`OTLP Endpoint (default): ${resolvedOtlpEndpoint}`);
-  }
-  console.log(`Environment: ${environment}`);
-} catch (error) {
-  console.error('Error initializing OpenTelemetry tracing:', error);
-}
+sdk
+  .start()
+  .then(() => {
+    console.log('OpenTelemetry tracing initialized successfully for CCXT service');
+    console.log(`Service: ${serviceName} v${serviceVersion}`);
+    if (otlpTracesEnv) {
+      console.log(`OTLP Endpoint (from OTEL_EXPORTER_OTLP_TRACES_ENDPOINT): ${resolvedOtlpEndpoint}`);
+    } else if (otlpBaseEnv) {
+      console.log(`OTLP Endpoint (normalized from OTEL_EXPORTER_OTLP_ENDPOINT): ${resolvedOtlpEndpoint}`);
+    } else {
+      console.log(`OTLP Endpoint (default): ${resolvedOtlpEndpoint}`);
+    }
+    console.log(`Environment: ${environment}`);
+  })
+  .catch((error) => {
+    console.error('Error initializing OpenTelemetry tracing:', error);
+  });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

@@ -8,7 +8,7 @@ Worker utilities note (Bun >= 1.2.21):
   as a top-level string field to preserve fast-path benefits.
 */
 import { serve } from '@hono/node-server'
-import './tracing'
+import './tracing';
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -16,8 +16,8 @@ import { logger } from 'hono/logger';
 // import { compress } from 'hono/compress'; // Removed due to CompressionStream not available in Bun
 import { secureHeaders } from 'hono/secure-headers';
 import { validator } from 'hono/validator';
-// Use ESM import for CCXT to work in Bun + tests
-import ccxt from 'ccxt'
+// Use ESM import so test mocks can intercept ccxt module
+import ccxt from 'ccxt';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
@@ -679,8 +679,9 @@ app.get('/api/funding-rates/:exchange',
             }
             
             if (fundingRate) {
+               const normalizedSymbol = (fundingRate as any).symbol || symbol;
                fundingRates.push({
-                 symbol: symbol,
+                 symbol: normalizedSymbol,
                  fundingRate: fundingRate.fundingRate || 0,
                  fundingTimestamp: fundingRate.fundingTimestamp || Date.now(),
                  nextFundingTime: fundingRate.nextFundingDatetime ? new Date(fundingRate.nextFundingDatetime).getTime() : 0,
@@ -1063,10 +1064,10 @@ app.notFound((c) => {
 export default app;
 
 if (import.meta.main) {
-  console.log(`🚀 CCXT Service starting on port ${PORT}`)
-  console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`)
+  console.log(`🚀 CCXT Service starting on port ${PORT}`);
+  console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
   serve({
     fetch: app.fetch,
     port: Number(PORT),
-  })
+  });
 }

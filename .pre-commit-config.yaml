@@ -88,6 +88,6 @@ repos:
 
       - id: no-secrets
         name: no-secrets
-        entry: bash -c 'if grep -RIEni "password|secret|api[_-]?key|jwt[_-]?secret|github[_-]?token|aws[_-]?access|aws[_-]?secret" --include="*.go" --include="*.yaml" --include="*.yml" --include="*.json" --exclude-dir=".git" --exclude="*.example" --exclude-dir="coverage" . | grep -vE "test-secret-key|test-admin-key|replace-with-secure-secret"; then echo "Potential secrets found!"; exit 1; fi'
+        entry: bash -c 'if grep -R -n -E -i "(password|secret|api[_-]?key|jwt[_-]?secret|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|bearer|ssh[ _-]?rsa)" --include="*.go" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.env" --exclude-dir=".git" --exclude="*.example" --exclude="*README*" --exclude-dir="docs" --exclude-dir=".trae" .; then echo "Potential secrets found!"; exit 1; fi'
         language: system
         pass_filenames: false
