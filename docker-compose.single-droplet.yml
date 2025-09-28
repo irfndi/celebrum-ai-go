@@ -121,7 +121,7 @@ services:
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3000
       - CCXT_TIMEOUT=30
-      - JWT_SECRET=${JWT_SECRET} # REQUIRED: Set JWT_SECRET env var
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set for production security} # REQUIRED
       - SERVER_PORT=8080
       # Phase control - External connections disabled during warmup
       - STARTUP_PHASE=3

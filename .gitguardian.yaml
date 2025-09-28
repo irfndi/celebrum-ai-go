@@ -1,0 +1,19 @@
+version: 1
+paths:
+  ignore:
+    - ".trae/**"
+    - "docs/**"
+    - "signoz/**"
+    - "coverage/**"
+    - "test/**"
+    - "testmocks/**"
+    - "**/*.pem"
+    - "**/*.crt"
+    - "**/*.key"
+    - "**/ccxt.log"
+secrets:
+  ignore_known_secrets: true
+  ignore:
+    - "test-secret-key"
+    - "test-admin-key"
+    - "replace-with-secure-secret"

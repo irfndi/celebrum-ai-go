@@ -8,7 +8,7 @@ Worker utilities note (Bun >= 1.2.21):
   as a top-level string field to preserve fast-path benefits.
 */
 import { serve } from '@hono/node-server'
-require('./tracing');
+import './tracing'
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -16,8 +16,8 @@ import { logger } from 'hono/logger';
 // import { compress } from 'hono/compress'; // Removed due to CompressionStream not available in Bun
 import { secureHeaders } from 'hono/secure-headers';
 import { validator } from 'hono/validator';
-// Use require for CCXT to ensure all exchanges are available in test environment
-const ccxt = require('ccxt');
+// Use ESM import for CCXT to work in Bun + tests
+import ccxt from 'ccxt'
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
@@ -37,7 +37,7 @@ import type {
 } from './types';
 
 // Load environment variables
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
 // SECURITY: Validate ADMIN_API_KEY is set and not using default insecure value
@@ -204,8 +204,8 @@ function initializeExchange(exchangeId: string): boolean {
       return false;
     }
     
-    if (!exchange.fetchMarkets) {
-      console.warn(`Exchange ${exchangeId} missing fetchMarkets method`);
+    if (!exchange.loadMarkets) {
+      console.warn(`Exchange ${exchangeId} missing loadMarkets method`);
       return false;
     }
 
@@ -1059,11 +1059,14 @@ app.notFound((c) => {
   return c.json(errorResponse, 404);
 });
 
-// Start server
-console.log(`🚀 CCXT Service starting on port ${PORT}`);
-console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`);
+// Export app for tests; only start server when run directly
+export default app;
 
-serve({
-  fetch: app.fetch,
-  port: Number(PORT),
-});
+if (import.meta.main) {
+  console.log(`🚀 CCXT Service starting on port ${PORT}`)
+  console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(', ')}`)
+  serve({
+    fetch: app.fetch,
+    port: Number(PORT),
+  })
+}

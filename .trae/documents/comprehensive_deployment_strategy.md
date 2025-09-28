@@ -75,9 +75,13 @@ docker-compose -f docker-compose.single-droplet.yml exec postgres psql -U celebr
 # Start CCXT service first
 docker-compose -f docker-compose.single-droplet.yml up -d ccxt-service
 
-# Wait and verify CCXT service health
-sleep 30
-curl -f http://localhost:3001/api/health || echo "CCXT service not ready"
+# Wait and verify CCXT service health (readiness loop)
+for i in {1..30}; do
+  if curl -sf http://localhost:3000/health >/dev/null; then
+    echo "CCXT service is ready"; break
+  fi
+  echo "Waiting for CCXT service..."; sleep 2
+done
 
 # Start main application
 docker-compose -f docker-compose.single-droplet.yml up -d app
@@ -118,7 +122,7 @@ docker-compose exec postgres pg_isready -U celebrum_user
 docker-compose exec redis redis-cli ping
 
 # CCXT service health
-curl -f http://localhost:3001/api/health
+curl -f http://localhost:3000/health
 
 # Application health
 curl -f http://localhost:8080/api/health
@@ -164,7 +168,7 @@ REDIS_PORT=6379
 REDIS_PASSWORD=<secure-password>
 
 # CCXT Service
-CCXT_SERVICE_URL=http://ccxt-service:3001
+CCXT_SERVICE_URL=http://ccxt-service:3000
 
 # Application
 SERVER_PORT=8080
@@ -271,7 +275,7 @@ docker-compose exec postgres psql -U celebrum_user -d celebrum_db -f /migrations
 - [ ] All containers running: `docker-compose ps`
 - [ ] Database accessible: `psql` connection test
 - [ ] Redis accessible: `redis-cli ping`
-- [ ] CCXT service responding: `curl http://localhost:3001/api/health`
+- [ ] CCXT service responding: `curl http://localhost:3000/health`
 - [ ] Main app responding: `curl http://localhost:8080/api/health`
 - [ ] Nginx serving requests: `curl http://localhost/api/health`
 - [ ] API endpoints functional: Test key endpoints
@@ -322,7 +326,11 @@ docker-compose -f docker-compose.single-droplet.yml up migrate
 
 # Start services in order
 docker-compose -f docker-compose.single-droplet.yml up -d ccxt-service
-sleep 30
+# readiness loop
+for i in {1..30}; do
+  curl -sf http://localhost:3000/health && break
+  sleep 2
+done
 docker-compose -f docker-compose.single-droplet.yml up -d app
 docker-compose -f docker-compose.single-droplet.yml up -d nginx
 
@@ -351,7 +359,7 @@ docker-compose -f docker-compose.single-droplet.yml ps
 echo "\n=== Health Checks ==="
 echo "Database: $(docker-compose exec -T postgres pg_isready -U celebrum_user)"
 echo "Redis: $(docker-compose exec -T redis redis-cli ping)"
-echo "CCXT: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health)"
+echo "CCXT: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health)"
 echo "App: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)"
 echo "Nginx: $(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)"
 

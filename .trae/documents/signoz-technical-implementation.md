@@ -71,6 +71,7 @@ import (
 func InitTracer(serviceName, collectorURL string) (*trace.TracerProvider, error) {
     exporter, err := otlptracehttp.New(
         context.Background(),
+        // WithEndpoint expects host:port, not a URL scheme
         otlptracehttp.WithEndpoint(collectorURL),
         otlptracehttp.WithInsecure(),
     )
@@ -301,7 +302,7 @@ import (
 
 func main() {
     // Initialize OpenTelemetry
-    tp, err := telemetry.InitTracer("arbitrage-server", "http://localhost:4318")
+    tp, err := telemetry.InitTracer("arbitrage-server", "localhost:4318")
     if err != nil {
         log.Fatal("Failed to initialize tracer:", err)
     }

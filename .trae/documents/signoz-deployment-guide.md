@@ -243,7 +243,7 @@ services:
     image: redis:7-alpine
     container_name: signoz-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - ${REDIS_DATA_PATH:-./data/redis}:/data
     command: redis-server --appendonly yes
