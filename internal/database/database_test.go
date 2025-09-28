@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -38,7 +40,7 @@ func TestPostgresDB_Close_WithPool(t *testing.T) {
 	// Create a mock pool that we can close
 	// Since we can't create a real pool without a database, we'll test the logic path
 	db := &PostgresDB{Pool: nil}
-	
+
 	// Should not panic when closing with nil pool (already tested)
 	assert.NotPanics(t, func() {
 		db.Close()
@@ -156,18 +158,14 @@ func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
 		ConnMaxIdleTime: "invalid-duration",
 	}
 
-	// This should still work as invalid durations are ignored
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	// but it should fail at connection, not at config parsing
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	// The error should be about connection failure
-	assert.Contains(t, err.Error(), "failed to ping database")
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
 }
 
-func TestNewPostgresConnection_BuildDSNFromComponents(t *testing.T) {
-	// Test DSN building from individual components
+func TestBuildPGXPoolConfig_BuildsFromComponents(t *testing.T) {
+	// Test DSN building from individual components without attempting a real connection
 	cfg := &config.DatabaseConfig{
 		Host:         "localhost",
 		Port:         5432,
@@ -180,11 +178,20 @@ func TestNewPostgresConnection_BuildDSNFromComponents(t *testing.T) {
 		// Leave DatabaseURL empty to test component-based DSN
 	}
 
-	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	assert.Error(t, err)
-	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	poolConfig, err := buildPGXPoolConfig(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, poolConfig)
+
+	assert.Equal(t, int32(10), poolConfig.MaxConns)
+	assert.Equal(t, int32(5), poolConfig.MinConns)
+
+	connString := poolConfig.ConnString()
+	assert.Contains(t, connString, "host=localhost")
+	assert.Contains(t, connString, "port=5432")
+	assert.Contains(t, connString, "user=testuser")
+	assert.Contains(t, connString, "password=testpass")
+	assert.Contains(t, connString, "dbname=testdb")
+	assert.Contains(t, connString, "sslmode=disable")
 }
 
 // Test NewRedisConnection with invalid config
@@ -646,7 +653,7 @@ func TestTracedTx_CopyFrom_NilTx(t *testing.T) {
 	ctx := context.Background()
 	tableName := pgx.Identifier{"test"}
 	columnNames := []string{"col"}
-	
+
 	// Create a simple CopyFromSource
 	rows := [][]interface{}{{"value"}}
 	rowSrc := pgx.CopyFromRows(rows)
@@ -1022,8 +1029,7 @@ func TestNewPostgresConnection_ValidDatabaseURL(t *testing.T) {
 }
 
 // Test NewPostgresConnection with connection pool configuration
-func TestNewPostgresConnection_ConnectionPoolConfig(t *testing.T) {
-	// Test with maximum connection pool values
+func TestBuildPGXPoolConfig_ConnectionPoolConfig(t *testing.T) {
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1031,22 +1037,22 @@ func TestNewPostgresConnection_ConnectionPoolConfig(t *testing.T) {
 		Password:        "test",
 		DBName:          "test",
 		SSLMode:         "disable",
-		MaxOpenConns:    2147483647, // Maximum int32 value
-		MaxIdleConns:    2147483647, // Maximum int32 value
+		MaxOpenConns:    2147483647,
+		MaxIdleConns:    2147483647,
 		ConnMaxLifetime: "24h",
 		ConnMaxIdleTime: "1h",
 	}
 
-	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	assert.Error(t, err)
-	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, maxAllowedPoolConns, poolCfg.MaxConns)
+	assert.Equal(t, maxAllowedPoolConns, poolCfg.MinConns)
+	assert.Equal(t, 24*time.Hour, poolCfg.MaxConnLifetime)
+	assert.Equal(t, time.Hour, poolCfg.MaxConnIdleTime)
 }
 
-// Test NewPostgresConnection with edge case configurations
-func TestNewPostgresConnection_EdgeCases(t *testing.T) {
-	// Test with zero connection pool values
+// Test buildPGXPoolConfig with edge case configurations
+func TestBuildPGXPoolConfig_EdgeCases(t *testing.T) {
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1054,23 +1060,32 @@ func TestNewPostgresConnection_EdgeCases(t *testing.T) {
 		Password:        "test",
 		DBName:          "test",
 		SSLMode:         "disable",
-		MaxOpenConns:    0, // Should be ignored
-		MaxIdleConns:    0, // Should be ignored
+		MaxOpenConns:    0,
+		MaxIdleConns:    0,
 		ConnMaxLifetime: "0s",
 		ConnMaxIdleTime: "0s",
 	}
 
-	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	assert.Error(t, err)
-	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, poolCfg.MaxConns, int32(0))
+	assert.GreaterOrEqual(t, poolCfg.MinConns, int32(0))
+	assert.LessOrEqual(t, poolCfg.MaxConns, maxAllowedPoolConns)
+	assert.LessOrEqual(t, poolCfg.MinConns, maxAllowedPoolConns)
+	assert.Equal(t, time.Duration(0), poolCfg.MaxConnLifetime)
+	assert.Equal(t, time.Duration(0), poolCfg.MaxConnIdleTime)
 }
 
+// Test buildPGXPoolConfig with connection pool bounds checking
+func TestBuildPGXPoolConfig_ConnectionPoolBounds(t *testing.T) {
+	t.Parallel()
 
-// Test NewPostgresConnection with connection pool bounds checking
-func TestNewPostgresConnection_ConnectionPoolBounds(t *testing.T) {
-	// Test with connection pool values exceeding int32 bounds
+	if strconv.IntSize == 32 {
+		t.Skip("skipping bounds test on 32-bit architectures")
+	}
+
+	tooLarge := int64(math.MaxInt32) + 1
+
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1078,17 +1093,63 @@ func TestNewPostgresConnection_ConnectionPoolBounds(t *testing.T) {
 		Password:        "test",
 		DBName:          "test",
 		SSLMode:         "disable",
-		MaxOpenConns:    2147483648, // Exceeds int32 max
-		MaxIdleConns:    2147483648, // Exceeds int32 max
+		MaxOpenConns:    int(tooLarge),
+		MaxIdleConns:    int(tooLarge),
 		ConnMaxLifetime: "1h",
 		ConnMaxIdleTime: "30m",
 	}
 
-	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, maxAllowedPoolConns, poolCfg.MaxConns)
+	assert.Equal(t, maxAllowedPoolConns, poolCfg.MinConns)
+	assert.Equal(t, time.Hour, poolCfg.MaxConnLifetime)
+	assert.Equal(t, 30*time.Minute, poolCfg.MaxConnIdleTime)
+}
+
+func TestBuildPGXPoolConfig_InvalidDurations(t *testing.T) {
+	cfg := &config.DatabaseConfig{
+		Host:            "localhost",
+		Port:            5432,
+		User:            "test",
+		Password:        "test",
+		DBName:          "test",
+		SSLMode:         "disable",
+		MaxOpenConns:    10,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: "oops",
+	}
+
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
 	assert.Error(t, err)
-	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
+
+	cfg.ConnMaxLifetime = "1h"
+	cfg.ConnMaxIdleTime = "still-bad"
+
+	poolCfg, err = buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxIdleTime")
+}
+
+func TestBuildPGXPoolConfig_InvalidPoolSizing(t *testing.T) {
+	cfg := &config.DatabaseConfig{
+		Host:         "localhost",
+		Port:         5432,
+		User:         "test",
+		Password:     "test",
+		DBName:       "test",
+		SSLMode:      "disable",
+		MaxOpenConns: 5,
+		MaxIdleConns: 10,
+	}
+
+	poolCfg, err := buildPGXPoolConfig(cfg)
+	assert.Nil(t, poolCfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid pool sizing")
 }
 
 // Test RedisClient Close with actual Redis client mock
@@ -1171,7 +1232,7 @@ func TestPostgresDB_Close_Success(t *testing.T) {
 	// Since we can't create a real pool without a database,
 	// we'll test the Close method behavior with nil pool
 	db := &PostgresDB{Pool: nil}
-	
+
 	// Should not panic when closing nil pool
 	assert.NotPanics(t, func() {
 		db.Close()
@@ -1183,11 +1244,11 @@ func TestPostgresDB_Close_Logging(t *testing.T) {
 	// Create a logger to capture log messages
 	logger := logrus.New()
 	logger.SetLevel(logrus.InfoLevel)
-	
+
 	db := &PostgresDB{
 		Pool: nil,
 	}
-	
+
 	// Should not panic and should handle nil pool gracefully
 	assert.NotPanics(t, func() {
 		db.Close()
@@ -1201,18 +1262,18 @@ func TestRedisClient_Close_ErrorScenarios(t *testing.T) {
 		Client: nil,
 		logger: nil,
 	}
-	
+
 	assert.NotPanics(t, func() {
 		client1.Close()
 	})
-	
+
 	// Test with nil client but with logger
 	logger := logrus.New()
 	client2 := &RedisClient{
 		Client: nil,
 		logger: logger,
 	}
-	
+
 	assert.NotPanics(t, func() {
 		client2.Close()
 	})
@@ -1308,21 +1369,21 @@ func TestNewRedisConnection_AdditionalScenarios(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
 }
 
-// Test PostgresDB additional configuration scenarios  
+// Test PostgresDB additional configuration scenarios
 func TestNewPostgresConnection_AdditionalConfigs(t *testing.T) {
 	// Test with different SSL modes
 	sslModes := []string{"disable", "require", "verify-ca", "verify-full"}
-	
+
 	for _, sslMode := range sslModes {
 		cfg := &config.DatabaseConfig{
-			Host:    "localhost",
-			Port:    5432,
-			User:    "test",
+			Host:     "localhost",
+			Port:     5432,
+			User:     "test",
 			Password: "test",
-			DBName:  "test",
-			SSLMode: sslMode,
+			DBName:   "test",
+			SSLMode:  sslMode,
 		}
-		
+
 		_, err := NewPostgresConnection(cfg)
 		assert.Error(t, err)
 	}
@@ -1331,9 +1392,9 @@ func TestNewPostgresConnection_AdditionalConfigs(t *testing.T) {
 // Test PostgresDB with duration edge cases
 func TestNewPostgresConnection_DurationEdgeCases(t *testing.T) {
 	durationTests := []struct {
-		name        string
-		lifetime    string
-		idleTime    string
+		name     string
+		lifetime string
+		idleTime string
 	}{
 		{"Empty strings", "", ""},
 		{"Zero durations", "0ns", "0ns"},
@@ -1343,20 +1404,20 @@ func TestNewPostgresConnection_DurationEdgeCases(t *testing.T) {
 		{"Microsecond precision", "1µs", "1µs"},
 		{"Nanosecond precision", "1ns", "1ns"},
 	}
-	
+
 	for _, tt := range durationTests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.DatabaseConfig{
 				Host:            "localhost",
 				Port:            5432,
-				User:            "test", 
+				User:            "test",
 				Password:        "test",
 				DBName:          "test",
 				SSLMode:         "disable",
 				ConnMaxLifetime: tt.lifetime,
 				ConnMaxIdleTime: tt.idleTime,
 			}
-			
+
 			_, err := NewPostgresConnection(cfg)
 			assert.Error(t, err)
 		})
@@ -1382,10 +1443,10 @@ func TestNewPostgresConnection_ErrorScenarios(t *testing.T) {
 		DBName:   "test",
 		SSLMode:  "disable",
 	}
-	
+
 	_, err := NewPostgresConnection(cfg)
 	assert.Error(t, err)
-	
+
 	// Test with empty host
 	cfg2 := &config.DatabaseConfig{
 		Host:     "",
@@ -1395,7 +1456,7 @@ func TestNewPostgresConnection_ErrorScenarios(t *testing.T) {
 		DBName:   "test",
 		SSLMode:  "disable",
 	}
-	
+
 	_, err = NewPostgresConnection(cfg2)
 	assert.Error(t, err)
 }
@@ -1409,10 +1470,10 @@ func TestNewRedisConnection_ErrorScenarios(t *testing.T) {
 		Password: "",
 		DB:       0,
 	}
-	
+
 	_, err := NewRedisConnection(cfg)
 	assert.Error(t, err)
-	
+
 	// Test with empty host
 	cfg2 := config.RedisConfig{
 		Host:     "",
@@ -1420,7 +1481,7 @@ func TestNewRedisConnection_ErrorScenarios(t *testing.T) {
 		Password: "",
 		DB:       0,
 	}
-	
+
 	_, err = NewRedisConnection(cfg2)
 	assert.Error(t, err)
 }
@@ -1433,14 +1494,14 @@ func TestNewRedisConnectionWithRetry_InvalidConfig(t *testing.T) {
 		Password: "",
 		DB:       0,
 	}
-	
+
 	// Mock ErrorRecoveryManager
 	mockManager := &MockErrorRecoveryManager{
 		executeWithRetryFunc: func(ctx context.Context, operationName string, operation func() error) error {
 			return operation() // Just execute once, no retry
 		},
 	}
-	
+
 	_, err := NewRedisConnectionWithRetry(cfg, mockManager)
 	assert.Error(t, err)
 }
@@ -1470,7 +1531,7 @@ func TestNewPostgresConnection_ExcessivePoolValues(t *testing.T) {
 
 // Test NewPostgresConnection with invalid duration formats
 func TestNewPostgresConnection_InvalidDurations(t *testing.T) {
-	// Test with invalid duration formats (should be ignored)
+	// Test with invalid duration formats (should error)
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
 		Port:            5432,
@@ -1485,9 +1546,7 @@ func TestNewPostgresConnection_InvalidDurations(t *testing.T) {
 	}
 
 	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
 }
-

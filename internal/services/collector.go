@@ -10,10 +10,10 @@ import (
     "sync"
     "sync/atomic"
     "time"
-
     "github.com/redis/go-redis/v9"
     "golang.org/x/text/cases"
     "golang.org/x/text/language"
+
     "github.com/irfandi/celebrum-ai-go/internal/cache"
     "github.com/irfandi/celebrum-ai-go/internal/ccxt"
     "github.com/irfandi/celebrum-ai-go/internal/config"
@@ -936,35 +936,6 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
     err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
         return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
             var fetchErr error
-            var marketDataInterfaces []ccxt.MarketPriceInterface
-            marketDataInterfaces, fetchErr = c.ccxtService.FetchMarketData(ctx, []string{worker.Exchange}, validSymbols)
-            if fetchErr != nil {
-                return fetchErr
-            }
-            // Convert to models for downstream processing
-            marketData = c.convertMarketPriceInterfacesToModels(marketDataInterfaces)
-            return nil
-        })
-    })
-
-	if err != nil {
-		// If bulk fetch fails, fall back to individual symbol collection
-		// This allows us to identify and blacklist problematic symbols
-		c.logger.Info("Bulk fetch failed, falling back to individual symbol collection", "exchange", worker.Exchange, "error", err)
-		return c.collectTickerDataSequential(worker)
-	}
-
-	c.logger.Info("Fetched tickers", "exchange", worker.Exchange, "count", len(marketData))
-
-	// Cache the bulk ticker data in Redis with 10-second TTL for API performance
-	if c.redisClient != nil && len(marketData) > 0 {
-		c.cacheBulkTickerData(worker.Exchange, marketData)
-	}
-
-	// Process and save each ticker data concurrently for better performance
-	successCount := 0
-	errorChan := make(chan error, len(marketData))
-	successChan := make(chan bool, len(marketData))
 
 	// Use goroutines for concurrent processing of ticker data
 	for _, ticker := range marketData {

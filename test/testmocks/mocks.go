@@ -505,15 +505,5 @@ func (m *MockCacheAnalyticsService) RecordCacheHit(category string) {
 }
 
 func (m *MockCacheAnalyticsService) RecordCacheMiss(category string) {
-    m.Called(category)
-}
-
-// MockSpotArbitrageCalculator implements ArbitrageCalculator for testing
-type MockSpotArbitrageCalculator struct {
-    mock.Mock
-}
-
-func (m *MockSpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
-    args := m.Called(ctx, marketData)
-    return args.Get(0).([]models.ArbitrageOpportunity), args.Error(1)
+	m.Called(category)
 }

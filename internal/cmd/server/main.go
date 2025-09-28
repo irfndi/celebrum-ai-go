@@ -13,11 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api"
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -86,11 +86,23 @@ func run() error {
 	}
 	defer redis.Close()
 
-	// Initialize blacklist cache using mock implementation from cache
+<<<<<<< HEAD
+	// Initialize blacklist cache using the in-memory implementation
 	blacklistCache := cache.NewInMemoryBlacklistCache()
 
 	// Initialize CCXT service with blacklist cache
 	ccxtService := ccxt.NewService(&cfg.CCXT, logrusLogger, blacklistCache)
+=======
+	// Initialize blacklist cache using the in-memory implementation
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+
+	// Initialize CCXT service with blacklist cache
+	ccxtConfig := &config.CCXTConfig{
+		ServiceURL: cfg.CCXT.ServiceURL,
+		Timeout:    cfg.CCXT.Timeout,
+	}
+	ccxtService := ccxt.NewService(ccxtConfig, logrusLogger, blacklistCache)
+>>>>>>> pr-24
 
 	// Initialize cache analytics service
 	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
