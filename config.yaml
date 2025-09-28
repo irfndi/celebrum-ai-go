@@ -6,9 +6,9 @@ environment: development
 
 # Logging configuration
 logging:
-  level: info # debug, info, warn, error
-  format: json # json, text
-  output: stdout # stdout, file
+  level: info  # debug, info, warn, error
+  format: json  # json, text
+  output: stdout  # stdout, file
   file_path: logs/app.log
 
 # Server configuration
@@ -25,17 +25,17 @@ server:
 
 # Database configuration
 database:
-  # For local development with Docker on host
+  # For local development
   host: localhost
   port: 5432
-  user: celebrum_user
-  password: celebrum_password_123
+  user: postgres
+  password: postgres
   dbname: celebrum_ai
   sslmode: disable
-
+  
   # For Digital Ocean managed database (use DATABASE_URL environment variable)
   # database_url: "postgres://username:password@host:port/dbname?sslmode=require"
-
+  
   # Connection pool settings (optimized for cloud deployment)
   max_open_conns: 25
   max_idle_conns: 5
@@ -44,7 +44,7 @@ database:
 
 # Redis configuration
 redis:
-  host: redis
+  host: localhost
   port: 6379
   password: ""
   db: 0
@@ -75,7 +75,7 @@ telegram:
 
 # Market Data configuration
 market_data:
-  collection_interval: 5m # Collect data every 5 minutes (optimized for efficiency)
+  collection_interval: 90s  # Collect data every 1.5 minutes (aggressive mode)
   batch_size: 500
   max_retries: 3
   timeout: 15s
@@ -85,39 +85,14 @@ market_data:
     - kraken
     - bitfinex
     - huobi
-
-# Data Cleanup configuration
-cleanup:
-  # Smart cleanup strategy - maintains 24h buffer while cleaning old data
-  market_data:
-    retention_hours: 36 # Keep 36 hours of market data
-    deletion_hours: 12 # Delete oldest 12 hours when cleaning (keeps 24h buffer)
-  funding_rates:
-    retention_hours: 36 # Keep 36 hours of funding rate data
-    deletion_hours: 12 # Delete oldest 12 hours when cleaning
-  arbitrage_opportunities:
-    retention_hours: 72 # Keep 72 hours of arbitrage opportunities
-  interval: 60 # Run cleanup every 60 minutes
-  enable_smart_cleanup: true # Use smart cleanup strategy
-
-# Historical Data Backfill configuration
-backfill:
-  enabled: true # Enable backfill on startup
-  backfill_hours: 6 # Collect 6 hours of historical data
-  min_data_threshold_hours: 4 # Trigger backfill if less than 4h of data available
-  batch_size: 5 # Process 5 symbols at a time
-  delay_between_batches: 500 # Delay in milliseconds between symbol processing
+    - bybit
 
 # Arbitrage configuration
 arbitrage:
-  min_profit_threshold: 0.5 # Minimum profit percentage
-  max_trade_amount: 1000.0 # Maximum trade amount in USD
-  check_interval: 2m # Check for opportunities every 2 minutes
-  enabled_pairs:
-    - BTC/USDT
-    - ETH/USDT
-    - BNB/USDT
-    - ADA/USDT
+  min_profit_threshold: 0.5  # Minimum profit percentage
+  max_trade_amount: 1000.0   # Maximum trade amount in USD
+  check_interval: 2m  # Check for opportunities every 2 minutes
+  # enabled_pairs: []  # Deprecated - using dynamic pairs from exchanges
 
 # Technical Analysis configuration
 technical_analysis:
@@ -138,7 +113,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "" # SECURITY: Use JWT_SECRET environment variable - never hardcode secrets
+  jwt_secret: ""
   jwt_expiry: 24h
   bcrypt_cost: 12
   rate_limit:
@@ -154,20 +129,12 @@ monitoring:
     enabled: true
     path: /metrics
 
-# Telemetry configuration for OpenTelemetry
-telemetry:
-  enabled: true
-  otlp_endpoint: http://localhost:4318
-  service_name: celebrum-ai-go
-  service_version: 1.0.0
-  log_level: info # debug, info, warn, error
-
 # Feature flags
 features:
   telegram_bot: true
   web_interface: true
   api_v1: true
-  real_trading: false # Set to true only in production with proper safeguards
+  real_trading: false  # Set to true only in production with proper safeguards
   paper_trading: true
 
 # External APIs
@@ -175,9 +142,9 @@ external_apis:
   coingecko:
     base_url: https://api.coingecko.com/api/v3
     timeout: 10s
-    rate_limit: 50 # requests per minute
+    rate_limit: 50  # requests per minute
   coinmarketcap:
     base_url: https://pro-api.coinmarketcap.com/v1
     api_key: ""
     timeout: 10s
-    rate_limit: 333 # requests per day for free tier
+    rate_limit: 333  # requests per day for free tier
