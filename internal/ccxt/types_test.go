@@ -1,16 +1,17 @@
 package ccxt
 
 import (
-	"context"
-	"fmt"
-	"testing"
-	"time"
+    "context"
+    "fmt"
+    "testing"
+    "time"
 
-	"github.com/irfandi/celebrum-ai-go/internal/cache"
-	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
+    "github.com/irfandi/celebrum-ai-go/internal/cache"
+    "github.com/irfandi/celebrum-ai-go/internal/config"
+    "github.com/irfandi/celebrum-ai-go/internal/models"
+    "github.com/shopspring/decimal"
+    "github.com/sirupsen/logrus"
+    "github.com/stretchr/testify/assert"
 )
 
 // MockClient implements the Client interface for testing
@@ -455,12 +456,16 @@ func TestService_FetchSingleTicker_Success(t *testing.T) {
 		logger:         logger,
 	}
 
-	marketPrice, err := service.FetchSingleTicker(context.Background(), "binance", "BTC/USDT")
-	assert.NoError(t, err)
-	assert.Equal(t, "binance", marketPrice.ExchangeName)
-	assert.Equal(t, "BTC/USDT", marketPrice.Symbol)
-	assert.Equal(t, decimal.NewFromFloat(50000.0), marketPrice.Price)
-	assert.Equal(t, decimal.NewFromFloat(1000.0), marketPrice.Volume)
+    marketPrice, err := service.FetchSingleTicker(context.Background(), "binance", "BTC/USDT")
+    assert.NoError(t, err)
+    mp, ok := marketPrice.(*models.MarketPrice)
+    if !ok {
+        t.Fatalf("expected *models.MarketPrice, got %T", marketPrice)
+    }
+    assert.Equal(t, "binance", mp.ExchangeName)
+    assert.Equal(t, "BTC/USDT", mp.Symbol)
+    assert.Equal(t, decimal.NewFromFloat(50000.0), mp.Price)
+    assert.Equal(t, decimal.NewFromFloat(1000.0), mp.Volume)
 }
 
 // Test Service FetchSingleTicker function with client error

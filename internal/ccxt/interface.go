@@ -49,8 +49,8 @@ type CCXTService interface {
 	AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error)
 
 	// Market data operations
-	FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error)
-	FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error)
+	FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]MarketPriceInterface, error)
+	FetchSingleTicker(ctx context.Context, exchange, symbol string) (MarketPriceInterface, error)
 	FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error)
 	FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error)
 	FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error)

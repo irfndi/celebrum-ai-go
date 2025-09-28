@@ -166,7 +166,7 @@ exporters:
   clickhouse:
     endpoint: tcp://clickhouse:9000?database=signoz_traces
     username: default
-    password: ""
+    password: "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}"
     timeout: 5s
     retry_on_failure:
       enabled: true

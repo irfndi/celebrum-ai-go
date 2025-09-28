@@ -1,25 +1,23 @@
 package services
 
 import (
-	"context"
-	"fmt"
-	"testing"
-	"time"
+    "context"
+    "fmt"
+    "testing"
+    "time"
+    "github.com/alicebob/miniredis/v2"
+    "github.com/pashagolub/pgxmock/v4"
+    "github.com/redis/go-redis/v9"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 
-	"github.com/alicebob/miniredis/v2"
-	"github.com/pashagolub/pgxmock/v4"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/irfandi/celebrum-ai-go/internal/database"
+    "github.com/irfandi/celebrum-ai-go/internal/database"
 )
-
 // TestCacheWarmingService_NewCacheWarmingService tests service creation
 func TestCacheWarmingService_NewCacheWarmingService(t *testing.T) {
 	// Create service with nil dependencies to test service creation
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	// Service should be created successfully (nil dependencies are handled gracefully)
 	assert.NotNil(t, service)
 }
@@ -28,10 +26,10 @@ func TestCacheWarmingService_NewCacheWarmingService(t *testing.T) {
 func TestCacheWarmingService_WarmCache(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.WarmCache(ctx)
-	
+
 	// The function should handle nil dependencies gracefully and return nil
 	// Individual warming operations will fail and log warnings, but overall function succeeds
 	assert.Nil(t, err)
@@ -41,10 +39,10 @@ func TestCacheWarmingService_WarmCache(t *testing.T) {
 func TestCacheWarmingService_warmExchangeConfig(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.warmExchangeConfig(ctx)
-	
+
 	// The function should handle nil dependencies gracefully
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -54,10 +52,10 @@ func TestCacheWarmingService_warmExchangeConfig(t *testing.T) {
 func TestCacheWarmingService_warmSupportedExchanges(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.warmSupportedExchanges(ctx)
-	
+
 	// The function should handle nil dependencies gracefully
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -67,10 +65,10 @@ func TestCacheWarmingService_warmSupportedExchanges(t *testing.T) {
 func TestCacheWarmingService_warmTradingPairs(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.warmTradingPairs(ctx)
-	
+
 	// The function should handle nil dependencies gracefully
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -80,10 +78,10 @@ func TestCacheWarmingService_warmTradingPairs(t *testing.T) {
 func TestCacheWarmingService_warmExchanges(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.warmExchanges(ctx)
-	
+
 	// The function should handle nil dependencies gracefully
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -93,10 +91,10 @@ func TestCacheWarmingService_warmExchanges(t *testing.T) {
 func TestCacheWarmingService_warmFundingRates(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.warmFundingRates(ctx)
-	
+
 	// The function should handle nil dependencies gracefully
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -380,10 +378,10 @@ func TestCacheWarmingService_warmFundingRates_TimePrecision(t *testing.T) {
 func TestCacheWarmingService_errorHandling(t *testing.T) {
 	// Create service with nil dependencies to test error handling
 	service := NewCacheWarmingService(nil, nil, nil)
-	
+
 	ctx := context.Background()
 	err := service.WarmCache(ctx)
-	
+
 	// The function should handle nil dependencies gracefully and return nil
 	// Individual warming operations will fail and log warnings, but overall function succeeds
 	assert.Nil(t, err)
