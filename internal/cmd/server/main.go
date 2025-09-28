@@ -86,23 +86,11 @@ func run() error {
 	}
 	defer redis.Close()
 
-<<<<<<< HEAD
 	// Initialize blacklist cache using the in-memory implementation
 	blacklistCache := cache.NewInMemoryBlacklistCache()
 
 	// Initialize CCXT service with blacklist cache
 	ccxtService := ccxt.NewService(&cfg.CCXT, logrusLogger, blacklistCache)
-=======
-	// Initialize blacklist cache using the in-memory implementation
-	blacklistCache := cache.NewInMemoryBlacklistCache()
-
-	// Initialize CCXT service with blacklist cache
-	ccxtConfig := &config.CCXTConfig{
-		ServiceURL: cfg.CCXT.ServiceURL,
-		Timeout:    cfg.CCXT.Timeout,
-	}
-	ccxtService := ccxt.NewService(ccxtConfig, logrusLogger, blacklistCache)
->>>>>>> pr-24
 
 	// Initialize cache analytics service
 	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
