@@ -29,19 +29,19 @@ func (c *CollectorService) convertMarketPriceInterfacesToModels(interfaceData []
     if interfaceData == nil {
         return make([]models.MarketPrice, 0)
     }
-	
-	marketData := make([]models.MarketPrice, 0, len(interfaceData))
-	for _, item := range interfaceData {
-		marketData = append(marketData, models.MarketPrice{
-			ExchangeID:   0, // Will be filled later
-			ExchangeName: item.GetExchangeName(),
-			Symbol:       item.GetSymbol(),
-			Price:        decimal.NewFromFloat(item.GetPrice()),
-			Volume:       decimal.NewFromFloat(item.GetVolume()),
-			Timestamp:    item.GetTimestamp(),
-		})
-	}
-	return marketData
+
+    marketData := make([]models.MarketPrice, 0, len(interfaceData))
+    for _, item := range interfaceData {
+        marketData = append(marketData, models.MarketPrice{
+            ExchangeID:   0, // Will be filled later
+            ExchangeName: item.GetExchangeName(),
+            Symbol:       item.GetSymbol(),
+            Price:        decimal.NewFromFloat(item.GetPrice()),
+            Volume:       decimal.NewFromFloat(item.GetVolume()),
+            Timestamp:    item.GetTimestamp(),
+        })
+    }
+    return marketData
 }
 
 // convertMarketPriceInterfaceToModel converts a single CCXT MarketPriceInterface to models.MarketPrice
@@ -941,6 +941,7 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
             if fetchErr != nil {
                 return fetchErr
             }
+            // Convert to models for downstream processing
             marketData = c.convertMarketPriceInterfacesToModels(marketDataInterfaces)
             return nil
         })
@@ -1224,7 +1225,7 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
+    // Use circuit breaker for CCXT service call with retry logic
     var ticker *models.MarketPrice
     cbErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
         return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_single_fetch", func() error {
@@ -1234,6 +1235,7 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
             if retryErr != nil {
                 return retryErr
             }
+            // Convert interface response to models.MarketPrice for downstream processing
             ticker = c.convertMarketPriceInterfaceToModel(resp)
             return nil
         })
@@ -2445,7 +2447,7 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 
 // generateHistoricalDataPoints creates synthetic historical data points for backfill
 func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exchangeID, symbol string, startTime time.Time) error {
-	// Get current ticker data as baseline with circuit breaker
+    // Get current ticker data as baseline with circuit breaker
     var ticker *models.MarketPrice
     err := c.errorRecoveryManager.ExecuteWithRetry(ctx, "api_call", func() error {
         var fetchErr error
