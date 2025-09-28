@@ -1,0 +1,3 @@
+./admin.go
+./auth.go
+./telemetry.go

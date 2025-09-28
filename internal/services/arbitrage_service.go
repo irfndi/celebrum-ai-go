@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 
@@ -409,7 +410,11 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(s.ctx)
+	defer func() {
+		if err := tx.Rollback(s.ctx); err != nil && err != pgx.ErrTxClosed {
+			s.logger.Error("Failed to rollback transaction", "error", err)
+		}
+	}()
 
 	for _, opp := range opportunities {
 		// Generate UUID for the opportunity if not already set

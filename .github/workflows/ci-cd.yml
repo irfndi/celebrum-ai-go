@@ -215,9 +215,9 @@ jobs:
           chmod +x scripts/ci-cd-integration.sh
           scripts/ci-cd-integration.sh security
 
-  # Build Docker images
+  # Build Docker images and extract artifacts
   build:
-    name: Build Images
+    name: Build Images & Extract Artifacts
     runs-on: ubuntu-latest
     needs: [preflight]
     if: needs.preflight.outputs.should_deploy == 'true'
@@ -227,9 +227,7 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
-    permissions:
-      packages: write
-      contents: read
+      artifacts_path: ${{ steps.extract.outputs.artifacts_path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -266,15 +264,42 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          target: production
+
+      - name: Extract binary artifacts
+        id: extract
+        run: |
+          # Create artifacts directory
+          mkdir -p artifacts/go-backend artifacts/ccxt-service
+          
+          # Extract Go backend binary
+          docker build --target binary -o artifacts/go-backend/ .
+          
+          # Extract CCXT service artifacts
+          cd ccxt-service
+          docker build --target binary -o ../artifacts/ccxt-service/ .
+          cd ..
+          
+          # Package artifacts
+          tar -czf artifacts.tar.gz -C artifacts .
+          
+          echo "artifacts_path=artifacts.tar.gz" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: artifacts.tar.gz
+          retention-days: 30
 
       - name: Output image
         id: image
         run: |
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
 
-  # Deploy to staging
-  deploy-staging:
-    name: Deploy to Staging
+  # Deploy to staging (containers)
+  deploy-staging-containers:
+    name: Deploy to Staging (Containers)
     runs-on: ubuntu-latest
     needs: [preflight, test, security, build]
     if: |
@@ -313,6 +338,49 @@ jobs:
         with:
           name: staging-deployment-artifacts
           path: ci-artifacts/
+
+  # Deploy to staging (binary)
+  deploy-staging-binary:
+    name: Deploy to Staging (Binary)
+    runs-on: ubuntu-latest
+    needs: [preflight, test, security, build]
+    if: |
+      always() &&
+      needs.preflight.outputs.should_deploy == 'true' && 
+      needs.preflight.outputs.environment == 'staging' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
+        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
+      )
+    environment:
+      name: staging-binary
+      url: https://staging-binary.celebrum-ai.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: artifacts/
+
+      - name: Extract artifacts
+        run: |
+          tar -xzf artifacts/artifacts.tar.gz
+
+      - name: Deploy binary to staging
+        env:
+          DEPLOYMENT_TYPE: binary
+          CI_ENVIRONMENT: staging
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+          SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+        run: |
+          chmod +x scripts/deploy-binary.sh
+          scripts/deploy-binary.sh staging
 
   # Deploy to production
   deploy-production:

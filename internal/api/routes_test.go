@@ -16,6 +16,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper functions for environment variable management with proper error handling
+func mustSetEnv(t *testing.T, key, value string) {
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
+
 // Test HealthResponse struct
 func TestHealthResponse_Struct(t *testing.T) {
 	now := time.Now()
@@ -683,14 +696,14 @@ func TestSetupRoutes_MissingTelegramConfig(t *testing.T) {
 	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		mustSetEnv(t, "ADMIN_API_KEY", oldAdminKey)
+		mustSetEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken)
+		mustSetEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Unsetenv("TELEGRAM_BOT_TOKEN")
-	os.Unsetenv("TELEGRAM_CHAT_ID")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustUnsetEnv(t, "TELEGRAM_BOT_TOKEN")
+	mustUnsetEnv(t, "TELEGRAM_CHAT_ID")
 
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}

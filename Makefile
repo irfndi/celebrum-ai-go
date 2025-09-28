@@ -9,6 +9,9 @@ DOCKER_IMAGE_CCXT=$(DOCKER_REGISTRY)/ccxt-service:latest
 DOCKER_COMPOSE_FILE=docker-compose.yml
 DOCKER_COMPOSE_PROD_FILE=docker-compose.single-droplet.yml
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GO_CACHE_DIR=$(PWD)/.cache/go-build
+GO_MOD_CACHE_DIR=$(PWD)/.cache/go-mod
+GO_ENV=GOCACHE=$(GO_CACHE_DIR)
 
 # Colors for output
 RED=\033[0;31m
@@ -17,7 +20,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated
+.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated go-env-setup
 
 # Default target
 all: build
@@ -28,6 +31,9 @@ help: ## Show this help message
 	@echo ''
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(BLUE)%-20s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+go-env-setup:
+	@mkdir -p $(GO_CACHE_DIR) $(GO_MOD_CACHE_DIR)
 
 ## Development
 build: ## Build the application
@@ -67,10 +73,10 @@ test-traces: ## Verify OTLP traces end-to-end using Bun script
 	@echo "$(GREEN)Running OTLP traces validation script...$(NC)"
 	bun run ./test-traces-bun.ts
 
-lint: ## Run linter across all languages
+lint: go-env-setup ## Run linter across all languages
 	@echo "$(GREEN)Running linter across all languages...$(NC)"
 	@# Lint Go code
-	golangci-lint run
+	$(GO_ENV) golangci-lint run
 	@# Lint TypeScript/JavaScript - skip ccxt-service for now
 	@echo "$(GREEN)Skipping TypeScript linting - ccxt-service has formatting issues$(NC)"
 	@# Lint YAML files

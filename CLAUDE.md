@@ -39,9 +39,16 @@ make docker-run               # Run with Docker
 make docker-prod              # Run production Docker setup
 
 # Deployment
-make deploy                   # Deploy to production
-make deploy-staging           # Deploy to staging
+make deploy                   # Deploy to production (containers)
+make deploy-staging           # Deploy to staging (containers)
 make health-prod              # Check production health
+
+# Hybrid deployment (NEW)
+make docker-build-hybrid      # Build multi-stage Docker with artifact extraction
+make deploy-binary            # Deploy binary artifacts to staging
+make setup-staging            # Setup staging environment for hybrid deployment
+make artifact-manager         # Manage deployment artifacts
+make benchmark-deployment     # Benchmark deployment performance
 ```
 
 ### CCXT Service Commands
@@ -171,6 +178,67 @@ go test -race ./...
 
 ## Deployment Architecture
 
+### Hybrid Deployment Approach
+
+The project uses a hybrid deployment strategy that combines the reproducibility of Docker builds with the efficiency of binary deployment:
+
+#### Benefits of Hybrid Deployment
+- **Reproducible Builds**: Docker ensures consistent build environments
+- **Efficient Deployment**: Binary deployment reduces container overhead
+- **Fast Rollbacks**: Artifact versioning enables quick rollbacks
+- **Flexible Deployment**: Support for both container and binary deployment methods
+- **Reduced Resource Usage**: Binaries use fewer resources than containers
+
+#### Deployment Methods
+
+**1. Container Deployment (Traditional)**
+```bash
+# Build and deploy containers
+make docker-build
+make deploy-staging
+make deploy
+```
+
+**2. Binary Deployment (Hybrid Approach)**
+```bash
+# Build Docker images and extract binaries
+make docker-build-hybrid
+
+# Deploy binaries to staging
+make deploy-binary
+
+# Manage artifacts
+./scripts/artifact-manager.sh store deployment.tar.gz 1.0.0 staging
+./scripts/artifact-manager.sh list
+./scripts/artifact-manager.sh get go-backend latest
+```
+
+#### Artifact Management
+
+The hybrid approach includes comprehensive artifact management:
+
+- **Storage**: Artifacts stored in `/opt/celebrum-ai/artifacts/`
+- **Versioning**: Semantic versioning with environment tracking
+- **Cleanup**: Automatic cleanup of old artifacts (configurable retention)
+- **Metadata**: Comprehensive metadata including checksums and build information
+
+#### Multi-Stage Docker Builds
+
+Both services use multi-stage Docker builds:
+
+1. **Builder Stage**: Full build environment with all dependencies
+2. **Production Stage**: Optimized runtime with minimal dependencies
+3. **Binary Stage**: Extracts binaries for artifact deployment
+
+#### CI/CD Pipeline Enhancements
+
+The updated CI/CD pipeline supports both deployment methods:
+
+- **Parallel Builds**: Container and artifact builds run simultaneously
+- **Environment-Specific Deployment**: Staging tests both approaches
+- **Artifact Upload**: Automatic artifact storage and versioning
+- **Rollback Support**: Quick rollback to previous artifact versions
+
 ### Production Deployment
 - Zero-downtime deployments with automatic rollback
 - Health monitoring for all services
@@ -188,6 +256,7 @@ go test -race ./...
 - Development: `docker-compose.yml`
 - Production: `docker-compose.single-droplet.yml`
 - CI: `docker-compose.ci.yml`
+- Staging: `setup-staging.sh` (hybrid deployment testing)
 
 ## Observability and Monitoring
 

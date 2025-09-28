@@ -1,0 +1,11 @@
+./awesome_oscillator.go
+./chaikin_oscillator.go
+./ichimoku_cloud.go
+./momentum.go
+./ppo.go
+./pvo.go
+./qstick.go
+./rsi.go
+./stochastic_oscillator.go
+./stochastic_rsi.go
+./williams_r.go

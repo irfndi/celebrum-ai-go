@@ -10,11 +10,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func mustSetEnv(t *testing.T, key, value string) {
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
+
+func deferRestoreEnv(t *testing.T, key string, originalValue string) {
+	t.Cleanup(func() {
+		if originalValue == "" {
+			mustUnsetEnv(t, key)
+		} else {
+			mustSetEnv(t, key, originalValue)
+		}
+	})
+}
+
 func TestGetTestRedisOptions(t *testing.T) {
 	// Test with default environment (no REDIS_TEST_ADDR set)
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
-	os.Unsetenv("REDIS_TEST_ADDR")
-	defer os.Setenv("REDIS_TEST_ADDR", originalAddr)
+	mustUnsetEnv(t, "REDIS_TEST_ADDR")
+	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
 
 	options := GetTestRedisOptions()
 	assert.NotNil(t, options)
@@ -23,7 +45,7 @@ func TestGetTestRedisOptions(t *testing.T) {
 
 	// Test with custom environment variable
 	testAddr := "localhost:6380"
-	os.Setenv("REDIS_TEST_ADDR", testAddr)
+	mustSetEnv(t, "REDIS_TEST_ADDR", testAddr)
 
 	options = GetTestRedisOptions()
 	assert.NotNil(t, options)
@@ -41,7 +63,7 @@ func TestGetTestRedisClient(t *testing.T) {
 	// Test client creation with custom environment
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
 	testAddr := "localhost:6380"
-	os.Setenv("REDIS_TEST_ADDR", testAddr)
+	mustSetEnv(t, "REDIS_TEST_ADDR", testAddr)
 
 	client = GetTestRedisClient()
 	assert.NotNil(t, client)
@@ -49,7 +71,7 @@ func TestGetTestRedisClient(t *testing.T) {
 	assert.Equal(t, 1, client.Options().DB)
 
 	// Restore environment
-	os.Setenv("REDIS_TEST_ADDR", originalAddr)
+	mustSetEnv(t, "REDIS_TEST_ADDR", originalAddr)
 }
 
 func TestGetTestRedisOptions_NilReturn(t *testing.T) {
@@ -67,8 +89,8 @@ func TestGetTestRedisClient_NilReturn(t *testing.T) {
 func TestGetTestRedisOptions_DefaultDB(t *testing.T) {
 	// Test that the default database is always set to 1 (test database)
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
-	os.Unsetenv("REDIS_TEST_ADDR")
-	defer os.Setenv("REDIS_TEST_ADDR", originalAddr)
+	mustUnsetEnv(t, "REDIS_TEST_ADDR")
+	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
 
 	options := GetTestRedisOptions()
 	assert.Equal(t, 1, options.DB)
@@ -77,8 +99,8 @@ func TestGetTestRedisOptions_DefaultDB(t *testing.T) {
 func TestGetTestRedisClient_DefaultDB(t *testing.T) {
 	// Test that the client is configured to use database 1 (test database)
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
-	os.Unsetenv("REDIS_TEST_ADDR")
-	defer os.Setenv("REDIS_TEST_ADDR", originalAddr)
+	mustUnsetEnv(t, "REDIS_TEST_ADDR")
+	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
 
 	client := GetTestRedisClient()
 	assert.Equal(t, 1, client.Options().DB)
@@ -87,8 +109,8 @@ func TestGetTestRedisClient_DefaultDB(t *testing.T) {
 func TestGetTestRedisOptions_FallbackAddress(t *testing.T) {
 	// Test that the function falls back to localhost:6379 when no env var is set
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
-	os.Unsetenv("REDIS_TEST_ADDR")
-	defer os.Setenv("REDIS_TEST_ADDR", originalAddr)
+	mustUnsetEnv(t, "REDIS_TEST_ADDR")
+	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
 
 	options := GetTestRedisOptions()
 	assert.Equal(t, "localhost:6379", options.Addr)

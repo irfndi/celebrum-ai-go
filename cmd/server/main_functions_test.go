@@ -16,6 +16,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper functions for environment variable management with proper error handling
+func mustSetEnv(t *testing.T, key, value string) {
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
+
+func deferRestoreEnv(t *testing.T, key string, originalValue string) {
+	t.Cleanup(func() {
+		if originalValue == "" {
+			mustUnsetEnv(t, key)
+		} else {
+			mustSetEnv(t, key, originalValue)
+		}
+	})
+}
+
 // TestMainFunctionBasic tests the main function in a controlled environment
 func TestMainFunctionBasic(t *testing.T) {
 	// Save original environment
@@ -68,17 +91,17 @@ func TestMainFunctionBasic(t *testing.T) {
 
 	// Set test environment
 	for key, value := range testEnv {
-		os.Setenv(key, value)
+		mustSetEnv(t, key, value)
 	}
 
 	// Restore environment after test
 	defer func() {
 		for key, value := range originalEnv {
-			os.Setenv(key, value)
+			mustSetEnv(t, key, value)
 		}
 		for key := range testEnv {
 			if _, exists := originalEnv[key]; !exists {
-				os.Unsetenv(key)
+				mustUnsetEnv(t, key)
 			}
 		}
 	}()
@@ -276,8 +299,8 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 	testValue := "test_value"
 
 	// Set environment variable
-	os.Setenv(testKey, testValue)
-	defer os.Unsetenv(testKey)
+	mustSetEnv(t, testKey, testValue)
+	defer mustUnsetEnv(t, testKey)
 
 	// Read it back
 	retrieved := os.Getenv(testKey)
@@ -285,8 +308,8 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 
 	// Test empty environment variable
 	emptyKey := "TEST_CELEBRUM_AI_EMPTY"
-	os.Setenv(emptyKey, "")
-	defer os.Unsetenv(emptyKey)
+	mustSetEnv(t, emptyKey, "")
+	defer mustUnsetEnv(t, emptyKey)
 
 	retrieved = os.Getenv(emptyKey)
 	assert.Equal(t, "", retrieved)

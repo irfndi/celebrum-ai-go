@@ -1,0 +1,6 @@
+./admin.go
+./auth.go
+./telemetry.go
+./admin_test.go
+./auth_test.go
+./telemetry_test.go

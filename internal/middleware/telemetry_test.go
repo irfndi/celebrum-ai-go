@@ -13,6 +13,9 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
+// TestTelemetryMiddleware tests the telemetry middleware functionality
+// including tracing headers, span propagation, and request context handling.
+
 func TestTelemetryMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

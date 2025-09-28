@@ -36,11 +36,24 @@ func TestValidateTelegramMain(t *testing.T) {
 	assert.True(t, true) // Placeholder since main() calls os.Exit on failure
 }
 
+// Helper functions for environment variable management with proper error handling
+func mustSetEnv(t *testing.T, key, value string) {
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
+
 func TestLoadDotEnv(t *testing.T) {
 	// Test .env file loading behavior
 	// Save current environment
 	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	defer mustSetEnv(t, "TELEGRAM_BOT_TOKEN", originalToken)
 
 	// Test that Load function can be called without error
 	// In actual usage, this would load .env file if it exists
@@ -53,10 +66,10 @@ func TestLoadDotEnv(t *testing.T) {
 func TestConfigLoading(t *testing.T) {
 	// Test configuration loading within the validate-telegram context
 	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	defer mustSetEnv(t, "TELEGRAM_BOT_TOKEN", originalToken)
 
 	// Test with valid token
-	os.Setenv("TELEGRAM_BOT_TOKEN", "valid_test_token")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "valid_test_token")
 
 	cfg, err := config.Load()
 	// Config might load successfully or fail due to missing config file
@@ -461,17 +474,17 @@ func TestMainFunctionWithMockEnvironment(t *testing.T) {
 	}
 
 	for key, value := range testEnv {
-		os.Setenv(key, value)
+		mustSetEnv(t, key, value)
 	}
 
 	// Restore environment after test
 	defer func() {
 		for key, value := range originalEnv {
-			os.Setenv(key, value)
+			mustSetEnv(t, key, value)
 		}
 		for key := range testEnv {
 			if _, exists := originalEnv[key]; !exists {
-				os.Unsetenv(key)
+				mustUnsetEnv(t, key)
 			}
 		}
 	}()

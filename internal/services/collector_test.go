@@ -46,7 +46,9 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Clean up
-	telemetry.Shutdown()
+	if err := telemetry.Shutdown(); err != nil {
+		fmt.Printf("Failed to shutdown telemetry: %v\n", err)
+	}
 
 	// Exit with the same code as the tests
 	os.Exit(code)

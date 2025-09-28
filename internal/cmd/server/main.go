@@ -8,7 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
 	"time"
+
+	// Main application entry point for the Celebrum AI server
+	// Initializes configuration, database connections, services, and HTTP routes
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api"

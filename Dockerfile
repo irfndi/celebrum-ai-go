@@ -16,8 +16,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+# Build the application with optimizations
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
 
 # Production stage
 FROM alpine:latest AS production
@@ -57,6 +57,17 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Run the application
 CMD ["./main"]
+
+# Binary extraction stage - for artifact deployment
+FROM scratch AS binary
+
+# Copy only the essential files for deployment
+COPY --from=builder /app/main .
+COPY --from=builder /app/configs ./configs/
+COPY --from=builder /app/config.yaml ./config.yaml
+
+# Set proper permissions for binary
+RUN chmod +x main
 
 # Debug stage (includes debugging tools)
 FROM production AS debug

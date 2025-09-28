@@ -8,6 +8,9 @@ import (
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/jackc/pgx/v5"
+
+	// Package database provides PostgreSQL database connectivity and operations
+	// for the Celebrum AI application including connection pooling and health checks
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"

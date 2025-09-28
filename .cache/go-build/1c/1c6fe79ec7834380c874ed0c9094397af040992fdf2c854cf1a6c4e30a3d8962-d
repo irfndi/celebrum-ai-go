@@ -1,0 +1,8 @@
+./client.go
+./interface.go
+./response_types.go
+./service.go
+./types.go
+./response_types_test.go
+./service_test.go
+./types_test.go

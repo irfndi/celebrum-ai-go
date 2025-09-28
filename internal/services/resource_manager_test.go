@@ -357,7 +357,8 @@ func TestResourceManager_GetResourceCount(t *testing.T) {
 	assert.Equal(t, 2, rm.GetResourceCount())
 
 	// Remove one resource
-	rm.CleanupResource("resource1")
+	err := rm.CleanupResource("resource1")
+	assert.NoError(t, err)
 	assert.Equal(t, 1, rm.GetResourceCount())
 }
 
@@ -375,7 +376,8 @@ func TestResourceManager_IsResourceManaged(t *testing.T) {
 	assert.True(t, rm.IsResourceManaged("test-resource"))
 
 	// Remove resource
-	rm.CleanupResource("test-resource")
+	err := rm.CleanupResource("test-resource")
+	assert.NoError(t, err)
 
 	// Check again
 	assert.False(t, rm.IsResourceManaged("test-resource"))
@@ -405,7 +407,8 @@ func TestResourceManager_ConcurrentAccess(t *testing.T) {
 			case 1:
 				rm.UpdateResourceUsage(resourceID)
 			case 2:
-				rm.CleanupResource(resourceID)
+				err := rm.CleanupResource(resourceID)
+				assert.NoError(t, err)
 			case 3:
 				rm.GetResourceCount()
 			case 4:
