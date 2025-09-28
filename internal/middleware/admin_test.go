@@ -10,11 +10,11 @@ import (
 )
 
 func TestNewAdminMiddleware(t *testing.T) {
-		t.Run("with environment variable", func(t *testing.T) {
-			// Set environment variable with secure 32+ character key
-			t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
+	t.Run("with environment variable", func(t *testing.T) {
+		// Set environment variable with secure 32+ character key
+		t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 
-			am := NewAdminMiddleware()
+		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
 		assert.Equal(t, "test-admin-key-32-chars-minimum-length", am.apiKey)
 	})
@@ -23,36 +23,36 @@ func TestNewAdminMiddleware(t *testing.T) {
 	// calls os.Exit() which cannot be tested with assert.Panics()
 	// In production, missing ADMIN_API_KEY will cause the application to exit
 
-		t.Run("with default key validation", func(t *testing.T) {
-			// Test default key 1
-			t.Setenv("ADMIN_API_KEY", "admin-dev-key-change-in-production")
+	t.Run("with default key validation", func(t *testing.T) {
+		// Test default key 1
+		t.Setenv("ADMIN_API_KEY", "admin-dev-key-change-in-production")
 
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
 	})
 
-		t.Run("with short key validation", func(t *testing.T) {
-			// Test short key (less than 32 characters)
-			t.Setenv("ADMIN_API_KEY", "short-key")
+	t.Run("with short key validation", func(t *testing.T) {
+		// Test short key (less than 32 characters)
+		t.Setenv("ADMIN_API_KEY", "short-key")
 
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
 	})
 
-		t.Run("with exactly 32 character key", func(t *testing.T) {
-			// Test with exactly 32 characters (minimum allowed)
-			t.Setenv("ADMIN_API_KEY", "12345678901234567890123456789012")
+	t.Run("with exactly 32 character key", func(t *testing.T) {
+		// Test with exactly 32 characters (minimum allowed)
+		t.Setenv("ADMIN_API_KEY", "12345678901234567890123456789012")
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
 		assert.Equal(t, "12345678901234567890123456789012", am.apiKey)
 	})
 
-		t.Run("with long key", func(t *testing.T) {
-			// Test with long key (more than 32 characters)
-			t.Setenv("ADMIN_API_KEY", "very-long-admin-key-that-is-much-longer-than-32-characters")
+	t.Run("with long key", func(t *testing.T) {
+		// Test with long key (more than 32 characters)
+		t.Setenv("ADMIN_API_KEY", "very-long-admin-key-that-is-much-longer-than-32-characters")
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)

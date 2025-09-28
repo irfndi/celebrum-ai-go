@@ -32,7 +32,7 @@ docker logs celebrum-redis --tail 20
 curl -I http://localhost:8080/health
 
 # CCXT service health
-curl -I http://localhost:3001/health
+curl -I http://localhost:3000/health
 
 # PostgreSQL connectivity
 docker exec celebrum-postgres pg_isready -U celebrum_user -d celebrum_db

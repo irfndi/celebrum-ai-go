@@ -36,9 +36,17 @@ go-env-setup:
 	@mkdir -p $(GO_CACHE_DIR) $(GO_MOD_CACHE_DIR)
 
 ## Development
-build: ## Build the application
+build: ## Build the application across all languages
 	@echo "$(GREEN)Building $(APP_NAME)...$(NC)"
+	@# Build Go application
 	go build -o bin/$(APP_NAME) cmd/server/main.go
+	@# Build TypeScript/CCXT service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building CCXT service...$(NC)"; \
+		cd ccxt-service && bun run build; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service build - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@echo "$(GREEN)Build complete!$(NC)"
 
 test: ## Run tests across all languages
@@ -77,8 +85,13 @@ lint: go-env-setup ## Run linter across all languages
 	@echo "$(GREEN)Running linter across all languages...$(NC)"
 	@# Lint Go code
 	$(GO_ENV) golangci-lint run
-	@# Lint TypeScript/JavaScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript linting - ccxt-service has formatting issues$(NC)"
+	@# Lint TypeScript/JavaScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Linting TypeScript...$(NC)"; \
+		cd ccxt-service && bunx oxlint .; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript linting - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Lint YAML files
 	@if command -v yamllint >/dev/null 2>&1; then \
 		find . -name "*.yml" -o -name "*.yaml" | grep -v node_modules | grep -v .git | grep -v build | xargs yamllint 2>/dev/null || true; \
@@ -88,8 +101,13 @@ typecheck: ## Run type checking across all languages
 	@echo "$(GREEN)Running type checking across all languages...$(NC)"
 	@# Type check Go code
 	go vet ./...
-	@# Type check TypeScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript type checking - ccxt-service has formatting issues$(NC)"
+	@# Type check TypeScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Type checking TypeScript...$(NC)"; \
+		cd ccxt-service && bun tsc --noEmit; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript type checking - ccxt-service directory or bun not found$(NC)"; \
+	fi
 
 fmt: ## Format code across all languages
 	@echo "$(GREEN)Formatting code across all languages...$(NC)"
@@ -100,14 +118,21 @@ fmt: ## Format code across all languages
 	else \
 		echo "$(YELLOW)goimports not found, skipping Go imports formatting$(NC)"; \
 	fi
-	@# Format TypeScript/JavaScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript formatting - ccxt-service has formatting issues$(NC)"
+	@# Format TypeScript/JavaScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Formatting TypeScript...$(NC)"; \
+		cd ccxt-service && bunx prettier --write . || bun format --write . || echo "$(YELLOW)Could not format TypeScript - prettier or bun format not available$(NC)"; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript formatting - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Format shell scripts
 	@if command -v shfmt >/dev/null 2>&1; then \
 		find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*" -exec shfmt -w {} \; 2>/dev/null || true; \
 	fi
-	@# Format YAML files - skip if bun format handles them
-	@echo "$(GREEN)Skipping YAML formatting - handled by project formatters$(NC)"
+	@# Format YAML files
+	@if command -v bun >/dev/null 2>&1 && [ -d "ccxt-service" ]; then \
+		cd ccxt-service && bunx prettier --write . 2>/dev/null || true; \
+	fi
 
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
@@ -153,8 +178,13 @@ security: ## Run security scan across all languages
 	else \
 		echo "$(YELLOW)gosec not found, skipping Go security scan$(NC)"; \
 	fi
-	@# Security scan for TypeScript/JavaScript dependencies - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript security scan - ccxt-service has formatting issues$(NC)"
+	@# Security scan for TypeScript/JavaScript dependencies
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Scanning TypeScript dependencies...$(NC)"; \
+		cd ccxt-service && bun audit || echo "$(YELLOW)bun audit completed with warnings$(NC)"; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript security scan - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Security scan for Docker images
 	@if command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(PWD):/app" -w /app securecodewarrior/docker-security-scanner . 2>/dev/null || echo "$(YELLOW)Docker security scanner not available$(NC)"; \
@@ -165,10 +195,18 @@ security: ## Run security scan across all languages
 	fi
 
 ## Docker
-docker-build: ## Build Docker image
-	@echo "$(GREEN)Building Docker image...$(NC)"
+docker-build: ## Build Docker images for all services
+	@echo "$(GREEN)Building Docker images...$(NC)"
+	@# Build main application image
 	docker build -t $(DOCKER_IMAGE_APP) .
-	@echo "$(GREEN)Docker image built: $(DOCKER_IMAGE_APP)$(NC)"
+	@# Build CCXT service image if directory exists
+	@if [ -d "ccxt-service" ]; then \
+		echo "$(GREEN)Building CCXT service image...$(NC)"; \
+		docker build -t $(DOCKER_IMAGE_CCXT) ./ccxt-service; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service image - ccxt-service directory not found$(NC)"; \
+	fi
+	@echo "$(GREEN)Docker images built!$(NC)"
 
 docker-build-hybrid: ## Build hybrid Docker image for binary deployment
 	@echo "$(GREEN)Building hybrid Docker image...$(NC)"
@@ -249,9 +287,17 @@ ci-lint: ## Run linter for CI
 	@echo "$(GREEN)Running CI linter...$(NC)"
 	golangci-lint run --timeout=5m
 
-ci-build: ## Build for CI
+ci-build: ## Build for CI across all languages
 	@echo "$(GREEN)Building for CI...$(NC)"
+	@# Build Go application for CI
 	CGO_ENABLED=0 go build -v -ldflags "-X main.version=$(shell git describe --tags --always --dirty) -X main.buildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S')" -o bin/$(APP_NAME) cmd/server/main.go
+	@# Build TypeScript/CCXT service for CI
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building CCXT service for CI...$(NC)"; \
+		cd ccxt-service && bun run build; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service CI build - ccxt-service directory or bun not found$(NC)"; \
+	fi
 
 ci-check: ci-lint ci-test ci-build ## Run all CI checks
 	@echo "$(GREEN)All CI checks completed!$(NC)"

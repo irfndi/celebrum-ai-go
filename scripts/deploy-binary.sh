@@ -147,7 +147,7 @@ SECRET_KEY=$SECRET_KEY
 ENVIRONMENT=$ENVIRONMENT
 NODE_ENV=$([ "$ENVIRONMENT" == "production" ] && echo "production" || echo "development")
 PORT=8080
-CCXT_PORT=3001
+CCXT_PORT=3000
 EOF
 
 # Set proper permissions

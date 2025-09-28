@@ -13,24 +13,24 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.0",
+    "@hono/node-server": "^1.19.4",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.64.1",
     "@opentelemetry/exporter-otlp-http": "^0.26.0",
-    "@opentelemetry/instrumentation": "^0.203.0",
-    "@opentelemetry/instrumentation-express": "^0.52.0",
-    "@opentelemetry/instrumentation-fs": "^0.23.0",
-    "@opentelemetry/instrumentation-http": "^0.203.0",
-    "@opentelemetry/resources": "^2.0.1",
-    "@opentelemetry/sdk-node": "^0.203.0",
-    "@opentelemetry/semantic-conventions": "^1.36.0",
-    "ccxt": "^4.5.1",
-    "hono": "^4.9.4",
+    "@opentelemetry/instrumentation": "^0.205.0",
+    "@opentelemetry/instrumentation-express": "^0.54.0",
+    "@opentelemetry/instrumentation-fs": "^0.25.0",
+    "@opentelemetry/instrumentation-http": "^0.205.0",
+    "@opentelemetry/resources": "^2.1.0",
+    "@opentelemetry/sdk-node": "^0.205.0",
+    "@opentelemetry/semantic-conventions": "^1.37.0",
+    "ccxt": "^4.5.6",
+    "hono": "^4.9.9",
     "http-proxy-agent": "^7.0.2",
-    "socks-proxy-agent": "^8.0.4"
+    "socks-proxy-agent": "^8.0.5"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.2.23",
     "typescript": "^5.9.2"
   },
   "keywords": [

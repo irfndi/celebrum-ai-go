@@ -459,7 +459,7 @@ func TestMainFunction(t *testing.T) {
 		"CLEANUP_ENABLE_SMART_CLEANUP":    "false",
 		"BACKFILL_ENABLED":                "false",
 		"ARBITRAGE_ENABLED":               "false",
-		"CCXT_SERVICE_URL":                "http://localhost:3001",
+		"CCXT_SERVICE_URL":                "http://localhost:3000",
 		"CCXT_TIMEOUT":                    "5",
 		"TELEGRAM_BOT_TOKEN":              "",
 		"MARKET_DATA_COLLECTION_INTERVAL": "1m",

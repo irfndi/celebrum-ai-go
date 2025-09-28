@@ -96,7 +96,7 @@ setup_firewall() {
     ufw allow 80/tcp       # HTTP
     ufw allow 443/tcp      # HTTPS
     ufw allow 8080/tcp     # Go backend (staging)
-    ufw allow 3001/tcp     # CCXT service (staging)
+    ufw allow 3000/tcp     # CCXT service (staging)
     ufw allow 8081/tcp     # Go backend (staging-binary)
     ufw allow 3002/tcp     # CCXT service (staging-binary)
     
@@ -195,7 +195,7 @@ server {
     
     # CCXT service
     location /ccxt/ {
-        proxy_pass http://127.0.0.1:3001/;
+        proxy_pass http://127.0.0.1:3000/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;

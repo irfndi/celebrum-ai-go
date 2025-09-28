@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-// Package middleware provides HTTP middleware components for authentication,
-// authorization, telemetry, and other cross-cutting concerns.
+	// Package middleware provides HTTP middleware components for authentication,
+	// authorization, telemetry, and other cross-cutting concerns.
 	"github.com/golang-jwt/jwt/v5"
 )
 

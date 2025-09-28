@@ -1,22 +1,22 @@
-const ccxt = require('ccxt');
+const ccxt = require("ccxt");
 
-console.log('CCXT version:', ccxt.version);
-console.log('Total exchanges available:', ccxt.exchanges.length);
-console.log('First 10 exchanges:', ccxt.exchanges.slice(0, 10));
+console.log("CCXT version:", ccxt.version);
+console.log("Total exchanges available:", ccxt.exchanges.length);
+console.log("First 10 exchanges:", ccxt.exchanges.slice(0, 10));
 
 // Test if binance class exists
-console.log('\nTesting binance:');
+console.log("\nTesting binance:");
 const BinanceClass = ccxt.binance;
-console.log('Binance class exists:', !!BinanceClass);
+console.log("Binance class exists:", !!BinanceClass);
 const binance = new BinanceClass();
-console.log('Binance instance created:', !!binance);
-console.log('Binance has fetchTicker:', !!binance.fetchTicker);
-console.log('Binance has fetchMarkets:', !!binance.fetchMarkets);
-console.log('Binance id:', binance.id);
-console.log('Binance name:', binance.name);
+console.log("Binance instance created:", !!binance);
+console.log("Binance has fetchTicker:", !!binance.fetchTicker);
+console.log("Binance has fetchMarkets:", !!binance.fetchMarkets);
+console.log("Binance id:", binance.id);
+console.log("Binance name:", binance.name);
 
 // Test a few more exchanges
-const testExchanges = ['bybit', 'okx', 'coinbase', 'kraken'];
+const testExchanges = ["bybit", "okx", "coinbase", "kraken"];
 for (const exchangeId of testExchanges) {
   console.log(`\nTesting ${exchangeId}:`);
   const ExchangeClass = ccxt[exchangeId];

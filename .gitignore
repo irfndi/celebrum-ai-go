@@ -25,7 +25,7 @@ test_output.log
 # Go cache
 .gocache/
 .gomodcache/
-.cache
+.cache/
 
 # Temporary configuration and response files
 config.yaml

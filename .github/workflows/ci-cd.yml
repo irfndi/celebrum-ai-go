@@ -382,9 +382,9 @@ jobs:
           chmod +x scripts/deploy-binary.sh
           scripts/deploy-binary.sh staging
 
-  # Deploy to production
+  # Deploy to production (hybrid)
   deploy-production:
-    name: Deploy to Production
+    name: Deploy to Production (Hybrid)
     runs-on: ubuntu-latest
     needs: [preflight, test, security, build]
     if: |
@@ -402,20 +402,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to production
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: artifacts/
+
+      - name: Extract artifacts
+        run: |
+          tar -xzf artifacts/artifacts.tar.gz
+
+      - name: Deploy binary to production
         env:
-          DEPLOYMENT_TYPE: ${{ needs.preflight.outputs.deployment_type }}
+          DEPLOYMENT_TYPE: binary
           CI_ENVIRONMENT: production
-          SKIP_BACKUP: false
-          AUTO_ROLLBACK: true
-          NOTIFY_SLACK: true
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
           SECRET_KEY: ${{ secrets.PRODUCTION_SECRET_KEY }}
         run: |
-          chmod +x scripts/ci-cd-integration.sh
-          scripts/ci-cd-integration.sh deploy
+          chmod +x scripts/deploy-binary.sh
+          scripts/deploy-binary.sh production
 
       - name: Upload deployment artifacts
         uses: actions/upload-artifact@v4
@@ -428,8 +436,8 @@ jobs:
   verify:
     name: Post-Deployment Verification
     runs-on: ubuntu-latest
-    needs: [preflight, deploy-staging, deploy-production]
-    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    needs: [preflight, deploy-staging-containers, deploy-staging-binary, deploy-production]
+    if: always() && (needs.deploy-staging-containers.result == 'success' || needs.deploy-staging-binary.result == 'success' || needs.deploy-production.result == 'success')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -452,7 +460,7 @@ jobs:
   notify:
     name: Send Notifications
     runs-on: ubuntu-latest
-    needs: [preflight, deploy-staging, deploy-production, verify]
+    needs: [preflight, deploy-staging-containers, deploy-staging-binary, deploy-production, verify]
     if: always() && needs.preflight.outputs.should_deploy == 'true'
     steps:
       - name: Checkout code
@@ -461,7 +469,7 @@ jobs:
       - name: Determine notification status
         id: status
         run: |
-          if [ "${{ needs.deploy-staging.result }}" = "success" ] || [ "${{ needs.deploy-production.result }}" = "success" ]; then
+          if [ "${{ needs.deploy-staging-containers.result }}" = "success" ] || [ "${{ needs.deploy-staging-binary.result }}" = "success" ] || [ "${{ needs.deploy-production.result }}" = "success" ]; then
             if [ "${{ needs.verify.result }}" = "success" ]; then
               echo "status=success" >> $GITHUB_OUTPUT
               echo "message=Deployment completed successfully" >> $GITHUB_OUTPUT

@@ -32,7 +32,6 @@ func mustUnsetEnv(t *testing.T, key string) {
 	}
 }
 
-
 func restoreEnv(t *testing.T, key string, originalValue string, originalExists bool) {
 	t.Helper()
 	if originalExists {
@@ -60,7 +59,6 @@ func TestValidateTelegramMain(t *testing.T) {
 	// This is a basic test to ensure the main function doesn't panic
 	assert.True(t, true) // Placeholder since main() calls os.Exit on failure
 }
-
 
 func TestLoadDotEnv(t *testing.T) {
 	// Test .env file loading behavior

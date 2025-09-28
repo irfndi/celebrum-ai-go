@@ -275,7 +275,7 @@ docker-compose exec postgres psql -U celebrum_user -d celebrum_db -f /migrations
 - [ ] All containers running: `docker-compose ps`
 - [ ] Database accessible: `psql` connection test
 - [ ] Redis accessible: `redis-cli ping`
-- [ ] CCXT service responding: `curl http://localhost:3001/api/health`
+- [ ] CCXT service responding: `curl http://localhost:3000/api/health`
 - [ ] Main app responding: `curl http://localhost:8080/api/health`
 - [ ] Nginx serving requests: `curl http://localhost/api/health`
 - [ ] API endpoints functional: Test key endpoints
@@ -355,7 +355,7 @@ docker-compose -f docker-compose.single-droplet.yml ps
 echo "\n=== Health Checks ==="
 echo "Database: $(docker-compose exec -T postgres pg_isready -U celebrum_user)"
 echo "Redis: $(docker-compose exec -T redis redis-cli ping)"
-echo "CCXT: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health)"
+echo "CCXT: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health)"
 echo "App: $(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)"
 echo "Nginx: $(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)"
 

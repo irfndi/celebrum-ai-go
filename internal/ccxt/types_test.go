@@ -163,7 +163,7 @@ func (m *MockClient) BaseURL() string {
 	if m.BaseURLFunc != nil {
 		return m.BaseURLFunc()
 	}
-	return "http://localhost:3001"
+	return "http://localhost:3000"
 }
 
 // MockBlacklistCache implements the BlacklistCache interface for testing

@@ -2,7 +2,8 @@ import { mock } from "bun:test";
 
 // Ensure ADMIN_API_KEY is present and long enough before importing the app
 if (!process.env.ADMIN_API_KEY || process.env.ADMIN_API_KEY.length < 32) {
-  process.env.ADMIN_API_KEY = "test-admin-key-1234567890123456789012345678901234";
+  process.env.ADMIN_API_KEY =
+    "test-admin-key-1234567890123456789012345678901234";
 }
 
 // Prevent tracing side-effects in tests
@@ -31,12 +32,23 @@ mock.module("ccxt", () => {
     }
 
     async fetchOrderBook(symbol: string, limit = 20) {
-      const bids = Array.from({ length: Math.min(limit, 5) }, (_, i) => [49990 - i, 1 + i]);
-      const asks = Array.from({ length: Math.min(limit, 5) }, (_, i) => [50010 + i, 1 + i]);
+      const bids = Array.from({ length: Math.min(limit, 5) }, (_, i) => [
+        49990 - i,
+        1 + i,
+      ]);
+      const asks = Array.from({ length: Math.min(limit, 5) }, (_, i) => [
+        50010 + i,
+        1 + i,
+      ]);
       return { bids, asks, timestamp: Date.now(), nonce: undefined } as any;
     }
 
-    async fetchOHLCV(symbol: string, timeframe = "1h", since?: number, limit = 5) {
+    async fetchOHLCV(
+      symbol: string,
+      timeframe = "1h",
+      since?: number,
+      limit = 5,
+    ) {
       const now = Date.now();
       const base = since ?? now - limit * 3600_000;
       const ohlcv = Array.from({ length: limit }, (_, i) => {
