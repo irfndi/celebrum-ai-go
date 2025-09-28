@@ -240,9 +240,9 @@ func TestMemoryMonitoring(t *testing.T) {
 	// Test that memory values are reasonable
 	assert.True(t, memStats.Total > 0)
 	assert.True(t, memStats.Available > 0)
-	assert.True(t, memStats.Used >= 0)
-	assert.True(t, memStats.UsedPercent >= 0)
-	assert.True(t, memStats.UsedPercent <= 100)
+	assert.LessOrEqual(t, memStats.Used, memStats.Total)
+	assert.GreaterOrEqual(t, memStats.UsedPercent, 0.0)
+	assert.LessOrEqual(t, memStats.UsedPercent, 100.0)
 }
 
 // Test configuration validation
@@ -435,9 +435,6 @@ func TestMainFunction(t *testing.T) {
 		return
 	}
 
-	// Save original environment variables
-	originalEnv := make(map[string]string)
-
 	// Set up test environment variables to mock external dependencies
 	testEnv := map[string]string{
 		"ENVIRONMENT":                     "test",
@@ -478,25 +475,10 @@ func TestMainFunction(t *testing.T) {
 		"TEST_MAIN_FUNCTION":              "1", // Signal this is the test process
 	}
 
-	// Backup and set test environment
+	// Apply test environment variables for the duration of this test
 	for key, value := range testEnv {
-		if original, exists := os.LookupEnv(key); exists {
-			originalEnv[key] = original
-		}
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Restore environment after test
-	defer func() {
-		for key, value := range originalEnv {
-			os.Setenv(key, value)
-		}
-		for key := range testEnv {
-			if _, exists := originalEnv[key]; !exists {
-				os.Unsetenv(key)
-			}
-		}
-	}()
 
 	// Test that main function handles errors gracefully by running it in a separate process
 	// We use exec.Command to run the test binary with the TEST_MAIN_FUNCTION flag
@@ -535,9 +517,6 @@ func TestMainFunction(t *testing.T) {
 
 // Test run function with test configuration
 func TestRunFunction(t *testing.T) {
-	// Save original environment variables
-	originalEnv := make(map[string]string)
-
 	// Set up minimal test environment with invalid database to fail fast
 	testEnv := map[string]string{
 		"ENVIRONMENT":                  "test",
@@ -560,25 +539,10 @@ func TestRunFunction(t *testing.T) {
 		"CLEANUP_ENABLE_SMART_CLEANUP": "false",
 	}
 
-	// Backup and set test environment
+	// Apply the environment variables for the duration of this test
 	for key, value := range testEnv {
-		if original, exists := os.LookupEnv(key); exists {
-			originalEnv[key] = original
-		}
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Restore environment after test
-	defer func() {
-		for key, value := range originalEnv {
-			os.Setenv(key, value)
-		}
-		for key := range testEnv {
-			if _, exists := originalEnv[key]; !exists {
-				os.Unsetenv(key)
-			}
-		}
-	}()
 
 	// Test run function directly - expect it to fail but exercise the function for coverage
 	err := run()
@@ -624,18 +588,8 @@ func TestRunFunction(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set invalid value
-			original, exists := os.LookupEnv(tc.envVar)
-			os.Setenv(tc.envVar, tc.value)
-
-			// Restore after test
-			defer func() {
-				if exists {
-					os.Setenv(tc.envVar, original)
-				} else {
-					os.Unsetenv(tc.envVar)
-				}
-			}()
+			// Set invalid value and rely on testing cleanup for restore
+			t.Setenv(tc.envVar, tc.value)
 
 			err := run()
 			assert.Error(t, err)

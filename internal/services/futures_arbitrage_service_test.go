@@ -16,16 +16,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Helper function to create decimal pointer
-func decimalPtr(d decimal.Decimal) *decimal.Decimal {
-	return &d
-}
-
-// Helper function to create time pointer
-func timePtr(t time.Time) *time.Time {
-	return &t
-}
-
 // MockErrorRecoveryManager is a mock implementation of ErrorRecoveryManager
 type MockErrorRecoveryManager struct {
 	mock.Mock

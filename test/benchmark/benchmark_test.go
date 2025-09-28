@@ -14,6 +14,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Context key types to avoid collisions
+type contextKey string
+
+const (
+	userIDKey    contextKey = "user_id"
+	requestIDKey contextKey = "request_id"
+	timestampKey contextKey = "timestamp"
+)
+
 // BenchmarkAPIPerformance benchmarks API performance
 func BenchmarkAPIPerformance(b *testing.B) {
 	// Set Gin to release mode for benchmarking
@@ -216,14 +225,14 @@ func BenchmarkContextOperations(b *testing.B) {
 		ctx := context.Background()
 
 		// Add values to context
-		ctx = context.WithValue(ctx, "user_id", "12345")
-		ctx = context.WithValue(ctx, "request_id", "req-123")
-		ctx = context.WithValue(ctx, "timestamp", time.Now())
+		ctx = context.WithValue(ctx, userIDKey, "12345")
+		ctx = context.WithValue(ctx, requestIDKey, "req-123")
+		ctx = context.WithValue(ctx, timestampKey, time.Now())
 
 		// Retrieve values from context
-		userID := ctx.Value("user_id").(string)
-		requestID := ctx.Value("request_id").(string)
-		timestamp := ctx.Value("timestamp").(time.Time)
+		userID := ctx.Value(userIDKey).(string)
+		requestID := ctx.Value(requestIDKey).(string)
+		timestamp := ctx.Value(timestampKey).(time.Time)
 
 		// Use values to avoid optimization
 		if userID == "" || requestID == "" || timestamp.IsZero() {

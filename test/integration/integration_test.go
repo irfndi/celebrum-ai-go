@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,6 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
+
+// generateTestPassword creates a random password for testing to avoid hardcoded secrets
+// This addresses GitGuardian security alerts about hardcoded test credentials
+func generateTestPassword() string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+	b := make([]byte, 12)
+	for i := range b {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		b[i] = letters[n.Int64()]
+	}
+	return string(b)
+}
 
 // TestIntegrationAPI tests the integration of various API components
 func TestIntegrationAPI(t *testing.T) {
@@ -117,7 +131,7 @@ func TestIntegrationAPI(t *testing.T) {
 			path:   "/api/v1/users/register",
 			body: map[string]interface{}{
 				"username": "testuser",
-				"password": "testpass123",
+				"password": generateTestPassword(),
 				"email":    "test@example.com",
 			},
 			expectedStatus: http.StatusCreated,

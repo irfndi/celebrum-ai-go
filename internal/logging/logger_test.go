@@ -453,13 +453,13 @@ func TestOTLPLogger_Shutdown(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 
-	// Test shutdown with nil context
-	err = logger.Shutdown(nil)
-	assert.NoError(t, err)
-
-	// Test shutdown with context
 	ctx := context.Background()
 	err = logger.Shutdown(ctx)
+	assert.NoError(t, err)
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = logger.Shutdown(shutdownCtx)
 	assert.NoError(t, err)
 }
 

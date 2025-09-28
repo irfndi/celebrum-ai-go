@@ -13,6 +13,10 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
+type nonRecordingContextKey struct{}
+
+var nonRecordingKey = nonRecordingContextKey{}
+
 // TestTelemetryMiddleware tests the telemetry middleware functionality
 // including tracing headers, span propagation, and request context handling.
 
@@ -200,7 +204,7 @@ func TestRecordError(t *testing.T) {
 		c.Request = req
 
 		// Create a non-recording span context
-		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
+		nonRecordingCtx := context.WithValue(c.Request.Context(), nonRecordingKey, true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
 
 		testErr := assert.AnError
@@ -246,7 +250,7 @@ func TestRecordError(t *testing.T) {
 		c.Request = req
 
 		// Create a non-recording span context
-		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
+		nonRecordingCtx := context.WithValue(c.Request.Context(), nonRecordingKey, true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
 
 		testErr := assert.AnError
@@ -372,7 +376,7 @@ func TestAddSpanAttribute(t *testing.T) {
 		c.Request = req
 
 		// Create a non-recording span context
-		nonRecordingCtx := context.WithValue(c.Request.Context(), "non-recording", true)
+		nonRecordingCtx := context.WithValue(c.Request.Context(), nonRecordingKey, true)
 		c.Request = c.Request.WithContext(nonRecordingCtx)
 
 		// This should not panic even with non-recording span

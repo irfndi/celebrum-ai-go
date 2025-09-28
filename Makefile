@@ -170,6 +170,16 @@ docker-build: ## Build Docker image
 	docker build -t $(DOCKER_IMAGE_APP) .
 	@echo "$(GREEN)Docker image built: $(DOCKER_IMAGE_APP)$(NC)"
 
+docker-build-hybrid: ## Build hybrid Docker image for binary deployment
+	@echo "$(GREEN)Building hybrid Docker image...$(NC)"
+	docker build --target binary -o bin/$(APP_NAME) .
+	@echo "$(GREEN)Hybrid build completed: bin/$(APP_NAME)$(NC)"
+
+docker-clean: ## Clean Docker artifacts
+	@echo "$(YELLOW)Cleaning Docker artifacts...$(NC)"
+	docker system prune -f
+	@echo "$(GREEN)Docker cleanup completed$(NC)"
+
 docker-build-all: ## Build all Docker images with version tags
 	@echo "$(GREEN)Building all Docker images with version tags...$(NC)"
 	docker build -t $(DOCKER_REGISTRY)/app:$(VERSION) -t $(DOCKER_REGISTRY)/app:latest .
@@ -213,6 +223,18 @@ deploy-staging: ## Deploy to staging
 deploy-manual: build ## Manual deployment with rsync
 	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
 	./scripts/deploy.sh production
+
+deploy-binary: build ## Deploy using binary deployment
+	@echo "$(GREEN)Deploying using binary deployment...$(NC)"
+	./scripts/deploy-binary.sh production
+
+deploy-binary-staging: build ## Deploy to staging using binary deployment
+	@echo "$(GREEN)Deploying to staging using binary deployment...$(NC)"
+	./scripts/deploy-binary.sh staging
+
+setup-staging: ## Set up staging environment
+	@echo "$(GREEN)Setting up staging environment...$(NC)"
+	./scripts/setup-staging.sh
 
 deploy-rollback: ## Rollback deployment
 	@echo "$(GREEN)Rolling back deployment...$(NC)"
@@ -394,6 +416,57 @@ clean: ## Clean build artifacts
 	rm -f coverage.out coverage.html
 	docker system prune -f
 	@echo "$(GREEN)Clean complete!$(NC)"
+
+## Artifact Management
+artifacts-setup: ## Setup artifacts directory structure
+	@echo "$(GREEN)Setting up artifacts directory...$(NC)"
+	./scripts/artifact-manager.sh setup
+
+artifacts-store: ## Store deployment package
+	@echo "$(GREEN)Storing deployment package...$(NC)"
+	@if [ -z "$(PACKAGE)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	@if [ -z "$(VERSION)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	@if [ -z "$(ENV)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	./scripts/artifact-manager.sh store "$(PACKAGE)" "$(VERSION)" "$(ENV)"
+
+artifacts-list: ## List available artifacts
+	@echo "$(GREEN)Listing available artifacts...$(NC)"
+	./scripts/artifact-manager.sh list
+
+artifacts-get: ## Get artifact path
+	@echo "$(GREEN)Getting artifact path...$(NC)"
+	@if [ -z "$(ARTIFACT_TYPE)" ]; then echo "$(RED)Usage: make artifacts-get ARTIFACT_TYPE=<type> VERSION=<version>$(NC)"; exit 1; fi
+	@if [ -z "$(VERSION)" ]; then echo "$(RED)Usage: make artifacts-get ARTIFACT_TYPE=<type> VERSION=<version>$(NC)"; exit 1; fi
+	./scripts/artifact-manager.sh get "$(ARTIFACT_TYPE)" "$(VERSION)"
+
+artifacts-cleanup: ## Clean up old artifacts
+	@echo "$(YELLOW)Cleaning up old artifacts...$(NC)"
+	./scripts/artifact-manager.sh cleanup
+
+## Deployment Benchmarking
+benchmark: ## Run deployment benchmarks
+	@echo "$(GREEN)Running deployment benchmarks...$(NC)"
+	./scripts/benchmark-deployment.sh
+
+benchmark-custom: ## Run deployment benchmarks with custom settings
+	@echo "$(GREEN)Running deployment benchmarks with custom settings...$(NC)"
+	./scripts/benchmark-deployment.sh --iterations "$(ITERATIONS)" --server "$(SERVER)"
+
+benchmark-report: ## Generate benchmark report
+	@echo "$(GREEN)Generating benchmark report...$(NC)"
+	@if [ -z "$(REPORT_FILE)" ]; then echo "$(RED)Usage: make benchmark-report REPORT_FILE=<path>$(NC)"; exit 1; fi
+	./scripts/benchmark-deployment.sh --report "$(REPORT_FILE)"
+
+benchmark-clean: ## Clean up benchmark results directory
+	@echo "$(YELLOW)Cleaning up benchmark results directory...$(NC)"
+	@if [ -d "benchmark-results" ]; then \
+		find benchmark-results -name "*.csv" -type f -delete 2>/dev/null || true; \
+		find benchmark-results -name "*.md" -type f -delete 2>/dev/null || true; \
+		rmdir benchmark-results 2>/dev/null || true; \
+		echo "$(GREEN)Benchmark results cleaned up successfully$(NC)"; \
+	else \
+		echo "$(BLUE)No benchmark results directory found$(NC)"; \
+	fi
 
 mod-tidy: ## Tidy Go modules
 	@echo "$(GREEN)Tidying Go modules...$(NC)"

@@ -1386,13 +1386,6 @@ func TestArbitrageHandler_FindArbitrageOpportunities_Limits(t *testing.T) {
 	}
 }
 
-// TestArbitrageHandlerForSorting is a handler that allows us to test the sorting and limiting logic
-type TestArbitrageHandlerForSorting struct {
-	*ArbitrageHandler
-	mockOpportunities []ArbitrageOpportunity
-	mockError         error
-}
-
 // MockFindArbitrageOpportunities tests the sorting and limiting logic
 func TestArbitrageHandler_FindArbitrageOpportunities_SortingAndLimiting(t *testing.T) {
 	// We can't easily mock the internal find* methods without complex setup,

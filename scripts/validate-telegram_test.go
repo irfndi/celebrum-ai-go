@@ -17,6 +17,31 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// Helper functions for environment variable management with proper error handling
+func mustSetEnv(t *testing.T, key, value string) {
+	t.Helper()
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	t.Helper()
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
+
+
+func restoreEnv(t *testing.T, key string, originalValue string, originalExists bool) {
+	t.Helper()
+	if originalExists {
+		mustSetEnv(t, key, originalValue)
+	} else {
+		mustUnsetEnv(t, key)
+	}
+}
+
 // MockBot is a mock implementation of the telegram bot
 type MockBot struct {
 	mock.Mock
@@ -36,18 +61,6 @@ func TestValidateTelegramMain(t *testing.T) {
 	assert.True(t, true) // Placeholder since main() calls os.Exit on failure
 }
 
-// Helper functions for environment variable management with proper error handling
-func mustSetEnv(t *testing.T, key, value string) {
-	if err := os.Setenv(key, value); err != nil {
-		t.Fatalf("Failed to set env %s: %v", key, err)
-	}
-}
-
-func mustUnsetEnv(t *testing.T, key string) {
-	if err := os.Unsetenv(key); err != nil {
-		t.Fatalf("Failed to unset env %s: %v", key, err)
-	}
-}
 
 func TestLoadDotEnv(t *testing.T) {
 	// Test .env file loading behavior
@@ -84,11 +97,11 @@ func TestConfigLoading(t *testing.T) {
 
 func TestEmptyBotTokenCheck(t *testing.T) {
 	// Test the empty bot token validation logic
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
 
 	// Test with empty token
-	os.Setenv("TELEGRAM_BOT_TOKEN", "")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "")
 
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
@@ -100,11 +113,11 @@ func TestEmptyBotTokenCheck(t *testing.T) {
 
 func TestValidBotTokenLength(t *testing.T) {
 	// Test that valid bot tokens have appropriate length
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
 
 	testToken := "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk" // Sample token format
-	os.Setenv("TELEGRAM_BOT_TOKEN", testToken)
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", testToken)
 
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
@@ -115,14 +128,14 @@ func TestValidBotTokenLength(t *testing.T) {
 
 func TestWebhookURLCheck(t *testing.T) {
 	// Test webhook URL validation logic
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	originalWebhook := os.Getenv("TELEGRAM_WEBHOOK_URL")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
-	defer os.Setenv("TELEGRAM_WEBHOOK_URL", originalWebhook)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	originalWebhook, webhookExists := os.LookupEnv("TELEGRAM_WEBHOOK_URL")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
+	defer restoreEnv(t, "TELEGRAM_WEBHOOK_URL", originalWebhook, webhookExists)
 
 	// Test with empty webhook URL
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test_token")
-	os.Setenv("TELEGRAM_WEBHOOK_URL", "")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test_token")
+	mustSetEnv(t, "TELEGRAM_WEBHOOK_URL", "")
 
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
@@ -130,7 +143,7 @@ func TestWebhookURLCheck(t *testing.T) {
 	}
 
 	// Test with valid webhook URL
-	os.Setenv("TELEGRAM_WEBHOOK_URL", "https://example.com/webhook")
+	mustSetEnv(t, "TELEGRAM_WEBHOOK_URL", "https://example.com/webhook")
 
 	cfg, err = config.Load()
 	if err == nil && cfg != nil {
@@ -140,12 +153,12 @@ func TestWebhookURLCheck(t *testing.T) {
 
 func TestBotCreationErrorHandling(t *testing.T) {
 	// Test error handling when creating bot with invalid token
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
 
 	// Test with invalid token
 	invalidToken := "invalid_token"
-	os.Setenv("TELEGRAM_BOT_TOKEN", invalidToken)
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", invalidToken)
 
 	// Attempt to create bot - this should fail
 	_, err := bot.New(invalidToken)
@@ -158,8 +171,8 @@ func TestBotCreationErrorHandling(t *testing.T) {
 func TestBotCreationSuccess(t *testing.T) {
 	// Test successful bot creation with valid token
 	// Note: This test may fail without actual network access to Telegram API
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
 
 	// Use a dummy token for testing
 	dummyToken := "1234567890:dummy_token_for_testing"
@@ -290,16 +303,16 @@ func TestContextCancellation(t *testing.T) {
 
 func TestEnvironmentVariableCleanup(t *testing.T) {
 	// Test that environment variables are properly cleaned up after tests
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	originalWebhook := os.Getenv("TELEGRAM_WEBHOOK_URL")
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	originalWebhook, webhookExists := os.LookupEnv("TELEGRAM_WEBHOOK_URL")
 
 	// Set test values
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test_token")
-	os.Setenv("TELEGRAM_WEBHOOK_URL", "https://test.example.com")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test_token")
+	mustSetEnv(t, "TELEGRAM_WEBHOOK_URL", "https://test.example.com")
 
 	// Restore original values
-	os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
-	os.Setenv("TELEGRAM_WEBHOOK_URL", originalWebhook)
+	restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
+	restoreEnv(t, "TELEGRAM_WEBHOOK_URL", originalWebhook, webhookExists)
 
 	// Verify restoration
 	if originalToken == "" {
@@ -330,8 +343,10 @@ func TestErrorScenarios(t *testing.T) {
 
 	for _, scenario := range errorScenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-			os.Setenv("TELEGRAM_BOT_TOKEN", scenario.token)
+			originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+			defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
+
+			mustSetEnv(t, "TELEGRAM_BOT_TOKEN", scenario.token)
 
 			_, err := bot.New(scenario.token)
 
@@ -346,17 +361,16 @@ func TestErrorScenarios(t *testing.T) {
 				}
 			}
 
-			os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
 		})
 	}
 }
 
 func TestConfigurationValidation(t *testing.T) {
 	// Test configuration validation logic
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	originalWebhook := os.Getenv("TELEGRAM_WEBHOOK_URL")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
-	defer os.Setenv("TELEGRAM_WEBHOOK_URL", originalWebhook)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	originalWebhook, webhookExists := os.LookupEnv("TELEGRAM_WEBHOOK_URL")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
+	defer restoreEnv(t, "TELEGRAM_WEBHOOK_URL", originalWebhook, webhookExists)
 
 	// Test various configuration scenarios
 	testCases := []struct {
@@ -391,8 +405,8 @@ func TestConfigurationValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			os.Setenv("TELEGRAM_BOT_TOKEN", tc.token)
-			os.Setenv("TELEGRAM_WEBHOOK_URL", tc.webhookURL)
+			mustSetEnv(t, "TELEGRAM_BOT_TOKEN", tc.token)
+			mustSetEnv(t, "TELEGRAM_WEBHOOK_URL", tc.webhookURL)
 
 			cfg, err := config.Load()
 			if err == nil && cfg != nil {
@@ -426,16 +440,16 @@ func TestSuccessMessageGeneration(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	// Test concurrent access to environment variables (avoid config loading due to concurrency issues)
-	originalToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	originalWebhook := os.Getenv("TELEGRAM_WEBHOOK_URL")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", originalToken)
-	defer os.Setenv("TELEGRAM_WEBHOOK_URL", originalWebhook)
+	originalToken, tokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	originalWebhook, webhookExists := os.LookupEnv("TELEGRAM_WEBHOOK_URL")
+	defer restoreEnv(t, "TELEGRAM_BOT_TOKEN", originalToken, tokenExists)
+	defer restoreEnv(t, "TELEGRAM_WEBHOOK_URL", originalWebhook, webhookExists)
 
 	// Set test values
 	testToken := "concurrent_test_token"
 	testWebhook := "https://concurrent.example.com"
-	os.Setenv("TELEGRAM_BOT_TOKEN", testToken)
-	os.Setenv("TELEGRAM_WEBHOOK_URL", testWebhook)
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", testToken)
+	mustSetEnv(t, "TELEGRAM_WEBHOOK_URL", testWebhook)
 
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {

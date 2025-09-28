@@ -18,25 +18,17 @@ import (
 
 // Helper functions for environment variable management with proper error handling
 func mustSetEnv(t *testing.T, key, value string) {
+	t.Helper()
 	if err := os.Setenv(key, value); err != nil {
 		t.Fatalf("Failed to set env %s: %v", key, err)
 	}
 }
 
 func mustUnsetEnv(t *testing.T, key string) {
+	t.Helper()
 	if err := os.Unsetenv(key); err != nil {
 		t.Fatalf("Failed to unset env %s: %v", key, err)
 	}
-}
-
-func deferRestoreEnv(t *testing.T, key string, originalValue string) {
-	t.Cleanup(func() {
-		if originalValue == "" {
-			mustUnsetEnv(t, key)
-		} else {
-			mustSetEnv(t, key, originalValue)
-		}
-	})
 }
 
 // TestMainFunctionBasic tests the main function in a controlled environment

@@ -18,15 +18,26 @@ import (
 
 // Helper functions for environment variable management with proper error handling
 func mustSetEnv(t *testing.T, key, value string) {
+	t.Helper()
 	if err := os.Setenv(key, value); err != nil {
 		t.Fatalf("Failed to set env %s: %v", key, err)
 	}
 }
 
 func mustUnsetEnv(t *testing.T, key string) {
+	t.Helper()
 	if err := os.Unsetenv(key); err != nil {
 		t.Fatalf("Failed to unset env %s: %v", key, err)
 	}
+}
+
+func restoreEnv(t *testing.T, key, value string, existed bool) {
+	t.Helper()
+	if existed {
+		mustSetEnv(t, key, value)
+		return
+	}
+	mustUnsetEnv(t, key)
 }
 
 // Test HealthResponse struct
@@ -389,9 +400,9 @@ func TestSetupRoutes_PanicHandling(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Set a test admin API key to avoid environment variable check
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-for-testing-purposes-only")
-	defer os.Setenv("ADMIN_API_KEY", oldAdminKey)
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-for-testing-purposes-only")
+	defer restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
 
 	// Create a new router
 	router := gin.New()
@@ -409,18 +420,18 @@ func TestSetupRoutes_RouteRegistration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Set required environment variables
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	oldTelegramToken, telegramTokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	oldTelegramChat, telegramChatExists := os.LookupEnv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
+		restoreEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken, telegramTokenExists)
+		restoreEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat, telegramChatExists)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "test-chat-id")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test-token")
+	mustSetEnv(t, "TELEGRAM_CHAT_ID", "test-chat-id")
 
 	// Use nil values for dependencies - SetupRoutes should handle this gracefully
 	// This provides coverage for the function signature and basic execution
@@ -470,18 +481,18 @@ func TestSetupRoutes_RouteGroups(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Set required environment variables
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	oldTelegramToken, telegramTokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	oldTelegramChat, telegramChatExists := os.LookupEnv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
+		restoreEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken, telegramTokenExists)
+		restoreEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat, telegramChatExists)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "test-chat-id")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test-token")
+	mustSetEnv(t, "TELEGRAM_CHAT_ID", "test-chat-id")
 
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
@@ -533,18 +544,18 @@ func TestSetupRoutes_HttpMethods(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Set required environment variables
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	oldTelegramToken, telegramTokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	oldTelegramChat, telegramChatExists := os.LookupEnv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
+		restoreEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken, telegramTokenExists)
+		restoreEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat, telegramChatExists)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "test-chat-id")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test-token")
+	mustSetEnv(t, "TELEGRAM_CHAT_ID", "test-chat-id")
 
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
@@ -599,18 +610,18 @@ func TestSetupRoutes_Middleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Set required environment variables
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	oldTelegramToken, telegramTokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	oldTelegramChat, telegramChatExists := os.LookupEnv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
+		restoreEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken, telegramTokenExists)
+		restoreEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat, telegramChatExists)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "test-chat-id")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test-token")
+	mustSetEnv(t, "TELEGRAM_CHAT_ID", "test-chat-id")
 
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}
@@ -650,18 +661,18 @@ func TestSetupRoutes_MissingAdminKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Remove admin API key
-	oldAdminKey := os.Getenv("ADMIN_API_KEY")
-	oldTelegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	oldTelegramChat := os.Getenv("TELEGRAM_CHAT_ID")
+	oldAdminKey, adminKeyExists := os.LookupEnv("ADMIN_API_KEY")
+	oldTelegramToken, telegramTokenExists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	oldTelegramChat, telegramChatExists := os.LookupEnv("TELEGRAM_CHAT_ID")
 	defer func() {
-		os.Setenv("ADMIN_API_KEY", oldAdminKey)
-		os.Setenv("TELEGRAM_BOT_TOKEN", oldTelegramToken)
-		os.Setenv("TELEGRAM_CHAT_ID", oldTelegramChat)
+		restoreEnv(t, "ADMIN_API_KEY", oldAdminKey, adminKeyExists)
+		restoreEnv(t, "TELEGRAM_BOT_TOKEN", oldTelegramToken, telegramTokenExists)
+		restoreEnv(t, "TELEGRAM_CHAT_ID", oldTelegramChat, telegramChatExists)
 	}()
 
-	os.Setenv("ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "test-chat-id")
+	mustSetEnv(t, "ADMIN_API_KEY", "test-admin-key-that-is-at-least-32-chars")
+	mustSetEnv(t, "TELEGRAM_BOT_TOKEN", "test-token")
+	mustSetEnv(t, "TELEGRAM_CHAT_ID", "test-chat-id")
 
 	// Create minimal mock dependencies
 	mockCCXT := &testmocks.MockCCXTService{}

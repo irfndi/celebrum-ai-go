@@ -1088,7 +1088,8 @@ func TestService_CalculateFundingRateArbitrage(t *testing.T) {
 	// Setup mock client with funding rate data that creates arbitrage opportunity
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1097,7 +1098,7 @@ func TestService_CalculateFundingRateArbitrage(t *testing.T) {
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1106,8 +1107,9 @@ func TestService_CalculateFundingRateArbitrage(t *testing.T) {
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
 
@@ -1144,7 +1146,8 @@ func TestService_CalculateFundingRateArbitrage_InsufficientProfit(t *testing.T) 
 	// Setup mock client with funding rate data that has very small difference
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1153,7 +1156,7 @@ func TestService_CalculateFundingRateArbitrage_InsufficientProfit(t *testing.T) 
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1162,8 +1165,9 @@ func TestService_CalculateFundingRateArbitrage_InsufficientProfit(t *testing.T) 
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
 
@@ -1190,7 +1194,8 @@ func TestService_CalculateFundingRateArbitrage_PriceDifferenceRisk(t *testing.T)
 	// Setup mock client with funding rate data but different mark prices
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1199,7 +1204,7 @@ func TestService_CalculateFundingRateArbitrage_PriceDifferenceRisk(t *testing.T)
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
 						Symbol:      "BTC/USDT",
@@ -1208,8 +1213,9 @@ func TestService_CalculateFundingRateArbitrage_PriceDifferenceRisk(t *testing.T)
 						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
 

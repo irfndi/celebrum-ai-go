@@ -441,7 +441,8 @@ func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64
 	// Calculate variance
 	variance := 0.0
 	for _, price := range window {
-		variance += math.Pow(price-mean, 2)
+		diff := price - mean
+		variance += diff * diff
 	}
 	variance /= float64(len(window))
 
