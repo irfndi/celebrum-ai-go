@@ -44,9 +44,10 @@ async function main() {
 
       if (btcMarkets.length > 0) {
         const testSymbol = btcMarkets[0].symbol;
+        const encodedSymbol = encodeURIComponent(testSymbol);
         console.log(`\n=== Testing ticker with symbol: ${testSymbol} ===`);
 
-        const tickerResponse = await fetch(`${baseUrl}/api/ticker/binance/${testSymbol}`, {
+        const tickerResponse = await fetch(`${baseUrl}/api/ticker/binance/${encodedSymbol}`, {
           headers: defaultHeaders,
         });
         console.log('Ticker status:', tickerResponse.status);
