@@ -7,7 +7,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
 // TestSignalAggregator_BasicFunctionality tests basic functionality without complex mocking

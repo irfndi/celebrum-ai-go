@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

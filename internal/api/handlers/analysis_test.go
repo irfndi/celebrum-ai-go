@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
 )
 
 func TestTechnicalIndicator_Struct(t *testing.T) {
@@ -148,7 +151,7 @@ func TestOHLCV_Struct(t *testing.T) {
 }
 
 func TestNewAnalysisHandler(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	assert.NotNil(t, handler)
@@ -186,7 +189,7 @@ func TestAnalysisHandler_GetTechnicalIndicators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCCXT := &MockCCXTService{}
+			mockCCXT := &testmocks.MockCCXTService{}
 			handler := NewAnalysisHandler(nil, mockCCXT)
 
 			w := httptest.NewRecorder()
@@ -245,7 +248,7 @@ func TestAnalysisHandler_GetTradingSignals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCCXT := &MockCCXTService{}
+			mockCCXT := &testmocks.MockCCXTService{}
 			handler := NewAnalysisHandler(nil, mockCCXT)
 
 			w := httptest.NewRecorder()
@@ -284,7 +287,7 @@ func TestAnalysisHandler_GetTradingSignals(t *testing.T) {
 
 // Test helper functions for technical indicators
 func TestAnalysisHandler_calculateSMA(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data with known values
@@ -308,7 +311,7 @@ func TestAnalysisHandler_calculateSMA(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateEMA(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data
@@ -331,7 +334,7 @@ func TestAnalysisHandler_calculateEMA(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateRSI(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data with upward trend
@@ -362,7 +365,7 @@ func TestAnalysisHandler_calculateRSI(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateMACD(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data
@@ -387,7 +390,7 @@ func TestAnalysisHandler_calculateMACD(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateBollingerBands(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data with some volatility
@@ -418,7 +421,7 @@ func TestAnalysisHandler_calculateBollingerBands(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateSupportResistance(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data
@@ -445,7 +448,7 @@ func TestAnalysisHandler_calculateSupportResistance(t *testing.T) {
 }
 
 func TestAnalysisHandler_calculateIndicators(t *testing.T) {
-	mockCCXT := &MockCCXTService{}
+	mockCCXT := &testmocks.MockCCXTService{}
 	handler := NewAnalysisHandler(nil, mockCCXT)
 
 	// Test data with sufficient length
@@ -490,4 +493,114 @@ func TestAnalysisHandler_calculateIndicators(t *testing.T) {
 	shortData := data[:10]
 	indicatorsShort := handler.calculateIndicators(shortData)
 	assert.Empty(t, indicatorsShort) // Should return empty map
+}
+
+func TestAnalysisHandler_getOHLCVData(t *testing.T) {
+	mockCCXT := &testmocks.MockCCXTService{}
+	handler := NewAnalysisHandler(nil, mockCCXT)
+	
+	// Test with nil database - should return error
+	_, err := handler.getOHLCVData(context.Background(), "BTC/USDT", "binance", "1h", 50)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to query OHLCV data")
+}
+
+func TestAnalysisHandler_simulateOHLCVFromTickers(t *testing.T) {
+	mockCCXT := &testmocks.MockCCXTService{}
+	handler := NewAnalysisHandler(nil, mockCCXT)
+	
+	// Test with nil database - should return error
+	_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", 50)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to query ticker data")
+
+	t.Run("various symbols", func(t *testing.T) {
+		symbols := []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "XRP/USDT"}
+		for _, symbol := range symbols {
+			t.Run(symbol, func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), symbol, "binance", 50)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("various exchanges", func(t *testing.T) {
+		exchanges := []string{"binance", "coinbase", "kraken", "kucoin", "bitfinex"}
+		for _, exchange := range exchanges {
+			t.Run(exchange, func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", exchange, 50)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("various limits", func(t *testing.T) {
+		limits := []int{0, 1, 10, 50, 100, 1000}
+		for _, limit := range limits {
+			t.Run(fmt.Sprintf("limit %d", limit), func(t *testing.T) {
+				_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", limit)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to query ticker data")
+			})
+		}
+	})
+
+	t.Run("negative limit", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "binance", -10)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("empty symbol", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("empty exchange", func(t *testing.T) {
+		_, err := handler.simulateOHLCVFromTickers(context.Background(), "BTC/USDT", "", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := handler.simulateOHLCVFromTickers(ctx, "BTC/USDT", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+
+	t.Run("timeout context", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+		time.Sleep(time.Millisecond)
+
+		_, err := handler.simulateOHLCVFromTickers(ctx, "BTC/USDT", "binance", 50)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query ticker data")
+	})
+}
+
+func TestAnalysisHandler_generateTradingSignal(t *testing.T) {
+	mockCCXT := &testmocks.MockCCXTService{}
+	handler := NewAnalysisHandler(nil, mockCCXT)
+	
+	// Test with database error (nil db)
+	_, err := handler.generateTradingSignal(context.Background(), "BTC/USDT", "binance", "1h")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to query OHLCV data")
+}
+
+func TestAnalysisHandler_getAllTradingSignals(t *testing.T) {
+	mockCCXT := &testmocks.MockCCXTService{}
+	handler := NewAnalysisHandler(nil, mockCCXT)
+	
+	// Test with database error (nil db)
+	_, err := handler.getAllTradingSignals(context.Background(), "1h", 0.6)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to query active pairs")
 }

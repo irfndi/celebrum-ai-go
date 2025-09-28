@@ -5,13 +5,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-otlp-http');
 const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
 const { BatchSpanProcessor, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { Resource } = require('@opentelemetry/resources');
-const {
-  SEMRESATTRS_SERVICE_NAME,
-  SEMRESATTRS_SERVICE_VERSION,
-  SEMRESATTRS_SERVICE_NAMESPACE,
-  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-  SEMRESATTRS_SERVICE_INSTANCE_ID,
-} = require('@opentelemetry/semantic-conventions');
+const { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION, SEMRESATTRS_SERVICE_NAMESPACE, SEMRESATTRS_DEPLOYMENT_ENVIRONMENT, SEMRESATTRS_SERVICE_INSTANCE_ID } = require('@opentelemetry/semantic-conventions');
 const { resolveOtlpTracesEndpoint } = require('./tracing-utils.js');
 
 // Environment variables for configuration
@@ -23,12 +17,7 @@ const environment = process.env.NODE_ENV || 'development';
 // Prefer signal-specific env (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT). If only base endpoint is provided (OTEL_EXPORTER_OTLP_ENDPOINT), ensure '/v1/traces' suffix.
 const otlpTracesEnv = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
 const otlpBaseEnv = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-
-const resolvedOtlpEndpoint = resolveOtlpTracesEndpoint(
-  otlpTracesEnv,
-  otlpBaseEnv,
-  'http://localhost:4318'
-);
+const resolvedOtlpEndpoint = resolveOtlpTracesEndpoint(otlpTracesEnv, otlpBaseEnv, 'http://localhost:4318');
 
 // Create OTLP trace exporter
 const otlpExporter = new OTLPTraceExporter({

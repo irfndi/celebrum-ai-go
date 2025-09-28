@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,8 +17,8 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	userModels "github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	userModels "github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )

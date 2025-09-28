@@ -240,3 +240,39 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, "prod_bot_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://prod-api.example.com/webhook", config.Telegram.WebhookURL)
 }
+
+func TestCCXTConfig_GetServiceURL(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, "http://localhost:3001", config.GetServiceURL())
+}
+
+func TestCCXTConfig_GetTimeout(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, 30, config.GetTimeout())
+}
+
+func TestCCXTConfig_GetServiceURL_Empty(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, "", config.GetServiceURL())
+}
+
+func TestCCXTConfig_GetTimeout_Zero(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    0,
+	}
+
+	assert.Equal(t, 0, config.GetTimeout())
+}

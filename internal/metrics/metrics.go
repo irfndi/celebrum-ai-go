@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/logging"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 )
 
 // MetricType represents the type of metric being recorded

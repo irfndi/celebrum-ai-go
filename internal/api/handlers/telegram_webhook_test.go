@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	userModels "github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	userModels "github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
 // MockTelegramBot implements a mock Telegram bot for testing

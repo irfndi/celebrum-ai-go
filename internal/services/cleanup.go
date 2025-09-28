@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/telemetry"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"log/slog"
 )
 
 // CleanupService handles automatic cleanup of old data
 type CleanupService struct {
-	db                   *database.PostgresDB
+	db                   database.DatabasePool
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	errorRecoveryManager *ErrorRecoveryManager
@@ -26,7 +26,7 @@ type CleanupService struct {
 type CleanupConfig = config.CleanupConfig
 
 // NewCleanupService creates a new cleanup service
-func NewCleanupService(db *database.PostgresDB, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {
+func NewCleanupService(db database.DatabasePool, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CleanupService{
 		db:                   db,
@@ -35,7 +35,7 @@ func NewCleanupService(db *database.PostgresDB, errorRecoveryManager *ErrorRecov
 		errorRecoveryManager: errorRecoveryManager,
 		resourceManager:      resourceManager,
 		performanceMonitor:   performanceMonitor,
-		logger:               telemetry.GetLogger().Logger(),
+		logger:               telemetry.Logger(),
 	}
 }
 
@@ -224,10 +224,15 @@ func (c *CleanupService) cleanupMarketData(ctx context.Context, retentionHours i
 
 // cleanupMarketDataSmart removes oldest data while keeping a buffer
 func (c *CleanupService) cleanupMarketDataSmart(ctx context.Context, retentionHours, deletionHours int) error {
+	// Check if database pool is available
+	if c.db == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(ctx,
+	result, err := c.db.Exec(ctx,
 		"DELETE FROM market_data WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -252,10 +257,15 @@ func (c *CleanupService) cleanupFundingRates(ctx context.Context, retentionHours
 
 // cleanupFundingRatesSmart removes oldest funding rates while keeping a buffer
 func (c *CleanupService) cleanupFundingRatesSmart(ctx context.Context, retentionHours, deletionHours int) error {
+	// Check if database pool is available
+	if c.db == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	// Delete data older than retention hours (e.g., older than 36h)
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(ctx,
+	result, err := c.db.Exec(ctx,
 		"DELETE FROM funding_rates WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -275,9 +285,14 @@ func (c *CleanupService) cleanupFundingRatesSmart(ctx context.Context, retention
 
 // cleanupArbitrageOpportunities removes old arbitrage opportunities
 func (c *CleanupService) cleanupArbitrageOpportunities(ctx context.Context, retentionHours int) error {
+	// Check if database pool is available
+	if c.db == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(ctx,
+	result, err := c.db.Exec(ctx,
 		"DELETE FROM arbitrage_opportunities WHERE detected_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -296,9 +311,14 @@ func (c *CleanupService) cleanupArbitrageOpportunities(ctx context.Context, rete
 
 // cleanupFundingArbitrageOpportunities removes old funding arbitrage opportunities
 func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Context, retentionHours int) error {
+	// Check if database pool is available
+	if c.db == nil {
+		return fmt.Errorf("database pool is not available")
+	}
+
 	cutoffTime := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 
-	result, err := c.db.Pool.Exec(ctx,
+	result, err := c.db.Exec(ctx,
 		"DELETE FROM funding_arbitrage_opportunities WHERE created_at < $1",
 		cutoffTime)
 	if err != nil {
@@ -319,9 +339,14 @@ func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Contex
 func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	stats := make(map[string]int64)
 
+	// Check if database pool is available
+	if c.db == nil {
+		return nil, fmt.Errorf("database pool is not available")
+	}
+
 	// Count market data records
 	var marketDataCount int64
-	err := c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM market_data").Scan(&marketDataCount)
+	err := c.db.QueryRow(ctx, "SELECT COUNT(*) FROM market_data").Scan(&marketDataCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count market data: %w", err)
 	}
@@ -329,7 +354,7 @@ func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, er
 
 	// Count funding rates
 	var fundingRatesCount int64
-	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM funding_rates").Scan(&fundingRatesCount)
+	err = c.db.QueryRow(ctx, "SELECT COUNT(*) FROM funding_rates").Scan(&fundingRatesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count funding rates: %w", err)
 	}
@@ -337,7 +362,7 @@ func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, er
 
 	// Count arbitrage opportunities
 	var arbitrageOpportunitiesCount int64
-	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM arbitrage_opportunities").Scan(&arbitrageOpportunitiesCount)
+	err = c.db.QueryRow(ctx, "SELECT COUNT(*) FROM arbitrage_opportunities").Scan(&arbitrageOpportunitiesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count arbitrage opportunities: %w", err)
 	}
@@ -345,7 +370,7 @@ func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, er
 
 	// Count funding arbitrage opportunities
 	var fundingArbitrageOpportunitiesCount int64
-	err = c.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM funding_arbitrage_opportunities").Scan(&fundingArbitrageOpportunitiesCount)
+	err = c.db.QueryRow(ctx, "SELECT COUNT(*) FROM funding_arbitrage_opportunities").Scan(&fundingArbitrageOpportunitiesCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count funding arbitrage opportunities: %w", err)
 	}

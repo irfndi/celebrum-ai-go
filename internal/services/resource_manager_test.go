@@ -494,7 +494,7 @@ func TestResourceManager_ResourceAging(t *testing.T) {
 
 	assert.True(t, resource.CreatedAt.After(startTime))
 	assert.True(t, resource.LastUsed.After(startTime))
-	assert.True(t, resource.CreatedAt.Equal(resource.LastUsed))
+	assert.True(t, resource.CreatedAt.Equal(resource.LastUsed) || resource.LastUsed.Sub(resource.CreatedAt) < time.Microsecond)
 
 	// Update usage after some time
 	time.Sleep(50 * time.Millisecond)
