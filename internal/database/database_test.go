@@ -162,25 +162,34 @@ func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse ConnMaxLifetime")
 }
 
-func TestNewPostgresConnection_BuildDSNFromComponents(t *testing.T) {
-	// Test DSN building from individual components
-	cfg := &config.DatabaseConfig{
-		Host:         "localhost",
-		Port:         5432,
-		User:         "testuser",
-		Password:     "testpass",
-		DBName:       "testdb",
-		SSLMode:      "disable",
-		MaxOpenConns: 10,
-		MaxIdleConns: 5,
-		// Leave DatabaseURL empty to test component-based DSN
-	}
+func TestBuildPGXPoolConfig_BuildsFromComponents(t *testing.T) {
+        // Test DSN building from individual components without attempting a real connection
+        cfg := &config.DatabaseConfig{
+                Host:         "localhost",
+                Port:         5432,
+                User:         "testuser",
+                Password:     "testpass",
+                DBName:       "testdb",
+                SSLMode:      "disable",
+                MaxOpenConns: 10,
+                MaxIdleConns: 5,
+                // Leave DatabaseURL empty to test component-based DSN
+        }
 
-	db, err := NewPostgresConnection(cfg)
-	// We expect this to fail because we don't have a real database
-	assert.Error(t, err)
-	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+        poolConfig, err := buildPGXPoolConfig(cfg)
+        require.NoError(t, err)
+        require.NotNil(t, poolConfig)
+
+        assert.Equal(t, int32(10), poolConfig.MaxConns)
+        assert.Equal(t, int32(5), poolConfig.MinConns)
+
+        connString := poolConfig.ConnString()
+        assert.Contains(t, connString, "host=localhost")
+        assert.Contains(t, connString, "port=5432")
+        assert.Contains(t, connString, "user=testuser")
+        assert.Contains(t, connString, "password=testpass")
+        assert.Contains(t, connString, "dbname=testdb")
+        assert.Contains(t, connString, "sslmode=disable")
 }
 
 // Test NewRedisConnection with invalid config
