@@ -931,21 +931,41 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
-	var marketData []models.MarketPrice
+    // Use circuit breaker for CCXT service call with retry logic
+    var marketData []models.MarketPrice
     err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
         return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
+            // Fetch bulk market data for a single exchange across symbols
             var fetchErr error
+            var resp []ccxt.MarketPriceInterface
+            resp, fetchErr = c.ccxtService.FetchMarketData(ctx, []string{worker.Exchange}, validSymbols)
+            if fetchErr != nil {
+                return fetchErr
+            }
+            // Convert interface slice to models for downstream processing
+            marketData = c.convertMarketPriceInterfacesToModels(resp)
+            return nil
+        })
+    })
 
-	// Use goroutines for concurrent processing of ticker data
-	for _, ticker := range marketData {
-		go func(t models.MarketPrice) {
-			select {
-			case <-c.ctx.Done():
-				errorChan <- c.ctx.Err()
-				return
-			default:
-			}
+    if err != nil {
+        return fmt.Errorf("failed to fetch bulk ticker data with circuit breaker: %w", err)
+    }
+
+    // Channels to track async save results
+    successChan := make(chan bool, len(marketData))
+    errorChan := make(chan error, len(marketData))
+    successCount := 0
+
+    // Use goroutines for concurrent processing of ticker data
+    for _, ticker := range marketData {
+        go func(t models.MarketPrice) {
+            select {
+            case <-c.ctx.Done():
+                errorChan <- c.ctx.Err()
+                return
+            default:
+            }
 
 			// Validate and save ticker data
 			if err := c.saveBulkTickerData(t); err != nil {
@@ -957,17 +977,20 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		}(ticker)
 	}
 
-	// Wait for all goroutines to complete
-	for i := 0; i < len(marketData); i++ {
-		select {
-		case <-successChan:
-			successCount++
-		case <-errorChan:
-			// Error already logged, continue processing
-		case <-c.ctx.Done():
-			return c.ctx.Err()
-		}
-	}
+    // Wait for all goroutines to complete
+    for i := 0; i < len(marketData); i++ {
+        select {
+        case <-successChan:
+            successCount++
+        case <-errorChan:
+            // Error already logged, continue processing
+        case <-c.ctx.Done():
+            return c.ctx.Err()
+        }
+    }
+
+    // Cache bulk results for fast API responses (best-effort)
+    c.cacheBulkTickerData(worker.Exchange, marketData)
 
 	c.logger.Info("Successfully saved tickers", "exchange", worker.Exchange, "success_count", successCount, "total_count", len(marketData))
 	return nil

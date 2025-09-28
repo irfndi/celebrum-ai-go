@@ -6,11 +6,11 @@ import (
 
     "github.com/irfandi/celebrum-ai-go/internal/ccxt"
     "github.com/irfandi/celebrum-ai-go/internal/models"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
     "github.com/redis/go-redis/v9"
     "github.com/shopspring/decimal"
     "github.com/stretchr/testify/mock"
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgconn"
 )
 
 // MockCCXTService implements ccxt.CCXTService for testing
