@@ -16,6 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Context key types to avoid collisions
+type contextKey string
+
+const (
+	requestIDKey contextKey = "request_id"
+)
+
 // generateTestPassword creates a random password for testing to avoid hardcoded secrets
 // This addresses GitGuardian security alerts about hardcoded test credentials
 func generateTestPassword() string {
@@ -328,14 +335,14 @@ func TestIntegrationContext(t *testing.T) {
 
 	// Add context middleware
 	router.Use(func(c *gin.Context) {
-		ctx := context.WithValue(c.Request.Context(), "request_id", "test-123")
+		ctx := context.WithValue(c.Request.Context(), requestIDKey, "test-123")
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
 
 	// Define test route
 	router.GET("/api/v1/context", func(c *gin.Context) {
-		requestID := c.Request.Context().Value("request_id").(string)
+		requestID := c.Request.Context().Value(requestIDKey).(string)
 		c.JSON(http.StatusOK, gin.H{
 			"request_id": requestID,
 			"timestamp":  time.Now(),
