@@ -1,19 +1,21 @@
-version: 1
+version: 2
 paths:
-  ignore:
-    - ".trae/**"
-    - "docs/**"
-    - "signoz/**"
-    - "coverage/**"
-    - "test/**"
-    - "testmocks/**"
-    - "**/*.pem"
-    - "**/*.crt"
-    - "**/*.key"
-    - "**/ccxt.log"
+  - exclude:
+      - "signoz/**"
+      - "**/coverage/**"
+      - "coverage/**"
+      - "**/*.out"
+      - "docs/**"
+      - ".trae/**"
+      - "ccxt-service/*.test.ts"
+      - "ccxt-service/test-*.js"
+      - "**/*_test.go"
+      - "test/**"
 secrets:
-  ignore_known_secrets: true
-  ignore:
-    - "test-secret-key"
-    - "test-admin-key"
-    - "replace-with-secure-secret"
+  ignored-matches:
+    - name: test-secret-key
+      match: test-secret-key
+    - name: test-admin-key
+      match: test-admin-key
+    - name: secret-key-placeholder
+      match: replace-with-secure-secret

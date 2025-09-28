@@ -210,8 +210,8 @@ function initializeExchange(exchangeId: string): boolean {
     }
 
     // Additional validation - check if exchange has basic properties
-    if (!exchange.id || !exchange.name) {
-      console.warn(`Exchange ${exchangeId} missing basic properties`);
+    if (!exchange.id) {
+      console.warn(`Exchange ${exchangeId} missing id property`);
       return false;
     }
 
