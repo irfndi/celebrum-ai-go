@@ -8,7 +8,7 @@
  * Optionally override the service URL by setting CCXT_SERVICE_URL.
  */
 
-const baseUrl = process.env.CCXT_SERVICE_URL ?? 'http://localhost:3001';
+const baseUrl = process.env.CCXT_SERVICE_URL ?? 'http://localhost:3000';
 const adminApiKey = process.env.ADMIN_API_KEY;
 
 if (!adminApiKey) {
@@ -44,9 +44,10 @@ async function main() {
 
       if (btcMarkets.length > 0) {
         const testSymbol = btcMarkets[0].symbol;
+        const encodedSymbol = encodeURIComponent(testSymbol);
         console.log(`\n=== Testing ticker with symbol: ${testSymbol} ===`);
 
-        const tickerResponse = await fetch(`${baseUrl}/api/ticker/binance/${testSymbol}`, {
+        const tickerResponse = await fetch(`${baseUrl}/api/ticker/binance/${encodedSymbol}`, {
           headers: defaultHeaders,
         });
         console.log('Ticker status:', tickerResponse.status);

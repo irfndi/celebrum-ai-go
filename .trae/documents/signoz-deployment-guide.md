@@ -144,9 +144,9 @@ COLLECTOR_MEMORY_LIMIT=512m
 
 # Security Configuration
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:?Please set a secure ClickHouse password}
+CLICKHOUSE_PASSWORD=
 SIGNOZ_ADMIN_USER=admin
-SIGNOZ_ADMIN_PASSWORD=${SIGNOZ_ADMIN_PASSWORD:?Please set a strong admin password}
+SIGNOZ_ADMIN_PASSWORD=
 ```
 
 ### 4.3 Docker Compose Configuration
