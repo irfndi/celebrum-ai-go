@@ -186,7 +186,8 @@ func setDefaults() {
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
-	viper.SetDefault("database.password", "postgres")
+	// Remove hardcoded default password for security
+	// viper.SetDefault("database.password", "postgres")
 	viper.SetDefault("database.dbname", "celebrum_ai")
 	viper.SetDefault("database.sslmode", "disable")
 	viper.SetDefault("database.database_url", "")
