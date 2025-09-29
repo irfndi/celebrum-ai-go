@@ -24,6 +24,8 @@ jobs:
       with:
         version: v2.5.0
         args: --timeout=5m
+        skip-cache: true
+        skip-save-cache: true
         
     - name: Check formatting
       run: make fmt-check
