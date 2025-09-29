@@ -27,9 +27,11 @@ jobs:
         args: --timeout=5m
         skip-cache: true
         skip-save-cache: true
+      env:
+        GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
         
     - name: Check formatting
       run: make fmt-check
       # Don't fail CI for formatting; surface as warning only
       continue-on-error: true
-# Force cache invalidation - 2025-09-29T10:42:00Z - v2.5.0
+# Force cache invalidation - 2025-09-29T11:00:00Z - v2.5.0 with explicit cache env

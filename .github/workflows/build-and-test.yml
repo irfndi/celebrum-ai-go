@@ -40,6 +40,8 @@ jobs:
           args: --timeout=5m
           skip-cache: true
           skip-save-cache: true
+        env:
+          GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
       
       - name: Coverage Check (non-blocking)
         run: |
