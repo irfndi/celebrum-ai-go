@@ -30,13 +30,18 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 		timeout = 30 * time.Second
 	}
 
-	return &Client{
+	// Log the actual service URL being used
+	log.Printf("CCXT Service URL from config: %s", cfg.ServiceURL)
+
+	client := &Client{
 		HTTPClient: &http.Client{
 			Timeout: timeout,
 		},
 		baseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
 		timeout: timeout,
 	}
+	log.Printf("DEBUG: CCXT Client initialized with BaseURL: %s", client.BaseURL())
+	return client
 }
 
 // HealthCheck checks if the CCXT service is healthy

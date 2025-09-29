@@ -74,11 +74,6 @@ jobs:
             SHOULD_DEPLOY="true"
             ENVIRONMENT="production"
             DEPLOYMENT_TYPE="zero-downtime"
-          # Push to develop -> staging
-          elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
-            SHOULD_DEPLOY="true"
-            ENVIRONMENT="staging"
-            DEPLOYMENT_TYPE="standard"
           # Push to development -> staging
           elif [ "${{ github.ref }}" = "refs/heads/development" ]; then
             SHOULD_DEPLOY="true"

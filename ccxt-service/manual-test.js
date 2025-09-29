@@ -3,6 +3,14 @@ process.env.ADMIN_API_KEY =
   "test-admin-key-that-is-at-least-32-characters-long-for-security";
 process.env.PORT = "3003";
 
+/**
+ * Run a manual end-to-end test suite against the local service and log results.
+ *
+ * Performs checks of the /health, /api/exchanges, /api/markets/:exchange,
+ * /api/ticker/:exchange/:base/:quote and /api/funding-rates/:exchange endpoints
+ * on http://localhost, logging HTTP statuses and response bodies; any errors
+ * encountered are caught and logged.
+ */
 async function runTests() {
   console.log("=== Manual Test Suite ===");
 

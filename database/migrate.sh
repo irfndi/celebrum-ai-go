@@ -20,20 +20,24 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Function to log messages
+# log writes a timestamped informational message to stdout formatted in green.
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
+# log_warn prints a timestamped WARNING message prefixed with "WARNING:" in yellow to stdout.
 log_warn() {
     echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1"
 }
 
+# log_error prints a timestamped "ERROR" message in red to stdout.
 log_error() {
     echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1"
 }
 
-# Function to check if migration has been applied
+# migration_applied checks whether a given migration filename is recorded as applied in the database's schema_migrations table.
+# Takes the migration filename as the first argument.
+# Returns exit status 0 if the schema_migrations table exists and the filename is marked applied; returns non-zero otherwise.
 migration_applied() {
     local migration_name="$1"
     
@@ -48,7 +52,7 @@ migration_applied() {
         "$migration_name" -t -A 2>/dev/null | grep -q 1
 }
 
-# Function to apply migration
+# apply_migration applies a SQL migration file to the configured database, records the migration in the `schema_migrations` table, skips the file if it is already recorded as applied, and exits with a non-zero status on failure.
 apply_migration() {
     local migration_file="$1"
     local migration_name
@@ -75,7 +79,8 @@ apply_migration() {
     fi
 }
 
-# Function to create schema_migrations table if it doesn't exist
+# create_migrations_table creates the schema_migrations table if it does not exist.
+# The table tracks applied migrations with columns: id (primary key), filename (unique, not null), applied (boolean), and applied_at (timestamp with time zone).
 create_migrations_table() {
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -87,7 +92,7 @@ create_migrations_table() {
     "
 }
 
-# Function to list available migrations
+# list_migrations prints available SQL migration files from the migrations directory and marks each as "applied" or "pending".
 list_migrations() {
     log "Available migrations:"
     ls -1 "$MIGRATIONS_DIR"/*.sql | sort -V | while read -r file; do
@@ -101,7 +106,7 @@ list_migrations() {
     done
 }
 
-# Function to show migration status
+# show_status shows migration status; if the `schema_migrations` table does not exist it warns and lists available migrations, otherwise it queries and prints `filename`, `applied`, and `applied_at` ordered by `applied_at` (descending) then `filename`.
 show_status() {
     log "Migration status:"
     if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q schema_migrations; then
@@ -117,7 +122,7 @@ show_status() {
     "
 }
 
-# Function to run specific migration
+# run_specific_migration runs the migration whose filename starts with the given numeric prefix, ensures exactly one matching SQL file exists, creates the migrations tracking table if needed, and applies the migration (exits with an error on failure).
 run_specific_migration() {
     local migration_number="$1"
     local migration_files=("$MIGRATIONS_DIR"/${migration_number}_*.sql)
@@ -138,7 +143,7 @@ run_specific_migration() {
     apply_migration "$migration_file"
 }
 
-# Function to run all pending migrations
+# run_all_migrations runs all pending SQL migrations from the migrations directory in version order, ensuring the migrations tracking table exists and applying each migration while recording successful applications.
 run_all_migrations() {
     log "Running all pending migrations..."
     create_migrations_table
@@ -150,7 +155,7 @@ run_all_migrations() {
     log "All migrations completed successfully!"
 }
 
-# Function to rollback migration
+# rollback_migration removes the migration's record from `schema_migrations` for the given migration number and warns that an actual SQL rollback must be provided separately.
 rollback_migration() {
     local migration_number="$1"
     local migration_files=("$MIGRATIONS_DIR"/${migration_number}_*.sql)

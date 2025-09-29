@@ -11,7 +11,13 @@ const service = mod.default;
 
 console.log("Service imported successfully");
 
-// Wait for service to be ready with active readiness probe
+/**
+ * Polls the service health endpoint until it responds with HTTP 200 or the timeout elapses.
+ *
+ * @param {number} timeoutMs - Maximum time to wait in milliseconds (default: 10000).
+ * @param {number} intervalMs - Delay between probes in milliseconds (default: 300).
+ * @throws {Error} If the service does not return HTTP 200 before the timeout elapses.
+ */
 async function waitForServiceReady(timeoutMs = 10000, intervalMs = 300) {
   const startTime = Date.now();
 

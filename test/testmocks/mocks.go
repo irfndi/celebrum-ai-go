@@ -33,6 +33,21 @@ type MockCacheAnalyticsService struct {
 	mock.Mock
 }
 
+// MockSpotArbitrageCalculator implements services.ArbitrageCalculator for testing
+type MockSpotArbitrageCalculator struct {
+	mock.Mock
+}
+
+// CalculateArbitrageOpportunities mocks arbitrage opportunity calculations
+func (m *MockSpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
+	args := m.Called(ctx, marketData)
+	var opportunities []models.ArbitrageOpportunity
+	if result := args.Get(0); result != nil {
+		opportunities = result.([]models.ArbitrageOpportunity)
+	}
+	return opportunities, args.Error(1)
+}
+
 // MockRedisClient implements RedisInterface for testing
 type MockRedisClient struct {
 	mock.Mock

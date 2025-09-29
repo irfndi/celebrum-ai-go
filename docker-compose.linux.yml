@@ -1,0 +1,22 @@
+version: '3.8'
+
+# Linux-specific Docker Compose override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.linux.yml up
+
+services:
+  nginx:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+  nginx-test:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Ensure services bind to 0.0.0.0 for cross-container access
+  app:
+    ports:
+      - "0.0.0.0:8080:8080"
+    
+  ccxt-service:
+    ports:
+      - "0.0.0.0:3001:3001"

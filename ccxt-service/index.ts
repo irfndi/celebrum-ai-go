@@ -153,7 +153,11 @@ const defaultExchangeConfig = {
   ],
 };
 
-// Load configuration from file or use defaults
+/**
+ * Loads persisted exchange configuration from disk or returns the default configuration.
+ *
+ * @returns The parsed exchange configuration if the config file exists and is valid, otherwise a copy of the default exchange configuration.
+ */
 function loadExchangeConfig() {
   try {
     if (existsSync(CONFIG_FILE_PATH)) {
@@ -171,7 +175,12 @@ function loadExchangeConfig() {
   return { ...defaultExchangeConfig };
 }
 
-// Save configuration to file
+/**
+ * Persist the exchange configuration object to disk at the configured path.
+ *
+ * @param config - The exchange configuration object to write to disk
+ * @returns `true` if the file was written successfully, `false` otherwise
+ */
 function saveExchangeConfig(config: any) {
   try {
     writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), "utf8");
@@ -210,7 +219,14 @@ const priorityExchanges = [
 // Initialize supported exchanges dynamically
 const exchanges: ExchangeManager = {};
 
-// Function to initialize an exchange
+/**
+ * Initialize and register a CCXT exchange by its identifier into the service's active exchanges map.
+ *
+ * Attempts to instantiate the exchange with configured options, validates that it supports market and ticker operations and has basic identity properties, and stores the instance in the `exchanges` map on success.
+ *
+ * @param exchangeId - The CCXT exchange identifier (e.g., "binance", "bybit")
+ * @returns `true` if the exchange was successfully instantiated and registered in the active exchanges map, `false` otherwise (including when blacklisted, not supported by CCXT, missing required capabilities, or on initialization error)
+ */
 function initializeExchange(exchangeId: string): boolean {
   try {
     if (blacklistedExchanges.has(exchangeId)) {
