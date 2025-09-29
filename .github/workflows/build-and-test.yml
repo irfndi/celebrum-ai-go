@@ -36,7 +36,7 @@ jobs:
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v1.59.0
           args: --timeout=5m --out-format=github-actions
       
       - name: Coverage Check (non-blocking)
@@ -135,7 +135,7 @@ jobs:
           
       - name: Aqua Security Trivy
         id: trivy
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: 'celebrum-api:${{ github.sha }}'
           format: 'sarif'
