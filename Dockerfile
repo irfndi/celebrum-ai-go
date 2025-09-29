@@ -37,7 +37,6 @@ COPY --from=builder /app/main .
 
 # Copy configuration files
 COPY --from=builder /app/configs ./configs
-COPY --from=builder /app/config.yaml ./config.yaml
 
 # Copy scripts directory
 COPY --from=builder /app/scripts ./scripts
@@ -64,7 +63,6 @@ FROM scratch AS binary
 # Copy only the essential files for deployment
 COPY --from=builder /app/main .
 COPY --from=builder /app/configs ./configs/
-COPY --from=builder /app/config.yaml ./config.yaml
 
 # Set proper permissions for binary
 RUN chmod +x main
