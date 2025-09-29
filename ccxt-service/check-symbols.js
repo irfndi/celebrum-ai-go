@@ -20,6 +20,11 @@ const defaultHeaders = {
   'x-api-key': adminApiKey,
 };
 
+/**
+ * Orchestrates fetching Binance markets and optionally tests a ticker from the configured local CCXT service.
+ *
+ * Fetches markets from `${baseUrl}/api/markets/binance`, logs the total count, and prints up to the first 10 markets whose symbol includes "BTC" with their base and quote. If any BTC markets are found, requests a ticker for the first BTC symbol and logs the HTTP status and either the last price (`ticker.last`) on success or the error response text on failure. Uses the module's `baseUrl` and `defaultHeaders`. On any unexpected error the process exits with code 1.
+ */
 async function main() {
   try {
     console.log('=== Checking Binance Markets ===');
