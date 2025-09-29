@@ -27,7 +27,7 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()
 
@@ -131,11 +131,12 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			users.POST("/register", userHandler.RegisterUser)
 			users.POST("/login", userHandler.LoginUser)
-			users.GET("/profile", userHandler.GetUserProfile)
+			users.GET("/profile", authMiddleware.RequireAuth(), userHandler.GetUserProfile)
 		}
 
 		// Alerts management
 		alerts := v1.Group("/alerts")
+		alerts.Use(authMiddleware.RequireAuth())
 		{
 			alerts.GET("/", getUserAlerts)
 			alerts.POST("/", createAlert)

@@ -20,6 +20,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/middleware"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/sirupsen/logrus"
@@ -95,6 +96,9 @@ func run() error {
 
 	// Initialize CCXT service with blacklist cache
 	ccxtService := ccxt.NewService(&cfg.CCXT, logrusLogger, blacklistCache)
+
+	// Initialize JWT authentication middleware
+	authMiddleware := middleware.NewAuthMiddleware(cfg.Auth.JWTSecret)
 
 	// Initialize cache analytics service
 	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
@@ -219,7 +223,7 @@ func run() error {
 	router.Use(otelgin.Middleware("celebrum-ai-go"))
 
 	// Setup routes
-	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram)
+	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram, authMiddleware)
 
 	// Create HTTP server with security timeouts
 	srv := &http.Server{

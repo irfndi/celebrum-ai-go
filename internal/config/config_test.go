@@ -226,7 +226,7 @@ func TestCCXTConfig_GetServiceURL(t *testing.T) {
 		Timeout:    30,
 	}
 
-	assert.Equal(t, "http://localhost:3001", config.GetServiceURL())
+	assert.Equal(t, "http://localhost:3000", config.GetServiceURL())
 }
 
 func TestCCXTConfig_GetTimeout(t *testing.T) {

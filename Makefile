@@ -7,7 +7,7 @@ DOCKER_REGISTRY=ghcr.io/irfndi
 DOCKER_IMAGE_APP=$(DOCKER_REGISTRY)/app:latest
 DOCKER_IMAGE_CCXT=$(DOCKER_REGISTRY)/ccxt-service:latest
 DOCKER_COMPOSE_FILE=docker-compose.yml
-DOCKER_COMPOSE_PROD_FILE=docker-compose.single-droplet.yml
+DOCKER_COMPOSE_ENV_FILE=.env
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GO_CACHE_DIR=$(PWD)/.cache/go-build
 GO_MOD_CACHE_DIR=$(PWD)/.cache/go-mod
@@ -156,12 +156,15 @@ dev: ## Run with hot reload (requires air)
 ## Environment Setup
 dev-setup: ## Setup development environment
 	@echo "$(GREEN)Setting up development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
+	@cp $(DOCKER_COMPOSE_ENV_FILE) $(DOCKER_COMPOSE_ENV_FILE).backup 2>/dev/null || true
+	@cp .env.development .env
+	docker compose --env-file .env up -d postgres redis
 	@echo "$(GREEN)Development environment ready!$(NC)"
 
 dev-down: ## Stop development environment
 	@echo "$(YELLOW)Stopping development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) down
+	docker compose --env-file .env down
+	@mv $(DOCKER_COMPOSE_ENV_FILE).backup $(DOCKER_COMPOSE_ENV_FILE) 2>/dev/null || true
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
@@ -234,11 +237,14 @@ docker-build-ccxt: ## Build CCXT service image with version
 
 docker-run: docker-build ## Run with Docker
 	@echo "$(GREEN)Running with Docker...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) up --build
+	docker compose --env-file .env up --build
 
 docker-prod: ## Run production Docker setup
 	@echo "$(GREEN)Running production Docker setup...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) up -d --build
+	@cp $(DOCKER_COMPOSE_ENV_FILE) $(DOCKER_COMPOSE_ENV_FILE).backup 2>/dev/null || true
+	@cp .env.production .env
+	docker compose --env-file .env up -d --build
+	@echo "$(GREEN)Production environment started!$(NC)"
 
 ## Database
 db-migrate: ## Run database migrations
@@ -337,14 +343,14 @@ migrate-list: ## List available database migrations
 migrate-docker: ## Run migrations in Docker environment
 	@echo "$(GREEN)Running migrations in Docker...$(NC)"
 	@echo "$(YELLOW)Using secure migration script...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) exec app ./scripts/migrate-optimized.sh migrate
+	docker compose --env-file .env exec app ./scripts/migrate-optimized.sh migrate
 
 .PHONY: auto-migrate dev-up prod-up
 
 # Automatic migration for all environments
 auto-migrate: ## Run automatic migration sync
 	@echo "$(GREEN)Starting automatic migration sync...$(NC)"
-	@docker compose -f $(DOCKER_COMPOSE_FILE) up --build migrate
+	@docker compose --env-file .env up --build migrate
 	@echo "$(GREEN)All migrations applied successfully!$(NC)"
 
 # Development environment with orchestrated sequential startup
@@ -393,8 +399,8 @@ startup-status: ## Check sequential startup status
 down-orchestrated: ## Stop all services gracefully with orchestrated shutdown
 	@echo "$(YELLOW)Stopping services with orchestrated shutdown...$(NC)"
 	@./webhook-control.sh disable 2>/dev/null || true
-	@docker compose -f $(DOCKER_COMPOSE_FILE) down
-	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) down 2>/dev/null || true
+	@docker compose --env-file .env down
+	@mv $(DOCKER_COMPOSE_ENV_FILE).backup $(DOCKER_COMPOSE_ENV_FILE) 2>/dev/null || true
 	@echo "$(GREEN)All services stopped$(NC)"
 
 ## Observability (SigNoz)
@@ -546,18 +552,46 @@ health-prod: ## Check production health
 
 status: ## Show service status
 	@echo "$(GREEN)Service Status:$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) ps
+	docker compose --env-file .env ps
 
 status-prod: ## Show production service status
 	@echo "$(GREEN)Production Service Status:$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) ps
+	@if [ -f ".env" ]; then \
+		docker compose --env-file .env ps; \
+	else \
+		echo "$(YELLOW)No .env file found. Run 'make docker-prod' first.$(NC)"; \
+	fi
 
 ## Logs
 logs: ## Show application logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f app
+	docker compose --env-file .env logs -f app
 
 logs-ccxt: ## Show CCXT service logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f ccxt-service
+	docker compose --env-file .env logs -f ccxt-service
 
 logs-all: ## Show all service logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f
+	docker compose --env-file .env logs -f
+
+## Environment Management
+env-dev: ## Switch to development environment
+	@echo "$(GREEN)Switching to development environment...$(NC)"
+	@cp .env.development .env
+	@echo "$(GREEN)Development environment activated!$(NC)"
+
+env-prod: ## Switch to production environment
+	@echo "$(GREEN)Switching to production environment...$(NC)"
+	@cp .env.production .env
+	@echo "$(GREEN)Production environment activated!$(NC)"
+
+env-current: ## Show current environment
+	@if [ -f ".env" ]; then \
+		if grep -q "ENVIRONMENT=development" .env; then \
+			echo "$(GREEN)Current environment: Development$(NC)"; \
+		elif grep -q "ENVIRONMENT=production" .env; then \
+			echo "$(GREEN)Current environment: Production$(NC)"; \
+		else \
+			echo "$(YELLOW)Current environment: Custom$(NC)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)No .env file found.$(NC)"; \
+	fi

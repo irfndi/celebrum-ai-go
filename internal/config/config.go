@@ -20,6 +20,7 @@ type Config struct {
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
 	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
+	Auth        AuthConfig       `mapstructure:"auth"`
 }
 
 type ServerConfig struct {
@@ -120,6 +121,10 @@ type BlacklistConfig struct {
 	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
 	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
 	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
+}
+
+type AuthConfig struct {
+	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
 func Load() (*Config, error) {
@@ -237,6 +242,9 @@ func setDefaults() {
 	viper.SetDefault("blacklist.long_ttl", "72h")
 	viper.SetDefault("blacklist.use_redis", true)
 	viper.SetDefault("blacklist.retry_after_clear", true)
+
+	// Auth
+	viper.SetDefault("auth.jwt_secret", "")
 }
 
 // GetServiceURL returns the CCXT service URL

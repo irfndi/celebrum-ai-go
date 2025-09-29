@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [ main, develop, development ]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
     inputs:
       environment:
         description: 'Deployment environment'
@@ -190,6 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       security-events: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -224,6 +229,7 @@ jobs:
     permissions:
       packages: write
       contents: read
+      id-token: write
     outputs:
       image: ${{ steps.image.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
