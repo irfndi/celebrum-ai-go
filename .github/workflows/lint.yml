@@ -22,8 +22,8 @@ jobs:
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
-        version: v1.59.0
-        args: --timeout=5m --out-format=github-actions
+        version: latest
+        args: --timeout=5m
         
     - name: Check formatting
       run: make fmt-check
