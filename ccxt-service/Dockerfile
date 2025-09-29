@@ -14,7 +14,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 # Build TypeScript
-RUN bun run build:bun
+RUN bun run build
 
 # Production stage - optimized runtime
 FROM alpine:latest AS production
