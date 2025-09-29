@@ -241,7 +241,7 @@ func (m *MockBlacklistCache) GetBlacklistedSymbols() ([]cache.BlacklistCacheEntr
 // Test Service struct initialization
 func TestService_Struct(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}
 
