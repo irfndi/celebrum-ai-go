@@ -2,7 +2,9 @@ name: Build and Test
 
 on:
   push:
+    branches: [ main, develop, development ]
   pull_request:
+    branches: [ main, develop, development ]
   workflow_dispatch:
 
 env:
