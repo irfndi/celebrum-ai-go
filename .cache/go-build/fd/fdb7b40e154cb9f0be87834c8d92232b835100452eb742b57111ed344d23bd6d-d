@@ -1,4 +1,0 @@
-./blacklist_repository.go
-./postgres.go
-./redis.go
-./telemetry.go

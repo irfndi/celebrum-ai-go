@@ -1,5 +1,0 @@
-./blacklist_cache.go
-./symbol_cache.go
-./blacklist_cache_mocks_test.go
-./blacklist_cache_test.go
-./symbol_cache_test.go
