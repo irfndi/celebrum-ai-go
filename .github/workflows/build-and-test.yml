@@ -142,7 +142,7 @@ jobs:
           
       - name: Aqua Security Trivy
         id: trivy
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@0.25.0
         with:
           image-ref: 'celebrum-api:${{ github.sha }}'
           format: 'sarif'
