@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -298,7 +297,7 @@ func TestMarketDataRequest_Struct(t *testing.T) {
 
 // Test TradingPair struct and methods
 func TestTradingPair_Struct(t *testing.T) {
-	id := uuid.New()
+	id := 1
 	now := time.Now()
 
 	tp := TradingPair{
@@ -647,4 +646,547 @@ func TestAlertConditions_JSON(t *testing.T) {
 	assert.True(t, priceThreshold.Equal(*unmarshaled.PriceThreshold))
 	assert.Equal(t, "BTC/USDT", unmarshaled.Symbol)
 	assert.Equal(t, "binance", unmarshaled.Exchange)
+}
+
+// Test EnhancedArbitrageOpportunity struct
+func TestEnhancedArbitrageOpportunity_Struct(t *testing.T) {
+	now := time.Now()
+	expiry := now.Add(time.Hour)
+	buyPriceRange := PriceRange{Min: decimal.NewFromFloat(50000.00), Max: decimal.NewFromFloat(50100.00)}
+	sellPriceRange := PriceRange{Min: decimal.NewFromFloat(50200.00), Max: decimal.NewFromFloat(50300.00)}
+	profitRange := ProfitRange{
+		MinPercentage: decimal.NewFromFloat(0.5),
+		MaxPercentage: decimal.NewFromFloat(1.0),
+		MinAmount:     decimal.NewFromFloat(100.0),
+		MaxAmount:     decimal.NewFromFloat(200.0),
+		BaseAmount:    decimal.NewFromFloat(20000.0),
+	}
+	
+	buyExchanges := []ExchangePrice{
+		{ExchangeID: 1, ExchangeName: "Binance", Price: decimal.NewFromFloat(50050.00), Volume: decimal.NewFromFloat(10.5)},
+	}
+	sellExchanges := []ExchangePrice{
+		{ExchangeID: 2, ExchangeName: "Coinbase", Price: decimal.NewFromFloat(50250.00), Volume: decimal.NewFromFloat(8.2)},
+	}
+	
+	volumeWeighted := VolumeWeightedPrices{
+		BuyVWAP:  decimal.NewFromFloat(50050.00),
+		SellVWAP: decimal.NewFromFloat(50250.00),
+	}
+
+	enhancedArb := EnhancedArbitrageOpportunity{
+		ID:                  "enhanced-arb-123",
+		Symbol:              "BTC/USDT",
+		BuyPriceRange:       buyPriceRange,
+		SellPriceRange:      sellPriceRange,
+		ProfitRange:         profitRange,
+		BuyExchanges:        buyExchanges,
+		SellExchanges:       sellExchanges,
+		MinVolume:           decimal.NewFromFloat(1.0),
+		TotalVolume:         decimal.NewFromFloat(18.7),
+		ValidityDuration:    time.Minute * 5,
+		DetectedAt:          now,
+		ExpiresAt:           expiry,
+		QualityScore:        decimal.NewFromFloat(85.5),
+		VolumeWeightedPrice: volumeWeighted,
+	}
+
+	assert.Equal(t, "enhanced-arb-123", enhancedArb.ID)
+	assert.Equal(t, "BTC/USDT", enhancedArb.Symbol)
+	assert.True(t, buyPriceRange.Min.Equal(enhancedArb.BuyPriceRange.Min))
+	assert.True(t, buyPriceRange.Max.Equal(enhancedArb.BuyPriceRange.Max))
+	assert.True(t, sellPriceRange.Min.Equal(enhancedArb.SellPriceRange.Min))
+	assert.True(t, sellPriceRange.Max.Equal(enhancedArb.SellPriceRange.Max))
+	assert.True(t, profitRange.MinPercentage.Equal(enhancedArb.ProfitRange.MinPercentage))
+	assert.True(t, profitRange.MaxPercentage.Equal(enhancedArb.ProfitRange.MaxPercentage))
+	assert.True(t, profitRange.MinAmount.Equal(enhancedArb.ProfitRange.MinAmount))
+	assert.True(t, profitRange.MaxAmount.Equal(enhancedArb.ProfitRange.MaxAmount))
+	assert.True(t, profitRange.BaseAmount.Equal(enhancedArb.ProfitRange.BaseAmount))
+	assert.Equal(t, 1, len(enhancedArb.BuyExchanges))
+	assert.Equal(t, 1, len(enhancedArb.SellExchanges))
+	assert.True(t, decimal.NewFromFloat(1.0).Equal(enhancedArb.MinVolume))
+	assert.True(t, decimal.NewFromFloat(18.7).Equal(enhancedArb.TotalVolume))
+	assert.Equal(t, time.Minute*5, enhancedArb.ValidityDuration)
+	assert.Equal(t, now, enhancedArb.DetectedAt)
+	assert.Equal(t, expiry, enhancedArb.ExpiresAt)
+	assert.True(t, decimal.NewFromFloat(85.5).Equal(enhancedArb.QualityScore))
+	assert.True(t, volumeWeighted.BuyVWAP.Equal(enhancedArb.VolumeWeightedPrice.BuyVWAP))
+	assert.True(t, volumeWeighted.SellVWAP.Equal(enhancedArb.VolumeWeightedPrice.SellVWAP))
+}
+
+// Test ExchangePrice struct
+func TestExchangePrice_Struct(t *testing.T) {
+	exchangePrice := ExchangePrice{
+		ExchangeID:   1,
+		ExchangeName: "Binance",
+		Price:        decimal.NewFromFloat(50000.00),
+		Volume:       decimal.NewFromFloat(10.5),
+		Spread:       decimal.NewFromFloat(50.00),
+		Reliability:  decimal.NewFromFloat(0.95),
+	}
+
+	assert.Equal(t, 1, exchangePrice.ExchangeID)
+	assert.Equal(t, "Binance", exchangePrice.ExchangeName)
+	assert.True(t, decimal.NewFromFloat(50000.00).Equal(exchangePrice.Price))
+	assert.True(t, decimal.NewFromFloat(10.5).Equal(exchangePrice.Volume))
+	assert.True(t, decimal.NewFromFloat(50.00).Equal(exchangePrice.Spread))
+	assert.True(t, decimal.NewFromFloat(0.95).Equal(exchangePrice.Reliability))
+}
+
+// Test VolumeWeightedPrices struct
+func TestVolumeWeightedPrices_Struct(t *testing.T) {
+	vwp := VolumeWeightedPrices{
+		BuyVWAP:  decimal.NewFromFloat(50000.00),
+		SellVWAP: decimal.NewFromFloat(50200.00),
+	}
+
+	assert.True(t, decimal.NewFromFloat(50000.00).Equal(vwp.BuyVWAP))
+	assert.True(t, decimal.NewFromFloat(50200.00).Equal(vwp.SellVWAP))
+}
+
+// Test ArbitrageAggregationInput struct
+func TestArbitrageAggregationInput_Struct(t *testing.T) {
+	opportunities := []ArbitrageOpportunity{
+		{ID: "arb-1", TradingPairID: 1, BuyExchangeID: 1, SellExchangeID: 2},
+		{ID: "arb-2", TradingPairID: 2, BuyExchangeID: 1, SellExchangeID: 2},
+	}
+
+	input := ArbitrageAggregationInput{
+		Opportunities: opportunities,
+		MinVolume:     decimal.NewFromFloat(1.0),
+		MaxSpread:     decimal.NewFromFloat(0.1),
+		BaseAmount:    decimal.NewFromFloat(1000.0),
+	}
+
+	assert.Equal(t, 2, len(input.Opportunities))
+	assert.Equal(t, "arb-1", input.Opportunities[0].ID)
+	assert.Equal(t, "arb-2", input.Opportunities[1].ID)
+	assert.True(t, decimal.NewFromFloat(1.0).Equal(input.MinVolume))
+	assert.True(t, decimal.NewFromFloat(0.1).Equal(input.MaxSpread))
+	assert.True(t, decimal.NewFromFloat(1000.0).Equal(input.BaseAmount))
+}
+
+// Test ArbitrageQualityMetrics struct
+func TestArbitrageQualityMetrics_Struct(t *testing.T) {
+	metrics := ArbitrageQualityMetrics{
+		VolumeScore:    decimal.NewFromFloat(85.0),
+		SpreadScore:    decimal.NewFromFloat(90.0),
+		ExchangeScore:  decimal.NewFromFloat(95.0),
+		LiquidityScore: decimal.NewFromFloat(88.0),
+		OverallScore:   decimal.NewFromFloat(89.5),
+		IsAcceptable:   true,
+		RejectionReason: "",
+	}
+
+	assert.True(t, decimal.NewFromFloat(85.0).Equal(metrics.VolumeScore))
+	assert.True(t, decimal.NewFromFloat(90.0).Equal(metrics.SpreadScore))
+	assert.True(t, decimal.NewFromFloat(95.0).Equal(metrics.ExchangeScore))
+	assert.True(t, decimal.NewFromFloat(88.0).Equal(metrics.LiquidityScore))
+	assert.True(t, decimal.NewFromFloat(89.5).Equal(metrics.OverallScore))
+	assert.True(t, metrics.IsAcceptable)
+	assert.Equal(t, "", metrics.RejectionReason)
+}
+
+// Test PriceRange struct
+func TestPriceRange_Struct(t *testing.T) {
+	priceRange := PriceRange{
+		Min: decimal.NewFromFloat(50000.00),
+		Max: decimal.NewFromFloat(50100.00),
+	}
+
+	assert.True(t, decimal.NewFromFloat(50000.00).Equal(priceRange.Min))
+	assert.True(t, decimal.NewFromFloat(50100.00).Equal(priceRange.Max))
+}
+
+// Test ProfitRange struct
+func TestProfitRange_Struct(t *testing.T) {
+	profitRange := ProfitRange{
+		MinPercentage: decimal.NewFromFloat(0.5),
+		MaxPercentage: decimal.NewFromFloat(1.0),
+		MinAmount:     decimal.NewFromFloat(100.0),
+		MaxAmount:     decimal.NewFromFloat(200.0),
+		BaseAmount:    decimal.NewFromFloat(20000.0),
+	}
+
+	assert.True(t, decimal.NewFromFloat(0.5).Equal(profitRange.MinPercentage))
+	assert.True(t, decimal.NewFromFloat(1.0).Equal(profitRange.MaxPercentage))
+	assert.True(t, decimal.NewFromFloat(100.0).Equal(profitRange.MinAmount))
+	assert.True(t, decimal.NewFromFloat(200.0).Equal(profitRange.MaxAmount))
+	assert.True(t, decimal.NewFromFloat(20000.0).Equal(profitRange.BaseAmount))
+}
+
+// Test FuturesArbitrageOpportunity struct
+func TestFuturesArbitrageOpportunity_Struct(t *testing.T) {
+	now := time.Now()
+	expiry := now.Add(8 * time.Hour)
+	nextFunding := now.Add(4 * time.Hour)
+	history := []FundingRateHistoryPoint{
+		{Timestamp: now.Add(-8 * time.Hour), FundingRate: decimal.NewFromFloat(0.0001), MarkPrice: decimal.NewFromFloat(50000.00)},
+	}
+
+	opportunity := FuturesArbitrageOpportunity{
+		ID:                      "futures-arb-123",
+		Symbol:                  "BTC/USDT",
+		BaseCurrency:            "BTC",
+		QuoteCurrency:           "USDT",
+		LongExchange:            "Binance",
+		ShortExchange:           "Bybit",
+		LongExchangeID:          1,
+		ShortExchangeID:         2,
+		LongFundingRate:        decimal.NewFromFloat(0.0001),
+		ShortFundingRate:       decimal.NewFromFloat(-0.0002),
+		NetFundingRate:          decimal.NewFromFloat(0.0003),
+		FundingInterval:         8,
+		LongMarkPrice:           decimal.NewFromFloat(50000.00),
+		ShortMarkPrice:          decimal.NewFromFloat(50100.00),
+		PriceDifference:         decimal.NewFromFloat(100.00),
+		PriceDifferencePercentage: decimal.NewFromFloat(0.2),
+		HourlyRate:              decimal.NewFromFloat(0.0000375),
+		DailyRate:               decimal.NewFromFloat(0.0009),
+		APY:                     decimal.NewFromFloat(0.3285),
+		EstimatedProfit8h:       decimal.NewFromFloat(0.3),
+		EstimatedProfitDaily:    decimal.NewFromFloat(0.9),
+		EstimatedProfitWeekly:   decimal.NewFromFloat(6.3),
+		EstimatedProfitMonthly:  decimal.NewFromFloat(27.0),
+		RiskScore:               decimal.NewFromFloat(3.5),
+		VolatilityScore:         decimal.NewFromFloat(2.1),
+		LiquidityScore:          decimal.NewFromFloat(8.5),
+		RecommendedPositionSize: decimal.NewFromFloat(1.0),
+		MaxLeverage:             decimal.NewFromFloat(10.0),
+		RecommendedLeverage:     decimal.NewFromFloat(5.0),
+		StopLossPercentage:      decimal.NewFromFloat(2.0),
+		MinPositionSize:          decimal.NewFromFloat(0.1),
+		MaxPositionSize:          decimal.NewFromFloat(10.0),
+		OptimalPositionSize:     decimal.NewFromFloat(2.5),
+		DetectedAt:              now,
+		ExpiresAt:               expiry,
+		NextFundingTime:         nextFunding,
+		TimeToNextFunding:      240,
+		IsActive:                true,
+		MarketTrend:             "bullish",
+		Volume24h:               decimal.NewFromFloat(1000000.0),
+		OpenInterest:            decimal.NewFromFloat(500000.0),
+		FundingRateHistory:      history,
+	}
+
+	assert.Equal(t, "futures-arb-123", opportunity.ID)
+	assert.Equal(t, "BTC/USDT", opportunity.Symbol)
+	assert.Equal(t, "Binance", opportunity.LongExchange)
+	assert.Equal(t, "Bybit", opportunity.ShortExchange)
+	assert.True(t, decimal.NewFromFloat(0.0003).Equal(opportunity.NetFundingRate))
+	assert.True(t, decimal.NewFromFloat(0.3285).Equal(opportunity.APY))
+	assert.True(t, decimal.NewFromFloat(1.0).Equal(opportunity.RecommendedPositionSize))
+	assert.Equal(t, 240, opportunity.TimeToNextFunding)
+	assert.True(t, opportunity.IsActive)
+	assert.Equal(t, "bullish", opportunity.MarketTrend)
+	assert.Equal(t, 1, len(opportunity.FundingRateHistory))
+}
+
+// Test FundingRateHistoryPoint struct
+func TestFundingRateHistoryPoint_Struct(t *testing.T) {
+	now := time.Now()
+	point := FundingRateHistoryPoint{
+		Timestamp:   now,
+		FundingRate: decimal.NewFromFloat(0.0001),
+		MarkPrice:   decimal.NewFromFloat(50000.00),
+	}
+
+	assert.Equal(t, now, point.Timestamp)
+	assert.True(t, decimal.NewFromFloat(0.0001).Equal(point.FundingRate))
+	assert.True(t, decimal.NewFromFloat(50000.00).Equal(point.MarkPrice))
+}
+
+// Test FuturesArbitrageCalculationInput struct
+func TestFuturesArbitrageCalculationInput_Struct(t *testing.T) {
+	input := FuturesArbitrageCalculationInput{
+		Symbol:             "BTC/USDT",
+		LongExchange:       "Binance",
+		ShortExchange:      "Bybit",
+		LongFundingRate:    decimal.NewFromFloat(0.0001),
+		ShortFundingRate:   decimal.NewFromFloat(-0.0002),
+		LongMarkPrice:      decimal.NewFromFloat(50000.00),
+		ShortMarkPrice:     decimal.NewFromFloat(50100.00),
+		BaseAmount:         decimal.NewFromFloat(1000.0),
+		UserRiskTolerance:  "medium",
+		MaxLeverageAllowed: decimal.NewFromFloat(10.0),
+		AvailableCapital:   decimal.NewFromFloat(10000.0),
+		FundingInterval:    8,
+	}
+
+	assert.Equal(t, "BTC/USDT", input.Symbol)
+	assert.Equal(t, "Binance", input.LongExchange)
+	assert.Equal(t, "Bybit", input.ShortExchange)
+	assert.True(t, decimal.NewFromFloat(0.0003).Equal(input.LongFundingRate.Sub(input.ShortFundingRate)))
+	assert.Equal(t, "medium", input.UserRiskTolerance)
+	assert.Equal(t, 8, input.FundingInterval)
+}
+
+// Test FuturesArbitrageRiskMetrics struct
+func TestFuturesArbitrageRiskMetrics_Struct(t *testing.T) {
+	metrics := FuturesArbitrageRiskMetrics{
+		PriceCorrelation:       decimal.NewFromFloat(0.95),
+		PriceVolatility:        decimal.NewFromFloat(0.15),
+		MaxDrawdown:            decimal.NewFromFloat(0.08),
+		FundingRateVolatility:  decimal.NewFromFloat(0.05),
+		FundingRateStability:   decimal.NewFromFloat(0.92),
+		BidAskSpread:           decimal.NewFromFloat(0.001),
+		MarketDepth:            decimal.NewFromFloat(0.95),
+		SlippageRisk:           decimal.NewFromFloat(0.02),
+		ExchangeReliability:    decimal.NewFromFloat(0.98),
+		CounterpartyRisk:       decimal.NewFromFloat(0.01),
+		OverallRiskScore:       decimal.NewFromFloat(25.5),
+		RiskCategory:           "medium",
+		Recommendation:         "Proceed with caution",
+	}
+
+	assert.True(t, decimal.NewFromFloat(0.95).Equal(metrics.PriceCorrelation))
+	assert.True(t, decimal.NewFromFloat(0.15).Equal(metrics.PriceVolatility))
+	assert.Equal(t, "medium", metrics.RiskCategory)
+	assert.Equal(t, "Proceed with caution", metrics.Recommendation)
+}
+
+// Test FuturesPositionSizing struct
+func TestFuturesPositionSizing_Struct(t *testing.T) {
+	sizing := FuturesPositionSizing{
+		KellyPercentage:   decimal.NewFromFloat(0.25),
+		KellyPositionSize: decimal.NewFromFloat(2500.0),
+		ConservativeSize:  decimal.NewFromFloat(1000.0),
+		ModerateSize:      decimal.NewFromFloat(2000.0),
+		AggressiveSize:    decimal.NewFromFloat(3000.0),
+		MinLeverage:       decimal.NewFromFloat(1.0),
+		OptimalLeverage:  decimal.NewFromFloat(5.0),
+		MaxSafeLeverage:   decimal.NewFromFloat(8.0),
+		StopLossPrice:     decimal.NewFromFloat(49000.00),
+		TakeProfitPrice:   decimal.NewFromFloat(51000.00),
+		MaxLossPercentage: decimal.NewFromFloat(2.0),
+	}
+
+	assert.True(t, decimal.NewFromFloat(0.25).Equal(sizing.KellyPercentage))
+	assert.True(t, decimal.NewFromFloat(2500.0).Equal(sizing.KellyPositionSize))
+	assert.True(t, decimal.NewFromFloat(1000.0).Equal(sizing.ConservativeSize))
+	assert.True(t, decimal.NewFromFloat(5.0).Equal(sizing.OptimalLeverage))
+}
+
+// Test FuturesArbitrageStrategy struct
+func TestFuturesArbitrageStrategy_Struct(t *testing.T) {
+	now := time.Now()
+	opportunity := FuturesArbitrageOpportunity{
+		ID:     "futures-arb-123",
+		Symbol: "BTC/USDT",
+	}
+	riskMetrics := FuturesArbitrageRiskMetrics{
+		OverallRiskScore: decimal.NewFromFloat(25.5),
+		RiskCategory:     "medium",
+	}
+	positionSizing := FuturesPositionSizing{
+		KellyPositionSize: decimal.NewFromFloat(2500.0),
+	}
+	longPosition := PositionDetails{
+		Exchange:       "Binance",
+		Symbol:         "BTC/USDT",
+		Side:           "long",
+		Size:           decimal.NewFromFloat(1.0),
+		Leverage:       decimal.NewFromFloat(5.0),
+		EntryPrice:     decimal.NewFromFloat(50000.00),
+		StopLoss:       decimal.NewFromFloat(49000.00),
+		TakeProfit:     decimal.NewFromFloat(51000.00),
+		MarginRequired: decimal.NewFromFloat(10000.00),
+		EstimatedFees:  decimal.NewFromFloat(10.0),
+	}
+	shortPosition := PositionDetails{
+		Exchange:       "Bybit",
+		Symbol:         "BTC/USDT",
+		Side:           "short",
+		Size:           decimal.NewFromFloat(1.0),
+		Leverage:       decimal.NewFromFloat(5.0),
+		EntryPrice:     decimal.NewFromFloat(50100.00),
+		StopLoss:       decimal.NewFromFloat(51100.00),
+		TakeProfit:     decimal.NewFromFloat(49100.00),
+		MarginRequired: decimal.NewFromFloat(10020.00),
+		EstimatedFees:  decimal.NewFromFloat(10.0),
+	}
+
+	strategy := FuturesArbitrageStrategy{
+		ID:                  "strategy-123",
+		Name:                "BTC/USDT Funding Rate Arbitrage",
+		Description:         "Exploit funding rate differential between Binance and Bybit",
+		Opportunity:         opportunity,
+		RiskMetrics:         riskMetrics,
+		PositionSizing:      positionSizing,
+		LongPosition:        longPosition,
+		ShortPosition:       shortPosition,
+		ExecutionOrder:      []string{"Open long position", "Open short position", "Set stop losses"},
+		EstimatedExecutionTime: 30,
+		ExpectedReturn:      decimal.NewFromFloat(0.3),
+		SharpeRatio:         decimal.NewFromFloat(2.5),
+		MaxDrawdownExpected: decimal.NewFromFloat(0.08),
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		IsActive:            true,
+	}
+
+	assert.Equal(t, "strategy-123", strategy.ID)
+	assert.Equal(t, "BTC/USDT Funding Rate Arbitrage", strategy.Name)
+	assert.Equal(t, 3, len(strategy.ExecutionOrder))
+	assert.Equal(t, 30, strategy.EstimatedExecutionTime)
+	assert.True(t, decimal.NewFromFloat(2.5).Equal(strategy.SharpeRatio))
+	assert.True(t, strategy.IsActive)
+}
+
+// Test PositionDetails struct
+func TestPositionDetails_Struct(t *testing.T) {
+	position := PositionDetails{
+		Exchange:       "Binance",
+		Symbol:         "BTC/USDT",
+		Side:           "long",
+		Size:           decimal.NewFromFloat(1.0),
+		Leverage:       decimal.NewFromFloat(5.0),
+		EntryPrice:     decimal.NewFromFloat(50000.00),
+		StopLoss:       decimal.NewFromFloat(49000.00),
+		TakeProfit:     decimal.NewFromFloat(51000.00),
+		MarginRequired: decimal.NewFromFloat(10000.00),
+		EstimatedFees:  decimal.NewFromFloat(10.0),
+	}
+
+	assert.Equal(t, "Binance", position.Exchange)
+	assert.Equal(t, "BTC/USDT", position.Symbol)
+	assert.Equal(t, "long", position.Side)
+	assert.True(t, decimal.NewFromFloat(1.0).Equal(position.Size))
+	assert.True(t, decimal.NewFromFloat(5.0).Equal(position.Leverage))
+}
+
+// Test FuturesArbitrageRequest struct
+func TestFuturesArbitrageRequest_Struct(t *testing.T) {
+	request := FuturesArbitrageRequest{
+		Symbols:               []string{"BTC/USDT", "ETH/USDT"},
+		Exchanges:             []string{"Binance", "Bybit", "OKX"},
+		MinAPY:                decimal.NewFromFloat(0.1),
+		MaxRiskScore:          decimal.NewFromFloat(50.0),
+		RiskTolerance:         "medium",
+		AvailableCapital:      decimal.NewFromFloat(10000.0),
+		MaxLeverage:           decimal.NewFromFloat(10.0),
+		TimeHorizon:           "medium",
+		IncludeRiskMetrics:    true,
+		IncludePositionSizing: true,
+		Limit:                 50,
+		Page:                  1,
+	}
+
+	assert.Equal(t, 2, len(request.Symbols))
+	assert.Equal(t, 3, len(request.Exchanges))
+	assert.Contains(t, request.Symbols, "BTC/USDT")
+	assert.Contains(t, request.Exchanges, "Binance")
+	assert.True(t, decimal.NewFromFloat(0.1).Equal(request.MinAPY))
+	assert.Equal(t, "medium", request.RiskTolerance)
+	assert.True(t, request.IncludeRiskMetrics)
+	assert.Equal(t, 50, request.Limit)
+}
+
+// Test FuturesArbitrageResponse struct
+func TestFuturesArbitrageResponse_Struct(t *testing.T) {
+	now := time.Now()
+	opportunities := []FuturesArbitrageOpportunity{
+		{ID: "arb-1", Symbol: "BTC/USDT"},
+		{ID: "arb-2", Symbol: "ETH/USDT"},
+	}
+	strategies := []FuturesArbitrageStrategy{
+		{ID: "strategy-1", Name: "BTC Strategy"},
+		{ID: "strategy-2", Name: "ETH Strategy"},
+	}
+	marketSummary := FuturesMarketSummary{
+		TotalOpportunities:  10,
+		AverageAPY:          decimal.NewFromFloat(0.15),
+		HighestAPY:          decimal.NewFromFloat(0.35),
+		AverageRiskScore:    decimal.NewFromFloat(30.0),
+		MarketVolatility:    decimal.NewFromFloat(0.12),
+		FundingRateTrend:    "stable",
+		RecommendedStrategy: "Conservative approach",
+		MarketCondition:     "favorable",
+	}
+
+	response := FuturesArbitrageResponse{
+		Opportunities: opportunities,
+		Strategies:    strategies,
+		Count:         2,
+		TotalCount:    10,
+		Page:          1,
+		Limit:         50,
+		Timestamp:     now,
+		MarketSummary: marketSummary,
+	}
+
+	assert.Equal(t, 2, len(response.Opportunities))
+	assert.Equal(t, 2, len(response.Strategies))
+	assert.Equal(t, 2, response.Count)
+	assert.Equal(t, 10, response.TotalCount)
+	assert.Equal(t, 1, response.Page)
+	assert.Equal(t, now, response.Timestamp)
+	assert.True(t, decimal.NewFromFloat(0.15).Equal(response.MarketSummary.AverageAPY))
+	assert.Equal(t, "stable", response.MarketSummary.FundingRateTrend)
+}
+
+// Test FuturesMarketSummary struct
+func TestFuturesMarketSummary_Struct(t *testing.T) {
+	summary := FuturesMarketSummary{
+		TotalOpportunities:  15,
+		AverageAPY:          decimal.NewFromFloat(0.18),
+		HighestAPY:          decimal.NewFromFloat(0.42),
+		AverageRiskScore:    decimal.NewFromFloat(28.5),
+		MarketVolatility:    decimal.NewFromFloat(0.14),
+		FundingRateTrend:    "increasing",
+		RecommendedStrategy: "Aggressive funding arbitrage",
+		MarketCondition:     "very favorable",
+	}
+
+	assert.Equal(t, 15, summary.TotalOpportunities)
+	assert.True(t, decimal.NewFromFloat(0.18).Equal(summary.AverageAPY))
+	assert.True(t, decimal.NewFromFloat(0.42).Equal(summary.HighestAPY))
+	assert.Equal(t, "increasing", summary.FundingRateTrend)
+	assert.Equal(t, "very favorable", summary.MarketCondition)
+}
+
+// Test ArbitrageOpportunityResponse getter methods
+func TestArbitrageOpportunityResponse_Getters(t *testing.T) {
+	now := time.Now()
+	expiry := now.Add(time.Hour)
+	
+	response := ArbitrageOpportunityResponse{
+		ID:               "arb-123",
+		Symbol:           "BTC/USDT",
+		BuyExchange:      "Binance",
+		SellExchange:     "Coinbase",
+		BuyPrice:         decimal.NewFromFloat(50000.00),
+		SellPrice:        decimal.NewFromFloat(50200.00),
+		ProfitPercentage: decimal.NewFromFloat(0.4),
+		DetectedAt:       now,
+		ExpiresAt:        expiry,
+	}
+
+	assert.Equal(t, "BTC/USDT", response.GetSymbol())
+	assert.Equal(t, "Binance", response.GetBuyExchange())
+	assert.Equal(t, "Coinbase", response.GetSellExchange())
+	assert.True(t, decimal.NewFromFloat(50000.00).Equal(response.GetBuyPrice()))
+	assert.True(t, decimal.NewFromFloat(50200.00).Equal(response.GetSellPrice()))
+	assert.True(t, decimal.NewFromFloat(0.4).Equal(response.GetProfitPercentage()))
+	assert.Equal(t, now, response.GetDetectedAt())
+	assert.Equal(t, expiry, response.GetExpiresAt())
+}
+
+// Test MarketPrice getter methods
+func TestMarketPrice_Getters(t *testing.T) {
+	now := time.Now()
+	marketPrice := MarketPrice{
+		ExchangeID:   1,
+		ExchangeName: "Binance",
+		Symbol:       "BTC/USDT",
+		Price:        decimal.NewFromFloat(50000.00),
+		Volume:       decimal.NewFromFloat(10.5),
+		Timestamp:    now,
+	}
+
+	assert.Equal(t, 50000.00, marketPrice.GetPrice())
+	assert.Equal(t, 10.5, marketPrice.GetVolume())
+	assert.Equal(t, now, marketPrice.GetTimestamp())
+	assert.Equal(t, "Binance", marketPrice.GetExchangeName())
+	assert.Equal(t, "BTC/USDT", marketPrice.GetSymbol())
 }

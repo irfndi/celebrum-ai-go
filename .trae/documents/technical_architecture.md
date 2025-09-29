@@ -42,7 +42,7 @@ This approach consolidates all services into a single $6/month droplet, perfect 
 graph TD
     A[Users] --> B[Nginx Reverse Proxy]
     B --> C[Go API Server :8080]
-    B --> D[CCXT Node.js Service :3000]
+    B --> D[CCXT Bun Service :3000]
     B --> E[React Frontend :80]
     C --> F[SQLite Database]
     C --> G[Redis Cache :6379]
@@ -496,7 +496,7 @@ services:
     repo: irfndi/celebrum-ai-go
     branch: main
     deploy_on_push: true
-  run_command: npm start
+  run_command: bun run start:bun
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: basic-xxs
@@ -531,7 +531,7 @@ static_sites:
     repo: irfndi/celebrum-ai-go
     branch: main
     deploy_on_push: true
-  build_command: npm run build
+  build_command: bun run build:bun
   output_dir: /dist
   environment_slug: node-js
   envs:
@@ -759,7 +759,7 @@ fi
 
 ### 4.1 Architecture
 - **Apps Platform**: Main Go backend API
-- **Droplets**: CCXT Node.js service (for better control and cost)
+- **Droplets**: CCXT Bun service (for better control and cost)
 - **Managed Databases**: PostgreSQL and Redis clusters
 
 ### 4.2 Benefits

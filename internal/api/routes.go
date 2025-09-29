@@ -1,15 +1,18 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/api/handlers"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/api/handlers"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	futuresHandlers "github.com/irfandi/celebrum-ai-go/internal/handlers"
+	"github.com/irfandi/celebrum-ai-go/internal/middleware"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 )
 
 type HealthResponse struct {
@@ -24,35 +27,63 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig) {
+	// Initialize admin middleware
+	adminMiddleware := middleware.NewAdminMiddleware()
+
 	// Initialize health handler
-	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL())
+	healthHandler := handlers.NewHealthHandler(db, redis, ccxtService.GetServiceURL(), cacheAnalyticsService)
 
-	// Health check endpoints
-	router.GET("/health", gin.WrapF(healthHandler.HealthCheck))
-	router.HEAD("/health", gin.WrapF(healthHandler.HealthCheck))
-	router.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
-	router.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
+	// Health check endpoints with telemetry
+	healthGroup := router.Group("/")
+	healthGroup.Use(middleware.HealthCheckTelemetryMiddleware())
+	{
+		healthGroup.GET("/health", gin.WrapF(healthHandler.HealthCheck))
+		healthGroup.HEAD("/health", gin.WrapF(healthHandler.HealthCheck))
+		healthGroup.GET("/ready", gin.WrapF(healthHandler.ReadinessCheck))
+		healthGroup.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
+	}
 
-	// Initialize notification service
-	notificationService := services.NewNotificationService(db, telegramConfig.BotToken)
+	// Initialize notification service with Redis caching
+	notificationService := services.NewNotificationService(db, redis, telegramConfig.BotToken)
 
 	// Initialize handlers
-	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService)
-	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService)
-	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler)
-	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
-	userHandler := handlers.NewUserHandler(db)
-	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
+	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
+	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
-	// API v1 routes
+	// Initialize telegram handler with debug logging
+	fmt.Printf("DEBUG: About to initialize Telegram handler with config: %+v\n", telegramConfig)
+	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
+	fmt.Printf("DEBUG: Telegram handler initialized: %+v\n", telegramHandler != nil)
+	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
+	userHandler := handlers.NewUserHandler(db, redis.Client)
+	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
+	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
+	cacheHandler := handlers.NewCacheHandler(cacheAnalyticsService)
+
+	// Initialize futures arbitrage handler with error handling
+	var futuresArbitrageHandler *futuresHandlers.FuturesArbitrageHandler
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("PANIC during futures arbitrage handler initialization: %v\n", r)
+				futuresArbitrageHandler = nil
+			}
+		}()
+		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
+		fmt.Println("Futures arbitrage handler initialized successfully")
+	}()
+
+	// API v1 routes with telemetry
 	v1 := router.Group("/api/v1")
+	v1.Use(middleware.TelemetryMiddleware())
 	{
 		// Market data routes
 		market := v1.Group("/market")
 		{
 			market.GET("/prices", marketHandler.GetMarketPrices)
 			market.GET("/ticker/:exchange/:symbol", marketHandler.GetTicker)
+			market.GET("/tickers/:exchange", marketHandler.GetBulkTickers)
 			market.GET("/orderbook/:exchange/:symbol", marketHandler.GetOrderBook)
 			market.GET("/workers/status", marketHandler.GetWorkerStatus)
 		}
@@ -65,6 +96,21 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			// Funding rate arbitrage
 			arbitrage.GET("/funding", arbitrageHandler.GetFundingRateArbitrage)
 			arbitrage.GET("/funding-rates/:exchange", arbitrageHandler.GetFundingRates)
+		}
+
+		// Futures arbitrage routes (only if handler initialized successfully)
+		if futuresArbitrageHandler != nil {
+			futuresArbitrage := v1.Group("/futures-arbitrage")
+			{
+				futuresArbitrage.GET("/opportunities", futuresArbitrageHandler.GetFuturesArbitrageOpportunities)
+				futuresArbitrage.POST("/calculate", futuresArbitrageHandler.CalculateFuturesArbitrage)
+				futuresArbitrage.GET("/strategy/:id", futuresArbitrageHandler.GetFuturesArbitrageStrategy)
+				futuresArbitrage.GET("/market-summary", futuresArbitrageHandler.GetFuturesMarketSummary)
+				futuresArbitrage.POST("/position-sizing", futuresArbitrageHandler.GetPositionSizingRecommendation)
+			}
+			fmt.Println("Futures arbitrage routes registered successfully")
+		} else {
+			fmt.Println("Skipping futures arbitrage routes due to handler initialization failure")
 		}
 
 		// Technical analysis routes
@@ -102,6 +148,37 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			data.GET("/stats", cleanupHandler.GetDataStats)
 			data.POST("/cleanup", cleanupHandler.TriggerCleanup)
+		}
+
+		// Exchange management
+		exchanges := v1.Group("/exchanges")
+		{
+			// Public endpoints (no admin auth required)
+			exchanges.GET("/config", exchangeHandler.GetExchangeConfig)
+			exchanges.GET("/supported", exchangeHandler.GetSupportedExchanges)
+			exchanges.GET("/workers/status", exchangeHandler.GetWorkerStatus)
+
+			// Admin-only endpoints (require admin authentication)
+			adminExchanges := exchanges.Group("/")
+			adminExchanges.Use(adminMiddleware.RequireAdminAuth())
+			{
+				adminExchanges.POST("/refresh", exchangeHandler.RefreshExchanges)
+				adminExchanges.POST("/add/:exchange", exchangeHandler.AddExchange)
+				adminExchanges.POST("/blacklist/:exchange", exchangeHandler.AddExchangeToBlacklist)
+				adminExchanges.DELETE("/blacklist/:exchange", exchangeHandler.RemoveExchangeFromBlacklist)
+				adminExchanges.POST("/workers/:exchange/restart", exchangeHandler.RestartWorker)
+			}
+		}
+
+		// Cache monitoring and analytics
+		cache := v1.Group("/cache")
+		{
+			cache.GET("/stats", cacheHandler.GetCacheStats)
+			cache.GET("/stats/:category", cacheHandler.GetCacheStatsByCategory)
+			cache.GET("/metrics", cacheHandler.GetCacheMetrics)
+			cache.POST("/stats/reset", cacheHandler.ResetCacheStats)
+			cache.POST("/hit", cacheHandler.RecordCacheHit)
+			cache.POST("/miss", cacheHandler.RecordCacheMiss)
 		}
 	}
 }

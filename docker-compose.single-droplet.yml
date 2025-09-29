@@ -1,24 +1,52 @@
 services:
-  # PostgreSQL Database
+  # PHASE 1: Database Services
   postgres:
     image: postgres:17
     container_name: celebrum-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Set POSTGRES_PASSWORD env var
       POSTGRES_DB: celebrum_ai
-      POSTGRES_INITDB_ARGS: "--auth-host=trust"
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      # Phase control
+      STARTUP_PHASE: "1"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-minimal.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database:/database
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -U postgres -d celebrum_ai -c 'SELECT 1;'"]
+      interval: 20s
+      timeout: 30s
+      retries: 20
+      start_period: 120s
+    networks:
+      - celebrum-network
+
+  # Migration Service - Runs automatically to sync all environments
+  migrate:
+    image: postgres:17
+    container_name: celebrum-migrate
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: celebrum_ai
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
+      # Phase control
+      STARTUP_PHASE: "1"
+    volumes:
+      - ./scripts:/scripts
+      - ./database/migrations:/database/migrations
+    command: ["bash", "/scripts/simple-migrate.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - celebrum-network
 
@@ -27,19 +55,23 @@ services:
     image: redis:7-alpine
     container_name: celebrum-redis
     restart: unless-stopped
+    environment:
+      # Phase control
+      - STARTUP_PHASE=1
     volumes:
       - redis_data:/data
-      - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    command: redis-server /usr/local/etc/redis/redis.conf
+      - ./configs/redis/redis.conf:/etc/redis/redis.conf:ro
+    command: redis-server /etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
     networks:
       - celebrum-network
 
-  # CCXT Service
+  # PHASE 3: CCXT Service (Bun) - Warm-up Phase
   ccxt-service:
     build:
       context: ./ccxt-service
@@ -48,21 +80,29 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=8081
+      - PORT=3000
       - LOG_LEVEL=info
+      - STARTUP_PHASE=3
+      - WARMUP_ENABLED=true
+      - API_KEY=${API_KEY:?API_KEY must be set for ccxt-service}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:?ADMIN_API_KEY must be set for ccxt-service}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 10
-      start_period: 120s
+      test: ["CMD-SHELL", "sh -c \"curl http://localhost:3000/health || wget -q --spider http://localhost:3000/health\""]
+      interval: 25s
+      timeout: 20s
+      retries: 6
+      start_period: 90s
     networks:
       - celebrum-network
 
-  # Main Go Application
+  # PHASE 3: Main Go Application - Warm-up Phase
   app:
     build:
       context: .
@@ -74,14 +114,20 @@ services:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production security} # REQUIRED: Use environment variable
       - DATABASE_DBNAME=celebrum_ai
       - DATABASE_SSLMODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - CCXT_SERVICE_URL=http://ccxt-service:8081
-      - JWT_SECRET=${JWT_SECRET}
+      - CCXT_SERVICE_URL=http://ccxt-service:3000
+      - CCXT_TIMEOUT=30
+      - JWT_SECRET=${JWT_SECRET} # REQUIRED: Set JWT_SECRET env var
       - SERVER_PORT=8080
+      # Phase control - External connections disabled during warmup
+      - STARTUP_PHASE=3
+      - WARMUP_ENABLED=true
+      - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
+      - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
@@ -95,35 +141,49 @@ services:
         condition: service_healthy
       ccxt-service:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      test: ["CMD-SHELL", "sh -c \"curl http://localhost:8080/health || wget -q --spider http://localhost:8080/health\""]
+      interval: 25s
+      timeout: 20s
+      retries: 6
+      start_period: 120s
     networks:
       - celebrum-network
 
-  # Nginx reverse proxy
+  # PHASE 2: Nginx reverse proxy - Gateway Phase
   nginx:
     image: nginx:alpine
     container_name: celebrum-nginx
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "8443:443"
     volumes:
-      - ./configs/nginx.single-droplet.conf:/etc/nginx/nginx.conf:ro
-      - /etc/ssl/certs/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
-      - /etc/ssl/private/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+      - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
+      - ./configs/ssl/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+    environment:
+      - STARTUP_PHASE=2
+      - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       app:
         condition: service_healthy
+      ccxt-service:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 2
+      test: ["CMD-SHELL", "sh -c \"curl http://localhost/health || wget -q --spider http://localhost/health\""]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     networks:
       - celebrum-network
 

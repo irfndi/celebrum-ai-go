@@ -12,7 +12,7 @@ type FundingRate struct {
 	ExchangeID      int              `json:"exchange_id" db:"exchange_id"`
 	TradingPairID   int              `json:"trading_pair_id" db:"trading_pair_id"`
 	FundingRate     decimal.Decimal  `json:"funding_rate" db:"funding_rate"`
-	FundingTime     time.Time        `json:"funding_time" db:"funding_time"`
+	FundingTime     time.Time        `json:"funding_time" db:"funding_rate_timestamp"`
 	NextFundingTime *time.Time       `json:"next_funding_time" db:"next_funding_time"`
 	MarkPrice       *decimal.Decimal `json:"mark_price" db:"mark_price"`
 	IndexPrice      *decimal.Decimal `json:"index_price" db:"index_price"`

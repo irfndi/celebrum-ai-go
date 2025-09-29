@@ -1,45 +1,30 @@
-# Use Bun runtime image
-FROM oven/bun:1 AS base
-WORKDIR /usr/src/app
+# Use Bun image for better performance and consistency
+FROM oven/bun:1-alpine as base
 
-# Install curl for health checks as root
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+# Set working directory
+WORKDIR /app
 
-# Install dependencies into temp directory
-# This will cache them and speed up future builds
-FROM base AS install
-WORKDIR /temp/dev
-COPY package.json bun.lock ./
+# Copy package files
+COPY package.json bun.lock* ./
+
+# Install dependencies including dev dependencies for build
 RUN bun install --frozen-lockfile
 
-# Install with --production (exclude devDependencies)
-WORKDIR /temp/prod
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
-
-# Copy node_modules from temp directory
-# Then copy all (non-ignored) project files into the image
-FROM base AS prerelease
-COPY --from=install /temp/dev/node_modules node_modules
+# Copy source code
 COPY . .
 
-# Set environment
-ENV NODE_ENV=production
-
-# Copy production dependencies and source code into final image
-FROM base AS release
-# Install curl in final image for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
-
-COPY --from=install /temp/prod/node_modules node_modules
-COPY --from=prerelease /usr/src/app/index.ts .
-COPY --from=prerelease /usr/src/app/types.ts .
-COPY --from=prerelease /usr/src/app/package.json .
+# Build TypeScript
+RUN bun run build:bun
 
 # Expose port
 EXPOSE 3001
 
-# Run the app
-USER bun
-CMD ["bun", "run", "index.ts"]
+# Install curl for health check
+RUN apk add --no-cache curl
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+# Start the application with Bun runtime
+CMD ["bun", "run", "start:bun"]

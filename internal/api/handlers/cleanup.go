@@ -1,20 +1,27 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfndi/celebrum-ai-go/internal/services"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 )
+
+// CleanupInterface defines the interface for cleanup operations
+type CleanupInterface interface {
+	GetDataStats(ctx context.Context) (map[string]int64, error)
+	RunCleanup(config config.CleanupConfig) error
+}
 
 // CleanupHandler handles cleanup-related API endpoints
 type CleanupHandler struct {
-	cleanupService *services.CleanupService
+	cleanupService CleanupInterface
 }
 
 // NewCleanupHandler creates a new cleanup handler
-func NewCleanupHandler(cleanupService *services.CleanupService) *CleanupHandler {
+func NewCleanupHandler(cleanupService CleanupInterface) *CleanupHandler {
 	return &CleanupHandler{
 		cleanupService: cleanupService,
 	}
@@ -31,7 +38,7 @@ type DataStatsResponse struct {
 
 // GetDataStats returns statistics about current data storage
 func (h *CleanupHandler) GetDataStats(c *gin.Context) {
-	stats, err := h.cleanupService.GetDataStats()
+	stats, err := h.cleanupService.GetDataStats(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get data statistics"})
 		return
@@ -82,10 +89,20 @@ func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 	}
 
 	// Create cleanup config for manual trigger
-	config := services.CleanupConfig{
-		MarketDataRetentionHours:  marketDataHours,
-		FundingRateRetentionHours: fundingRateHours,
-		ArbitrageRetentionHours:   arbitrageHours,
+	config := config.CleanupConfig{
+		MarketData: config.CleanupDataConfig{
+			RetentionHours: marketDataHours,
+			DeletionHours:  12, // Default deletion hours
+		},
+		FundingRates: config.CleanupDataConfig{
+			RetentionHours: fundingRateHours,
+			DeletionHours:  12, // Default deletion hours
+		},
+		ArbitrageOpportunities: config.CleanupArbitrageConfig{
+			RetentionHours: arbitrageHours,
+		},
+		IntervalMinutes:    60,   // Default interval
+		EnableSmartCleanup: true, // Enable smart cleanup by default
 	}
 
 	// Trigger cleanup (this will run synchronously)
@@ -95,7 +112,7 @@ func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 	}
 
 	// Get updated stats after cleanup
-	stats, err := h.cleanupService.GetDataStats()
+	stats, err := h.cleanupService.GetDataStats(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cleanup completed but failed to get updated statistics"})
 		return

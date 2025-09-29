@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,10 +13,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/irfndi/celebrum-ai-go/internal/config"
-	"github.com/irfndi/celebrum-ai-go/internal/database"
-	userModels "github.com/irfndi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
+	userModels "github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -26,42 +29,74 @@ type TelegramHandler struct {
 	config           *config.TelegramConfig
 	bot              *bot.Bot
 	arbitrageHandler *ArbitrageHandler
+	signalAggregator *services.SignalAggregator
+	redis            *redis.Client
+	pollingActive    bool
+	pollingCancel    context.CancelFunc
 }
 
 // NewTelegramHandler creates a new Telegram handler
-func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler) *TelegramHandler {
+func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler, signalAggregator *services.SignalAggregator, redisClient *redis.Client) *TelegramHandler {
+	log.Printf("[DEBUG] NewTelegramHandler called")
 	// Return handler with nil bot if config is not provided
 	if cfg == nil {
+		log.Printf("[DEBUG] Telegram config is nil, returning handler with nil bot")
 		return &TelegramHandler{
 			db:               db,
 			config:           nil,
 			bot:              nil,
 			arbitrageHandler: arbitrageHandler,
+			signalAggregator: signalAggregator,
+			redis:            redisClient,
 		}
 	}
 
-	// Initialize the bot
+	botTokenDisplay := "<empty>"
+	if len(cfg.BotToken) > 10 {
+		botTokenDisplay = cfg.BotToken[:10] + "..."
+	} else if len(cfg.BotToken) > 0 {
+		botTokenDisplay = cfg.BotToken + "..."
+	}
+	log.Printf("[DEBUG] Telegram config: BotToken=%s, UsePolling=%t", botTokenDisplay, cfg.UsePolling)
+
+	// Create handler first
+	handler := &TelegramHandler{
+		db:               db,
+		config:           cfg,
+		bot:              nil, // Will be set after bot creation
+		arbitrageHandler: arbitrageHandler,
+		signalAggregator: signalAggregator,
+		redis:            redisClient,
+		pollingActive:    false,
+		pollingCancel:    nil,
+	}
+
+	// Initialize the bot with handler reference
 	b, err := bot.New(cfg.BotToken, bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		// This will be handled by our custom webhook handler
+		// Process updates in polling mode
+		if err := handler.processUpdate(ctx, update); err != nil {
+			log.Printf("Failed to process update: %v", err)
+		}
 	}))
 	if err != nil {
 		log.Printf("Failed to create Telegram bot: %v", err)
 		log.Printf("Telegram bot functionality will be disabled")
 		// Return handler with nil bot - webhook will handle gracefully
-		return &TelegramHandler{
-			db:               db,
-			config:           cfg,
-			bot:              nil,
-			arbitrageHandler: arbitrageHandler,
-		}
+		return handler
 	}
 
-	return &TelegramHandler{
-		db:               db,
-		config:           cfg,
-		bot:              b,
-		arbitrageHandler: arbitrageHandler,
+	// Set the bot in the handler
+	handler.bot = b
+
+	// Start polling mode if configured
+	if cfg.UsePolling {
+		log.Printf("Starting Telegram bot in polling mode")
+		go handler.StartPolling()
+	} else {
+		log.Printf("Telegram bot configured for webhook mode")
 	}
+
+	return handler
 }
 
 // Using models from go-telegram/bot package instead of custom structs
@@ -158,17 +193,16 @@ func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID
 		return fmt.Errorf("database error: %w", err)
 	}
 
-	// Create new user
-	userID_str := fmt.Sprintf("usr_%d_%d", userID, time.Now().Unix())
+	// Create new user - let database generate UUID automatically
 	email := fmt.Sprintf("telegram_%d@celebrum.ai", userID)
 	telegramChatID := &chatIDStr
 	subscriptionTier := "free"
 	now := time.Now()
 
 	_, err = h.db.Pool.Exec(ctx, `
-		INSERT INTO users (id, email, telegram_chat_id, subscription_tier, created_at, updated_at)
+		INSERT INTO users (email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at) 
 		VALUES ($1, $2, $3, $4, $5, $6)`,
-		userID_str, email, telegramChatID, subscriptionTier, now, now)
+		email, "telegram_user", telegramChatID, subscriptionTier, now, now)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -196,47 +230,31 @@ Use /help to see all available commands
 
 // handleOpportunitiesCommand handles the /opportunities command
 func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID, userID int64) error {
-	// Call the arbitrage handler's underlying function directly
-	minProfit := 1.0   // Minimum 1% profit
-	limit := 5         // Limit to top 5 opportunities for Telegram
-	symbolFilter := "" // No symbol filter
+	// Check for cached aggregated signals first
+	cachedSignals, err := h.getCachedAggregatedSignals(ctx)
+	if err == nil && len(cachedSignals) > 0 {
+		log.Printf("Using cached aggregated signals for Telegram user %d", userID)
+		return h.sendAggregatedSignalsMessage(ctx, chatID, cachedSignals)
+	}
 
-	opportunities, err := h.arbitrageHandler.FindArbitrageOpportunities(ctx, minProfit, limit, symbolFilter)
+	// If no cached signals, fetch new ones from SignalAggregator
+	if h.signalAggregator == nil {
+		log.Printf("SignalAggregator not available")
+		return h.sendMessage(ctx, chatID, "❌ Signal aggregation service is not available. Please try again later.")
+	}
+
+	// Get active aggregated signals (limit to 10 for display)
+	signals, err := h.signalAggregator.GetActiveAggregatedSignals(ctx, 10)
 	if err != nil {
-		log.Printf("Error fetching arbitrage opportunities: %v", err)
-		return h.sendMessage(ctx, chatID, "❌ Error fetching arbitrage opportunities. Please try again later.")
+		log.Printf("Failed to get aggregated signals: %v", err)
+		return h.sendMessage(ctx, chatID, "❌ Failed to fetch trading signals. Please try again later.")
 	}
 
-	// Format the message
-	if len(opportunities) == 0 {
-		msg := `📈 Current Arbitrage Opportunities:
+	// Cache the signals
+	h.cacheAggregatedSignals(ctx, signals)
 
-🔍 No profitable opportunities found at the moment.
-
-💡 Opportunities appear when there are price differences ≥1% between exchanges.
-
-⚙️ Configure alerts: /settings
-🎯 Upgrade for more features: /upgrade`
-		return h.sendMessage(ctx, chatID, msg)
-	}
-
-	// Build opportunities message
-	msg := "📈 Current Arbitrage Opportunities:\n\n"
-	for i, opp := range opportunities {
-		if i >= 5 { // Limit to top 5 for readability
-			break
-		}
-		msg += fmt.Sprintf("💰 %s\n", opp.Symbol)
-		msg += fmt.Sprintf("📊 Profit: %.2f%% (%.4f)\n", opp.ProfitPercent, opp.ProfitAmount)
-		msg += fmt.Sprintf("🔻 Buy: %s @ %.6f\n", opp.BuyExchange, opp.BuyPrice)
-		msg += fmt.Sprintf("🔺 Sell: %s @ %.6f\n", opp.SellExchange, opp.SellPrice)
-		msg += "\n"
-	}
-
-	msg += "⚙️ Configure alerts: /settings\n"
-	msg += "🎯 Upgrade for more features: /upgrade"
-
-	return h.sendMessage(ctx, chatID, msg)
+	// Send the aggregated signals
+	return h.sendAggregatedSignalsMessage(ctx, chatID, signals)
 }
 
 // handleSettingsCommand handles the /settings command
@@ -256,6 +274,52 @@ For now, use:
 /upgrade - Upgrade to premium`
 
 	return h.sendMessage(ctx, chatID, msg)
+}
+
+// StartPolling starts the Telegram bot in polling mode
+func (h *TelegramHandler) StartPolling() {
+	if h.bot == nil {
+		log.Printf("Cannot start polling: Telegram bot is not initialized")
+		return
+	}
+
+	if h.pollingActive {
+		log.Printf("Polling is already active")
+		return
+	}
+
+	log.Printf("Starting Telegram bot polling...")
+	h.pollingActive = true
+
+	// Create a context that can be cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	h.pollingCancel = cancel
+
+	// Start the bot with polling - this will handle updates automatically
+	go func() {
+		defer func() {
+			h.pollingActive = false
+			log.Printf("Polling stopped")
+		}()
+
+		// The bot.Start method handles polling internally
+		h.bot.Start(ctx)
+	}()
+}
+
+// StopPolling stops the Telegram bot polling
+func (h *TelegramHandler) StopPolling() {
+	if !h.pollingActive {
+		log.Printf("Polling is not active")
+		return
+	}
+
+	log.Printf("Stopping Telegram bot polling...")
+	if h.pollingCancel != nil {
+		h.pollingCancel()
+		h.pollingCancel = nil
+	}
+	h.pollingActive = false
 }
 
 // handleHelpCommand handles the /help command
@@ -383,4 +447,152 @@ func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text st
 		return err
 	}
 	return nil
+}
+
+// Removed unused cacheTelegramOpportunities function
+
+// cacheAggregatedSignals caches aggregated signals in Redis
+func (h *TelegramHandler) cacheAggregatedSignals(ctx context.Context, signals []*services.AggregatedSignal) {
+	if h.redis == nil {
+		return
+	}
+
+	data, err := json.Marshal(signals)
+	if err != nil {
+		log.Printf("Error marshaling aggregated signals for cache: %v", err)
+		return
+	}
+
+	cacheKey := "telegram:aggregated_signals"
+	err = h.redis.Set(ctx, cacheKey, data, 3*time.Minute).Err() // Shorter cache time for signals
+	if err != nil {
+		log.Printf("Error caching aggregated signals: %v", err)
+	}
+}
+
+// getCachedAggregatedSignals retrieves cached aggregated signals from Redis
+func (h *TelegramHandler) getCachedAggregatedSignals(ctx context.Context) ([]*services.AggregatedSignal, error) {
+	if h.redis == nil {
+		return nil, fmt.Errorf("redis client not available")
+	}
+
+	cacheKey := "telegram:aggregated_signals"
+	data, err := h.redis.Get(ctx, cacheKey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var signals []*services.AggregatedSignal
+	err = json.Unmarshal([]byte(data), &signals)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling cached aggregated signals: %w", err)
+	}
+
+	return signals, nil
+}
+
+// Removed unused getString function
+
+// Removed unused getFloat64 function
+
+// getCachedTelegramOpportunities retrieves cached opportunities from Redis
+func (h *TelegramHandler) getCachedTelegramOpportunities(ctx context.Context) ([]ArbitrageOpportunity, error) {
+	if h.redis == nil {
+		return nil, fmt.Errorf("redis not available")
+	}
+
+	cacheKey := "telegram:opportunities:latest"
+	cachedData, err := h.redis.Get(ctx, cacheKey).Result()
+	if err != nil || cachedData == "" {
+		return nil, fmt.Errorf("no cached Telegram opportunities found")
+	}
+
+	var opportunities []ArbitrageOpportunity
+	if err := json.Unmarshal([]byte(cachedData), &opportunities); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cached Telegram opportunities: %w", err)
+	}
+
+	log.Printf("Retrieved cached Telegram opportunities from Redis")
+	return opportunities, nil
+}
+
+// Removed unused sendOpportunitiesMessage function
+
+// sendAggregatedSignalsMessage sends aggregated trading signals to Telegram
+func (h *TelegramHandler) sendAggregatedSignalsMessage(ctx context.Context, chatID int64, signals []*services.AggregatedSignal) error {
+	if len(signals) == 0 {
+		return h.sendMessage(ctx, chatID, "📊 No trading signals found at the moment.")
+	}
+
+	// Limit to top 5 signals for better readability
+	if len(signals) > 5 {
+		signals = signals[:5]
+	}
+
+	message := "🎯 *Top Trading Signals*\n\n"
+
+	for i, signal := range signals {
+		// Signal header with type icon
+		var typeIcon string
+		switch signal.SignalType {
+		case "arbitrage":
+			typeIcon = "⚡"
+		case "technical":
+			typeIcon = "📈"
+		default:
+			typeIcon = "🔍"
+		}
+
+		message += fmt.Sprintf("*%d. %s %s*\n", i+1, typeIcon, signal.Symbol)
+		message += fmt.Sprintf("🎯 Action: *%s*\n", strings.ToUpper(signal.Action))
+		message += fmt.Sprintf("💪 Strength: *%s*\n", strings.ToUpper(string(signal.Strength)))
+		confidenceFloat, _ := signal.Confidence.Float64()
+		profitPotentialFloat, _ := signal.ProfitPotential.Float64()
+		message += fmt.Sprintf("🎲 Confidence: *%.1f%%*\n", confidenceFloat*100)
+		message += fmt.Sprintf("💰 Profit Potential: *%.2f%%*\n", profitPotentialFloat*100)
+
+		// Add signal-specific details
+		if signal.SignalType == "arbitrage" && len(signal.Exchanges) > 0 {
+			message += fmt.Sprintf("🏪 Exchanges: %s\n", strings.Join(signal.Exchanges, ", "))
+		}
+
+		if signal.SignalType == "technical" && len(signal.Indicators) > 0 {
+			indicatorNames := make([]string, 0, len(signal.Indicators))
+			indicatorNames = append(indicatorNames, signal.Indicators...)
+			message += fmt.Sprintf("📊 Indicators: %s\n", strings.Join(indicatorNames, ", "))
+		}
+
+		// Risk level
+		riskLevelFloat, _ := signal.RiskLevel.Float64()
+		var riskIcon string
+		switch {
+		case riskLevelFloat <= 0.3:
+			riskIcon = "🟢"
+		case riskLevelFloat <= 0.6:
+			riskIcon = "🟡"
+		default:
+			riskIcon = "🔴"
+		}
+		message += fmt.Sprintf("⚠️ Risk: %s *%.1f%%*\n", riskIcon, riskLevelFloat*100)
+
+		// Time info
+		timeAgo := time.Since(signal.CreatedAt)
+		var timeStr string
+		if timeAgo < time.Minute {
+			timeStr = "just now"
+		} else if timeAgo < time.Hour {
+			timeStr = fmt.Sprintf("%dm ago", int(timeAgo.Minutes()))
+		} else {
+			timeStr = fmt.Sprintf("%dh ago", int(timeAgo.Hours()))
+		}
+		message += fmt.Sprintf("⏰ Generated: %s\n", timeStr)
+
+		if i < len(signals)-1 {
+			message += "\n"
+		}
+	}
+
+	message += "\n🔄 _Auto-updated every 3 minutes_"
+
+	return h.sendMessage(ctx, chatID, message)
 }

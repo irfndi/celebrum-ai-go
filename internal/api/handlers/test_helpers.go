@@ -1,12 +1,11 @@
 package handlers
 
 import (
-	"context"
-
-	"github.com/irfndi/celebrum-ai-go/internal/models"
-	"github.com/irfndi/celebrum-ai-go/pkg/ccxt"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/mock"
+    "context"
+    "github.com/irfandi/celebrum-ai-go/internal/ccxt"
+    "github.com/irfandi/celebrum-ai-go/internal/models"
+    "github.com/shopspring/decimal"
+    "github.com/stretchr/testify/mock"
 )
 
 // MockCCXTService for testing
@@ -39,17 +38,17 @@ func (m *MockCCXTService) GetExchangeInfo(exchangeID string) (ccxt.ExchangeInfo,
 	return args.Get(0).(ccxt.ExchangeInfo), args.Bool(1)
 }
 
-func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]models.MarketPrice, error) {
+func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchanges, symbols)
-	return args.Get(0).([]models.MarketPrice), args.Error(1)
+	return args.Get(0).([]ccxt.MarketPriceInterface), args.Error(1)
 }
 
-func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (*models.MarketPrice, error) {
+func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (ccxt.MarketPriceInterface, error) {
 	args := m.Called(ctx, exchange, symbol)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.MarketPrice), args.Error(1)
+	return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
 }
 
 func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {
@@ -115,4 +114,79 @@ func (m *MockCCXTService) CalculateFundingRateArbitrage(ctx context.Context, sym
 func (m *MockCCXTService) GetServiceURL() string {
 	args := m.Called()
 	return args.String(0)
+}
+
+// Exchange management methods
+func (m *MockCCXTService) GetExchangeConfig(ctx context.Context) (*ccxt.ExchangeConfigResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeConfigResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx, exchange)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) RefreshExchanges(ctx context.Context) (*ccxt.ExchangeManagementResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*ccxt.ExchangeManagementResponse, error) {
+    args := m.Called(ctx, exchange)
+    if args.Get(0) == nil {
+        return nil, args.Error(1)
+    }
+    return args.Get(0).(*ccxt.ExchangeManagementResponse), args.Error(1)
+}
+
+// MockCollectorService is a mock implementation of CollectorInterface for testing
+type MockCollectorService struct {
+	mock.Mock
+}
+
+func (m *MockCollectorService) Start() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockCollectorService) Stop() {
+	m.Called()
+}
+
+func (m *MockCollectorService) RestartWorker(exchangeID string) error {
+	args := m.Called(exchangeID)
+	return args.Error(0)
+}
+
+func (m *MockCollectorService) IsReady() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockCollectorService) IsInitialized() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockCollectorService) GetStatus() map[string]interface{} {
+    args := m.Called()
+    return args.Get(0).(map[string]interface{})
 }

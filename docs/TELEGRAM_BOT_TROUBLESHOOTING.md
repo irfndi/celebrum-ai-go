@@ -110,7 +110,7 @@ watchtower:
 docker exec celebrum-app env | grep TELEGRAM
 
 # Test service connectivity
-docker exec celebrum-app curl -f http://ccxt-service:3001/health
+docker exec celebrum-app curl -f http://ccxt-service:3000/health
 
 # Check network connectivity
 docker network ls

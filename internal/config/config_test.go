@@ -36,7 +36,7 @@ func TestConfig_Struct(t *testing.T) {
 			DB:       0,
 		},
 		CCXT: CCXTConfig{
-			ServiceURL: "http://ccxt-service:3001",
+			ServiceURL: "http://localhost:3001",
 			Timeout:    30,
 		},
 		Telegram: TelegramConfig{
@@ -64,7 +64,7 @@ func TestConfig_Struct(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "redis_pass", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "test_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://example.com/webhook", config.Telegram.WebhookURL)
@@ -124,11 +124,11 @@ func TestRedisConfig_Struct(t *testing.T) {
 
 func TestCCXTConfig_Struct(t *testing.T) {
 	config := CCXTConfig{
-		ServiceURL: "http://ccxt.example.com:3001",
+		ServiceURL: "http://ccxt.example.com:3000",
 		Timeout:    60,
 	}
 
-	assert.Equal(t, "http://ccxt.example.com:3001", config.ServiceURL)
+	assert.Equal(t, "http://ccxt.example.com:3000", config.ServiceURL)
 	assert.Equal(t, 60, config.Timeout)
 }
 
@@ -170,34 +170,52 @@ func TestLoad_WithDefaults(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "", config.Telegram.BotToken)
 	assert.Equal(t, "", config.Telegram.WebhookURL)
 }
 
 func TestLoad_WithEnvironmentVariables(t *testing.T) {
-	// Set environment variables using t.Setenv for automatic cleanup
-	t.Setenv("ENVIRONMENT", "production")
-	t.Setenv("LOG_LEVEL", "error")
-	t.Setenv("SERVER_PORT", "9000")
-	t.Setenv("DATABASE_HOST", "prod-db.example.com")
-	t.Setenv("DATABASE_PORT", "5433")
-	t.Setenv("DATABASE_USER", "prod_user")
-	t.Setenv("DATABASE_PASSWORD", "prod_pass")
-	t.Setenv("DATABASE_DBNAME", "prod_db")
-	t.Setenv("DATABASE_SSLMODE", "require")
-	t.Setenv("REDIS_HOST", "prod-redis.example.com")
-	t.Setenv("REDIS_PORT", "6380")
-	t.Setenv("REDIS_PASSWORD", "redis_prod_pass")
-	t.Setenv("REDIS_DB", "1")
-	t.Setenv("CCXT_SERVICE_URL", "http://prod-ccxt.example.com:3001")
-	t.Setenv("CCXT_TIMEOUT", "60")
-	t.Setenv("TELEGRAM_BOT_TOKEN", "prod_bot_token")
-	t.Setenv("TELEGRAM_WEBHOOK_URL", "https://prod-api.example.com/webhook")
-	t.Setenv("JWT_SECRET", "test-jwt-secret-for-production-test")
+	// Set environment variables
+	_ = os.Setenv("ENVIRONMENT", "production")
+	_ = os.Setenv("LOG_LEVEL", "error")
+	_ = os.Setenv("SERVER_PORT", "9000")
+	_ = os.Setenv("DATABASE_HOST", "prod-db.example.com")
+	_ = os.Setenv("DATABASE_PORT", "5433")
+	_ = os.Setenv("DATABASE_USER", "prod_user")
+	_ = os.Setenv("DATABASE_PASSWORD", "prod_pass")
+	_ = os.Setenv("DATABASE_DBNAME", "prod_db")
+	_ = os.Setenv("DATABASE_SSLMODE", "require")
+	_ = os.Setenv("REDIS_HOST", "prod-redis.example.com")
+	_ = os.Setenv("REDIS_PORT", "6380")
+	_ = os.Setenv("REDIS_PASSWORD", "redis_prod_pass")
+	_ = os.Setenv("REDIS_DB", "1")
+	_ = os.Setenv("CCXT_SERVICE_URL", "http://prod-ccxt.example.com:3000")
+	_ = os.Setenv("CCXT_TIMEOUT", "60")
+	_ = os.Setenv("TELEGRAM_BOT_TOKEN", "prod_bot_token")
+	_ = os.Setenv("TELEGRAM_WEBHOOK_URL", "https://prod-api.example.com/webhook")
 
-	// No manual cleanup needed - t.Setenv handles automatic cleanup
+	defer func() {
+		// Clean up environment variables
+		_ = os.Unsetenv("ENVIRONMENT")
+		_ = os.Unsetenv("LOG_LEVEL")
+		_ = os.Unsetenv("SERVER_PORT")
+		_ = os.Unsetenv("DATABASE_HOST")
+		_ = os.Unsetenv("DATABASE_PORT")
+		_ = os.Unsetenv("DATABASE_USER")
+		_ = os.Unsetenv("DATABASE_PASSWORD")
+		_ = os.Unsetenv("DATABASE_DBNAME")
+		_ = os.Unsetenv("DATABASE_SSLMODE")
+		_ = os.Unsetenv("REDIS_HOST")
+		_ = os.Unsetenv("REDIS_PORT")
+		_ = os.Unsetenv("REDIS_PASSWORD")
+		_ = os.Unsetenv("REDIS_DB")
+		_ = os.Unsetenv("CCXT_SERVICE_URL")
+		_ = os.Unsetenv("CCXT_TIMEOUT")
+		_ = os.Unsetenv("TELEGRAM_BOT_TOKEN")
+		_ = os.Unsetenv("TELEGRAM_WEBHOOK_URL")
+	}()
 
 	config, err := Load()
 	require.NoError(t, err)
@@ -217,8 +235,44 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 6380, config.Redis.Port)
 	assert.Equal(t, "redis_prod_pass", config.Redis.Password)
 	assert.Equal(t, 1, config.Redis.DB)
-	assert.Equal(t, "http://prod-ccxt.example.com:3001", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://prod-ccxt.example.com:3000", config.CCXT.ServiceURL)
 	assert.Equal(t, 60, config.CCXT.Timeout)
 	assert.Equal(t, "prod_bot_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://prod-api.example.com/webhook", config.Telegram.WebhookURL)
+}
+
+func TestCCXTConfig_GetServiceURL(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, "http://localhost:3001", config.GetServiceURL())
+}
+
+func TestCCXTConfig_GetTimeout(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, 30, config.GetTimeout())
+}
+
+func TestCCXTConfig_GetServiceURL_Empty(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "",
+		Timeout:    30,
+	}
+
+	assert.Equal(t, "", config.GetServiceURL())
+}
+
+func TestCCXTConfig_GetTimeout_Zero(t *testing.T) {
+	config := CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    0,
+	}
+
+	assert.Equal(t, 0, config.GetTimeout())
 }

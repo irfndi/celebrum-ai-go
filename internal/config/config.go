@@ -1,14 +1,9 @@
 package config
 
 import (
-	"errors"
-	"fmt"
-	"log"
 	"strings"
-	"time"
 
 	"github.com/spf13/viper"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Config struct {
@@ -19,10 +14,12 @@ type Config struct {
 	Redis       RedisConfig      `mapstructure:"redis"`
 	CCXT        CCXTConfig       `mapstructure:"ccxt"`
 	Telegram    TelegramConfig   `mapstructure:"telegram"`
+	Telemetry   TelemetryConfig  `mapstructure:"telemetry"`
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
+	Backfill    BackfillConfig   `mapstructure:"backfill"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
-	Security    SecurityConfig   `mapstructure:"security"`
+	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
 }
 
 type ServerConfig struct {
@@ -57,15 +54,45 @@ type CCXTConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken   string `mapstructure:"bot_token"`
-	WebhookURL string `mapstructure:"webhook_url"`
+	BotToken       string `mapstructure:"bot_token"`
+	WebhookURL     string `mapstructure:"webhook_url"`
+	UsePolling     bool   `mapstructure:"use_polling"`
+	PollingOffset  int    `mapstructure:"polling_offset"`
+	PollingLimit   int    `mapstructure:"polling_limit"`
+	PollingTimeout int    `mapstructure:"polling_timeout"`
+}
+
+type TelemetryConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
+	ServiceName    string `mapstructure:"service_name"`
+	ServiceVersion string `mapstructure:"service_version"`
+	LogLevel       string `mapstructure:"log_level"`
 }
 
 type CleanupConfig struct {
-	MarketDataRetentionHours  int `mapstructure:"market_data_retention_hours"`
-	FundingRateRetentionHours int `mapstructure:"funding_rate_retention_hours"`
-	ArbitrageRetentionHours   int `mapstructure:"arbitrage_retention_hours"`
-	CleanupIntervalMinutes    int `mapstructure:"cleanup_interval_minutes"`
+	MarketData             CleanupDataConfig      `mapstructure:"market_data"`
+	FundingRates           CleanupDataConfig      `mapstructure:"funding_rates"`
+	ArbitrageOpportunities CleanupArbitrageConfig `mapstructure:"arbitrage_opportunities"`
+	IntervalMinutes        int                    `mapstructure:"interval"`
+	EnableSmartCleanup     bool                   `mapstructure:"enable_smart_cleanup"`
+}
+
+type CleanupDataConfig struct {
+	RetentionHours int `mapstructure:"retention_hours"`
+	DeletionHours  int `mapstructure:"deletion_hours"`
+}
+
+type CleanupArbitrageConfig struct {
+	RetentionHours int `mapstructure:"retention_hours"`
+}
+
+type BackfillConfig struct {
+	Enabled               bool `mapstructure:"enabled"`
+	BackfillHours         int  `mapstructure:"backfill_hours"`
+	MinDataThresholdHours int  `mapstructure:"min_data_threshold_hours"`
+	BatchSize             int  `mapstructure:"batch_size"`
+	DelayBetweenBatches   int  `mapstructure:"delay_between_batches"`
 }
 
 type MarketDataConfig struct {
@@ -77,16 +104,22 @@ type MarketDataConfig struct {
 }
 
 type ArbitrageConfig struct {
-	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
-	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
-	CheckInterval      string   `mapstructure:"check_interval"`
+	MinProfitThreshold float64 `mapstructure:"min_profit_threshold"`
+	MaxTradeAmount     float64 `mapstructure:"max_trade_amount"`
+	CheckInterval      string  `mapstructure:"check_interval"`
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
+	Enabled            bool    `mapstructure:"enabled"`
+	IntervalSeconds    int     `mapstructure:"interval_seconds"`
+	MaxAgeMinutes      int     `mapstructure:"max_age_minutes"`
+	BatchSize          int     `mapstructure:"batch_size"`
 }
 
-type SecurityConfig struct {
-	JWTSecret  string `mapstructure:"jwt_secret" json:"-" yaml:"-"`
-	JWTExpiry  string `mapstructure:"jwt_expiry"`
-	BcryptCost int    `mapstructure:"bcrypt_cost"`
+type BlacklistConfig struct {
+	TTL             string `mapstructure:"ttl"`               // Default TTL for blacklisted symbols (e.g., "24h")
+	ShortTTL        string `mapstructure:"short_ttl"`         // Short TTL for temporary issues (e.g., "1h")
+	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
+	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
+	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
 }
 
 func Load() (*Config, error) {
@@ -95,96 +128,25 @@ func Load() (*Config, error) {
 	viper.AddConfigPath("./configs")
 	viper.AddConfigPath(".")
 
+	// Set default values
+	setDefaults()
+
 	// Enable environment variable support
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
-
-	// Bind specific environment variables
-	if err := viper.BindEnv("security.jwt_secret", "JWT_SECRET"); err != nil {
-		return nil, fmt.Errorf("failed to bind JWT_SECRET environment variable: %w", err)
-	}
-	if err := viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL"); err != nil {
-		return nil, fmt.Errorf("failed to bind CCXT_SERVICE_URL environment variable: %w", err)
-	}
-
-	// Set default values (after environment variables are bound)
-	setDefaults()
-
-	// Configuration sources will be logged after config is loaded
-	if err := viper.BindEnv("database.host", "DATABASE_HOST"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_HOST environment variable: %w", err)
-	}
-	if err := viper.BindEnv("database.port", "DATABASE_PORT"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_PORT environment variable: %w", err)
-	}
-	if err := viper.BindEnv("database.user", "DATABASE_USER"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_USER environment variable: %w", err)
-	}
-	if err := viper.BindEnv("database.password", "DATABASE_PASSWORD"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_PASSWORD environment variable: %w", err)
-	}
-	if err := viper.BindEnv("database.dbname", "DATABASE_DBNAME"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_DBNAME environment variable: %w", err)
-	}
-	if err := viper.BindEnv("database.sslmode", "DATABASE_SSLMODE"); err != nil {
-		return nil, fmt.Errorf("failed to bind DATABASE_SSLMODE environment variable: %w", err)
-	}
-	if err := viper.BindEnv("redis.host", "REDIS_HOST"); err != nil {
-		return nil, fmt.Errorf("failed to bind REDIS_HOST environment variable: %w", err)
-	}
-	if err := viper.BindEnv("redis.port", "REDIS_PORT"); err != nil {
-		return nil, fmt.Errorf("failed to bind REDIS_PORT environment variable: %w", err)
-	}
-	if err := viper.BindEnv("ccxt.timeout", "CCXT_TIMEOUT"); err != nil {
-		return nil, fmt.Errorf("failed to bind CCXT_TIMEOUT environment variable: %w", err)
-	}
-	if err := viper.BindEnv("telegram.bot_token", "TELEGRAM_BOT_TOKEN"); err != nil {
-		return nil, fmt.Errorf("failed to bind TELEGRAM_BOT_TOKEN environment variable: %w", err)
-	}
 
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			log.Printf("DEBUG: Error reading config file: %v", err)
 			return nil, err
 		}
-		log.Printf("DEBUG: Config file not found, using defaults and environment variables")
-	} else {
-		log.Printf("DEBUG: Config file loaded: %s", viper.ConfigFileUsed())
 	}
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
-
-	// Normalize environment to lowercase for consistent comparison
-	environment := strings.ToLower(config.Environment)
-
-	// Validate JWT secret in non-development environments
-	if environment != "development" && config.Security.JWTSecret == "" {
-		return nil, errors.New("JWT_SECRET environment variable is required in non-development environments")
-	}
-
-	// Validate JWT expiry duration
-	if config.Security.JWTExpiry != "" {
-		if _, err := time.ParseDuration(config.Security.JWTExpiry); err != nil {
-			return nil, fmt.Errorf("invalid JWT expiry duration: %w", err)
-		}
-	}
-
-	// Validate bcrypt cost parameter
-	if config.Security.BcryptCost < bcrypt.MinCost || config.Security.BcryptCost > bcrypt.MaxCost {
-		return nil, fmt.Errorf("bcrypt cost must be between %d and %d, got %d",
-			bcrypt.MinCost, bcrypt.MaxCost, config.Security.BcryptCost)
-	}
-
-	// Update config with normalized environment
-	config.Environment = environment
-
-	// Debug: Log final configuration
-	log.Printf("DEBUG: CCXT ServiceURL=%s timeout=%d", config.CCXT.ServiceURL, config.CCXT.Timeout)
 
 	return &config, nil
 }
@@ -218,20 +180,39 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
+	viper.SetDefault("ccxt.service_url", "http://localhost:3000")
 	viper.SetDefault("ccxt.timeout", 30)
-
-	// Configuration defaults set silently to avoid side effects
 
 	// Telegram
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
+	viper.SetDefault("telegram.use_polling", false)
+	viper.SetDefault("telegram.polling_offset", 0)
+	viper.SetDefault("telegram.polling_limit", 100)
+	viper.SetDefault("telegram.polling_timeout", 60)
 
-	// Cleanup
-	viper.SetDefault("cleanup.market_data_retention_hours", 24)
-	viper.SetDefault("cleanup.funding_rate_retention_hours", 24)
-	viper.SetDefault("cleanup.arbitrage_retention_hours", 72)
-	viper.SetDefault("cleanup.cleanup_interval_minutes", 60)
+	// Telemetry
+	viper.SetDefault("telemetry.enabled", true)
+	viper.SetDefault("telemetry.otlp_endpoint", "http://localhost:4318")
+	viper.SetDefault("telemetry.service_name", "github.com/irfandi/celebrum-ai-go")
+	viper.SetDefault("telemetry.service_version", "1.0.0")
+	viper.SetDefault("telemetry.log_level", "info")
+
+	// Cleanup - Enhanced configuration with smart cleanup
+	viper.SetDefault("cleanup.market_data.retention_hours", 36)
+	viper.SetDefault("cleanup.market_data.deletion_hours", 12)
+	viper.SetDefault("cleanup.funding_rates.retention_hours", 36)
+	viper.SetDefault("cleanup.funding_rates.deletion_hours", 12)
+	viper.SetDefault("cleanup.arbitrage_opportunities.retention_hours", 72)
+	viper.SetDefault("cleanup.interval", 60)
+	viper.SetDefault("cleanup.enable_smart_cleanup", true)
+
+	// Backfill
+	viper.SetDefault("backfill.enabled", true)
+	viper.SetDefault("backfill.backfill_hours", 6)
+	viper.SetDefault("backfill.min_data_threshold_hours", 4)
+	viper.SetDefault("backfill.batch_size", 5)
+	viper.SetDefault("backfill.delay_between_batches", 500)
 
 	// Market Data
 	viper.SetDefault("market_data.collection_interval", "5m")
@@ -241,13 +222,29 @@ func setDefaults() {
 	viper.SetDefault("market_data.exchanges", []string{"binance", "coinbase", "kraken", "bitfinex", "huobi"})
 
 	// Arbitrage
+	viper.SetDefault("arbitrage.enabled", true)
+	viper.SetDefault("arbitrage.interval_seconds", 60)
 	viper.SetDefault("arbitrage.min_profit_threshold", 0.5)
+	viper.SetDefault("arbitrage.max_age_minutes", 30)
+	viper.SetDefault("arbitrage.batch_size", 100)
 	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
 	viper.SetDefault("arbitrage.check_interval", "2m")
 	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
 
-	// Security
-	viper.SetDefault("security.jwt_secret", "")
-	viper.SetDefault("security.jwt_expiry", "24h")
-	viper.SetDefault("security.bcrypt_cost", 12)
+	// Blacklist
+	viper.SetDefault("blacklist.ttl", "24h")
+	viper.SetDefault("blacklist.short_ttl", "1h")
+	viper.SetDefault("blacklist.long_ttl", "72h")
+	viper.SetDefault("blacklist.use_redis", true)
+	viper.SetDefault("blacklist.retry_after_clear", true)
+}
+
+// GetServiceURL returns the CCXT service URL
+func (c *CCXTConfig) GetServiceURL() string {
+	return c.ServiceURL
+}
+
+// GetTimeout returns the CCXT service timeout in seconds
+func (c *CCXTConfig) GetTimeout() int {
+	return c.Timeout
 }

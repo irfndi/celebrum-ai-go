@@ -17,13 +17,13 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
 
-# Final stage
-FROM alpine:latest
+# Production stage
+FROM alpine:latest AS production
 
-# Install ca-certificates and wget for HTTPS requests and health checks
-RUN apk --no-cache add ca-certificates tzdata wget
+# Install only essential runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata wget curl
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
@@ -38,6 +38,9 @@ COPY --from=builder /app/main .
 # Copy configuration files
 COPY --from=builder /app/configs ./configs
 COPY --from=builder /app/config.yaml ./config.yaml
+
+# Copy scripts directory
+COPY --from=builder /app/scripts ./scripts
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /root
@@ -54,3 +57,15 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Run the application
 CMD ["./main"]
+
+# Debug stage (includes debugging tools)
+FROM production AS debug
+
+# Switch to root to install debugging tools
+USER root
+
+# Install debugging and monitoring tools for development/debugging
+RUN apk --no-cache add procps htop strace lsof tcpdump
+
+# Switch back to non-root user for debug stage
+USER appuser

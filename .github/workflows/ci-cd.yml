@@ -1,26 +1,110 @@
-name: CI/CD Pipeline
+name: Celebrum AI CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, development ]
+    branches: [ main, development, staging ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, development ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      deployment_type:
+        description: 'Deployment strategy'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+        - standard
+        - zero-downtime
+        - rolling
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: false
+        type: boolean
 
 env:
-  GO_VERSION: '1.24'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.25'
+  NODE_VERSION: '20'
 
 jobs:
-  test:
-    name: Test
+  # Pre-flight checks
+  preflight:
+    name: Pre-flight Checks
     runs-on: ubuntu-latest
-    
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      environment: ${{ steps.check.outputs.environment }}
+      deployment_type: ${{ steps.check.outputs.deployment_type }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check deployment conditions
+        id: check
+        run: |
+          # Determine if we should deploy
+          SHOULD_DEPLOY="false"
+          ENVIRONMENT="staging"
+          DEPLOYMENT_TYPE="standard"
+          
+          # Manual workflow dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+            DEPLOYMENT_TYPE="${{ github.event.inputs.deployment_type }}"
+          # Push to main/master -> production
+          elif [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="production"
+            DEPLOYMENT_TYPE="zero-downtime"
+          # Push to development -> staging
+          elif [ "${{ github.ref }}" = "refs/heads/development" ]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="staging"
+            DEPLOYMENT_TYPE="standard"
+          # Push to staging -> staging
+          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="staging"
+            DEPLOYMENT_TYPE="standard"
+          # Tags -> production
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            SHOULD_DEPLOY="true"
+            ENVIRONMENT="production"
+            DEPLOYMENT_TYPE="zero-downtime"
+          fi
+          
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "deployment_type=$DEPLOYMENT_TYPE" >> $GITHUB_OUTPUT
+          
+          echo "Should deploy: $SHOULD_DEPLOY"
+          echo "Environment: $ENVIRONMENT"
+          echo "Deployment type: $DEPLOYMENT_TYPE"
+
+  # Build and test
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || !github.event.inputs.skip_tests }}
     services:
       postgres:
-        image: postgres:17
+        image: postgres:15
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD }}
           POSTGRES_DB: celebrum_test
         options: >-
           --health-cmd pg_isready
@@ -40,265 +124,287 @@ jobs:
         ports:
           - 6379:6379
 
-    env:
-      CCXT_SERVICE_URL: http://localhost:8081
-      CONFIG_PATH: configs/config.ci.yml
-
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-    
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
-    
-    - name: Install dependencies
-      run: |
-        cd ccxt-service
-        bun install
-    
-    - name: Download Go dependencies
-      run: go mod download
-    
-    - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: latest
-        args: --timeout=5m
-    
-    - name: Check formatting
-      run: make fmt-check
-    
-    - name: Start CCXT service
-      run: |
-        cd ccxt-service
-        bun run start:ci &
-        CCXT_PID=$!
-        echo "Waiting for CCXT service to be ready..."
-        for i in {1..30}; do
-          if curl -f http://localhost:8081/health >/dev/null 2>&1; then
-            echo "CCXT service is ready"
-            break
-          fi
-          echo "Attempt $i/30: CCXT service not ready, waiting..."
-          sleep 2
-        done
-        if ! curl -f http://localhost:8081/health >/dev/null 2>&1; then
-          echo "CCXT service failed to start within 60 seconds"
-          kill $CCXT_PID || true
-          exit 1
-        fi
-        
-        # Run Go tests
-        cd ..
-        go test -v -race -coverprofile=coverage.out ./...
-        
-        # Clean up CCXT service
-        kill $CCXT_PID || true
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/celebrum_test?sslmode=disable
-        DATABASE_HOST: localhost
-        DATABASE_PORT: 5432
-        DATABASE_USER: postgres
-        DATABASE_PASSWORD: postgres
-        DATABASE_DBNAME: celebrum_test
-        REDIS_HOST: localhost
-        REDIS_PORT: 6379
-        REDIS_URL: redis://localhost:6379
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
-    
-    - name: Build application
-      run: |
-        # Build with CI configuration
-        CONFIG_PATH=configs/config.ci.yml make build
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  build-and-push:
-    name: Build and Push Docker Image
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          cd ccxt-service && bun install --frozen-lockfile
+
+      - name: Run CI/CD integration tests
+        env:
+          DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+          TEST_REDIS_ADDR: localhost:6379
+          RUN_TESTS: "true"
+          RUN_SECURITY_SCAN: "true"
+          RUN_PERFORMANCE_TEST: "false"
+          CI_ENVIRONMENT: "test"
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh test
+
+      - name: Coverage Check (non-blocking)
+        run: |
+          make coverage-check
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results
+          path: |
+            ci-artifacts/test-results/
+            ci-artifacts/coverage/
+            ci-artifacts/reports/
+
+  # Security scanning
+  security:
+    name: Security Scan
     runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    permissions:
-      contents: read
-      packages: write
-      id-token: write  # Required for OIDC
-      attestations: write  # Required for provenance
-    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-    
-    - name: Build and push Docker image
-      id: build
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        build-args: |
-          # Runtime variables are injected via environment variables at deploy time
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-    
-    - name: Generate build provenance attestation
-      uses: actions/attest-build-provenance@v1
-      with:
-        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        subject-digest: ${{ steps.build.outputs.digest }}
-        push-to-registry: true
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  deploy:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run security scan via CI/CD integration
+        env:
+          RUN_SECURITY_SCAN: true
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh security
+
+  # Build Docker images
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    if: needs.preflight.outputs.should_deploy == 'true'
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image
+        id: image
+        run: |
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [preflight, test, security, build]
+    if: |
+      needs.preflight.outputs.should_deploy == 'true' && 
+      needs.preflight.outputs.environment == 'staging' &&
+      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
+    environment:
+      name: staging
+      url: https://staging.celebrum-ai.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        env:
+          DEPLOYMENT_TYPE: ${{ needs.preflight.outputs.deployment_type }}
+          CI_ENVIRONMENT: staging
+          SKIP_BACKUP: false
+          AUTO_ROLLBACK: true
+          NOTIFY_SLACK: true
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+          SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh deploy
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: staging-deployment-artifacts
+          path: ci-artifacts/
+
+  # Deploy to production
+  deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [build-and-push]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    environment: production
-    
+    needs: [preflight, test, security, build]
+    if: |
+      needs.preflight.outputs.should_deploy == 'true' && 
+      needs.preflight.outputs.environment == 'production' &&
+      (success() || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests))
+    environment:
+      name: production
+      url: https://celebrum-ai.com
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Deploy to DigitalOcean
-      uses: digitalocean/action-doctl@v2
-      with:
-        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-    
-    - name: Setup SSH key
-      run: |
-        # Create SSH directory
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
-        
-        # Setup SSH key with proper formatting
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key_raw
-        cat ~/.ssh/deploy_key_raw | tr -d '\r' | sed 's/\n/\n/g' > ~/.ssh/deploy_key
-        sed -i 's/$//' ~/.ssh/deploy_key
-        
-        # Verify key format
-        echo "Checking SSH key format..."
-        head -1 ~/.ssh/deploy_key
-        tail -1 ~/.ssh/deploy_key
-        
-        if ! head -1 ~/.ssh/deploy_key | grep -q "BEGIN.*PRIVATE KEY"; then
-          echo "Error: SSH key does not start with proper header"
-          exit 1
-        fi
-        
-        if ! tail -1 ~/.ssh/deploy_key | grep -q "END.*PRIVATE KEY"; then
-          echo "Error: SSH key does not end with proper footer"
-          exit 1
-        fi
-        
-        chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
-        
-        # Test SSH connection
-        for i in {1..3}; do
-          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"; then
-            echo "SSH connection test successful"
-            break
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        env:
+          DEPLOYMENT_TYPE: ${{ needs.preflight.outputs.deployment_type }}
+          CI_ENVIRONMENT: production
+          SKIP_BACKUP: false
+          AUTO_ROLLBACK: true
+          NOTIFY_SLACK: true
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
+          SECRET_KEY: ${{ secrets.PRODUCTION_SECRET_KEY }}
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh deploy
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: production-deployment-artifacts
+          path: ci-artifacts/
+
+  # Post-deployment verification
+  verify:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: [preflight, deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify deployment
+        env:
+          CI_ENVIRONMENT: ${{ needs.preflight.outputs.environment }}
+        run: |
+          chmod +x scripts/deploy-master.sh
+          scripts/deploy-master.sh verify
+
+      - name: Run health checks
+        env:
+          CI_ENVIRONMENT: ${{ needs.preflight.outputs.environment }}
+        run: |
+          chmod +x scripts/health-monitor-enhanced.sh
+          scripts/health-monitor-enhanced.sh verify
+
+  # Notification
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [preflight, deploy-staging, deploy-production, verify]
+    if: always() && needs.preflight.outputs.should_deploy == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine notification status
+        id: status
+        run: |
+          if [ "${{ needs.deploy-staging.result }}" = "success" ] || [ "${{ needs.deploy-production.result }}" = "success" ]; then
+            if [ "${{ needs.verify.result }}" = "success" ]; then
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "message=Deployment completed successfully" >> $GITHUB_OUTPUT
+            else
+              echo "status=warning" >> $GITHUB_OUTPUT
+              echo "message=Deployment completed but verification failed" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "SSH connection attempt $i failed, retrying..."
-            sleep 15
-            if [ $i -eq 3 ]; then
-              echo "SSH connection failed after 3 attempts"
-              exit 1
-            fi
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed" >> $GITHUB_OUTPUT
           fi
-        done
-    
-    - name: Deploy with environment variables
-      run: |
-        # Create production environment file
-        ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-          set -euo pipefail
-          
-          # Ensure target directory exists
-          mkdir -p /root/celebrum-ai-go
-          
-          # Create production environment file with secure permissions
-          cat > /root/celebrum-ai-go/.env << 'ENV_EOF'
-          ENVIRONMENT=production
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          CCXT_SERVICE_URL=http://ccxt-service:3001
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
-          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-          CONFIG_PATH=configs/config.prod.yml
-          ENV_EOF
-          chmod 600 /root/celebrum-ai-go/.env
-          
-          # Deploy with production configuration
-          cd /root/celebrum-ai-go
-          docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
-          
-          # Health check with polling loop
-          echo "Waiting for services to become healthy..."
-          max_attempts=30
-          attempt=1
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "Health check attempt $attempt/$max_attempts"
-            
-            if curl -f http://localhost:8080/health >/dev/null 2>&1; then
-              echo "Services are healthy!"
-              docker compose ps
-              exit 0
-            fi
-            
-            echo "Services not ready yet, waiting 10 seconds..."
-            sleep 10
-            attempt=$((attempt + 1))
-          done
-          
-          echo "Services failed to become healthy after $max_attempts attempts"
-          docker compose logs --tail=50
-          exit 1
-        EOF
+
+      - name: Send notification
+        env:
+          NOTIFY_SLACK: true
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CI_ENVIRONMENT: ${{ needs.preflight.outputs.environment }}
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh notify "${{ steps.status.outputs.status }}" "${{ steps.status.outputs.message }}"
+
+  # Cleanup
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [notify]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cleanup CI artifacts
+        run: |
+          chmod +x scripts/ci-cd-integration.sh
+          scripts/ci-cd-integration.sh cleanup
