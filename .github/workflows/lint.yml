@@ -20,7 +20,7 @@ jobs:
         go-version: '1.25.0'
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
         version: v1.59.0
         args: --timeout=5m --out-format=github-actions
