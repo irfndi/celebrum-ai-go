@@ -2,7 +2,9 @@ name: Build and Test
 
 on:
   push:
+    branches: [main, development]
   pull_request:
+    branches: [main, development]
 
 env:
   GO_VERSION: '1.25.0'

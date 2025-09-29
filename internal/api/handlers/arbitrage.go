@@ -679,7 +679,7 @@ func (h *ArbitrageHandler) findVolatilityOpportunities(ctx context.Context, minP
 
 	// Get market data for volatility analysis
 	query := `
-		SELECT tp.symbol, e.name as exchange, 
+		SELECT tp.symbol, e.name as exchange,
 		       MIN(md.last_price) as min_price,
 		       MAX(md.last_price) as max_price,
 		       AVG(md.last_price) as avg_price,
@@ -825,7 +825,7 @@ func (h *ArbitrageHandler) getArbitrageHistory(ctx context.Context, limit, offse
 	// For now, we'll simulate historical data since we don't have a dedicated arbitrage_history table
 	// In a real implementation, you would store detected opportunities in a separate table
 	query := `
-		SELECT 
+		SELECT
 			ROW_NUMBER() OVER (ORDER BY md.timestamp DESC) as id,
 			tp.symbol,
 			e.name as buy_exchange,

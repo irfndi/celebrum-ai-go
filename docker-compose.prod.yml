@@ -1,0 +1,161 @@
+# Docker Compose Production Configuration
+# This file is optimized for production deployments
+# Use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  telegram_bot_token:
+    file: ./secrets/telegram_bot_token.txt
+  telegram_webhook_secret:
+    file: ./secrets/telegram_webhook_secret.txt
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  redis:
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+      - ./configs/redis.prod.conf:/usr/local/etc/redis/redis.conf:ro
+    command: sh -c "exec redis-server /usr/local/etc/redis/redis.conf --requirepass $(cat /run/secrets/redis_password)"
+    secrets:
+      - redis_password
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $(cat /run/secrets/redis_password) ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ccxt-service:
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+    secrets:
+      - redis_password
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  app:
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - CONFIG_PATH=/app/configs/config.prod.yml
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${POSTGRES_USER}
+      - DATABASE_DBNAME=${POSTGRES_DB}
+      - DATABASE_PASSWORD_FILE=/run/secrets/postgres_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - TELEGRAM_BOT_TOKEN_FILE=/run/secrets/telegram_bot_token
+      - TELEGRAM_WEBHOOK_SECRET_FILE=/run/secrets/telegram_webhook_secret
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
+    secrets:
+      - postgres_password
+      - redis_password
+      - jwt_secret
+      - telegram_bot_token
+      - telegram_webhook_secret
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  nginx:
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl:/etc/nginx/ssl:ro
+    # Note: The 'deploy' key is used by Docker Swarm and ignored by docker-compose.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  celebrum-network:
+    name: celebrum-network
+    driver: bridge

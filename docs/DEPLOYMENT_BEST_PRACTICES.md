@@ -31,7 +31,7 @@ name: Build and Prepare Deployment
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, development]
   pull_request:
     branches: [main]
 
@@ -227,7 +227,7 @@ services:
     
   ccxt-service:
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-f", "http://ccxt-service:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3

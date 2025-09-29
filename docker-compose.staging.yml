@@ -1,0 +1,120 @@
+# Docker Compose Staging Configuration
+# This file is optimized for staging/testing environments
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-celebrum_staging}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    mem_limit: 512M
+    cpus: 1.0
+    networks:
+      - celebrum-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-celebrum_staging}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+      - ./configs/redis.staging.conf:/usr/local/etc/redis/redis.conf:ro
+    command: sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then exec redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\"; else exec redis-server /usr/local/etc/redis/redis.conf; fi"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    mem_limit: 256M
+    cpus: 0.5
+    networks:
+      - celebrum-network
+    healthcheck:
+      test: ["CMD-SHELL", "[ -z \"$$REDIS_PASSWORD\" ] && redis-cli ping || redis-cli -a \"$$REDIS_PASSWORD\" ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  ccxt-service:
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=staging
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+    mem_limit: 256M
+    cpus: 0.5
+    networks:
+      - celebrum-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  app:
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=staging
+      - CONFIG_PATH=/app/configs/config.staging.yml
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${POSTGRES_USER:-postgres}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_staging}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+    mem_limit: 512M
+    cpus: 1.0
+    networks:
+      - celebrum-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ccxt-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  nginx:
+    restart: unless-stopped
+    ports:
+      - "8080:80"  # Use port 8080 for staging to avoid conflicts
+    volumes:
+      - ./configs/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+    mem_limit: 128M
+    cpus: 0.25
+    networks:
+      - celebrum-network
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  celebrum-network:
+    name: celebrum-network
+    driver: bridge
