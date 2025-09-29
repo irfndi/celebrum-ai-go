@@ -100,6 +100,13 @@ const blacklistedExchanges = ['bitfinex2', 'bitmex'];
 // Initialize exchanges with tracing
 const exchanges = {};
 
+/**
+ * Initialize and populate the in-memory exchanges map from configured exchange definitions while respecting the blacklist.
+ *
+ * Attempts to instantiate each configured exchange (skipping blacklisted ones), stores successful instances in the `exchanges` object, and records initialization metrics on an OpenTelemetry span. Logs initialization summary and individual instantiation failures.
+ *
+ * @throws {Error} Re-throws any unexpected error that occurs during the initialization process.
+ */
 function initializeExchanges() {
   const span = tracer.startSpan('ccxt.exchanges.initialize', {
     kind: SpanKind.INTERNAL,
