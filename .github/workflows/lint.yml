@@ -31,4 +31,4 @@ jobs:
       run: make fmt-check
       # Don't fail CI for formatting; surface as warning only
       continue-on-error: true
-# Cache-busting comment
+# Force cache invalidation - 2025-09-29T10:40:00Z
