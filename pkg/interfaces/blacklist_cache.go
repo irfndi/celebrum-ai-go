@@ -283,7 +283,6 @@ type SymbolCacheStats struct {
 	Hits   int64 `json:"hits"`
 	Misses int64 `json:"misses"`
 	Sets   int64 `json:"sets"`
-	mu     sync.RWMutex
 }
 
 // SymbolCacheInterface defines the interface for symbol caching
