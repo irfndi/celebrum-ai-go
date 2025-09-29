@@ -41,13 +41,6 @@ function ensureTracesPath(url) {
   }
 }
 
-<<<<<<< HEAD
-function resolveOtlpTracesEndpoint(
-  otlpTracesEnv,
-  otlpBaseEnv,
-  defaultBaseUrl = "http://localhost:4318",
-) {
-=======
 /**
  * Selects the OTLP traces endpoint using environment-provided values with normalized fallbacks.
  *
@@ -57,7 +50,6 @@ function resolveOtlpTracesEndpoint(
  * @returns {string|null} The chosen OTLP traces endpoint URL, or `null` if all inputs are falsy.
  */
 function resolveOtlpTracesEndpoint(otlpTracesEnv, otlpBaseEnv, defaultBaseUrl = 'http://localhost:4318') {
->>>>>>> 47dcf0701519045878635a277800880c3ffecca4
   return (
     otlpTracesEnv ||
     ensureTracesPath(otlpBaseEnv) ||

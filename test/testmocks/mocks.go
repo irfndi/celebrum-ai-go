@@ -522,16 +522,6 @@ func (m *MockCacheAnalyticsService) RecordCacheMiss(category string) {
 	m.Called(category)
 }
 
-// MockSpotArbitrageCalculator mocks the spot arbitrage calculator
-type MockSpotArbitrageCalculator struct {
-	mock.Mock
-}
-
-func (m *MockSpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
-	args := m.Called(ctx, marketData)
-	return args.Get(0).([]models.ArbitrageOpportunity), args.Error(1)
-}
-
 func (m *MockSpotArbitrageCalculator) GetCalculatorStats() map[string]interface{} {
 	args := m.Called()
 	return args.Get(0).(map[string]interface{})

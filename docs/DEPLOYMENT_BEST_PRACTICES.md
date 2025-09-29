@@ -227,11 +227,7 @@ services:
     
   ccxt-service:
     healthcheck:
-<<<<<<< HEAD
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-=======
       test: ["CMD", "curl", "-f", "http://ccxt-service:3001/health"]
->>>>>>> 47dcf0701519045878635a277800880c3ffecca4
       interval: 30s
       timeout: 10s
       retries: 3
