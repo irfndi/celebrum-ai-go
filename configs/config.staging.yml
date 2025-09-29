@@ -25,7 +25,7 @@ database:
   host: postgres
   port: 5432
   user: ${POSTGRES_USER:-postgres}
-  password: ${POSTGRES_PASSWORD:-postgres}
+  password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
   dbname: ${POSTGRES_DB:-celebrum_staging}
   sslmode: disable
   max_open_conns: 20

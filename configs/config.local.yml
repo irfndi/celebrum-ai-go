@@ -29,7 +29,7 @@ database:
   host: localhost
   port: 5433
   user: postgres
-  password: postgres
+  password: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env file}
   dbname: celebrum_ai
   sslmode: disable
   max_open_conns: 25
