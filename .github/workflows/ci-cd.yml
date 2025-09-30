@@ -108,7 +108,7 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
           POSTGRES_DB: celebrum_test
         options: >-
           --health-cmd pg_isready
@@ -173,7 +173,7 @@ jobs:
 
       - name: Run CI/CD integration tests
         env:
-          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
+          DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
           RUN_TESTS: "true"
