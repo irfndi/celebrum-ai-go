@@ -106,6 +106,15 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || !github.event.inputs.skip_tests }}
     env:
       POSTGRES_TEST_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY || 'test_admin_api_key_for_ci' }}
+      DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}@localhost:5432/celebrum_test?sslmode=disable
+      REDIS_URL: redis://localhost:6379
+      TEST_REDIS_ADDR: localhost:6379
+      RUN_TESTS: "true"
+      RUN_SECURITY_SCAN: "true"
+      RUN_PERFORMANCE_TEST: "false"
+      CI_ENVIRONMENT: "test"
     services:
       postgres:
         image: postgres:15
@@ -165,7 +174,11 @@ jobs:
           go mod download
           cd ccxt-service && bun install --frozen-lockfile
 
-  
+      - name: Setup CI environment
+        run: |
+          cp .env.ci .env.test
+          echo "CI environment configured"
+
       - name: Run CI/CD integration tests
         env:
           DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
@@ -324,7 +337,6 @@ jobs:
       )
     environment:
       name: staging
-      url: https://staging.celebrum-ai.com
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -366,7 +378,6 @@ jobs:
       )
     environment:
       name: staging-binary
-      url: https://staging-binary.celebrum-ai.com
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
