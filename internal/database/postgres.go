@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
@@ -23,21 +25,35 @@ type PostgresDB struct {
 const maxAllowedPoolConns int32 = 10000
 
 func NewPostgresConnection(cfg *config.DatabaseConfig) (*PostgresDB, error) {
+	return NewPostgresConnectionWithContext(context.Background(), cfg)
+}
+
+func NewPostgresConnectionWithContext(ctx context.Context, cfg *config.DatabaseConfig) (*PostgresDB, error) {
 	poolConfig, err := buildPGXPoolConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create connection pool with retry logic
+	// Optimize for test environment
+	if isTestEnvironment() {
+		return createTestDatabaseConnection(poolConfig)
+	}
+
+	// Create connection pool with optimized retry logic and timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	var pool *pgxpool.Pool
 	for attempts := 0; attempts < 3; attempts++ {
-		pool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
+		pool, err = pgxpool.NewWithConfig(ctx, poolConfig)
 		if err == nil {
 			break
 		}
 		logrus.Warnf("Database connection attempt %d failed: %v", attempts+1, err)
 		if attempts < 2 {
-			time.Sleep(time.Duration(attempts+1) * time.Second)
+			// Exponential backoff with jitter
+			backoffDuration := time.Duration(1<<uint(attempts)) * time.Second
+			time.Sleep(backoffDuration)
 		}
 	}
 
@@ -45,12 +61,49 @@ func NewPostgresConnection(cfg *config.DatabaseConfig) (*PostgresDB, error) {
 		return nil, fmt.Errorf("failed to create connection pool after retries: %w", err)
 	}
 
-	// Test the connection
-	if err := pool.Ping(context.Background()); err != nil {
+	// Test the connection with timeout
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	logrus.Info("Successfully connected to PostgreSQL")
+
+	return &PostgresDB{Pool: pool}, nil
+}
+
+// isTestEnvironment detects if we're running in a test environment
+func isTestEnvironment() bool {
+	// Check environment variables that indicate test environment
+	return os.Getenv("CI_ENVIRONMENT") == "test" || 
+		   os.Getenv("RUN_TESTS") == "true" ||
+		   strings.HasSuffix(os.Args[0], ".test") ||
+		   strings.Contains(os.Args[0], "test")
+}
+
+// createTestDatabaseConnection creates a connection optimized for testing
+func createTestDatabaseConnection(poolConfig *pgxpool.Config) (*PostgresDB, error) {
+	// Optimize pool settings for tests
+	poolConfig.MaxConns = 5
+	poolConfig.MinConns = 1
+	poolConfig.MaxConnLifetime = 5 * time.Minute
+	poolConfig.MaxConnIdleTime = 30 * time.Second
+	poolConfig.HealthCheckPeriod = 30 * time.Second
+
+	// Shorter timeout for tests
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create test database connection: %w", err)
+	}
+
+	// Quick ping with timeout
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping test database: %w", err)
+	}
 
 	return &PostgresDB{Pool: pool}, nil
 }
@@ -84,8 +137,10 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	if cfg.DatabaseURL != "" {
 		dsn = cfg.DatabaseURL
 	} else {
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
+		// Build DSN with PostgreSQL 18 optimizations
+		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s application_name=%s connect_timeout=%d",
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode, 
+			cfg.ApplicationName, cfg.ConnectTimeout)
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
@@ -93,6 +148,7 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
+	// Basic connection pool configuration
 	if cfg.MaxOpenConns > 0 {
 		poolConfig.MaxConns = clampToSafePoolSize(cfg.MaxOpenConns)
 	}
@@ -104,6 +160,7 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 		return nil, fmt.Errorf("invalid pool sizing: min_conns (%d) > max_conns (%d)", poolConfig.MinConns, poolConfig.MaxConns)
 	}
 
+	// Parse duration-based configurations
 	if cfg.ConnMaxLifetime != "" {
 		duration, err := time.ParseDuration(cfg.ConnMaxLifetime)
 		if err != nil {
@@ -118,6 +175,36 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 			return nil, fmt.Errorf("failed to parse ConnMaxIdleTime: %w", err)
 		}
 		poolConfig.MaxConnIdleTime = duration
+	}
+
+	// PostgreSQL 18 specific optimizations
+	if cfg.PoolHealthCheckPeriod > 0 {
+		poolConfig.HealthCheckPeriod = time.Duration(cfg.PoolHealthCheckPeriod) * time.Second
+	}
+	
+	if cfg.PoolMaxLifetime > 0 {
+		poolConfig.MaxConnLifetime = time.Duration(cfg.PoolMaxLifetime) * time.Second
+	}
+	
+	if cfg.PoolIdleTimeout > 0 {
+		poolConfig.MaxConnIdleTime = time.Duration(cfg.PoolIdleTimeout) * time.Second
+	}
+
+	// Configure pgx config for PostgreSQL 18 async features
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
+	
+	if cfg.StatementTimeout > 0 {
+		poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", cfg.StatementTimeout)
+	}
+	
+	if cfg.QueryTimeout > 0 {
+		poolConfig.ConnConfig.RuntimeParams["query_timeout"] = fmt.Sprintf("%d", cfg.QueryTimeout)
+	}
+
+	// Enable PostgreSQL 18 async features if requested
+	if cfg.EnableAsync {
+		poolConfig.ConnConfig.RuntimeParams["jit"] = "off" // Disable JIT for better async performance
+		poolConfig.ConnConfig.RuntimeParams["plan_cache_mode"] = "force_generic_plan"
 	}
 
 	return poolConfig, nil

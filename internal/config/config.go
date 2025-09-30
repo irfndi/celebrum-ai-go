@@ -40,6 +40,18 @@ type DatabaseConfig struct {
 	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
 	ConnMaxLifetime string `mapstructure:"conn_max_lifetime"`
 	ConnMaxIdleTime string `mapstructure:"conn_max_idle_time"`
+	// PostgreSQL 18 specific optimizations
+	ApplicationName         string `mapstructure:"application_name"`
+	ConnectTimeout         int    `mapstructure:"connect_timeout"`
+	StatementTimeout       int    `mapstructure:"statement_timeout"`
+	QueryTimeout           int    `mapstructure:"query_timeout"`
+	PoolTimeout            int    `mapstructure:"pool_timeout"`
+	PoolHealthCheckPeriod  int    `mapstructure:"pool_health_check_period"`
+	PoolMaxLifetime        int    `mapstructure:"pool_max_lifetime"`
+	PoolIdleTimeout        int    `mapstructure:"pool_idle_timeout"`
+	EnableAsync            bool   `mapstructure:"enable_async"`
+	AsyncBatchSize         int    `mapstructure:"async_batch_size"`
+	AsyncConcurrency       int    `mapstructure:"async_concurrency"`
 }
 
 type RedisConfig struct {

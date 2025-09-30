@@ -184,9 +184,19 @@ jobs:
           DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
+          DATABASE_HOST: localhost
+          DATABASE_PASSWORD: ${{ env.POSTGRES_TEST_PASSWORD }}
+          DATABASE_DBNAME: celebrum_test
+          DATABASE_MAX_CONNS: 5
+          DATABASE_MAX_IDLE_CONNS: 2
+          DATABASE_CONNECT_TIMEOUT: 5
+          DATABASE_POOL_TIMEOUT: 5
+          DATABASE_HEALTH_CHECK_PERIOD: 10
+          RUN_TESTS: "true"
+          CI_ENVIRONMENT: "test"
         run: |
-          echo "Running Go unit tests..."
-          go test -v -race -coverprofile=coverage.out ./...
+          echo "Running Go unit tests with optimized database settings..."
+          go test -v -race -timeout=2m -coverprofile=coverage.out ./...
           go tool cover -html=coverage.out -o coverage.html
 
       - name: Run integration tests with PostgreSQL and Redis
@@ -194,12 +204,22 @@ jobs:
           DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
+          DATABASE_HOST: localhost
+          DATABASE_PASSWORD: ${{ env.POSTGRES_TEST_PASSWORD }}
+          DATABASE_DBNAME: celebrum_test
+          DATABASE_MAX_CONNS: 5
+          DATABASE_MAX_IDLE_CONNS: 2
+          DATABASE_CONNECT_TIMEOUT: 5
+          DATABASE_POOL_TIMEOUT: 5
+          DATABASE_HEALTH_CHECK_PERIOD: 10
+          RUN_TESTS: "true"
+          CI_ENVIRONMENT: "test"
         run: |
-          echo "Running integration tests..."
-          # Test database connectivity with timeout
-          timeout 30s go test -v -tags=integration ./internal/database/... || echo "Database tests timed out or failed (non-critical)"
-          # Test Redis connectivity with timeout  
-          timeout 30s go test -v -tags=integration ./internal/services/... || echo "Redis tests timed out or failed (non-critical)"
+          echo "Running integration tests with optimized database settings..."
+          # Test database connectivity with shorter timeout
+          timeout 20s go test -v -timeout=1m -tags=integration ./internal/database/... || echo "Database tests timed out or failed (non-critical)"
+          # Test Redis connectivity with shorter timeout
+          timeout 20s go test -v -timeout=1m -tags=integration ./internal/services/... || echo "Redis tests timed out or failed (non-critical)"
 
       - name: Coverage Check (non-blocking)
         run: |

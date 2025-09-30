@@ -143,6 +143,31 @@ func TestNewPostgresConnection_InvalidConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse database config")
 }
 
+// Test optimized database connection for test environment
+func TestNewPostgresConnection_TestEnvironment(t *testing.T) {
+	// Set test environment
+	t.Setenv("CI_ENVIRONMENT", "test")
+	t.Setenv("RUN_TESTS", "true")
+	
+	// Test with valid config but using test optimizations
+	cfg := &config.DatabaseConfig{
+		Host:     "localhost",
+		Port:     5432,
+		User:     "test",
+		Password: "test",
+		DBName:   "test",
+		SSLMode:  "disable",
+	}
+
+	// This should use the optimized test connection path and fail quickly
+	db, err := NewPostgresConnection(cfg)
+	// We expect this to fail gracefully without long timeouts due to no database running
+	assert.Error(t, err)
+	assert.Nil(t, db)
+	// Should fail quickly with connection error, not timeout
+	assert.Contains(t, err.Error(), "failed to connect")
+}
+
 func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
 	// Test with valid basic config but invalid duration strings
 	cfg := &config.DatabaseConfig{
