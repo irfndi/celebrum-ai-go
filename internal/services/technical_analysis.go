@@ -170,11 +170,11 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 		dataErr := fmt.Errorf("insufficient price data: need at least 50 points, got %d", len(priceData.Close))
 		// Log insufficient data error with structured logging
 		tas.logger.WithFields(logrus.Fields{
-			"symbol":           symbol,
-			"exchange":         exchange,
-			"data_points":       len(priceData.Close),
-			"required_points":   50,
-			"operation":        "technical_analysis",
+			"symbol":          symbol,
+			"exchange":        exchange,
+			"data_points":     len(priceData.Close),
+			"required_points": 50,
+			"operation":       "technical_analysis",
 		}).Warn("Insufficient price data for technical analysis")
 		return nil, dataErr
 	}
@@ -183,7 +183,7 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 	tas.logger.WithFields(logrus.Fields{
 		"symbol":      symbol,
 		"exchange":    exchange,
-		"data_points":  len(priceData.Close),
+		"data_points": len(priceData.Close),
 		"operation":   "technical_analysis",
 	}).Debug("Successfully fetched price data")
 
@@ -199,10 +199,10 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 	if calcErr != nil {
 		// Log indicator calculation error with structured logging
 		tas.logger.WithFields(logrus.Fields{
-			"symbol":      symbol,
-			"exchange":    exchange,
-			"error":       calcErr.Error(),
-			"operation":   "technical_analysis",
+			"symbol":    symbol,
+			"exchange":  exchange,
+			"error":     calcErr.Error(),
+			"operation": "technical_analysis",
 		}).Error("Failed to calculate technical indicators")
 		return nil, fmt.Errorf("failed to calculate indicators: %w", calcErr)
 	}
@@ -235,7 +235,7 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.Snapshot, config *IndicatorConfig) []*IndicatorResult {
 	// Log indicator calculation start with structured logging
 	tas.logger.WithFields(logrus.Fields{
-		"snapshots":  len(snapshots),
+		"snapshots": len(snapshots),
 		"operation": "calculate_indicators",
 	}).Debug("Starting technical indicator calculations")
 
@@ -300,7 +300,7 @@ func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.S
 	// Log indicator calculation completion with structured logging
 	tas.logger.WithFields(logrus.Fields{
 		"indicators_count": len(indicators),
-		"operation":       "calculate_indicators",
+		"operation":        "calculate_indicators",
 	}).Debug("Technical indicator calculations completed")
 
 	return indicators

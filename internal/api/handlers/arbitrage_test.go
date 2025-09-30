@@ -101,7 +101,7 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 		// This test documents current behavior but should be skipped
 		// since it doesn't actually test stale data filtering functionality
 		t.Skip("Implementation doesn't filter stale data yet - test documents current behavior only")
-		
+
 		oldTime := time.Now().Add(-10 * time.Minute)
 		exchanges := map[string]struct {
 			price     float64
@@ -1215,9 +1215,9 @@ func TestArbitrageHandler_SendArbitrageNotifications_NilService(t *testing.T) {
 		}
 
 		// Should not panic when notification service is nil
-	assert.NotPanics(t, func() {
-		handler.sendArbitrageNotifications(opportunities)
-	}, "sendArbitrageNotifications should not panic when notification service is nil")
+		assert.NotPanics(t, func() {
+			handler.sendArbitrageNotifications(opportunities)
+		}, "sendArbitrageNotifications should not panic when notification service is nil")
 	})
 }
 

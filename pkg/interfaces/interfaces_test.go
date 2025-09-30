@@ -12,7 +12,7 @@ func TestConfigDefaults(t *testing.T) {
 	config, err := Load()
 	assert.NoError(t, err)
 	assert.NotNil(t, config)
-	
+
 	// Test some default values
 	assert.Equal(t, "development", config.Environment)
 	assert.Equal(t, "info", config.LogLevel)
@@ -26,7 +26,7 @@ func TestBlacklistCacheEntry(t *testing.T) {
 		Reason:    "Test blacklist",
 		CreatedAt: time.Now(),
 	}
-	
+
 	assert.Equal(t, "TEST/USDT", entry.Symbol)
 	assert.Equal(t, "Test blacklist", entry.Reason)
 	assert.False(t, entry.CreatedAt.IsZero())
@@ -41,7 +41,7 @@ func TestExchangeBlacklistEntry(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	
+
 	assert.Equal(t, int64(1), entry.ID)
 	assert.Equal(t, "test_exchange", entry.ExchangeName)
 	assert.Equal(t, "Test reason", entry.Reason)
@@ -51,10 +51,10 @@ func TestSymbolCacheEntry(t *testing.T) {
 	// Test SymbolCacheEntry struct
 	entry := SymbolCacheEntry{
 		Symbols:   []string{"BTC/USDT", "ETH/USDT"},
-		CachedAt: time.Now(),
+		CachedAt:  time.Now(),
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
-	
+
 	assert.Len(t, entry.Symbols, 2)
 	assert.Equal(t, "BTC/USDT", entry.Symbols[0])
 	assert.Equal(t, "ETH/USDT", entry.Symbols[1])
@@ -71,7 +71,7 @@ func TestBlacklistCacheStats(t *testing.T) {
 		Misses:         20,
 		Adds:           15,
 	}
-	
+
 	assert.Equal(t, int64(10), stats.TotalEntries)
 	assert.Equal(t, int64(2), stats.ExpiredEntries)
 	assert.Equal(t, int64(100), stats.Hits)
@@ -86,7 +86,7 @@ func TestSymbolCacheStats(t *testing.T) {
 		Misses: 10,
 		Sets:   25,
 	}
-	
+
 	assert.Equal(t, int64(50), stats.Hits)
 	assert.Equal(t, int64(10), stats.Misses)
 	assert.Equal(t, int64(25), stats.Sets)
