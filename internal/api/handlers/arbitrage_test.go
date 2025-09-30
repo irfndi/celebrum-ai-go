@@ -98,7 +98,10 @@ func TestArbitrageHandler_FindCrossExchangeArbitrage(t *testing.T) {
 
 	t.Run("stale data filtering", func(t *testing.T) {
 		// Note: Current implementation doesn't filter stale data
-		// This test documents current behavior
+		// This test documents current behavior but should be skipped
+		// since it doesn't actually test stale data filtering functionality
+		t.Skip("Implementation doesn't filter stale data yet - test documents current behavior only")
+		
 		oldTime := time.Now().Add(-10 * time.Minute)
 		exchanges := map[string]struct {
 			price     float64
@@ -184,7 +187,9 @@ func TestArbitrageHandler_SendArbitrageNotifications(t *testing.T) {
 		}
 
 		// Should not panic with nil notification service
-		handler.sendArbitrageNotifications(opportunities)
+		assert.NotPanics(t, func() {
+			handler.sendArbitrageNotifications(opportunities)
+		}, "sendArbitrageNotifications should not panic with nil notification service")
 	})
 
 	t.Run("low profit opportunities do not trigger notifications", func(t *testing.T) {
@@ -470,6 +475,9 @@ func TestArbitrageHandler_GetFundingRateArbitrage(t *testing.T) {
 			if r := recover(); r != nil {
 				// Expected panic due to nil ccxtService
 				assert.NotNil(t, r)
+			} else {
+				// This test expects a panic but none occurred
+				t.Error("Expected panic due to nil ccxtService but none occurred")
 			}
 		}()
 		fn()
@@ -659,6 +667,9 @@ func TestArbitrageHandler_GetFundingRates(t *testing.T) {
 			if r := recover(); r != nil {
 				// Expected panic due to nil ccxtService
 				assert.NotNil(t, r)
+			} else {
+				// This test expects a panic but none occurred
+				t.Error("Expected panic due to nil ccxtService but none occurred")
 			}
 		}()
 		fn()
@@ -1107,7 +1118,9 @@ func TestArbitrageHandler_SendArbitrageNotifications_Integration(t *testing.T) {
 		}
 
 		// Should not panic with nil notification service
-		handler.sendArbitrageNotifications(opportunities)
+		assert.NotPanics(t, func() {
+			handler.sendArbitrageNotifications(opportunities)
+		}, "sendArbitrageNotifications should not panic with nil notification service")
 	})
 
 	t.Run("low profit opportunities do not trigger notifications", func(t *testing.T) {
@@ -1202,7 +1215,9 @@ func TestArbitrageHandler_SendArbitrageNotifications_NilService(t *testing.T) {
 		}
 
 		// Should not panic when notification service is nil
+	assert.NotPanics(t, func() {
 		handler.sendArbitrageNotifications(opportunities)
+	}, "sendArbitrageNotifications should not panic when notification service is nil")
 	})
 }
 

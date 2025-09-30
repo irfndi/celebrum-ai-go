@@ -30,6 +30,7 @@ func TestNewAdminMiddleware(t *testing.T) {
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
+		t.Skip("Refactor NewAdminMiddleware to return an error from a validate() helper so we can assert failure without log.Fatal")
 	})
 
 	t.Run("with short key validation", func(t *testing.T) {
@@ -39,6 +40,7 @@ func TestNewAdminMiddleware(t *testing.T) {
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
+		t.Skip("Refactor NewAdminMiddleware to return an error from a validate() helper so we can assert failure without log.Fatal")
 	})
 
 	t.Run("with exactly 32 character key", func(t *testing.T) {

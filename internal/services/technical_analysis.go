@@ -128,8 +128,12 @@ func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfi
 
 // AnalyzeSymbol performs comprehensive technical analysis on a symbol
 func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, exchange string, config *IndicatorConfig) (*TechnicalAnalysisResult, error) {
-	// Stub logging for telemetry
-	_ = fmt.Sprintf("Technical analysis: symbol=%s, exchange=%s", symbol, exchange)
+	// Log analysis start with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":    symbol,
+		"exchange":  exchange,
+		"operation": "technical_analysis_start",
+	}).Debug("Starting technical analysis calculation")
 
 	// Register operation with resource manager
 	operationID := fmt.Sprintf("technical_analysis_%s_%s_%d", symbol, exchange, time.Now().UnixNano())
@@ -164,13 +168,24 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 
 	if len(priceData.Close) < 50 {
 		dataErr := fmt.Errorf("insufficient price data: need at least 50 points, got %d", len(priceData.Close))
-		// Stub logging for error
-		_ = fmt.Sprintf("Insufficient price data: %v", dataErr)
+		// Log insufficient data error with structured logging
+		tas.logger.WithFields(logrus.Fields{
+			"symbol":           symbol,
+			"exchange":         exchange,
+			"data_points":       len(priceData.Close),
+			"required_points":   50,
+			"operation":        "technical_analysis",
+		}).Warn("Insufficient price data for technical analysis")
 		return nil, dataErr
 	}
 
-	// Stub logging for price data
-	_ = fmt.Sprintf("Price data points: %d", len(priceData.Close))
+	// Log price data summary with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":      symbol,
+		"exchange":    exchange,
+		"data_points":  len(priceData.Close),
+		"operation":   "technical_analysis",
+	}).Debug("Successfully fetched price data")
 
 	// Convert to asset snapshots for cinar/indicator
 	snapshots := tas.convertToSnapshots(priceData)
@@ -182,17 +197,28 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 		return nil
 	})
 	if calcErr != nil {
-		// Stub logging for error
-		_ = fmt.Sprintf("Failed to calculate indicators: %v", calcErr)
+		// Log indicator calculation error with structured logging
+		tas.logger.WithFields(logrus.Fields{
+			"symbol":      symbol,
+			"exchange":    exchange,
+			"error":       calcErr.Error(),
+			"operation":   "technical_analysis",
+		}).Error("Failed to calculate technical indicators")
 		return nil, fmt.Errorf("failed to calculate indicators: %w", calcErr)
 	}
 
 	// Determine overall signal and confidence
 	overallSignal, confidence := tas.determineOverallSignal(indicators)
 
-	// Stub logging for analysis results
-	_ = fmt.Sprintf("Analysis completed: indicators=%d, signal=%s, confidence=%f",
-		len(indicators), overallSignal, confidence.InexactFloat64())
+	// Log analysis completion with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":         symbol,
+		"exchange":       exchange,
+		"indicators":     len(indicators),
+		"overall_signal": overallSignal,
+		"confidence":     confidence.InexactFloat64(),
+		"operation":      "technical_analysis",
+	}).Info("Technical analysis completed successfully")
 
 	return &TechnicalAnalysisResult{
 		Symbol:        symbol,
@@ -207,8 +233,11 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 
 // calculateAllIndicators computes all configured technical indicators
 func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.Snapshot, config *IndicatorConfig) []*IndicatorResult {
-	// Stub logging for indicator calculation
-	_ = fmt.Sprintf("Calculating indicators: snapshots=%d", len(snapshots))
+	// Log indicator calculation start with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"snapshots":  len(snapshots),
+		"operation": "calculate_indicators",
+	}).Debug("Starting technical indicator calculations")
 
 	var indicators []*IndicatorResult
 
@@ -268,8 +297,11 @@ func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.S
 		}
 	}
 
-	// Stub logging for calculation results
-	_ = fmt.Sprintf("Indicators calculated: total=%d", len(indicators))
+	// Log indicator calculation completion with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"indicators_count": len(indicators),
+		"operation":       "calculate_indicators",
+	}).Debug("Technical indicator calculations completed")
 
 	return indicators
 }
