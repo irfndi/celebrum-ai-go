@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1050,7 +1051,10 @@ func TestNewPostgresConnection_ValidDatabaseURL(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t, 
+		strings.Contains(err.Error(), "failed to ping database") || 
+		strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool configuration
@@ -1340,7 +1344,10 @@ func TestNewPostgresConnection_MinimalConfig(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t, 
+		strings.Contains(err.Error(), "failed to ping database") || 
+		strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool edge cases
@@ -1551,7 +1558,10 @@ func TestNewPostgresConnection_ExcessivePoolValues(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t, 
+		strings.Contains(err.Error(), "failed to ping database") || 
+		strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with invalid duration formats

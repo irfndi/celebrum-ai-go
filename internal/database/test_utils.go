@@ -55,7 +55,6 @@ func (m *MockPool) Acquire(ctx context.Context) (*pgxpool.Conn, error) {
 type MockPostgresDB struct {
 	Pool *MockPool
 	data map[string]map[string]interface{}
-	mu   sync.RWMutex
 }
 
 // NewMockPostgresDB creates a new mock database for testing
@@ -128,10 +127,7 @@ func (m *MockRows) FieldDescriptions() []pgconn.FieldDescription {
 
 func (m *MockRows) Next() bool {
 	m.current++
-	if m.current >= len(m.values) {
-		return false
-	}
-	return true
+	return m.current < len(m.values)
 }
 
 func (m *MockRows) Values() ([]interface{}, error) {
@@ -215,7 +211,7 @@ func (m *MockRow) Scan(dest ...interface{}) error {
 }
 
 // CreateTestDatabaseConnection creates a fast mock connection for testing
-func CreateTestDatabaseConnection(t *testing.T) *PostgresDB {
+func CreateTestDatabaseConnection(t *testing.T) *MockDatabase {
 	t.Helper()
 	
 	// Create a mock pool
@@ -226,8 +222,8 @@ func CreateTestDatabaseConnection(t *testing.T) *PostgresDB {
 	mockPool.On("Close").Return()
 	
 	// Return the mock database
-	return &PostgresDB{
-		Pool: nil, // We use nil pool to avoid real connections
+	return &MockDatabase{
+		Pool: nil,
 	}
 }
 
@@ -235,7 +231,11 @@ func CreateTestDatabaseConnection(t *testing.T) *PostgresDB {
 type MockRedisClient struct {
 	mock.Mock
 	data map[string]interface{}
-	mu   sync.RWMutex
+}
+
+// MockDatabase provides a mock database interface for testing
+type MockDatabase struct {
+	Pool *MockPool
 }
 
 // NewMockRedisClient creates a new mock Redis client for testing
@@ -303,11 +303,8 @@ func (opt *TestConnectionOptimizer) Cleanup() {
 	
 	// Close all connections
 	for name, conn := range opt.connections {
-		switch c := conn.(type) {
-		case *PostgresDB:
-			c.Close()
-		case interface{ Close() }:
-			c.Close()
+		if closer, ok := conn.(interface{ Close() }); ok {
+			closer.Close()
 		}
 		delete(opt.connections, name)
 	}
