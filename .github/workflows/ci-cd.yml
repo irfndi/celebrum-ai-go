@@ -163,9 +163,17 @@ jobs:
           go mod download
           cd ccxt-service && bun install --frozen-lockfile
 
+      - name: Set test database password
+        run: |
+          if [ -z "${{ secrets.POSTGRES_TEST_PASSWORD }}" ]; then
+            echo "POSTGRES_TEST_PASSWORD=postgres_test_password" >> $GITHUB_ENV
+          else
+            echo "POSTGRES_TEST_PASSWORD=${{ secrets.POSTGRES_TEST_PASSWORD }}" >> $GITHUB_ENV
+          fi
+
       - name: Run CI/CD integration tests
         env:
-          DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
+          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
           RUN_TESTS: "true"
