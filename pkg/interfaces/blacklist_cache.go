@@ -180,17 +180,19 @@ func setDefaults() {
 
 	// Server
 	viper.SetDefault("server.port", 8080)
+	// Use environment variables for allowed origins in production
 	viper.SetDefault("server.allowed_origins", []string{"http://localhost:3000"})
 
 	// Set database defaults
+	// Use environment variables for production database configuration
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
-	// Remove hardcoded default password for security
+	// Remove hardcoded default password for security - use $DATABASE_PASSWORD environment variable
 	// viper.SetDefault("database.password", "postgres")
 	viper.SetDefault("database.dbname", "celebrum_ai")
 	viper.SetDefault("database.sslmode", "disable")
-	// Remove hardcoded database URL for security
+	// Remove hardcoded database URL for security - use $DATABASE_URL environment variable
 	// viper.SetDefault("database.database_url", "postgres://postgres:password@localhost:5432/celebrum_ai?sslmode=disable")
 	viper.SetDefault("database.database_url", "")
 	viper.SetDefault("database.max_open_conns", 25)
@@ -199,19 +201,21 @@ func setDefaults() {
 	viper.SetDefault("database.conn_max_idle_time", "60s")
 
 	// Redis
+	// Use environment variables for production Redis configuration
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
-	// Remove hardcoded Redis password for security
+	// Remove hardcoded Redis password for security - use $REDIS_PASSWORD environment variable
 	// viper.SetDefault("redis.password", "your_redis_password")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT
+	// Use environment variables for production CCXT service configuration
 	viper.SetDefault("ccxt.service_url", "http://localhost:3000")
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram
-	// Remove hardcoded Telegram bot token for security
+	// Remove hardcoded Telegram bot token for security - use $TELEGRAM_BOT_TOKEN environment variable
 	// viper.SetDefault("telegram.bot_token", "your_telegram_bot_token")
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
