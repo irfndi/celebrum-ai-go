@@ -124,32 +124,45 @@ func (c *CacheAnalyticsService) GetMetrics(ctx context.Context) (*CacheMetrics, 
 	}
 	c.mu.RUnlock()
 
+	metrics := &CacheMetrics{
+		ByCategory: allStats,
+		RedisInfo:  make(map[string]string),
+	}
+
+	// Guard against nil Redis client
+	if c.redisClient == nil {
+		// Return metrics with default values when Redis is unavailable
+		if overall, exists := allStats["overall"]; exists {
+			metrics.Overall = overall
+		}
+		return metrics, nil
+	}
+
 	// Get Redis info
 	redisInfo, err := c.redisClient.Info(ctx, "memory", "clients", "keyspace").Result()
 	if err != nil {
-		return nil, err
+		// Return metrics with available stats if Redis info fails
+		if overall, exists := allStats["overall"]; exists {
+			metrics.Overall = overall
+		}
+		return metrics, nil
 	}
 
 	// Parse Redis info
 	infoMap := c.parseRedisInfo(redisInfo)
+	metrics.RedisInfo = infoMap
 
-	// Get memory usage
+	// Get memory usage (ignore errors to provide partial metrics)
 	memoryUsage, _ := c.redisClient.MemoryUsage(ctx, "*").Result()
+	metrics.MemoryUsage = memoryUsage
 
-	// Get connected clients
+	// Get connected clients (ignore errors to provide partial metrics)
 	clientList, _ := c.redisClient.ClientList(ctx).Result()
-	connectedClients := int64(len(clientList))
+	metrics.ConnectedClients = int64(len(clientList))
 
-	// Get key count
+	// Get key count (ignore errors to provide partial metrics)
 	keyCount, _ := c.redisClient.DBSize(ctx).Result()
-
-	metrics := &CacheMetrics{
-		ByCategory:       allStats,
-		RedisInfo:        infoMap,
-		MemoryUsage:      memoryUsage,
-		ConnectedClients: connectedClients,
-		KeyCount:         keyCount,
-	}
+	metrics.KeyCount = keyCount
 
 	// Set overall stats
 	if overall, exists := allStats["overall"]; exists {
@@ -210,12 +223,17 @@ func (c *CacheAnalyticsService) StartPeriodicReporting(ctx context.Context, inte
 
 // reportStats reports current stats to Redis for persistence
 func (c *CacheAnalyticsService) reportStats(ctx context.Context) {
+	// Guard against nil Redis client
+	if c.redisClient == nil {
+		return
+	}
+
 	allStats := c.GetAllStats()
 	statsJSON, err := json.Marshal(allStats)
 	if err != nil {
 		return
 	}
 
-	// Store stats in Redis with 24 hour TTL
+	// Store stats in Redis with 24 hour TTL (ignore errors)
 	c.redisClient.Set(ctx, "cache:analytics:stats", statsJSON, 24*time.Hour)
 }
