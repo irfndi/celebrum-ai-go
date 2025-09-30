@@ -105,7 +105,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' || !github.event.inputs.skip_tests }}
     env:
-      POSTGRES_TEST_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY || 'test_admin_api_key_for_ci' }}
       DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}@localhost:5432/celebrum_test?sslmode=disable
@@ -119,7 +118,7 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_TEST_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB: celebrum_test
         options: >-
           --health-cmd pg_isready
@@ -181,11 +180,11 @@ jobs:
 
       - name: Run unit tests
         env:
-          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
+          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
           DATABASE_HOST: localhost
-          DATABASE_PASSWORD: ${{ env.POSTGRES_TEST_PASSWORD }}
+          DATABASE_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           DATABASE_DBNAME: celebrum_test
           DATABASE_MAX_CONNS: 5
           DATABASE_MAX_IDLE_CONNS: 2
@@ -201,11 +200,11 @@ jobs:
 
       - name: Run integration tests with PostgreSQL and Redis
         env:
-          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_TEST_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
+          DATABASE_URL: postgres://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/celebrum_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
           TEST_REDIS_ADDR: localhost:6379
           DATABASE_HOST: localhost
-          DATABASE_PASSWORD: ${{ env.POSTGRES_TEST_PASSWORD }}
+          DATABASE_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           DATABASE_DBNAME: celebrum_test
           DATABASE_MAX_CONNS: 5
           DATABASE_MAX_IDLE_CONNS: 2

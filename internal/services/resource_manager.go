@@ -273,7 +273,9 @@ func (rm *ResourceManager) GetSystemStats() map[string]interface{} {
 
 // startMonitoring starts the background monitoring goroutine
 func (rm *ResourceManager) startMonitoring() {
+	rm.mu.RLock()
 	ticker := time.NewTicker(rm.cleanupInterval)
+	rm.mu.RUnlock()
 	defer ticker.Stop()
 
 	leakDetectionTicker := time.NewTicker(5 * time.Minute)

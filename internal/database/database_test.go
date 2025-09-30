@@ -1009,15 +1009,15 @@ func TestNewRedisConnection_UnreachableHost(t *testing.T) {
 // Test NewRedisConnectionWithRetry with nil error recovery manager
 func TestNewRedisConnectionWithRetry_NilErrorRecovery(t *testing.T) {
 	cfg := config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
+		Host:     "invalid-host-that-does-not-exist",
+		Port:     9999,
 		Password: "",
 		DB:       0,
 	}
 
 	// Test with nil error recovery manager (should use fallback)
 	client, err := NewRedisConnectionWithRetry(cfg, nil)
-	// We expect this to fail because we don't have Redis running
+	// We expect this to fail because we're using an invalid host
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")

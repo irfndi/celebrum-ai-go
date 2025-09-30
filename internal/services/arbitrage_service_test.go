@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -644,9 +645,9 @@ func TestArbitrageService_Start_MutexBehavior(t *testing.T) {
 
 	// Test concurrent access to Start method
 	var wg sync.WaitGroup
-	startCount := 0
-	successCount := 0
-	errorCount := 0
+	var startCount int64
+	var successCount int64
+	var errorCount int64
 
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -655,21 +656,21 @@ func TestArbitrageService_Start_MutexBehavior(t *testing.T) {
 
 			err := service.Start()
 			if err == nil {
-				successCount++
+				atomic.AddInt64(&successCount, 1)
 			} else {
-				errorCount++
+				atomic.AddInt64(&errorCount, 1)
 			}
-			startCount++
+			atomic.AddInt64(&startCount, 1)
 		}()
 	}
 
 	wg.Wait()
 
 	// Since service is disabled, Start should succeed but not start the goroutine
-	assert.Equal(t, 10, startCount, "All Start calls should complete")
+	assert.Equal(t, int64(10), atomic.LoadInt64(&startCount), "All Start calls should complete")
 	// Since the service is disabled, all calls should succeed
-	assert.Equal(t, 10, successCount, "All Start calls should succeed when disabled")
-	assert.Equal(t, 0, errorCount, "No errors should occur when disabled")
+	assert.Equal(t, int64(10), atomic.LoadInt64(&successCount), "All Start calls should succeed when disabled")
+	assert.Equal(t, int64(0), atomic.LoadInt64(&errorCount), "No errors should occur when disabled")
 
 	// Verify only one Start operation actually marked the service as running
 	assert.False(t, service.IsRunning(), "Service should not be running when disabled")
