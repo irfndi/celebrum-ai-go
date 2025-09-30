@@ -50,6 +50,17 @@ init_logging() {
     log "Project root: $PROJECT_ROOT"
 }
 
+# Docker compose command compatibility
+get_docker_compose_cmd() {
+    if command -v "docker" &> /dev/null && docker compose version &> /dev/null 2>&1; then
+        echo "docker compose"
+    elif command -v "docker-compose" &> /dev/null; then
+        echo "docker-compose"
+    else
+        echo "docker compose" # Default to modern syntax
+    fi
+}
+
 # Check prerequisites
 check_prerequisites() {
     log "Checking testing prerequisites..."
@@ -57,11 +68,17 @@ check_prerequisites() {
     local missing_tools=()
     
     # Check required tools
-    for tool in docker docker-compose curl jq; do
+    for tool in docker curl jq; do
         if ! command -v "$tool" &> /dev/null; then
             missing_tools+=("$tool")
         fi
     done
+    
+    # Check docker compose availability
+    local docker_compose_cmd=$(get_docker_compose_cmd)
+    if ! $docker_compose_cmd version &> /dev/null 2>&1; then
+        missing_tools+=("docker compose")
+    fi
     
     if [ ${#missing_tools[@]} -ne 0 ]; then
         log_error "Missing required tools: ${missing_tools[*]}"
@@ -112,12 +129,13 @@ setup_test_environment() {
 # Build test services
 build_test_services() {
     local test_type="${1:-full}"
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     log "Building services for $test_type testing..."
     
     case "$test_type" in
         "ci")
-            if docker-compose -f "${COMPOSE_FILE:-docker-compose.ci.yml}" build --no-cache; then
+            if $docker_compose_cmd -f "${COMPOSE_FILE:-docker-compose.ci.yml}" build --no-cache; then
                 log_success "CI services built successfully"
             else
                 log_error "Failed to build CI services"
@@ -128,7 +146,7 @@ build_test_services() {
             # Build only core services
             local core_services=("postgres" "redis" "app")
             for service in "${core_services[@]}"; do
-                if docker-compose build "$service"; then
+                if $docker_compose_cmd build "$service"; then
                     log_success "Service $service built successfully"
                 else
                     log_error "Failed to build service: $service"
@@ -137,7 +155,7 @@ build_test_services() {
             done
             ;;
         "full")
-            if docker-compose build; then
+            if $docker_compose_cmd build; then
                 log_success "All services built successfully"
             else
                 log_error "Failed to build services"
@@ -150,12 +168,13 @@ build_test_services() {
 # Start test services
 start_test_services() {
     local test_type="${1:-full}"
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     log "Starting services for $test_type testing..."
     
     case "$test_type" in
         "ci")
-            if docker-compose -f "${COMPOSE_FILE:-docker-compose.ci.yml}" up -d; then
+            if $docker_compose_cmd -f "${COMPOSE_FILE:-docker-compose.ci.yml}" up -d; then
                 log_success "CI services started"
             else
                 log_error "Failed to start CI services"
@@ -165,7 +184,7 @@ start_test_services() {
         "core")
             # Start only core services
             local core_services=("postgres" "redis" "app")
-            if docker-compose up -d "${core_services[@]}"; then
+            if $docker_compose_cmd up -d "${core_services[@]}"; then
                 log_success "Core services started"
             else
                 log_error "Failed to start core services"
@@ -188,19 +207,20 @@ start_test_services() {
 wait_for_services() {
     local test_type="${1:-full}"
     local timeout="${2:-$HEALTH_CHECK_TIMEOUT}"
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     log "Waiting for services to become healthy (timeout: ${timeout}s)..."
     
     local services_to_check=()
     case "$test_type" in
         "ci")
-            services_to_check=($(docker-compose -f "${COMPOSE_FILE:-docker-compose.ci.yml}" config --services))
+            services_to_check=($($docker_compose_cmd -f "${COMPOSE_FILE:-docker-compose.ci.yml}" config --services))
             ;;
         "core")
             services_to_check=("postgres" "redis" "app")
             ;;
         "full")
-            services_to_check=($(docker-compose config --services))
+            services_to_check=($($docker_compose_cmd config --services))
             ;;
     esac
     
@@ -211,11 +231,11 @@ wait_for_services() {
         all_healthy=true
         
         for service in "${services_to_check[@]}"; do
-            local status=$(docker-compose ps -q "$service" | xargs -r docker inspect --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+            local status=$($docker_compose_cmd ps -q "$service" | xargs -r docker inspect --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
             
             if [ "$status" != "healthy" ]; then
                 # Check if service is running without health check
-                local running=$(docker-compose ps "$service" | grep -c "Up" || echo "0")
+                local running=$($docker_compose_cmd ps "$service" | grep -c "Up" || echo "0")
                 if [ "$running" -eq 0 ]; then
                     all_healthy=false
                     break
@@ -240,14 +260,16 @@ wait_for_services() {
 
 # Show service status
 show_service_status() {
+    local docker_compose_cmd=$(get_docker_compose_cmd)
+    
     log "Current service status:"
-    docker-compose ps
+    $docker_compose_cmd ps
     
     log "Service logs (last 20 lines each):"
-    local services=($(docker-compose config --services))
+    local services=($($docker_compose_cmd config --services))
     for service in "${services[@]}"; do
         echo "\n=== $service logs ==="
-        docker-compose logs --tail=20 "$service" 2>/dev/null || echo "No logs available for $service"
+        $docker_compose_cmd logs --tail=20 "$service" 2>/dev/null || echo "No logs available for $service"
     done
 }
 
@@ -283,9 +305,10 @@ test_application_health() {
 # Test database connectivity
 test_database_connectivity() {
     log "Testing database connectivity..."
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     # Test PostgreSQL
-    if docker-compose exec -T postgres pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
+    if $docker_compose_cmd exec -T postgres pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
         log_success "PostgreSQL is ready"
     else
         log_error "PostgreSQL is not ready"
@@ -306,9 +329,10 @@ test_database_connectivity() {
 # Test Redis connectivity
 test_redis_connectivity() {
     log "Testing Redis connectivity..."
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     # Test Redis directly
-    if docker-compose exec -T redis redis-cli ping | grep -q PONG; then
+    if $docker_compose_cmd exec -T redis redis-cli ping | grep -q PONG; then
         log_success "Redis is responding"
     else
         log_error "Redis is not responding"
@@ -365,9 +389,10 @@ test_api_endpoints() {
 # Test CCXT service
 test_ccxt_service() {
     log "Testing CCXT service..."
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     # Check if CCXT service is running
-    if docker-compose ps ccxt | grep -q "Up"; then
+    if $docker_compose_cmd ps ccxt | grep -q "Up"; then
         log_success "CCXT service is running"
         
         # Test CCXT endpoints if available
@@ -464,20 +489,21 @@ run_comprehensive_tests() {
 # Cleanup test environment
 cleanup_test_environment() {
     local cleanup_type="${1:-stop}"
+    local docker_compose_cmd=$(get_docker_compose_cmd)
     
     log "Cleaning up test environment ($cleanup_type)..."
     
     case "$cleanup_type" in
         "stop")
-            docker-compose stop
+            $docker_compose_cmd stop
             log_success "Services stopped"
             ;;
         "down")
-            docker-compose down
+            $docker_compose_cmd down
             log_success "Services stopped and removed"
             ;;
         "full")
-            docker-compose down -v --remove-orphans
+            $docker_compose_cmd down -v --remove-orphans
             log_success "Services, volumes, and orphans removed"
             ;;
         "none")
@@ -485,7 +511,7 @@ cleanup_test_environment() {
             ;;
         *)
             log_warn "Unknown cleanup type: $cleanup_type, stopping services"
-            docker-compose stop
+            $docker_compose_cmd stop
             ;;
     esac
 }
