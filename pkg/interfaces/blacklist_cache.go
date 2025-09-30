@@ -190,6 +190,8 @@ func setDefaults() {
 	// viper.SetDefault("database.password", "postgres")
 	viper.SetDefault("database.dbname", "celebrum_ai")
 	viper.SetDefault("database.sslmode", "disable")
+	// Remove hardcoded database URL for security
+	// viper.SetDefault("database.database_url", "postgres://postgres:password@localhost:5432/celebrum_ai?sslmode=disable")
 	viper.SetDefault("database.database_url", "")
 	viper.SetDefault("database.max_open_conns", 25)
 	viper.SetDefault("database.max_idle_conns", 5)
@@ -199,6 +201,8 @@ func setDefaults() {
 	// Redis
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
+	// Remove hardcoded Redis password for security
+	// viper.SetDefault("redis.password", "your_redis_password")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
@@ -207,6 +211,8 @@ func setDefaults() {
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram
+	// Remove hardcoded Telegram bot token for security
+	// viper.SetDefault("telegram.bot_token", "your_telegram_bot_token")
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
 	viper.SetDefault("telegram.use_polling", false)
