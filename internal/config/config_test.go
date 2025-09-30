@@ -177,7 +177,10 @@ func TestLoad_WithDefaults(t *testing.T) {
 }
 
 func TestLoad_WithEnvironmentVariables(t *testing.T) {
-	// Set environment variables
+	// Clear any existing environment variables and set new ones
+	os.Clearenv()
+	
+	// Set environment variables - Viper converts nested keys to uppercase with underscores
 	t.Setenv("ENVIRONMENT", "production")
 	t.Setenv("LOG_LEVEL", "error")
 	t.Setenv("SERVER_PORT", "9000")
