@@ -70,8 +70,13 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 				futuresArbitrageHandler = nil
 			}
 		}()
-		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
-		fmt.Println("Futures arbitrage handler initialized successfully")
+		// Only initialize if database is available
+		if db != nil && db.Pool != nil {
+			futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
+			fmt.Println("Futures arbitrage handler initialized successfully")
+		} else {
+			fmt.Println("Database not available for futures arbitrage handler initialization")
+		}
 	}()
 
 	// API v1 routes with telemetry
