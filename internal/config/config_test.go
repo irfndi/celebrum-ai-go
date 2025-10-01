@@ -198,6 +198,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	t.Setenv("CCXT_TIMEOUT", "60")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "prod_bot_token")
 	t.Setenv("TELEGRAM_WEBHOOK_URL", "https://prod-api.example.com/webhook")
+	t.Setenv("AUTH_JWT_SECRET", "ci-test-secret-key-should-be-32-chars!!")
 
 	config, err := Load()
 	require.NoError(t, err)
@@ -221,6 +222,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 60, config.CCXT.Timeout)
 	assert.Equal(t, "prod_bot_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://prod-api.example.com/webhook", config.Telegram.WebhookURL)
+	assert.Equal(t, "ci-test-secret-key-should-be-32-chars!!", config.Auth.JWTSecret)
 }
 
 func TestCCXTConfig_GetServiceURL(t *testing.T) {

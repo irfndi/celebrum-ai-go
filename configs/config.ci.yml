@@ -92,7 +92,7 @@ technical_analysis:
 
 # Security configuration
 security:
-  jwt_secret: "${JWT_SECRET}"
+  jwt_secret: "${JWT_SECRET:?JWT_SECRET must be set for CI security}"
   jwt_expiry: 1h
   bcrypt_cost: 10
   rate_limit:
