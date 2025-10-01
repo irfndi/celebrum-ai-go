@@ -156,6 +156,10 @@ jobs:
       - name: Clean up existing cache
         run: |
           go clean -cache -modcache -testcache
+          # Clean up any conflicting cached files
+          rm -rf ~/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1
+          rm -rf ~/go/pkg/mod/go.yaml.in/yaml/v3@v3.0.4
+          rm -rf ~/.cache/go-build
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -163,9 +167,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.mod') }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/go.mod') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.mod') }}-
+            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-go-${{ hashFiles('**/go.mod') }}-
             ${{ runner.os }}-go-
 
@@ -406,7 +410,7 @@ jobs:
         (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
       )
     environment:
-      name: staging-binary
+      name: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
