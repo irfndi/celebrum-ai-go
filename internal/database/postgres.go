@@ -75,10 +75,10 @@ func NewPostgresConnectionWithContext(ctx context.Context, cfg *config.DatabaseC
 // isTestEnvironment detects if we're running in a test environment
 func isTestEnvironment() bool {
 	// Check environment variables that indicate test environment
-	return os.Getenv("CI_ENVIRONMENT") == "test" || 
-		   os.Getenv("RUN_TESTS") == "true" ||
-		   strings.HasSuffix(os.Args[0], ".test") ||
-		   strings.Contains(os.Args[0], "test")
+	return os.Getenv("CI_ENVIRONMENT") == "test" ||
+		os.Getenv("RUN_TESTS") == "true" ||
+		strings.HasSuffix(os.Args[0], ".test") ||
+		strings.Contains(os.Args[0], "test")
 }
 
 // createTestDatabaseConnection creates a connection optimized for testing
@@ -139,7 +139,7 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	} else {
 		// Build DSN with PostgreSQL 18 optimizations
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s application_name=%s connect_timeout=%d",
-			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode, 
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
 			cfg.ApplicationName, cfg.ConnectTimeout)
 	}
 
@@ -181,22 +181,22 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	if cfg.PoolHealthCheckPeriod > 0 {
 		poolConfig.HealthCheckPeriod = time.Duration(cfg.PoolHealthCheckPeriod) * time.Second
 	}
-	
+
 	if cfg.PoolMaxLifetime > 0 {
 		poolConfig.MaxConnLifetime = time.Duration(cfg.PoolMaxLifetime) * time.Second
 	}
-	
+
 	if cfg.PoolIdleTimeout > 0 {
 		poolConfig.MaxConnIdleTime = time.Duration(cfg.PoolIdleTimeout) * time.Second
 	}
 
 	// Configure pgx config for PostgreSQL 18 async features
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
-	
+
 	if cfg.StatementTimeout > 0 {
 		poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", cfg.StatementTimeout)
 	}
-	
+
 	if cfg.QueryTimeout > 0 {
 		poolConfig.ConnConfig.RuntimeParams["query_timeout"] = fmt.Sprintf("%d", cfg.QueryTimeout)
 	}

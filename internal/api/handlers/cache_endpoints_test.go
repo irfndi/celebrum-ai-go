@@ -281,7 +281,7 @@ func TestCacheEndpointsWithRealData(t *testing.T) {
 
 	// Verify Redis info is included
 	redisInfo := data["redis_info"].(map[string]interface{})
-	
+
 	// Redis info fields might not be available in all test environments
 	// Make these checks optional to avoid test failures
 	if _, hasConnectedClients := redisInfo["connected_clients"]; hasConnectedClients {
@@ -289,7 +289,7 @@ func TestCacheEndpointsWithRealData(t *testing.T) {
 	} else {
 		t.Logf("Connected clients not available in test environment")
 	}
-	
+
 	if _, hasUsedMemory := redisInfo["used_memory_human"]; hasUsedMemory {
 		t.Logf("Used memory available: %v", redisInfo["used_memory_human"])
 	} else {

@@ -333,16 +333,16 @@ func TestResourceManager_SetConfiguration(t *testing.T) {
 
 	// Test setting max idle time - this should not panic
 	rm.SetMaxIdleTime(2 * time.Minute)
-	
+
 	// Test setting cleanup interval - this should not panic
 	rm.SetCleanupInterval(30 * time.Second)
-	
+
 	// Test setting max resources - this should not panic
 	rm.SetMaxResources(500)
 
 	// Clean up
 	rm.Shutdown()
-	
+
 	// Configuration setters should work without panicking - tested by reaching this point
 	assert.True(t, true, "All setters completed without panicking")
 }

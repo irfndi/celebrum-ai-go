@@ -149,7 +149,7 @@ func TestNewPostgresConnection_TestEnvironment(t *testing.T) {
 	// Set test environment
 	t.Setenv("CI_ENVIRONMENT", "test")
 	t.Setenv("RUN_TESTS", "true")
-	
+
 	// Test with valid config but using test optimizations
 	cfg := &config.DatabaseConfig{
 		Host:     "localhost",
@@ -1052,9 +1052,9 @@ func TestNewPostgresConnection_ValidDatabaseURL(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, db)
 	// Should fail with connection error (either from test optimized path or normal path)
-	assert.True(t, 
-		strings.Contains(err.Error(), "failed to ping database") || 
-		strings.Contains(err.Error(), "failed to connect"))
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool configuration
@@ -1345,9 +1345,9 @@ func TestNewPostgresConnection_MinimalConfig(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, db)
 	// Should fail with connection error (either from test optimized path or normal path)
-	assert.True(t, 
-		strings.Contains(err.Error(), "failed to ping database") || 
-		strings.Contains(err.Error(), "failed to connect"))
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool edge cases
@@ -1375,7 +1375,7 @@ func TestNewPostgresConnection_ConnectionPoolEdgeCases(t *testing.T) {
 // Test additional Redis configuration scenarios
 func TestNewRedisConnection_AdditionalScenarios(t *testing.T) {
 	// Use unreachable addresses and invalid credentials that will fail in any environment
-	
+
 	// Test with completely invalid port number (outside valid range)
 	cfg := config.RedisConfig{
 		Host:     "localhost",
@@ -1571,9 +1571,9 @@ func TestNewPostgresConnection_ExcessivePoolValues(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, db)
 	// Should fail with connection error (either from test optimized path or normal path)
-	assert.True(t, 
-		strings.Contains(err.Error(), "failed to ping database") || 
-		strings.Contains(err.Error(), "failed to connect"))
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with invalid duration formats

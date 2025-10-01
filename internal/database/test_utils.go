@@ -60,15 +60,15 @@ type MockPostgresDB struct {
 // NewMockPostgresDB creates a new mock database for testing
 func NewMockPostgresDB() *MockPostgresDB {
 	mockPool := &MockPool{}
-	
+
 	db := &MockPostgresDB{
 		Pool: mockPool,
 		data: make(map[string]map[string]interface{}),
 	}
-	
+
 	// Setup default mock behaviors
 	db.setupDefaultMockBehaviors()
-	
+
 	return db
 }
 
@@ -76,16 +76,16 @@ func NewMockPostgresDB() *MockPostgresDB {
 func (db *MockPostgresDB) setupDefaultMockBehaviors() {
 	// Mock Ping to always succeed
 	db.Pool.On("Ping", mock.Anything).Return(nil)
-	
+
 	// Mock Query to return empty result set by default
 	db.Pool.On("Query", mock.Anything, mock.Anything, mock.Anything).Return(&MockRows{}, nil)
-	
+
 	// Mock QueryRow to return a mock row
 	db.Pool.On("QueryRow", mock.Anything, mock.Anything, mock.Anything).Return(&MockRow{})
-	
+
 	// Mock Exec to return success
 	db.Pool.On("Exec", mock.Anything, mock.Anything, mock.Anything).Return(pgconn.NewCommandTag("SELECT 0"), nil)
-	
+
 	// Mock Close to do nothing
 	db.Pool.On("Close").Return()
 }
@@ -93,7 +93,7 @@ func (db *MockPostgresDB) setupDefaultMockBehaviors() {
 // MockRows implements pgx.Rows for testing
 type MockRows struct {
 	mock.Mock
-	values [][]interface{}
+	values  [][]interface{}
 	current int
 	closed  bool
 }
@@ -141,12 +141,12 @@ func (m *MockRows) Scan(dest ...interface{}) error {
 	if m.current < 0 || m.current >= len(m.values) {
 		return fmt.Errorf("no current row")
 	}
-	
+
 	values := m.values[m.current]
 	if len(values) != len(dest) {
 		return fmt.Errorf("column count mismatch: expected %d, got %d", len(dest), len(values))
 	}
-	
+
 	for i, value := range values {
 		switch d := dest[i].(type) {
 		case *string:
@@ -181,7 +181,7 @@ func (m *MockRows) Scan(dest ...interface{}) error {
 			return fmt.Errorf("unsupported scan type: %T", d)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -213,14 +213,14 @@ func (m *MockRow) Scan(dest ...interface{}) error {
 // CreateTestDatabaseConnection creates a fast mock connection for testing
 func CreateTestDatabaseConnection(t *testing.T) *MockDatabase {
 	t.Helper()
-	
+
 	// Create a mock pool
 	mockPool := &MockPool{}
-	
+
 	// Setup basic expectations for test environment
 	mockPool.On("Ping", mock.Anything).Return(nil)
 	mockPool.On("Close").Return()
-	
+
 	// Return the mock database
 	return &MockDatabase{
 		Pool: nil,
@@ -243,7 +243,7 @@ func NewMockRedisClient() *MockRedisClient {
 	client := &MockRedisClient{
 		data: make(map[string]interface{}),
 	}
-	
+
 	// Setup default mock behaviors
 	client.On("Ping", mock.Anything).Return(nil)
 	client.On("Close").Return()
@@ -251,7 +251,7 @@ func NewMockRedisClient() *MockRedisClient {
 	client.On("Get", mock.Anything, mock.Anything).Return("", nil)
 	client.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	client.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), nil)
-	
+
 	return client
 }
 
@@ -272,11 +272,11 @@ func NewTestConnectionOptimizer() *TestConnectionOptimizer {
 func (opt *TestConnectionOptimizer) GetOptimizedConnection(name string) interface{} {
 	opt.mu.RLock()
 	defer opt.mu.RUnlock()
-	
+
 	if conn, exists := opt.connections[name]; exists {
 		return conn
 	}
-	
+
 	// Create optimized connection based on type
 	switch name {
 	case "postgres":
@@ -292,7 +292,7 @@ func (opt *TestConnectionOptimizer) GetOptimizedConnection(name string) interfac
 func (opt *TestConnectionOptimizer) SetOptimizedConnection(name string, conn interface{}) {
 	opt.mu.Lock()
 	defer opt.mu.Unlock()
-	
+
 	opt.connections[name] = conn
 }
 
@@ -300,7 +300,7 @@ func (opt *TestConnectionOptimizer) SetOptimizedConnection(name string, conn int
 func (opt *TestConnectionOptimizer) Cleanup() {
 	opt.mu.Lock()
 	defer opt.mu.Unlock()
-	
+
 	// Close all connections
 	for name, conn := range opt.connections {
 		if closer, ok := conn.(interface{ Close() }); ok {

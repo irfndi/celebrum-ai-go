@@ -377,7 +377,7 @@ func TestResourceOptimizer_ConcurrentAccess(t *testing.T) {
 
 	// Get performance history with proper synchronization
 	history := ro.GetPerformanceHistory(100) // Get up to 100 entries
-	
+
 	// Should not panic and data should be consistent
 	assert.GreaterOrEqual(t, len(history), 0)
 	assert.LessOrEqual(t, len(history), config.MaxHistorySize)

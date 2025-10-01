@@ -37,7 +37,7 @@ async function getService() {
             if (healthRes.status === 200) {
               return serviceInstance;
             }
-          // eslint-disable-next-line no-unused-vars
+            // eslint-disable-next-line no-unused-vars
           } catch (error) {
             // Service not ready yet, continue polling
           }
