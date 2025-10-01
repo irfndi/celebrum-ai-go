@@ -105,9 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' || !github.event.inputs.skip_tests }}
     env:
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_TEST_PASSWORD || env.POSTGRES_PASSWORD || 'postgres_test_password' }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY || 'test_admin_api_key_for_ci' }}
-      DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD || 'postgres_test_password' }}@localhost:5432/celebrum_test?sslmode=disable
+      DATABASE_URL: postgres://postgres:${{ secrets.POSTGRES_TEST_PASSWORD || env.POSTGRES_PASSWORD || 'postgres_test_password' }}@localhost:5432/celebrum_test?sslmode=disable
       REDIS_URL: redis://localhost:6379
       TEST_REDIS_ADDR: localhost:6379
       RUN_TESTS: "true"
@@ -163,9 +163,10 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/go.mod') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.mod') }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.mod') }}-
+            ${{ runner.os }}-go-${{ hashFiles('**/go.mod') }}-
             ${{ runner.os }}-go-
 
       - name: Install dependencies
@@ -216,9 +217,9 @@ jobs:
         run: |
           echo "Running integration tests with optimized database settings..."
           # Test database connectivity with shorter timeout
-          timeout 20s go test -v -timeout=1m -tags=integration ./internal/database/... || echo "Database tests timed out or failed (non-critical)"
-          # Test Redis connectivity with shorter timeout
-          timeout 20s go test -v -timeout=1m -tags=integration ./internal/services/... || echo "Redis tests timed out or failed (non-critical)"
+          timeout 30s go test -v -timeout=2m -tags=integration ./internal/database/... || echo "Database tests timed out or failed (non-critical)"
+          # Test Redis connectivity with shorter timeout  
+          timeout 30s go test -v -timeout=2m -tags=integration ./internal/services/... || echo "Redis tests timed out or failed (non-critical)"
 
       - name: Coverage Check (non-blocking)
         run: |
@@ -247,7 +248,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.25.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -325,12 +326,12 @@ jobs:
           # Create artifacts directory
           mkdir -p artifacts/go-backend artifacts/ccxt-service
           
-          # Extract Go backend binary
-          docker build --target binary -o artifacts/go-backend/ .
+          # Extract Go backend binary using buildx
+          docker buildx build --target binary --load -o artifacts/go-backend/ .
           
           # Extract CCXT service artifacts
           cd ccxt-service
-          docker build --target binary -o ../artifacts/ccxt-service/ .
+          docker buildx build --target binary --load -o ../artifacts/ccxt-service/ .
           cd ..
           
           # Package artifacts

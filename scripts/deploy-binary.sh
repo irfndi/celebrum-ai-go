@@ -57,6 +57,23 @@ required_vars=(
     "SECRET_KEY"
 )
 
+# Handle DEPLOYMENT_TYPE if not set
+if [[ -z "${DEPLOYMENT_TYPE:-}" ]]; then
+    DEPLOYMENT_TYPE="binary"
+    log "DEPLOYMENT_TYPE not set, defaulting to 'binary'"
+fi
+
+# Validate deployment type
+case "$DEPLOYMENT_TYPE" in
+    "binary"|"standard"|"zero-downtime"|"rolling")
+        log "Deployment type: $DEPLOYMENT_TYPE"
+        ;;
+    *)
+        error "Invalid deployment type: $DEPLOYMENT_TYPE. Use binary, standard, zero-downtime, or rolling"
+        exit 1
+        ;;
+esac
+
 for var in "${required_vars[@]}"; do
     if [[ -z "${!var:-}" ]]; then
         error "Required environment variable $var is not set"
