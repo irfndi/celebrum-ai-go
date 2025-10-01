@@ -17,7 +17,8 @@ RUN go mod download
 COPY . .
 
 # Build the application with optimizations
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server && \
+    chmod +x main
 
 # Production stage
 FROM alpine:latest AS production
@@ -63,9 +64,6 @@ FROM scratch AS binary
 # Copy only the essential files for deployment
 COPY --from=builder /app/main .
 COPY --from=builder /app/configs ./configs/
-
-# Set proper permissions for binary
-RUN chmod +x main
 
 # Debug stage (includes debugging tools)
 FROM production AS debug

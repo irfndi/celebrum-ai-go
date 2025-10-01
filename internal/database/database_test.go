@@ -1381,21 +1381,24 @@ func TestNewRedisConnection_AdditionalScenarios(t *testing.T) {
 		DB:       0,
 	}
 
-	// Test with different port numbers
+	// Test with invalid port number
 	cfg.Port = 6380
 	_, err := NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
 
-	// Test with different DB numbers
+	// Test with invalid host
+	cfg.Host = "invalid-host-that-does-not-exist.local"
 	cfg.Port = 6379
-	cfg.DB = 1
+	cfg.DB = 0
 	_, err = NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
 
-	// Test with password
-	cfg.Password = "testpass"
+	// Test with invalid password
+	cfg.Host = "localhost"
+	cfg.Port = 6379
+	cfg.Password = "invalid-password-12345"
 	_, err = NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
