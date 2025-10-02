@@ -1,5 +1,12 @@
 name: Celebrum AI CI/CD Pipeline
 
+# SECURITY POLICY: Deployment Safety Requirements
+# ==========================================
+# Production deployments: ALL checks required (tests, security, build) - NO bypasses allowed
+# Staging deployments: Security & build required, tests can be bypassed only on development branch
+# Manual deployments with skip_tests: Limited to development branch, security scans always required
+# This ensures critical security scans are never bypassed while allowing development flexibility
+
 on:
   push:
     branches: [ main, develop, development, staging ]
@@ -364,9 +371,10 @@ jobs:
       always() &&
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'staging' &&
+      needs.security.result == 'success' && needs.build.result == 'success' &&
       (
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
-        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests && github.ref == 'refs/heads/development') ||
+        needs.test.result == 'success'
       )
     environment:
       name: staging
@@ -405,9 +413,10 @@ jobs:
       always() &&
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'staging' &&
+      needs.security.result == 'success' && needs.build.result == 'success' &&
       (
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
-        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests && github.ref == 'refs/heads/development') ||
+        needs.test.result == 'success'
       )
     environment:
       name: staging
@@ -447,10 +456,7 @@ jobs:
       always() &&
       needs.preflight.outputs.should_deploy == 'true' && 
       needs.preflight.outputs.environment == 'production' &&
-      (
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_tests) ||
-        (needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success')
-      )
+      needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success'
     environment:
       name: production
       url: https://celebrum-ai.com
