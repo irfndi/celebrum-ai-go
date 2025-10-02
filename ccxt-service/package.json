@@ -8,7 +8,7 @@
     "start:bun": "bun run --preload ./tracing.js index.ts",
     "dev": "npm run build && node --require ./dist/tracing.js --watch ./dist/index.js",
     "dev:bun": "bun --watch index.ts",
-    "build": "tsc && mkdir -p dist/ && cp tracing.js dist/",
+    "build": "tsc && mkdir -p dist/ && cp tracing-utils.js dist/tracing.js",
     "build:bun": "bun build index.ts --outdir ./dist --target node",
     "test": "bun test"
   },

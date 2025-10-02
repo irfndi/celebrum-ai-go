@@ -863,7 +863,7 @@ func TestNotificationService_NotifyArbitrageOpportunities_EmptyOpportunities(t *
 
 	// Should panic due to nil database when trying to get eligible users
 	assert.Panics(t, func() {
-		ns.NotifyArbitrageOpportunities(ctx, opportunities)
+		_ = ns.NotifyArbitrageOpportunities(ctx, opportunities)
 	})
 }
 
@@ -992,7 +992,7 @@ func TestNotificationService_NotifyArbitrageOpportunities_WithDatabase(t *testin
 	// Should panic due to nil database access
 	ns := NewNotificationService(nil, nil, "")
 	assert.Panics(t, func() {
-		ns.NotifyArbitrageOpportunities(ctx, opportunities)
+		_ = ns.NotifyArbitrageOpportunities(ctx, opportunities)
 	})
 }
 
@@ -1002,7 +1002,7 @@ func TestNotificationService_getEligibleUsers_NilDependencies(t *testing.T) {
 
 	// Should panic due to nil database when trying to query users
 	assert.Panics(t, func() {
-		ns.getEligibleUsers(ctx)
+		_, _ = ns.getEligibleUsers(ctx)
 	})
 }
 
@@ -1054,6 +1054,6 @@ func TestNotificationService_getEligibleUsers_ContextCancellation(t *testing.T) 
 
 	// Should still panic due to nil database, even with cancelled context
 	assert.Panics(t, func() {
-		ns.getEligibleUsers(ctx)
+		_, _ = ns.getEligibleUsers(ctx)
 	})
 }
