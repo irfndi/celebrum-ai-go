@@ -2,11 +2,15 @@ import "./test-setup";
 import { test, expect } from "bun:test";
 
 // Set required environment variables for testing
-process.env.ADMIN_API_KEY = 'test-admin-key-that-is-at-least-32-characters-long-for-security';
-process.env.PORT = '3003';
+process.env.ADMIN_API_KEY =
+  "test-admin-key-that-is-at-least-32-characters-long-for-security";
+process.env.PORT = "3003";
 
 // Cache the service instance to avoid re-initialization
-let serviceInstance: { port: number | string; fetch: (req: Request) => Promise<Response> } | null = null;
+let serviceInstance: {
+  port: number | string;
+  fetch: (req: Request) => Promise<Response>;
+} | null = null;
 let initializationPromise: Promise<any> | null = null;
 
 async function getService() {
@@ -15,25 +19,31 @@ async function getService() {
       initializationPromise = (async () => {
         // Force fresh import by adding timestamp to avoid module caching issues
         const mod = await import("./index.ts?" + Date.now());
-        serviceInstance = mod.default as { port: number | string; fetch: (req: Request) => Promise<Response> };
-        
+        serviceInstance = mod.default as {
+          port: number | string;
+          fetch: (req: Request) => Promise<Response>;
+        };
+
         // Wait for service to be ready using readiness probe
         const timeout = 10000; // 10 seconds
         const interval = 200; // 200ms
         const startTime = Date.now();
-        
+
         while (Date.now() - startTime < timeout) {
           try {
-            const healthRes = await serviceInstance.fetch(new Request("http://localhost/health"));
+            const healthRes = await serviceInstance.fetch(
+              new Request("http://localhost/health"),
+            );
             if (healthRes.status === 200) {
               return serviceInstance;
             }
+            // eslint-disable-next-line no-unused-vars
           } catch (error) {
             // Service not ready yet, continue polling
           }
-          await new Promise(resolve => setTimeout(resolve, interval));
+          await new Promise((resolve) => setTimeout(resolve, interval));
         }
-        
+
         throw new Error(`Service failed to become ready within ${timeout}ms`);
       })();
     }
@@ -65,13 +75,17 @@ test("/api/exchanges returns mocked exchange list", async () => {
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(Array.isArray(body.exchanges)).toBe(true);
-  const hasBinance = body.exchanges.some((ex: any) => (typeof ex === 'string' ? ex : ex.id) === 'binance');
+  const hasBinance = body.exchanges.some(
+    (ex: any) => (typeof ex === "string" ? ex : ex.id) === "binance",
+  );
   expect(hasBinance).toBe(true);
 });
 
 test("/api/markets/:exchange returns symbols", async () => {
   const svc = await getService();
-  const res = await svc.fetch(new Request("http://localhost/api/markets/binance"));
+  const res = await svc.fetch(
+    new Request("http://localhost/api/markets/binance"),
+  );
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body.exchange).toBe("binance");
@@ -81,7 +95,9 @@ test("/api/markets/:exchange returns symbols", async () => {
 
 test("/api/ticker/:exchange/:symbol returns ticker data", async () => {
   const svc = await getService();
-  const res = await svc.fetch(new Request("http://localhost/api/ticker/binance/BTC/USDT"));
+  const res = await svc.fetch(
+    new Request("http://localhost/api/ticker/binance/BTC/USDT"),
+  );
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body.exchange).toBe("binance");
@@ -91,7 +107,9 @@ test("/api/ticker/:exchange/:symbol returns ticker data", async () => {
 
 test("/api/ticker with unsupported exchange returns 400", async () => {
   const svc = await getService();
-  const res = await svc.fetch(new Request("http://localhost/api/ticker/unknown/BTC/USDT"));
+  const res = await svc.fetch(
+    new Request("http://localhost/api/ticker/unknown/BTC/USDT"),
+  );
   expect(res.status).toBe(400);
   const body = await res.json();
   expect(body.error).toBe("Exchange not supported");
@@ -99,7 +117,9 @@ test("/api/ticker with unsupported exchange returns 400", async () => {
 
 test("/api/funding-rates returns array", async () => {
   const svc = await getService();
-  const res = await svc.fetch(new Request("http://localhost/api/funding-rates/binance"));
+  const res = await svc.fetch(
+    new Request("http://localhost/api/funding-rates/binance"),
+  );
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(Array.isArray(body.fundingRates)).toBe(true);
@@ -108,7 +128,9 @@ test("/api/funding-rates returns array", async () => {
 
 test("/api/funding-rates with symbols filter", async () => {
   const svc = await getService();
-  const res = await svc.fetch(new Request("http://localhost/api/funding-rates/binance?symbols=BTC/USDT"));
+  const res = await svc.fetch(
+    new Request("http://localhost/api/funding-rates/binance?symbols=BTC/USDT"),
+  );
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body.count).toBe(1);

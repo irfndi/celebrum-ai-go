@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	// Package middleware provides HTTP middleware components for authentication,
+	// authorization, telemetry, and other cross-cutting concerns.
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -41,9 +44,9 @@ func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// Check Bearer prefix
+		// Check Bearer prefix (case-insensitive as per RFC 6750)
 		tokenParts := strings.Split(authHeader, " ")
-		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+		if len(tokenParts) != 2 || strings.ToLower(tokenParts[0]) != "bearer" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
 			c.Abort()
 			return
@@ -104,7 +107,7 @@ func (am *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 
 		// If token is provided, validate it
 		tokenParts := strings.Split(authHeader, " ")
-		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+		if len(tokenParts) != 2 || strings.ToLower(tokenParts[0]) != "bearer" {
 			c.Next()
 			return
 		}

@@ -15,6 +15,9 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
+// Package middleware provides HTTP middleware components for authentication,
+// authorization, telemetry, and other cross-cutting concerns.
+
 // TelemetryMiddleware creates a Gin middleware for OpenTelemetry tracing
 func TelemetryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

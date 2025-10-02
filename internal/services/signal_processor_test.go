@@ -158,7 +158,7 @@ func TestSignalProcessor_GetRecentMarketDataFromDB_MissingVolume24hColumn(t *tes
 
 	// Simulate database schema without volume_24h column (missing column)
 	expectedRows := pgxmock.NewRows([]string{
-		"id", "exchange_id", "trading_pair_id", "last_price", 
+		"id", "exchange_id", "trading_pair_id", "last_price",
 		"timestamp", "created_at",
 	}).AddRow(
 		"test-id-1", 1, 1, decimal.NewFromFloat(45000.0),
@@ -401,4 +401,3 @@ func TestSignalProcessor_GetTradingPairSymbol_DBError(t *testing.T) {
 	// Ensure all expectations were met
 	assert.NoError(t, mockPool.ExpectationsWereMet())
 }
-

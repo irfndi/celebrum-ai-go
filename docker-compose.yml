@@ -1,44 +1,45 @@
+version: '3.8'
+
 services:
   # PHASE 1: Database Services
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: celebrum-postgres
     restart: unless-stopped
     environment:
-      # SECURITY: Default passwords removed - must be set via environment variables
-      # Set POSTGRES_PASSWORD in your .env file for security
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
       POSTGRES_DB: ${POSTGRES_DB:-celebrum_ai}
-    ports:
-      - "127.0.0.1:5432:5432"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      STARTUP_PHASE: "1"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ${INIT_SCRIPT_PATH:-./scripts/init.sql}:/docker-entrypoint-initdb.d/init.sql
+      - ./database:/database
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-celebrum_user} && psql -U ${POSTGRES_USER:-celebrum_user} -d ${POSTGRES_DB:-celebrum_ai} -c 'SELECT 1;'"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} && psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-celebrum_ai} -c 'SELECT 1;'"]
+      interval: ${HEALTHCHECK_INTERVAL:-15s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: ${HEALTHCHECK_RETRIES:-10}
+      start_period: ${HEALTHCHECK_START_PERIOD:-60s}
     networks:
       - celebrum-network
+    ports:
+      - "${POSTGRES_HOST_PORT:-127.0.0.1:5432}:5432"
 
   # Migration Service - Runs automatically to sync all environments
   migrate:
-    image: postgres:17
+    image: postgres:18
     container_name: celebrum-migrate
+    restart: "no"
     environment:
-      # SECURITY: Database credentials must be provided via environment variables
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-celebrum_ai}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
-      # Migration configuration
       MIGRATIONS_DIR: /database/migrations
-      # Phase control
       STARTUP_PHASE: "1"
     volumes:
       - ./scripts:/scripts
@@ -49,21 +50,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: "no"
     networks:
       - celebrum-network
 
+  # Redis for caching
   redis:
     image: redis:7-alpine
     container_name: celebrum-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    # SECURITY: Removed host port mapping to prevent external Redis access
-    # Redis is only accessible within the Docker network
+    environment:
+      STARTUP_PHASE: 1
     volumes:
       - redis_data:/data
-      - ./configs/redis/redis-docker.conf:/etc/redis/redis.conf:ro
+      - ./configs/redis/redis-${ENVIRONMENT:-development}.conf:/etc/redis/redis.conf:ro
     command: redis-server /etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -79,21 +78,20 @@ services:
     build:
       context: ./ccxt-service
       dockerfile: Dockerfile
-    image: celebrum-ai/ccxt-service:latest
+    image: celebrum-ai/ccxt-service:${IMAGE_TAG:-latest}
     container_name: celebrum-ccxt
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
       - ADMIN_API_KEY=${ADMIN_API_KEY:?ADMIN_API_KEY must be set in .env file}
-      # OpenTelemetry configuration (disabled for local dev)
-      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4318
-      # - OTEL_SERVICE_NAME=ccxt-service
-      # - OTEL_RESOURCE_ATTRIBUTES=service.name=ccxt-service,service.version=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=ccxt-service
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=ccxt-service,service.version=${IMAGE_TAG:-latest}
+    ports:
+      - "${CCXT_HOST_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +100,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "${HEALTHCHECK_COMMAND:-curl}", "-f", "http://localhost:3000/health"]
       interval: 20s
       timeout: 15s
       retries: 5
@@ -115,19 +113,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: celebrum-ai/app:latest
+    image: celebrum-ai/app:${IMAGE_TAG:-latest}
     container_name: celebrum-app
     restart: unless-stopped
-    ports:
-      - "8081:8081"
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=${POSTGRES_USER:-postgres}
-      # SECURITY: Database password must be set via environment variables
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
       - DATABASE_DBNAME=${POSTGRES_DB:-celebrum_ai}
       - DATABASE_SSLMODE=disable
@@ -135,21 +130,20 @@ services:
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3000
       - CCXT_TIMEOUT=30
-      # Phase control
       - STARTUP_PHASE=3
       - WARMUP_ENABLED=true
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
-      # OpenTelemetry configuration (disabled for local dev)
-      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4318
-      # - OTEL_SERVICE_NAME=celebrum-ai-app
-      # - OTEL_RESOURCE_ATTRIBUTES=service.name=celebrum-ai-app,service.version=1.0.0
-      # Go application telemetry configuration (viper expects TELEMETRY_*)
-      # - TELEMETRY_ENABLED=true
-      # - TELEMETRY_OTLP_ENDPOINT=http://signoz-otel-collector:4318
-      # Enable debug logging to see telemetry initialization
-      - LOG_LEVEL=debug
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=celebrum-ai-app
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=celebrum-ai-app,service.version=${IMAGE_TAG:-latest}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SERVER_PORT=${SERVER_PORT:-8081}
+    volumes:
+      - app_data:/data
+    ports:
+      - "${APP_HOST_PORT:-8081}:${SERVER_PORT:-8081}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,7 +154,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      test: ["CMD", "${HEALTHCHECK_COMMAND:-wget}", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8081}/health"]
       interval: 20s
       timeout: 15s
       retries: 5
@@ -174,8 +168,8 @@ services:
     container_name: celebrum-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
       - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./configs/ssl:/etc/nginx/ssl:ro
@@ -183,7 +177,7 @@ services:
       - STARTUP_PHASE=2
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      test: ["CMD", "${HEALTHCHECK_COMMAND:-wget}", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 20s
       timeout: 15s
       retries: 5
@@ -207,9 +201,9 @@ volumes:
     driver: local
   redis_data:
     driver: local
+  app_data:
+    driver: local
 
 networks:
   celebrum-network:
     driver: bridge
-  default:
-    name: celebrum-network

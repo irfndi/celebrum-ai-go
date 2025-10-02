@@ -11,8 +11,27 @@ bin/
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
-coverage.html
+coverage*.html
 coverage.out
+
+# Binary executables
+main
+server
+
+# Test and build output files
+build.log
+test_output.log
+
+# Go cache
+.gocache/
+.gomodcache/
+.cache/
+
+# Temporary configuration and response files
+config.yaml
+api_response.json
+webhook_info.json
+get-docker.sh
 
 # Dependency directories (remove the comment below to include it)
 # vendor/

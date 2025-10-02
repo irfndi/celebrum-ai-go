@@ -7,8 +7,11 @@ DOCKER_REGISTRY=ghcr.io/irfndi
 DOCKER_IMAGE_APP=$(DOCKER_REGISTRY)/app:latest
 DOCKER_IMAGE_CCXT=$(DOCKER_REGISTRY)/ccxt-service:latest
 DOCKER_COMPOSE_FILE=docker-compose.yml
-DOCKER_COMPOSE_PROD_FILE=docker-compose.single-droplet.yml
+DOCKER_COMPOSE_ENV_FILE=.env
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GO_CACHE_DIR=$(PWD)/.cache/go-build
+GO_MOD_CACHE_DIR=$(PWD)/.cache/go-mod
+GO_ENV=GOCACHE=$(GO_CACHE_DIR)
 
 # Colors for output
 RED=\033[0;31m
@@ -17,7 +20,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated
+.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated go-env-setup
 
 # Default target
 all: build
@@ -29,10 +32,21 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(BLUE)%-20s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+go-env-setup:
+	@mkdir -p $(GO_CACHE_DIR) $(GO_MOD_CACHE_DIR)
+
 ## Development
-build: ## Build the application
+build: ## Build the application across all languages
 	@echo "$(GREEN)Building $(APP_NAME)...$(NC)"
+	@# Build Go application
 	go build -o bin/$(APP_NAME) cmd/server/main.go
+	@# Build TypeScript/CCXT service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building CCXT service...$(NC)"; \
+		cd ccxt-service && bun run build; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service build - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@echo "$(GREEN)Build complete!$(NC)"
 
 test: ## Run tests across all languages
@@ -67,12 +81,17 @@ test-traces: ## Verify OTLP traces end-to-end using Bun script
 	@echo "$(GREEN)Running OTLP traces validation script...$(NC)"
 	bun run ./test-traces-bun.ts
 
-lint: ## Run linter across all languages
+lint: go-env-setup ## Run linter across all languages
 	@echo "$(GREEN)Running linter across all languages...$(NC)"
 	@# Lint Go code
-	golangci-lint run
-	@# Lint TypeScript/JavaScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript linting - ccxt-service has formatting issues$(NC)"
+	$(GO_ENV) golangci-lint run
+	@# Lint TypeScript/JavaScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Linting TypeScript...$(NC)"; \
+		cd ccxt-service && bunx oxlint .; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript linting - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Lint YAML files
 	@if command -v yamllint >/dev/null 2>&1; then \
 		find . -name "*.yml" -o -name "*.yaml" | grep -v node_modules | grep -v .git | grep -v build | xargs yamllint 2>/dev/null || true; \
@@ -82,8 +101,13 @@ typecheck: ## Run type checking across all languages
 	@echo "$(GREEN)Running type checking across all languages...$(NC)"
 	@# Type check Go code
 	go vet ./...
-	@# Type check TypeScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript type checking - ccxt-service has formatting issues$(NC)"
+	@# Type check TypeScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Type checking TypeScript...$(NC)"; \
+		cd ccxt-service && bun tsc --noEmit; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript type checking - ccxt-service directory or bun not found$(NC)"; \
+	fi
 
 fmt: ## Format code across all languages
 	@echo "$(GREEN)Formatting code across all languages...$(NC)"
@@ -94,14 +118,21 @@ fmt: ## Format code across all languages
 	else \
 		echo "$(YELLOW)goimports not found, skipping Go imports formatting$(NC)"; \
 	fi
-	@# Format TypeScript/JavaScript - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript formatting - ccxt-service has formatting issues$(NC)"
+	@# Format TypeScript/JavaScript in ccxt-service
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Formatting TypeScript...$(NC)"; \
+		cd ccxt-service && bunx prettier --write . || bun format --write . || echo "$(YELLOW)Could not format TypeScript - prettier or bun format not available$(NC)"; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript formatting - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Format shell scripts
 	@if command -v shfmt >/dev/null 2>&1; then \
 		find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*" -exec shfmt -w {} \; 2>/dev/null || true; \
 	fi
-	@# Format YAML files - skip if bun format handles them
-	@echo "$(GREEN)Skipping YAML formatting - handled by project formatters$(NC)"
+	@# Format YAML files
+	@if command -v bun >/dev/null 2>&1 && [ -d "ccxt-service" ]; then \
+		cd ccxt-service && bunx prettier --write . 2>/dev/null || true; \
+	fi
 
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
@@ -125,12 +156,15 @@ dev: ## Run with hot reload (requires air)
 ## Environment Setup
 dev-setup: ## Setup development environment
 	@echo "$(GREEN)Setting up development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
+	@cp $(DOCKER_COMPOSE_ENV_FILE) $(DOCKER_COMPOSE_ENV_FILE).backup 2>/dev/null || true
+	@cp .env.development .env
+	docker compose --env-file .env up -d postgres redis
 	@echo "$(GREEN)Development environment ready!$(NC)"
 
 dev-down: ## Stop development environment
 	@echo "$(YELLOW)Stopping development environment...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) down
+	docker compose --env-file .env down
+	@mv $(DOCKER_COMPOSE_ENV_FILE).backup $(DOCKER_COMPOSE_ENV_FILE) 2>/dev/null || true
 
 install-tools: ## Install development tools
 	@echo "$(GREEN)Installing development tools...$(NC)"
@@ -147,8 +181,13 @@ security: ## Run security scan across all languages
 	else \
 		echo "$(YELLOW)gosec not found, skipping Go security scan$(NC)"; \
 	fi
-	@# Security scan for TypeScript/JavaScript dependencies - skip ccxt-service for now
-	@echo "$(GREEN)Skipping TypeScript security scan - ccxt-service has formatting issues$(NC)"
+	@# Security scan for TypeScript/JavaScript dependencies
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Scanning TypeScript dependencies...$(NC)"; \
+		cd ccxt-service && bun audit || echo "$(YELLOW)bun audit completed with warnings$(NC)"; \
+	else \
+		echo "$(YELLOW)Skipping TypeScript security scan - ccxt-service directory or bun not found$(NC)"; \
+	fi
 	@# Security scan for Docker images
 	@if command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(PWD):/app" -w /app securecodewarrior/docker-security-scanner . 2>/dev/null || echo "$(YELLOW)Docker security scanner not available$(NC)"; \
@@ -159,10 +198,28 @@ security: ## Run security scan across all languages
 	fi
 
 ## Docker
-docker-build: ## Build Docker image
-	@echo "$(GREEN)Building Docker image...$(NC)"
+docker-build: ## Build Docker images for all services
+	@echo "$(GREEN)Building Docker images...$(NC)"
+	@# Build main application image
 	docker build -t $(DOCKER_IMAGE_APP) .
-	@echo "$(GREEN)Docker image built: $(DOCKER_IMAGE_APP)$(NC)"
+	@# Build CCXT service image if directory exists
+	@if [ -d "ccxt-service" ]; then \
+		echo "$(GREEN)Building CCXT service image...$(NC)"; \
+		docker build -t $(DOCKER_IMAGE_CCXT) ./ccxt-service; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service image - ccxt-service directory not found$(NC)"; \
+	fi
+	@echo "$(GREEN)Docker images built!$(NC)"
+
+docker-build-hybrid: ## Build hybrid Docker image for binary deployment
+	@echo "$(GREEN)Building hybrid Docker image...$(NC)"
+	docker build --target binary -o bin/$(APP_NAME) .
+	@echo "$(GREEN)Hybrid build completed: bin/$(APP_NAME)$(NC)"
+
+docker-clean: ## Clean Docker artifacts
+	@echo "$(YELLOW)Cleaning Docker artifacts...$(NC)"
+	docker system prune -f
+	@echo "$(GREEN)Docker cleanup completed$(NC)"
 
 docker-build-all: ## Build all Docker images with version tags
 	@echo "$(GREEN)Building all Docker images with version tags...$(NC)"
@@ -180,11 +237,14 @@ docker-build-ccxt: ## Build CCXT service image with version
 
 docker-run: docker-build ## Run with Docker
 	@echo "$(GREEN)Running with Docker...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) up --build
+	docker compose --env-file .env up --build
 
 docker-prod: ## Run production Docker setup
 	@echo "$(GREEN)Running production Docker setup...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) up -d --build
+	@cp $(DOCKER_COMPOSE_ENV_FILE) $(DOCKER_COMPOSE_ENV_FILE).backup 2>/dev/null || true
+	@cp .env.production .env
+	docker compose --env-file .env up -d --build
+	@echo "$(GREEN)Production environment started!$(NC)"
 
 ## Database
 db-migrate: ## Run database migrations
@@ -208,6 +268,18 @@ deploy-manual: build ## Manual deployment with rsync
 	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
 	./scripts/deploy.sh production
 
+deploy-binary: build ## Deploy using binary deployment
+	@echo "$(GREEN)Deploying using binary deployment...$(NC)"
+	./scripts/deploy-binary.sh production
+
+deploy-binary-staging: build ## Deploy to staging using binary deployment
+	@echo "$(GREEN)Deploying to staging using binary deployment...$(NC)"
+	./scripts/deploy-binary.sh staging
+
+setup-staging: ## Set up staging environment
+	@echo "$(GREEN)Setting up staging environment...$(NC)"
+	./scripts/setup-staging.sh
+
 deploy-rollback: ## Rollback deployment
 	@echo "$(GREEN)Rolling back deployment...$(NC)"
 	./scripts/deploy-enhanced.sh --rollback
@@ -221,9 +293,17 @@ ci-lint: ## Run linter for CI
 	@echo "$(GREEN)Running CI linter...$(NC)"
 	golangci-lint run --timeout=5m
 
-ci-build: ## Build for CI
+ci-build: ## Build for CI across all languages
 	@echo "$(GREEN)Building for CI...$(NC)"
+	@# Build Go application for CI
 	CGO_ENABLED=0 go build -v -ldflags "-X main.version=$(shell git describe --tags --always --dirty) -X main.buildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S')" -o bin/$(APP_NAME) cmd/server/main.go
+	@# Build TypeScript/CCXT service for CI
+	@if [ -d "ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building CCXT service for CI...$(NC)"; \
+		cd ccxt-service && bun run build; \
+	else \
+		echo "$(YELLOW)Skipping CCXT service CI build - ccxt-service directory or bun not found$(NC)"; \
+	fi
 
 ci-check: ci-lint ci-test ci-build ## Run all CI checks
 	@echo "$(GREEN)All CI checks completed!$(NC)"
@@ -263,14 +343,14 @@ migrate-list: ## List available database migrations
 migrate-docker: ## Run migrations in Docker environment
 	@echo "$(GREEN)Running migrations in Docker...$(NC)"
 	@echo "$(YELLOW)Using secure migration script...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) exec app ./scripts/migrate-optimized.sh migrate
+	docker compose --env-file .env exec app ./scripts/migrate-optimized.sh migrate
 
 .PHONY: auto-migrate dev-up prod-up
 
 # Automatic migration for all environments
 auto-migrate: ## Run automatic migration sync
 	@echo "$(GREEN)Starting automatic migration sync...$(NC)"
-	@docker compose -f $(DOCKER_COMPOSE_FILE) up --build migrate
+	@docker compose --env-file .env up --build migrate
 	@echo "$(GREEN)All migrations applied successfully!$(NC)"
 
 # Development environment with orchestrated sequential startup
@@ -319,8 +399,8 @@ startup-status: ## Check sequential startup status
 down-orchestrated: ## Stop all services gracefully with orchestrated shutdown
 	@echo "$(YELLOW)Stopping services with orchestrated shutdown...$(NC)"
 	@./webhook-control.sh disable 2>/dev/null || true
-	@docker compose -f $(DOCKER_COMPOSE_FILE) down
-	@docker compose -f $(DOCKER_COMPOSE_PROD_FILE) down 2>/dev/null || true
+	@docker compose --env-file .env down
+	@mv $(DOCKER_COMPOSE_ENV_FILE).backup $(DOCKER_COMPOSE_ENV_FILE) 2>/dev/null || true
 	@echo "$(GREEN)All services stopped$(NC)"
 
 ## Observability (SigNoz)
@@ -389,6 +469,57 @@ clean: ## Clean build artifacts
 	docker system prune -f
 	@echo "$(GREEN)Clean complete!$(NC)"
 
+## Artifact Management
+artifacts-setup: ## Setup artifacts directory structure
+	@echo "$(GREEN)Setting up artifacts directory...$(NC)"
+	./scripts/artifact-manager.sh setup
+
+artifacts-store: ## Store deployment package
+	@echo "$(GREEN)Storing deployment package...$(NC)"
+	@if [ -z "$(PACKAGE)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	@if [ -z "$(VERSION)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	@if [ -z "$(ENV)" ]; then echo "$(RED)Usage: make artifacts-store PACKAGE=<package> VERSION=<version> ENV=<env>$(NC)"; exit 1; fi
+	./scripts/artifact-manager.sh store "$(PACKAGE)" "$(VERSION)" "$(ENV)"
+
+artifacts-list: ## List available artifacts
+	@echo "$(GREEN)Listing available artifacts...$(NC)"
+	./scripts/artifact-manager.sh list
+
+artifacts-get: ## Get artifact path
+	@echo "$(GREEN)Getting artifact path...$(NC)"
+	@if [ -z "$(ARTIFACT_TYPE)" ]; then echo "$(RED)Usage: make artifacts-get ARTIFACT_TYPE=<type> VERSION=<version>$(NC)"; exit 1; fi
+	@if [ -z "$(VERSION)" ]; then echo "$(RED)Usage: make artifacts-get ARTIFACT_TYPE=<type> VERSION=<version>$(NC)"; exit 1; fi
+	./scripts/artifact-manager.sh get "$(ARTIFACT_TYPE)" "$(VERSION)"
+
+artifacts-cleanup: ## Clean up old artifacts
+	@echo "$(YELLOW)Cleaning up old artifacts...$(NC)"
+	./scripts/artifact-manager.sh cleanup
+
+## Deployment Benchmarking
+benchmark: ## Run deployment benchmarks
+	@echo "$(GREEN)Running deployment benchmarks...$(NC)"
+	./scripts/benchmark-deployment.sh
+
+benchmark-custom: ## Run deployment benchmarks with custom settings
+	@echo "$(GREEN)Running deployment benchmarks with custom settings...$(NC)"
+	./scripts/benchmark-deployment.sh --iterations "$(ITERATIONS)" --server "$(SERVER)"
+
+benchmark-report: ## Generate benchmark report
+	@echo "$(GREEN)Generating benchmark report...$(NC)"
+	@if [ -z "$(REPORT_FILE)" ]; then echo "$(RED)Usage: make benchmark-report REPORT_FILE=<path>$(NC)"; exit 1; fi
+	./scripts/benchmark-deployment.sh --report "$(REPORT_FILE)"
+
+benchmark-clean: ## Clean up benchmark results directory
+	@echo "$(YELLOW)Cleaning up benchmark results directory...$(NC)"
+	@if [ -d "benchmark-results" ]; then \
+		find benchmark-results -name "*.csv" -type f -delete 2>/dev/null || true; \
+		find benchmark-results -name "*.md" -type f -delete 2>/dev/null || true; \
+		rmdir benchmark-results 2>/dev/null || true; \
+		echo "$(GREEN)Benchmark results cleaned up successfully$(NC)"; \
+	else \
+		echo "$(BLUE)No benchmark results directory found$(NC)"; \
+	fi
+
 mod-tidy: ## Tidy Go modules
 	@echo "$(GREEN)Tidying Go modules...$(NC)"
 	go mod tidy
@@ -421,18 +552,46 @@ health-prod: ## Check production health
 
 status: ## Show service status
 	@echo "$(GREEN)Service Status:$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) ps
+	docker compose --env-file .env ps
 
 status-prod: ## Show production service status
 	@echo "$(GREEN)Production Service Status:$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_PROD_FILE) ps
+	@if [ -f ".env" ]; then \
+		docker compose --env-file .env ps; \
+	else \
+		echo "$(YELLOW)No .env file found. Run 'make docker-prod' first.$(NC)"; \
+	fi
 
 ## Logs
 logs: ## Show application logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f app
+	docker compose --env-file .env logs -f app
 
 logs-ccxt: ## Show CCXT service logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f ccxt-service
+	docker compose --env-file .env logs -f ccxt-service
 
 logs-all: ## Show all service logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f
+	docker compose --env-file .env logs -f
+
+## Environment Management
+env-dev: ## Switch to development environment
+	@echo "$(GREEN)Switching to development environment...$(NC)"
+	@cp .env.development .env
+	@echo "$(GREEN)Development environment activated!$(NC)"
+
+env-prod: ## Switch to production environment
+	@echo "$(GREEN)Switching to production environment...$(NC)"
+	@cp .env.production .env
+	@echo "$(GREEN)Production environment activated!$(NC)"
+
+env-current: ## Show current environment
+	@if [ -f ".env" ]; then \
+		if grep -q "ENVIRONMENT=development" .env; then \
+			echo "$(GREEN)Current environment: Development$(NC)"; \
+		elif grep -q "ENVIRONMENT=production" .env; then \
+			echo "$(GREEN)Current environment: Production$(NC)"; \
+		else \
+			echo "$(YELLOW)Current environment: Custom$(NC)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)No .env file found.$(NC)"; \
+	fi

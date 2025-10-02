@@ -18,7 +18,7 @@ func TestTelemetry_NewTracedDB(t *testing.T) {
 	// In real usage, this would be called with a real pool
 	var pool *pgxpool.Pool
 	db := NewTracedDB(pool)
-	
+
 	assert.NotNil(t, db)
 	assert.Equal(t, pool, db.Pool)
 }
@@ -159,7 +159,7 @@ func TestTelemetry_TracedTx_Query(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Query method - should not panic
 	rows, err := tracedTx.Query(ctx, "SELECT * FROM users")
 	assert.NoError(t, err)
@@ -171,7 +171,7 @@ func TestTelemetry_TracedTx_QueryRow(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx QueryRow method - should not panic
 	row := tracedTx.QueryRow(ctx, "SELECT * FROM users WHERE id = $1", 1)
 	assert.Nil(t, row)
@@ -182,7 +182,7 @@ func TestTelemetry_TracedTx_Exec(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Exec method - should not panic
 	tag, err := tracedTx.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", "test")
 	assert.NoError(t, err)
@@ -194,7 +194,7 @@ func TestTelemetry_TracedTx_Commit(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Commit method - should not panic
 	err := tracedTx.Commit(ctx)
 	assert.NoError(t, err)
@@ -205,7 +205,7 @@ func TestTelemetry_TracedTx_Rollback(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Rollback method - should not panic
 	err := tracedTx.Rollback(ctx)
 	assert.NoError(t, err)
@@ -216,7 +216,7 @@ func TestTelemetry_TracedTx_Begin(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Begin method - should not panic
 	tx, err := tracedTx.Begin(ctx)
 	assert.NoError(t, err)
@@ -230,7 +230,7 @@ func TestTelemetry_TracedTx_Begin(t *testing.T) {
 func TestTelemetry_TracedTx_Conn(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
-	
+
 	// Test TracedTx Conn method
 	conn := tracedTx.Conn()
 	assert.Nil(t, conn)
@@ -241,7 +241,7 @@ func TestTelemetry_TracedTx_CopyFrom(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx CopyFrom method
 	tableName := pgx.Identifier{"users"}
 	columnNames := []string{"id", "name", "email"}
@@ -252,7 +252,7 @@ func TestTelemetry_TracedTx_CopyFrom(t *testing.T) {
 	rowSrc := pgx.CopyFromSlice(len(data), func(i int) ([]interface{}, error) {
 		return data[i], nil
 	})
-	
+
 	rowsAffected, err := tracedTx.CopyFrom(ctx, tableName, columnNames, rowSrc)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), rowsAffected)
@@ -262,7 +262,7 @@ func TestTelemetry_TracedTx_CopyFrom(t *testing.T) {
 func TestTelemetry_TracedTx_LargeObjects(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
-	
+
 	// Test TracedTx LargeObjects method
 	lo := tracedTx.LargeObjects()
 	assert.IsType(t, pgx.LargeObjects{}, lo)
@@ -273,7 +273,7 @@ func TestTelemetry_TracedTx_Prepare(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx Prepare method
 	stmt, err := tracedTx.Prepare(ctx, "get_user", "SELECT * FROM users WHERE id = $1")
 	assert.NoError(t, err)
@@ -285,12 +285,12 @@ func TestTelemetry_TracedTx_SendBatch(t *testing.T) {
 	mockTx := &MockTx{}
 	tracedTx := &TracedTx{Tx: mockTx}
 	ctx := context.Background()
-	
+
 	// Test TracedTx SendBatch method
 	batch := &pgx.Batch{}
 	batch.Queue("SELECT * FROM users WHERE id = $1", 1)
 	batch.Queue("UPDATE accounts SET balance = $1", 100.0)
-	
+
 	results := tracedTx.SendBatch(ctx, batch)
 	assert.Nil(t, results)
 }
@@ -300,7 +300,7 @@ func TestTelemetry_RecordDatabaseError(t *testing.T) {
 	ctx := context.Background()
 	err := fmt.Errorf("test error")
 	operation := "test_operation"
-	
+
 	// Test RecordDatabaseError function - should not panic
 	RecordDatabaseError(ctx, err, operation)
 	// This is a stub function, so we just verify it doesn't panic
@@ -311,7 +311,7 @@ func TestTelemetry_AddDatabaseSpanAttributes(t *testing.T) {
 	ctx := context.Background()
 	table := "test_table"
 	rowsAffected := int64(10)
-	
+
 	// Test AddDatabaseSpanAttributes function - should not panic
 	AddDatabaseSpanAttributes(ctx, table, rowsAffected)
 	// This is a stub function, so we just verify it doesn't panic

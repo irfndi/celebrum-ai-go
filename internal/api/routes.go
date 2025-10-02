@@ -7,12 +7,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api/handlers"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	futuresHandlers "github.com/irfandi/celebrum-ai-go/internal/handlers"
 	"github.com/irfandi/celebrum-ai-go/internal/middleware"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 )
 
 type HealthResponse struct {
@@ -27,7 +27,7 @@ type Services struct {
 	Redis    string `json:"redis"`
 }
 
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()
 
@@ -70,8 +70,13 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 				futuresArbitrageHandler = nil
 			}
 		}()
-		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
-		fmt.Println("Futures arbitrage handler initialized successfully")
+		// Only initialize if database is available
+		if db != nil && db.Pool != nil {
+			futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
+			fmt.Println("Futures arbitrage handler initialized successfully")
+		} else {
+			fmt.Println("Database not available for futures arbitrage handler initialization")
+		}
 	}()
 
 	// API v1 routes with telemetry
@@ -131,11 +136,12 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			users.POST("/register", userHandler.RegisterUser)
 			users.POST("/login", userHandler.LoginUser)
-			users.GET("/profile", userHandler.GetUserProfile)
+			users.GET("/profile", authMiddleware.RequireAuth(), userHandler.GetUserProfile)
 		}
 
 		// Alerts management
 		alerts := v1.Group("/alerts")
+		alerts.Use(authMiddleware.RequireAuth())
 		{
 			alerts.GET("/", getUserAlerts)
 			alerts.POST("/", createAlert)

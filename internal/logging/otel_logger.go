@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -43,16 +45,49 @@ func NewOTLPLogger(config OTLPConfig) (*OTLPLogger, error) {
 
 	ctx := context.Background()
 
-	// Parse endpoint
+	// Parse and normalize endpoint
 	endpoint := config.Endpoint
 	if endpoint == "" {
 		endpoint = "http://localhost:4318"
 	}
 
-	// Create OTLP log exporter
+	// Ensure we don't have double protocol prefix
+	endpoint = strings.TrimPrefix(endpoint, "http://http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://https://")
+	// Also handle URL-encoded protocols
+	endpoint = strings.ReplaceAll(endpoint, "http://http%3A//", "http://")
+	endpoint = strings.ReplaceAll(endpoint, "https://https%3A//", "https://")
+
+	// URL decode the endpoint to handle any URL-encoded characters
+	decoded, err := url.QueryUnescape(endpoint)
+	if err == nil {
+		endpoint = decoded
+	}
+
+	// Parse the endpoint URL
+	u, parseErr := url.Parse(endpoint)
+	if parseErr != nil || u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("invalid OTLP endpoint: %q: %v", endpoint, parseErr)
+	}
+
+	insecure := (u.Scheme == "http")
+	// otlploghttp.New expects WithEndpoint(host[:port]) and path with WithURLPath
+	endpointHostPort := u.Host
+
+	path := u.Path
+	if path == "" || path == "/" {
+		path = "/v1/logs"
+	}
+	// if user passed full path ending with /v1/logs keep as-is, otherwise ensure it ends with /v1/logs
+	if !strings.HasSuffix(path, "/v1/logs") {
+		// trim trailing slash then append
+		path = strings.TrimRight(path, "/") + "/v1/logs"
+	}
+
+	// Create OTLP log exporter with proper endpoint configuration
+	fullURL := fmt.Sprintf("%s://%s%s", map[bool]string{true: "http", false: "https"}[insecure], endpointHostPort, path)
 	exporter, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(endpoint),
-		otlploghttp.WithURLPath("/v1/logs"),
+		otlploghttp.WithEndpointURL(fullURL),
 		otlploghttp.WithInsecure(),
 	)
 	if err != nil {

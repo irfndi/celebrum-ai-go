@@ -235,9 +235,9 @@ func TestMemoryMonitoring(t *testing.T) {
 	// Test that memory values are reasonable
 	assert.True(t, memStats.Total > 0)
 	assert.True(t, memStats.Available > 0)
-	assert.True(t, memStats.Used >= 0)
-	assert.True(t, memStats.UsedPercent >= 0)
-	assert.True(t, memStats.UsedPercent <= 100)
+	assert.LessOrEqual(t, memStats.Used, memStats.Total)
+	assert.GreaterOrEqual(t, memStats.UsedPercent, 0.0)
+	assert.LessOrEqual(t, memStats.UsedPercent, 100.0)
 }
 
 // Test configuration validation

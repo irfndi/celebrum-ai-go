@@ -807,7 +807,7 @@ func TestRedisBlacklistCache_LoadFromDatabase(t *testing.T) {
 	// Mock the repository call to return blacklisted entries
 	now := time.Now()
 	futureTime := now.Add(time.Hour)
-	
+
 	repo.On("GetAllBlacklisted", mock.Anything).Return([]database.ExchangeBlacklistEntry{
 		{
 			ID:           1,
@@ -912,8 +912,8 @@ func TestRedisBlacklistCache_LoadFromDatabase_WithExpired(t *testing.T) {
 	cache := NewRedisBlacklistCache(client, repo)
 
 	now := time.Now()
-	pastTime := now.Add(-time.Hour) // Expired
-	futureTime := now.Add(time.Hour)  // Not expired
+	pastTime := now.Add(-time.Hour)  // Expired
+	futureTime := now.Add(time.Hour) // Not expired
 
 	repo.On("GetAllBlacklisted", mock.Anything).Return([]database.ExchangeBlacklistEntry{
 		{

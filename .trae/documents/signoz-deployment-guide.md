@@ -144,9 +144,9 @@ COLLECTOR_MEMORY_LIMIT=512m
 
 # Security Configuration
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=
+CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:?Please set a secure ClickHouse password}
 SIGNOZ_ADMIN_USER=admin
-SIGNOZ_ADMIN_PASSWORD=
+SIGNOZ_ADMIN_PASSWORD=${SIGNOZ_ADMIN_PASSWORD:?Please set a strong admin password}
 ```
 
 ### 4.3 Docker Compose Configuration
@@ -243,7 +243,7 @@ services:
     image: redis:7-alpine
     container_name: signoz-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379" # limit exposure to localhost
     volumes:
       - ${REDIS_DATA_PATH:-./data/redis}:/data
     command: redis-server --appendonly yes

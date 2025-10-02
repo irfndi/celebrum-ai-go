@@ -661,14 +661,14 @@ func TestEnhancedArbitrageOpportunity_Struct(t *testing.T) {
 		MaxAmount:     decimal.NewFromFloat(200.0),
 		BaseAmount:    decimal.NewFromFloat(20000.0),
 	}
-	
+
 	buyExchanges := []ExchangePrice{
 		{ExchangeID: 1, ExchangeName: "Binance", Price: decimal.NewFromFloat(50050.00), Volume: decimal.NewFromFloat(10.5)},
 	}
 	sellExchanges := []ExchangePrice{
 		{ExchangeID: 2, ExchangeName: "Coinbase", Price: decimal.NewFromFloat(50250.00), Volume: decimal.NewFromFloat(8.2)},
 	}
-	
+
 	volumeWeighted := VolumeWeightedPrices{
 		BuyVWAP:  decimal.NewFromFloat(50050.00),
 		SellVWAP: decimal.NewFromFloat(50250.00),
@@ -769,12 +769,12 @@ func TestArbitrageAggregationInput_Struct(t *testing.T) {
 // Test ArbitrageQualityMetrics struct
 func TestArbitrageQualityMetrics_Struct(t *testing.T) {
 	metrics := ArbitrageQualityMetrics{
-		VolumeScore:    decimal.NewFromFloat(85.0),
-		SpreadScore:    decimal.NewFromFloat(90.0),
-		ExchangeScore:  decimal.NewFromFloat(95.0),
-		LiquidityScore: decimal.NewFromFloat(88.0),
-		OverallScore:   decimal.NewFromFloat(89.5),
-		IsAcceptable:   true,
+		VolumeScore:     decimal.NewFromFloat(85.0),
+		SpreadScore:     decimal.NewFromFloat(90.0),
+		ExchangeScore:   decimal.NewFromFloat(95.0),
+		LiquidityScore:  decimal.NewFromFloat(88.0),
+		OverallScore:    decimal.NewFromFloat(89.5),
+		IsAcceptable:    true,
 		RejectionReason: "",
 	}
 
@@ -825,48 +825,48 @@ func TestFuturesArbitrageOpportunity_Struct(t *testing.T) {
 	}
 
 	opportunity := FuturesArbitrageOpportunity{
-		ID:                      "futures-arb-123",
-		Symbol:                  "BTC/USDT",
-		BaseCurrency:            "BTC",
-		QuoteCurrency:           "USDT",
-		LongExchange:            "Binance",
-		ShortExchange:           "Bybit",
-		LongExchangeID:          1,
-		ShortExchangeID:         2,
-		LongFundingRate:        decimal.NewFromFloat(0.0001),
-		ShortFundingRate:       decimal.NewFromFloat(-0.0002),
-		NetFundingRate:          decimal.NewFromFloat(0.0003),
-		FundingInterval:         8,
-		LongMarkPrice:           decimal.NewFromFloat(50000.00),
-		ShortMarkPrice:          decimal.NewFromFloat(50100.00),
-		PriceDifference:         decimal.NewFromFloat(100.00),
+		ID:                        "futures-arb-123",
+		Symbol:                    "BTC/USDT",
+		BaseCurrency:              "BTC",
+		QuoteCurrency:             "USDT",
+		LongExchange:              "Binance",
+		ShortExchange:             "Bybit",
+		LongExchangeID:            1,
+		ShortExchangeID:           2,
+		LongFundingRate:           decimal.NewFromFloat(0.0001),
+		ShortFundingRate:          decimal.NewFromFloat(-0.0002),
+		NetFundingRate:            decimal.NewFromFloat(0.0003),
+		FundingInterval:           8,
+		LongMarkPrice:             decimal.NewFromFloat(50000.00),
+		ShortMarkPrice:            decimal.NewFromFloat(50100.00),
+		PriceDifference:           decimal.NewFromFloat(100.00),
 		PriceDifferencePercentage: decimal.NewFromFloat(0.2),
-		HourlyRate:              decimal.NewFromFloat(0.0000375),
-		DailyRate:               decimal.NewFromFloat(0.0009),
-		APY:                     decimal.NewFromFloat(0.3285),
-		EstimatedProfit8h:       decimal.NewFromFloat(0.3),
-		EstimatedProfitDaily:    decimal.NewFromFloat(0.9),
-		EstimatedProfitWeekly:   decimal.NewFromFloat(6.3),
-		EstimatedProfitMonthly:  decimal.NewFromFloat(27.0),
-		RiskScore:               decimal.NewFromFloat(3.5),
-		VolatilityScore:         decimal.NewFromFloat(2.1),
-		LiquidityScore:          decimal.NewFromFloat(8.5),
-		RecommendedPositionSize: decimal.NewFromFloat(1.0),
-		MaxLeverage:             decimal.NewFromFloat(10.0),
-		RecommendedLeverage:     decimal.NewFromFloat(5.0),
-		StopLossPercentage:      decimal.NewFromFloat(2.0),
-		MinPositionSize:          decimal.NewFromFloat(0.1),
-		MaxPositionSize:          decimal.NewFromFloat(10.0),
-		OptimalPositionSize:     decimal.NewFromFloat(2.5),
-		DetectedAt:              now,
-		ExpiresAt:               expiry,
-		NextFundingTime:         nextFunding,
-		TimeToNextFunding:      240,
-		IsActive:                true,
-		MarketTrend:             "bullish",
-		Volume24h:               decimal.NewFromFloat(1000000.0),
-		OpenInterest:            decimal.NewFromFloat(500000.0),
-		FundingRateHistory:      history,
+		HourlyRate:                decimal.NewFromFloat(0.0000375),
+		DailyRate:                 decimal.NewFromFloat(0.0009),
+		APY:                       decimal.NewFromFloat(0.3285),
+		EstimatedProfit8h:         decimal.NewFromFloat(0.3),
+		EstimatedProfitDaily:      decimal.NewFromFloat(0.9),
+		EstimatedProfitWeekly:     decimal.NewFromFloat(6.3),
+		EstimatedProfitMonthly:    decimal.NewFromFloat(27.0),
+		RiskScore:                 decimal.NewFromFloat(3.5),
+		VolatilityScore:           decimal.NewFromFloat(2.1),
+		LiquidityScore:            decimal.NewFromFloat(8.5),
+		RecommendedPositionSize:   decimal.NewFromFloat(1.0),
+		MaxLeverage:               decimal.NewFromFloat(10.0),
+		RecommendedLeverage:       decimal.NewFromFloat(5.0),
+		StopLossPercentage:        decimal.NewFromFloat(2.0),
+		MinPositionSize:           decimal.NewFromFloat(0.1),
+		MaxPositionSize:           decimal.NewFromFloat(10.0),
+		OptimalPositionSize:       decimal.NewFromFloat(2.5),
+		DetectedAt:                now,
+		ExpiresAt:                 expiry,
+		NextFundingTime:           nextFunding,
+		TimeToNextFunding:         240,
+		IsActive:                  true,
+		MarketTrend:               "bullish",
+		Volume24h:                 decimal.NewFromFloat(1000000.0),
+		OpenInterest:              decimal.NewFromFloat(500000.0),
+		FundingRateHistory:        history,
 	}
 
 	assert.Equal(t, "futures-arb-123", opportunity.ID)
@@ -924,19 +924,19 @@ func TestFuturesArbitrageCalculationInput_Struct(t *testing.T) {
 // Test FuturesArbitrageRiskMetrics struct
 func TestFuturesArbitrageRiskMetrics_Struct(t *testing.T) {
 	metrics := FuturesArbitrageRiskMetrics{
-		PriceCorrelation:       decimal.NewFromFloat(0.95),
-		PriceVolatility:        decimal.NewFromFloat(0.15),
-		MaxDrawdown:            decimal.NewFromFloat(0.08),
-		FundingRateVolatility:  decimal.NewFromFloat(0.05),
-		FundingRateStability:   decimal.NewFromFloat(0.92),
-		BidAskSpread:           decimal.NewFromFloat(0.001),
-		MarketDepth:            decimal.NewFromFloat(0.95),
-		SlippageRisk:           decimal.NewFromFloat(0.02),
-		ExchangeReliability:    decimal.NewFromFloat(0.98),
-		CounterpartyRisk:       decimal.NewFromFloat(0.01),
-		OverallRiskScore:       decimal.NewFromFloat(25.5),
-		RiskCategory:           "medium",
-		Recommendation:         "Proceed with caution",
+		PriceCorrelation:      decimal.NewFromFloat(0.95),
+		PriceVolatility:       decimal.NewFromFloat(0.15),
+		MaxDrawdown:           decimal.NewFromFloat(0.08),
+		FundingRateVolatility: decimal.NewFromFloat(0.05),
+		FundingRateStability:  decimal.NewFromFloat(0.92),
+		BidAskSpread:          decimal.NewFromFloat(0.001),
+		MarketDepth:           decimal.NewFromFloat(0.95),
+		SlippageRisk:          decimal.NewFromFloat(0.02),
+		ExchangeReliability:   decimal.NewFromFloat(0.98),
+		CounterpartyRisk:      decimal.NewFromFloat(0.01),
+		OverallRiskScore:      decimal.NewFromFloat(25.5),
+		RiskCategory:          "medium",
+		Recommendation:        "Proceed with caution",
 	}
 
 	assert.True(t, decimal.NewFromFloat(0.95).Equal(metrics.PriceCorrelation))
@@ -954,7 +954,7 @@ func TestFuturesPositionSizing_Struct(t *testing.T) {
 		ModerateSize:      decimal.NewFromFloat(2000.0),
 		AggressiveSize:    decimal.NewFromFloat(3000.0),
 		MinLeverage:       decimal.NewFromFloat(1.0),
-		OptimalLeverage:  decimal.NewFromFloat(5.0),
+		OptimalLeverage:   decimal.NewFromFloat(5.0),
 		MaxSafeLeverage:   decimal.NewFromFloat(8.0),
 		StopLossPrice:     decimal.NewFromFloat(49000.00),
 		TakeProfitPrice:   decimal.NewFromFloat(51000.00),
@@ -1007,22 +1007,22 @@ func TestFuturesArbitrageStrategy_Struct(t *testing.T) {
 	}
 
 	strategy := FuturesArbitrageStrategy{
-		ID:                  "strategy-123",
-		Name:                "BTC/USDT Funding Rate Arbitrage",
-		Description:         "Exploit funding rate differential between Binance and Bybit",
-		Opportunity:         opportunity,
-		RiskMetrics:         riskMetrics,
-		PositionSizing:      positionSizing,
-		LongPosition:        longPosition,
-		ShortPosition:       shortPosition,
-		ExecutionOrder:      []string{"Open long position", "Open short position", "Set stop losses"},
+		ID:                     "strategy-123",
+		Name:                   "BTC/USDT Funding Rate Arbitrage",
+		Description:            "Exploit funding rate differential between Binance and Bybit",
+		Opportunity:            opportunity,
+		RiskMetrics:            riskMetrics,
+		PositionSizing:         positionSizing,
+		LongPosition:           longPosition,
+		ShortPosition:          shortPosition,
+		ExecutionOrder:         []string{"Open long position", "Open short position", "Set stop losses"},
 		EstimatedExecutionTime: 30,
-		ExpectedReturn:      decimal.NewFromFloat(0.3),
-		SharpeRatio:         decimal.NewFromFloat(2.5),
-		MaxDrawdownExpected: decimal.NewFromFloat(0.08),
-		CreatedAt:           now,
-		UpdatedAt:           now,
-		IsActive:            true,
+		ExpectedReturn:         decimal.NewFromFloat(0.3),
+		SharpeRatio:            decimal.NewFromFloat(2.5),
+		MaxDrawdownExpected:    decimal.NewFromFloat(0.08),
+		CreatedAt:              now,
+		UpdatedAt:              now,
+		IsActive:               true,
 	}
 
 	assert.Equal(t, "strategy-123", strategy.ID)
@@ -1149,7 +1149,7 @@ func TestFuturesMarketSummary_Struct(t *testing.T) {
 func TestArbitrageOpportunityResponse_Getters(t *testing.T) {
 	now := time.Now()
 	expiry := now.Add(time.Hour)
-	
+
 	response := ArbitrageOpportunityResponse{
 		ID:               "arb-123",
 		Symbol:           "BTC/USDT",

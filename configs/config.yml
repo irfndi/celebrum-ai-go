@@ -29,13 +29,27 @@ database:
   host: ${DATABASE_HOST:-postgres}
   port: ${DATABASE_PORT:-5432}
   user: ${DATABASE_USER:-postgres}
-  password: ${DATABASE_PASSWORD:-postgres}
+  password: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env file}
   dbname: ${DATABASE_DBNAME:-celebrum_ai}
   sslmode: ${DATABASE_SSLMODE:-disable}
-  max_open_conns: 25
-  max_idle_conns: 5
-  conn_max_lifetime: 300s
-  conn_max_idle_time: 60s
+  max_open_conns: ${DATABASE_MAX_CONNS:-25}
+  max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:-5}
+  conn_max_lifetime: ${DATABASE_CONN_MAX_LIFETIME:-300s}
+  conn_max_idle_time: ${DATABASE_CONN_MAX_IDLE_TIME:-60s}
+  # PostgreSQL 18 specific optimizations
+  application_name: ${DATABASE_APP_NAME:-celebrum-ai}
+  connect_timeout: ${DATABASE_CONNECT_TIMEOUT:-30}
+  statement_timeout: ${DATABASE_STATEMENT_TIMEOUT:-300000}
+  query_timeout: ${DATABASE_QUERY_TIMEOUT:-300000}
+  # Connection pool tuning for async operations
+  pool_timeout: ${DATABASE_POOL_TIMEOUT:-10}
+  pool_health_check_period: ${DATABASE_HEALTH_CHECK_PERIOD:-30}
+  pool_max_lifetime: ${DATABASE_POOL_MAX_LIFETIME:-3600}
+  pool_idle_timeout: ${DATABASE_POOL_IDLE_TIMEOUT:-600}
+  # Enable PostgreSQL 18 async features
+  enable_async: true
+  async_batch_size: ${DATABASE_ASYNC_BATCH_SIZE:-1000}
+  async_concurrency: ${DATABASE_ASYNC_CONCURRENCY:-10}
 
 # Redis configuration
 redis:

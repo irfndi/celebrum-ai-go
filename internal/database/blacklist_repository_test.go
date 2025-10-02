@@ -65,7 +65,7 @@ func TestBlacklistRepository_ExchangeBlacklistEntry(t *testing.T) {
 func TestBlacklistRepository_ExchangeBlacklistEntry_WithExpiration(t *testing.T) {
 	now := time.Now()
 	future := now.Add(24 * time.Hour)
-	
+
 	entry := ExchangeBlacklistEntry{
 		ID:           2,
 		ExchangeName: "expired_exchange",
@@ -88,7 +88,7 @@ func TestBlacklistRepository_ConcurrentAccess(t *testing.T) {
 	// Test concurrent access simulation
 	var wg sync.WaitGroup
 	concurrentOps := 10
-	
+
 	wg.Add(concurrentOps)
 	for i := 0; i < concurrentOps; i++ {
 		go func(id int) {
@@ -173,10 +173,10 @@ func TestBlacklistRepository_DataValidation(t *testing.T) {
 // TestBlacklistRepository_TimeScenarios tests various time-related scenarios
 func TestBlacklistRepository_TimeScenarios(t *testing.T) {
 	now := time.Now()
-	
+
 	tests := []struct {
-		name          string
-		entry         ExchangeBlacklistEntry
+		name           string
+		entry          ExchangeBlacklistEntry
 		timeComparison func(t *testing.T, entry ExchangeBlacklistEntry)
 	}{
 		{
@@ -246,7 +246,7 @@ func TestBlacklistRepository_ErrorScenarios(t *testing.T) {
 	// Test context cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	// Verify context is cancelled
 	select {
 	case <-ctx.Done():
@@ -266,13 +266,13 @@ func TestBlacklistRepository_RepositoryMock(t *testing.T) {
 	// Test that we can create a mock pool and it has the expected interface
 	assert.NotNil(t, mockPool, "Expected mock pool to be non-nil")
 	assert.Implements(t, (*pgxmock.PgxPoolIface)(nil), mockPool, "Expected mock pool to implement PgxPoolIface")
-	
+
 	// Test that we can set expectations on the mock pool
 	mockPool.ExpectClose()
-	
+
 	// Test closing the mock pool
 	mockPool.Close()
-	
+
 	// Verify expectations were met
 	err = mockPool.ExpectationsWereMet()
 	assert.NoError(t, err, "Expected all expectations to be met")
@@ -293,7 +293,7 @@ func TestBlacklistRepository_SQLInjection(t *testing.T) {
 			// Test that malicious inputs are properly escaped
 			assert.Contains(t, maliciousInput, "'", "Expected malicious input to contain quotes")
 			assert.NotEmpty(t, maliciousInput, "Expected malicious input to be non-empty")
-			
+
 			// In a real implementation, we would test that the repository properly
 			// parameterizes queries to prevent SQL injection
 		})
@@ -303,11 +303,11 @@ func TestBlacklistRepository_SQLInjection(t *testing.T) {
 // TestBlacklistRepository_ConstraintValidation tests constraint validation scenarios
 func TestBlacklistRepository_ConstraintValidation(t *testing.T) {
 	tests := []struct {
-		name          string
-		exchangeName  string
-		reason        string
-		expiresAt     *time.Time
-		expectValid   bool
+		name         string
+		exchangeName string
+		reason       string
+		expiresAt    *time.Time
+		expectValid  bool
 	}{
 		{
 			name:         "valid entry",
@@ -318,15 +318,15 @@ func TestBlacklistRepository_ConstraintValidation(t *testing.T) {
 		},
 		{
 			name:         "very long exchange name",
-			exchangeName:  "this_exchange_name_is_too_long_for_the_database_column_constraint",
+			exchangeName: "this_exchange_name_is_too_long_for_the_database_column_constraint",
 			reason:       "Long name test",
 			expiresAt:    nil,
 			expectValid:  false,
 		},
 		{
 			name:         "very long reason",
-			exchangeName:  "test_exchange",
-			reason:        "This reason is too long for the database column constraint and should be rejected by validation",
+			exchangeName: "test_exchange",
+			reason:       "This reason is too long for the database column constraint and should be rejected by validation",
 			expiresAt:    nil,
 			expectValid:  false,
 		},
@@ -349,7 +349,7 @@ func TestBlacklistRepository_ConstraintValidation(t *testing.T) {
 // TestBlacklistRepository_BusinessLogic tests business logic scenarios
 func TestBlacklistRepository_BusinessLogic(t *testing.T) {
 	now := time.Now()
-	
+
 	// Test blacklist entry business logic
 	entry := ExchangeBlacklistEntry{
 		ID:           1,

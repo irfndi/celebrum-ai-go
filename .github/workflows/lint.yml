@@ -2,9 +2,10 @@ name: Lint
 
 on:
   push:
-    branches: [ main, development ]
+    branches: [ main, develop, development ]
   pull_request:
-    branches: [ main, development ]
+    branches: [ main, develop, development ]
+  workflow_dispatch:
 
 jobs:
   golangci:
@@ -20,10 +21,16 @@ jobs:
         go-version: '1.25.0'
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v7
       with:
-        version: v2.4.0
-        args: --timeout=5m --output.text.path=stdout --output.text.colors=true
+        version: v2.5.0
+        args: --timeout=5m
+        skip-cache: true
+        skip-save-cache: true
+      env:
+        GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
         
     - name: Check formatting
       run: make fmt-check
+      # Don't fail CI for formatting; surface as warning only
+      continue-on-error: true

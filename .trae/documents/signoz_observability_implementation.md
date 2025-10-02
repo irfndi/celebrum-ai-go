@@ -6,7 +6,7 @@ This document outlines the comprehensive implementation of SigNoz for distribute
 
 ### Current Stack Analysis
 - **Go Main Server**: Core application on port 8080
-- **Node.js CCXT Service**: Exchange data service on port 3001  
+- **Node.js CCXT Service**: Exchange data service on port 3000  
 - **Redis**: Caching layer
 - **PostgreSQL**: Primary database
 - **Telegram Bot**: Webhook integration
@@ -148,7 +148,7 @@ receivers:
             - targets: ['host.docker.internal:8080']
         - job_name: 'ccxt-service'
           static_configs:
-            - targets: ['host.docker.internal:3001']
+            - targets: ['host.docker.internal:3000']
 
 processors:
   batch:

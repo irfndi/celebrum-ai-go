@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,6 +15,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
+
+// Context key types to avoid collisions
+type contextKey string
+
+const (
+	requestIDKey contextKey = "request_id"
+)
+
+// generateTestPassword creates a random password for testing to avoid hardcoded secrets
+// This addresses GitGuardian security alerts about hardcoded test credentials
+func generateTestPassword() string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+	b := make([]byte, 12)
+	for i := range b {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		b[i] = letters[n.Int64()]
+	}
+	return string(b)
+}
 
 // TestIntegrationAPI tests the integration of various API components
 func TestIntegrationAPI(t *testing.T) {
@@ -42,12 +63,12 @@ func TestIntegrationAPI(t *testing.T) {
 	router.GET("/api/v1/market/ticker/:exchange/:symbol", func(c *gin.Context) {
 		exchange := c.Param("exchange")
 		symbol := c.Param("symbol")
-		
+
 		c.JSON(http.StatusOK, gin.H{
-			"exchange": exchange,
-			"symbol":   symbol,
-			"price":    50000.0,
-			"volume":   1000.0,
+			"exchange":  exchange,
+			"symbol":    symbol,
+			"price":     50000.0,
+			"volume":    1000.0,
 			"timestamp": time.Now(),
 		})
 	})
@@ -58,12 +79,12 @@ func TestIntegrationAPI(t *testing.T) {
 			Password string `json:"password"`
 			Email    string `json:"email"`
 		}
-		
+
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "User registered successfully",
 			"user": gin.H{
@@ -112,12 +133,12 @@ func TestIntegrationAPI(t *testing.T) {
 			},
 		},
 		{
-			name:           "User registration endpoint",
-			method:         "POST",
-			path:           "/api/v1/users/register",
+			name:   "User registration endpoint",
+			method: "POST",
+			path:   "/api/v1/users/register",
 			body: map[string]interface{}{
 				"username": "testuser",
-				"password": "testpass123",
+				"password": generateTestPassword(),
 				"email":    "test@example.com",
 			},
 			expectedStatus: http.StatusCreated,
@@ -198,8 +219,8 @@ func TestIntegrationMiddleware(t *testing.T) {
 		userID := c.MustGet("user_id").(string)
 		middlewareValue := c.MustGet("middleware_value").(string)
 		c.JSON(http.StatusOK, gin.H{
-			"message":  "Test endpoint",
-			"user_id":  userID,
+			"message":    "Test endpoint",
+			"user_id":    userID,
 			"middleware": middlewareValue,
 		})
 	})
@@ -314,14 +335,14 @@ func TestIntegrationContext(t *testing.T) {
 
 	// Add context middleware
 	router.Use(func(c *gin.Context) {
-		ctx := context.WithValue(c.Request.Context(), "request_id", "test-123")
+		ctx := context.WithValue(c.Request.Context(), requestIDKey, "test-123")
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
 
 	// Define test route
 	router.GET("/api/v1/context", func(c *gin.Context) {
-		requestID := c.Request.Context().Value("request_id").(string)
+		requestID := c.Request.Context().Value(requestIDKey).(string)
 		c.JSON(http.StatusOK, gin.H{
 			"request_id": requestID,
 			"timestamp":  time.Now(),
@@ -357,7 +378,7 @@ func TestIntegrationPerformance(t *testing.T) {
 	router.GET("/api/v1/performance", func(c *gin.Context) {
 		// Simulate some processing time
 		time.Sleep(10 * time.Millisecond)
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"message":   "Performance test",
 			"timestamp": time.Now(),
@@ -370,20 +391,20 @@ func TestIntegrationPerformance(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			req, _ := http.NewRequest("GET", "/api/v1/performance", nil)
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			assert.Equal(t, http.StatusOK, w.Code)
-			
+
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			assert.NoError(t, err)
 			assert.Equal(t, "Performance test", response["message"])
 		}(i)
 	}
-	
+
 	wg.Wait()
 }

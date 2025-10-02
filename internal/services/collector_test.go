@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	// Initialize a basic logger to prevent nil pointer dereference in tests
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
-	
+
 	// Initialize telemetry with disabled export to prevent nil pointer dereference
 	// This is needed because ExchangeCapabilityCache tries to log via telemetry.GetLogger()
 	telemetryConfig := telemetry.TelemetryConfig{
@@ -34,24 +34,25 @@ func TestMain(m *testing.M) {
 		ServiceName:  "test-collector-service",
 		LogLevel:     "error",
 	}
-	
+
 	// This will initialize the global logger in telemetry package
 	err := telemetry.InitTelemetry(telemetryConfig)
 	if err != nil {
 		// Continue even if telemetry fails - we'll use fallback logging
 		fmt.Printf("Warning: Failed to initialize telemetry for tests: %v\n", err)
 	}
-	
+
 	// Run the tests
 	code := m.Run()
-	
+
 	// Clean up
-	telemetry.Shutdown()
-	
+	if err := telemetry.Shutdown(); err != nil {
+		fmt.Printf("Failed to shutdown telemetry: %v\n", err)
+	}
+
 	// Exit with the same code as the tests
 	os.Exit(code)
 }
-
 
 func TestNewCollectorService(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
@@ -564,7 +565,7 @@ func TestCollectorService_SaveBulkTickerData(t *testing.T) {
 			assert.NotNil(t, r)
 		}
 	}()
-	
+
 	err := collector.saveBulkTickerData(ticker)
 	// If we reach here, check for error
 	assert.Error(t, err)
@@ -573,14 +574,14 @@ func TestCollectorService_SaveBulkTickerData(t *testing.T) {
 // Test saveBulkTickerData with nil database (should handle gracefully)
 func TestCollectorService_SaveBulkTickerData_NilDatabase(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
-	
+
 	// Create config with blacklist TTL
 	config := &config.Config{
 		Blacklist: config.BlacklistConfig{
 			TTL: "1h",
 		},
 	}
-	
+
 	blacklistCache := cache.NewInMemoryBlacklistCache()
 	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
@@ -600,7 +601,7 @@ func TestCollectorService_SaveBulkTickerData_NilDatabase(t *testing.T) {
 			assert.NotNil(t, r)
 		}
 	}()
-	
+
 	err := collector.saveBulkTickerData(ticker)
 	// If we reach here without panicking, check for error
 	assert.NotNil(t, err, "Expected error when database is nil")
@@ -609,14 +610,14 @@ func TestCollectorService_SaveBulkTickerData_NilDatabase(t *testing.T) {
 // Test saveBulkTickerData with invalid data (should be blacklisted)
 func TestCollectorService_SaveBulkTickerData_InvalidData(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
-	
+
 	// Create config with blacklist TTL
 	config := &config.Config{
 		Blacklist: config.BlacklistConfig{
 			TTL: "1h",
 		},
 	}
-	
+
 	blacklistCache := cache.NewInMemoryBlacklistCache()
 	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
@@ -658,11 +659,11 @@ func TestCollectorService_CollectTickerDataDirect(t *testing.T) {
 			assert.NotNil(t, r)
 		}
 	}()
-	
+
 	err = collector.collectTickerDataDirect("binance", "ETH/USDT")
 	// If we reach here without panicking, check for error
 	assert.Error(t, err) // Should error due to nil database and other dependencies
-	assert.True(t, assert.Contains(t, err.Error(), "failed to fetch ticker data") || 
+	assert.True(t, assert.Contains(t, err.Error(), "failed to fetch ticker data") ||
 		assert.Contains(t, err.Error(), "database pool is not available"))
 }
 
@@ -693,12 +694,12 @@ func TestCollectorService_CollectTickerDataDirect_WithMockCCXT(t *testing.T) {
 			assert.NotNil(t, r)
 		}
 	}()
-	
+
 	err := collector.collectTickerDataDirect("binance", "ETH/USDT")
 	// If we reach here without panicking, check for error
 	assert.Error(t, err)
 	// The error should be about database or exchange creation, not CCXT fetch
-	assert.True(t, assert.Contains(t, err.Error(), "failed to get or create exchange") || 
+	assert.True(t, assert.Contains(t, err.Error(), "failed to get or create exchange") ||
 		assert.Contains(t, err.Error(), "database pool is not available"))
 
 	mockCCXT.AssertExpectations(t)
@@ -707,14 +708,14 @@ func TestCollectorService_CollectTickerDataDirect_WithMockCCXT(t *testing.T) {
 // Test collectTickerDataDirect with CCXT error (should blacklist)
 func TestCollectorService_CollectTickerDataDirect_CCXErrorWithBlacklist(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
-	
+
 	// Create config with blacklist TTL
 	config := &config.Config{
 		Blacklist: config.BlacklistConfig{
 			TTL: "1h",
 		},
 	}
-	
+
 	blacklistCache := cache.NewInMemoryBlacklistCache()
 	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
@@ -739,7 +740,7 @@ func TestCollectorService_CollectFundingRates(t *testing.T) {
 	// Initialize a basic logger for testing to prevent nil pointer dereference
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel) // Reduce log noise in tests
-	
+
 	mockCCXT := &testmocks.MockCCXTService{}
 	config := &config.Config{}
 	blacklistCache := cache.NewInMemoryBlacklistCache()
@@ -802,7 +803,7 @@ func TestCollectorService_CollectFundingRatesBulk(t *testing.T) {
 	mockCCXT.AssertExpectations(t)
 }
 
-// Test storeFundingRate function 
+// Test storeFundingRate function
 func TestCollectorService_StoreFundingRate(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -927,7 +928,7 @@ func TestCollectorService_CollectFundingRatesBulk_Concurrent(t *testing.T) {
 	mockCCXT := &testmocks.MockCCXTService{}
 	config := &config.Config{}
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Use nil database to test error handling
 	collector := NewCollectorService(nil, mockCCXT, config, nil, blacklistCache)
 
@@ -938,7 +939,7 @@ func TestCollectorService_CollectFundingRatesBulk_Concurrent(t *testing.T) {
 
 	// Mock CCXT to return error to avoid database access issues
 	mockCCXT.On("FetchAllFundingRates", mock.Anything, "binance").Return([]ccxt.FundingRate{}, fmt.Errorf("funding rates not available"))
-	
+
 	collector.ccxtService = mockCCXT
 
 	// Test concurrent processing - should handle CCXT error gracefully without panicking
@@ -984,7 +985,7 @@ func TestSymbolCache_Set(t *testing.T) {
 
 	// Test setting new data
 	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT"})
-	
+
 	// Verify data was set
 	symbols, found := cache.Get("binance")
 	assert.True(t, found)
@@ -992,7 +993,7 @@ func TestSymbolCache_Set(t *testing.T) {
 
 	// Test updating existing data
 	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT", "SOL/USDT"})
-	
+
 	// Verify data was updated
 	symbols, found = cache.Get("binance")
 	assert.True(t, found)
@@ -1000,7 +1001,7 @@ func TestSymbolCache_Set(t *testing.T) {
 
 	// Test setting empty slice
 	cache.Set("coinbase", []string{})
-	
+
 	// Verify empty slice was set
 	symbols, found = cache.Get("coinbase")
 	assert.True(t, found)
@@ -1008,7 +1009,7 @@ func TestSymbolCache_Set(t *testing.T) {
 
 	// Test setting nil slice
 	cache.Set("kucoin", nil)
-	
+
 	// Verify nil slice was set
 	symbols, found = cache.Get("kucoin")
 	assert.True(t, found)
@@ -1016,7 +1017,7 @@ func TestSymbolCache_Set(t *testing.T) {
 
 	// Test with empty exchange ID
 	cache.Set("", []string{"TEST/USDT"})
-	
+
 	// Verify empty exchange ID was handled
 	symbols, found = cache.Get("")
 	assert.True(t, found)
@@ -1035,7 +1036,7 @@ func TestSymbolCache_GetStats(t *testing.T) {
 
 	// Perform some operations
 	cache.Set("binance", []string{"BTC/USDT"})
-	cache.Get("binance") // Hit
+	cache.Get("binance")  // Hit
 	cache.Get("coinbase") // Miss
 	cache.Get("coinbase") // Miss
 
@@ -1069,13 +1070,13 @@ func TestSymbolCache_ConcurrentOperations(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		exchangeID := fmt.Sprintf("exchange%d", i)
 		expectedSymbol := fmt.Sprintf("SYMBOL%d/USDT", i)
-		
+
 		symbols, found := cache.Get(exchangeID)
 		assert.True(t, found)
 		assert.Equal(t, []string{expectedSymbol}, symbols)
 		// Verify cache state through GetStats instead of IsInitialized
-	stats := cache.GetStats()
-	assert.Equal(t, int64(10), stats.Sets) // We Set 10 entries
+		stats := cache.GetStats()
+		assert.Equal(t, int64(10), stats.Sets) // We Set 10 entries
 	}
 
 	// Test concurrent Get operations
@@ -1114,7 +1115,7 @@ func TestSymbolCache_EdgeCases(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		longList[i] = fmt.Sprintf("SYMBOL%d/USDT", i)
 	}
-	
+
 	cache.Set("large_exchange", longList)
 	symbols, found = cache.Get("large_exchange")
 	assert.True(t, found)
@@ -1151,7 +1152,7 @@ func TestSymbolCache_LogStats(t *testing.T) {
 
 	// Perform some operations to generate stats
 	cache.Set("binance", []string{"BTC/USDT"})
-	cache.Get("binance") // Hit
+	cache.Get("binance")  // Hit
 	cache.Get("coinbase") // Miss
 
 	// Test LogStats with actual data
@@ -1183,11 +1184,11 @@ func TestCollectorService_ConvertMarketPriceInterfacesToModels(t *testing.T) {
 		volume:       1000.0,
 		timestamp:    time.Now(),
 	}
-	
+
 	result = service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{singleItem})
 	assert.NotNil(t, result)
 	assert.Len(t, result, 1)
-	
+
 	convertedItem := result[0]
 	assert.Equal(t, 0, convertedItem.ExchangeID) // Should be 0 as per implementation
 	assert.Equal(t, "binance", convertedItem.ExchangeName)
@@ -1207,15 +1208,15 @@ func TestCollectorService_ConvertMarketPriceInterfacesToModels(t *testing.T) {
 			timestamp:    time.Now().Add(-1 * time.Hour),
 		},
 	}
-	
+
 	result = service.convertMarketPriceInterfacesToModels(multipleItems)
 	assert.NotNil(t, result)
 	assert.Len(t, result, 2)
-	
+
 	// Verify first item
 	assert.Equal(t, "binance", result[0].ExchangeName)
 	assert.Equal(t, "BTC/USDT", result[0].Symbol)
-	
+
 	// Verify second item
 	assert.Equal(t, "coinbase", result[1].ExchangeName)
 	assert.Equal(t, "ETH/USD", result[1].Symbol)
@@ -1230,11 +1231,11 @@ func TestCollectorService_ConvertMarketPriceInterfacesToModels(t *testing.T) {
 		volume:       1000.98765432,
 		timestamp:    time.Now(),
 	}
-	
+
 	result = service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{preciseItem})
 	assert.NotNil(t, result)
 	assert.Len(t, result, 1)
-	
+
 	preciseResult := result[0]
 	assert.Equal(t, "50000.12345678", preciseResult.Price.String())
 	assert.Equal(t, "1000.98765432", preciseResult.Volume.String())
@@ -1257,10 +1258,10 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
 		volume:       1000.0,
 		timestamp:    time.Now(),
 	}
-	
+
 	result = service.convertMarketPriceInterfaceToModel(input)
 	assert.NotNil(t, result)
-	
+
 	// Verify all fields are properly converted
 	assert.Equal(t, 0, result.ExchangeID) // Should be 0 as per implementation
 	assert.Equal(t, "binance", result.ExchangeName)
@@ -1277,7 +1278,7 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
 		volume:       0.0,
 		timestamp:    time.Time{},
 	}
-	
+
 	result = service.convertMarketPriceInterfaceToModel(zeroInput)
 	assert.NotNil(t, result)
 	assert.Equal(t, "", result.ExchangeName)
@@ -1294,7 +1295,7 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
 		volume:       -50.0,
 		timestamp:    time.Now(),
 	}
-	
+
 	result = service.convertMarketPriceInterfaceToModel(negativeInput)
 	assert.NotNil(t, result)
 	assert.Equal(t, "-100", result.Price.String())
@@ -1308,7 +1309,7 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
 		volume:       888888888.888,
 		timestamp:    time.Now(),
 	}
-	
+
 	result = service.convertMarketPriceInterfaceToModel(largeInput)
 	assert.NotNil(t, result)
 	assert.Equal(t, "999999999.999", result.Price.String())
@@ -1328,10 +1329,10 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel_FunctionalInterface
 		volume:       67.89,
 		timestamp:    time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 	}
-	
+
 	result := service.convertMarketPriceInterfaceToModel(input)
 	assert.NotNil(t, result)
-	
+
 	// Verify all fields are properly converted
 	assert.Equal(t, 0, result.ExchangeID)
 	assert.Equal(t, "functional", result.ExchangeName)
@@ -1369,4 +1370,3 @@ func (m *MockMarketPriceInterface) GetVolume() float64 {
 func (m *MockMarketPriceInterface) GetTimestamp() time.Time {
 	return m.timestamp
 }
-

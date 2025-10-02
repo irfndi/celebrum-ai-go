@@ -44,7 +44,7 @@ func TestNewCleanupService(t *testing.T) {
 	assert.NotNil(t, service.cancel)
 	assert.Nil(t, service.db) // db should be nil as set above
 	assert.Equal(t, errorRecoveryManager, service.errorRecoveryManager)
-	assert.Nil(t, service.resourceManager) // Should be nil as passed
+	assert.Nil(t, service.resourceManager)    // Should be nil as passed
 	assert.Nil(t, service.performanceMonitor) // Should be nil as passed
 	assert.NotNil(t, service.logger)
 }
@@ -132,7 +132,6 @@ func TestCleanupService_RunCleanup(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
 }
-
 
 // TestCleanupService_GetDataStats tests the GetDataStats method
 func TestCleanupService_GetDataStats(t *testing.T) {
@@ -475,6 +474,238 @@ func TestCleanupService_CleanupMarketDataSmart_WithError(t *testing.T) {
 	err := service.cleanupMarketDataSmart(ctx, 36, 12)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
+}
+
+// TestCleanupService_CleanupMarketDataSmart_Comprehensive tests cleanupMarketDataSmart with various scenarios
+func TestCleanupService_CleanupMarketDataSmart_Comprehensive(t *testing.T) {
+	// Create real ErrorRecoveryManager for testing
+	errorRecoveryManager := NewErrorRecoveryManager(logrus.New())
+
+	// Test with nil database
+	t.Run("NilDatabase", func(t *testing.T) {
+		service := NewCleanupService(
+			nil,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		ctx := context.Background()
+		err := service.cleanupMarketDataSmart(ctx, 36, 12)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "database pool is not available")
+	})
+
+	// Test with successful deletion
+	t.Run("SuccessfulDeletion", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call with proper parameters
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 10))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, 36, 12)
+		assert.NoError(t, err)
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with no rows deleted
+	t.Run("NoRowsDeleted", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call with no rows affected
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 0))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, 36, 12)
+		assert.NoError(t, err)
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with database error
+	t.Run("DatabaseError", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call to return an error
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnError(errors.New("database connection failed"))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, 36, 12)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to delete old market data")
+		assert.Contains(t, err.Error(), "database connection failed")
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with different retention and deletion hours
+	t.Run("DifferentHours", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Test with 48 hours retention, 24 hours deletion
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 25))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, 48, 24)
+		assert.NoError(t, err)
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with zero retention hours (should delete everything)
+	t.Run("ZeroRetentionHours", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call - cutoff time will be now
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 100))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, 0, 0)
+		assert.NoError(t, err)
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with negative retention hours (should still work, deleting more data)
+	t.Run("NegativeRetentionHours", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call - cutoff time will be in the future
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 0))
+
+		ctx := context.Background()
+		err = service.cleanupMarketDataSmart(ctx, -10, 0)
+		assert.NoError(t, err)
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test with cancelled context
+	t.Run("CancelledContext", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Create cancelled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		// The context cancellation should be checked during database execution
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnError(context.Canceled)
+
+		err = service.cleanupMarketDataSmart(ctx, 36, 12)
+		assert.Error(t, err)
+		// Error could be context.Canceled or wrapped version
+		assert.True(t, err == context.Canceled || err.Error() == "failed to delete old market data: context canceled")
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
+
+	// Test time calculation accuracy
+	t.Run("TimeCalculation", func(t *testing.T) {
+		mockPool, err := pgxmock.NewPool()
+		assert.NoError(t, err)
+		defer mockPool.Close()
+
+		service := NewCleanupService(
+			mockPool,
+			errorRecoveryManager,
+			nil,
+			nil,
+		)
+
+		// Expect the DELETE call - we can't easily capture the time argument with pgxmock
+		// but we can verify the call is made correctly
+		mockPool.ExpectExec("DELETE FROM market_data WHERE created_at < \\$1").
+			WithArgs(pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("DELETE", 5))
+
+		ctx := context.Background()
+		beforeCall := time.Now()
+		err = service.cleanupMarketDataSmart(ctx, 24, 12)
+
+		assert.NoError(t, err)
+		assert.True(t, time.Since(beforeCall) < time.Second, "Call should complete quickly")
+
+		assert.NoError(t, mockPool.ExpectationsWereMet())
+	})
 }
 
 // TestCleanupService_Stop tests the Stop method

@@ -212,7 +212,7 @@ func TestPerformanceMonitor_RecordWorkerHealth(t *testing.T) {
 	pm.RecordWorkerHealth("kraken", false, 5)
 
 	appMetrics := pm.GetApplicationMetrics()
-	assert.Equal(t, 1, appMetrics.CollectorMetrics.ActiveWorkers) // 2 running workers minus 1 stopped worker = 1 active worker
+	assert.Equal(t, 1, appMetrics.CollectorMetrics.ActiveWorkers)            // 2 running workers minus 1 stopped worker = 1 active worker
 	assert.Equal(t, int64(7), appMetrics.CollectorMetrics.FailedCollections) // 0 + 2 + 5 errors
 
 	// Check Redis cache
@@ -256,9 +256,9 @@ func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 
 	// Test with healthy metrics
 	pm.systemMetrics = SystemMetrics{
-		HeapInuse:   100 * 1024 * 1024, // 100MB
-		HeapSys:     1000 * 1024 * 1024, // 1GB
-		Goroutines:  500,
+		HeapInuse:  100 * 1024 * 1024,  // 100MB
+		HeapSys:    1000 * 1024 * 1024, // 1GB
+		Goroutines: 500,
 	}
 	pm.appMetrics.CollectorMetrics = CollectorPerformanceMetrics{
 		TotalCollections:  1000,
@@ -270,9 +270,9 @@ func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 
 	// Test with unhealthy metrics (high memory usage)
 	pm.systemMetrics = SystemMetrics{
-		HeapInuse:   900 * 1024 * 1024, // 900MB (90% of 1GB)
-		HeapSys:     1000 * 1024 * 1024, // 1GB
-		Goroutines:  500,
+		HeapInuse:  900 * 1024 * 1024,  // 900MB (90% of 1GB)
+		HeapSys:    1000 * 1024 * 1024, // 1GB
+		Goroutines: 500,
 	}
 
 	score = pm.calculateHealthScore()
@@ -280,9 +280,9 @@ func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 
 	// Test with too many goroutines
 	pm.systemMetrics = SystemMetrics{
-		HeapInuse:   100 * 1024 * 1024,
-		HeapSys:     1000 * 1024 * 1024,
-		Goroutines:  2000,
+		HeapInuse:  100 * 1024 * 1024,
+		HeapSys:    1000 * 1024 * 1024,
+		Goroutines: 2000,
 	}
 
 	score = pm.calculateHealthScore()
@@ -290,9 +290,9 @@ func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 
 	// Test with high failure rate
 	pm.systemMetrics = SystemMetrics{
-		HeapInuse:   100 * 1024 * 1024,
-		HeapSys:     1000 * 1024 * 1024,
-		Goroutines:  500,
+		HeapInuse:  100 * 1024 * 1024,
+		HeapSys:    1000 * 1024 * 1024,
+		Goroutines: 500,
 	}
 	pm.appMetrics.CollectorMetrics = CollectorPerformanceMetrics{
 		TotalCollections:  1000,
@@ -318,7 +318,7 @@ func TestPerformanceMonitor_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			
+
 			switch i % 5 {
 			case 0:
 				pm.GetSystemMetrics()

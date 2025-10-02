@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -80,10 +80,10 @@ func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
 
 	// Check for nil dependencies
 	if c.ccxtService == nil {
-		return fmt.Errorf("CCXT service is nil")
+		return fmt.Errorf("ccxt service is nil")
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("Redis client is nil")
+		return fmt.Errorf("redis client is nil")
 	}
 
 	// Get exchange config from CCXT service
@@ -114,10 +114,10 @@ func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error 
 
 	// Check for nil dependencies
 	if c.ccxtService == nil {
-		return fmt.Errorf("CCXT service is nil")
+		return fmt.Errorf("ccxt service is nil")
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("Redis client is nil")
+		return fmt.Errorf("redis client is nil")
 	}
 
 	// Get supported exchanges from CCXT service
@@ -148,7 +148,7 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 		return fmt.Errorf("database is nil")
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("Redis client is nil")
+		return fmt.Errorf("redis client is nil")
 	}
 
 	// Get all trading pairs from database
@@ -202,7 +202,7 @@ func (c *CacheWarmingService) warmExchanges(ctx context.Context) error {
 		return fmt.Errorf("database is nil")
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("Redis client is nil")
+		return fmt.Errorf("redis client is nil")
 	}
 
 	// Get all exchanges from database
@@ -247,7 +247,7 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 		return fmt.Errorf("database pool is not available")
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("Redis client is nil")
+		return fmt.Errorf("redis client is nil")
 	}
 
 	// Get latest funding rates from database for each exchange-symbol combination

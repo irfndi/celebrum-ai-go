@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
       POSTGRES_DB: celebrum_ai
       POSTGRES_INITDB_ARGS: "--auth-host=trust"
       POSTGRES_HOST_AUTH_METHOD: trust

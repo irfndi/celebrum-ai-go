@@ -2,9 +2,10 @@ name: Build and Test
 
 on:
   push:
-    branches: [main, development]
+    branches: [ main, develop, development ]
   pull_request:
-    branches: [main, development]
+    branches: [ main, develop, development ]
+  workflow_dispatch:
 
 env:
   GO_VERSION: '1.25.0'
@@ -22,7 +23,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           
       - name: Cache Go modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -36,10 +37,14 @@ jobs:
         run: make test
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.4.0
-          args: --timeout=5m --output.text.path=stdout --output.text.colors=true
+          version: v2.5.0
+          args: --timeout=5m
+          skip-cache: true
+          skip-save-cache: true
+        env:
+          GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
       
       - name: Coverage Check (non-blocking)
         run: |
@@ -137,7 +142,7 @@ jobs:
           
       - name: Aqua Security Trivy
         id: trivy
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@0.25.0
         with:
           image-ref: 'celebrum-api:${{ github.sha }}'
           format: 'sarif'

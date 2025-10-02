@@ -13,12 +13,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api"
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
+	"github.com/irfandi/celebrum-ai-go/internal/middleware"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -50,7 +52,7 @@ func run() error {
 		LogLevel:       cfg.Telemetry.LogLevel,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize telemetry: %v\n", err)
-		os.Exit(1)
+		// Don't exit on telemetry failure, continue with reduced observability
 	}
 	defer func() {
 		if err := telemetry.Shutdown(); err != nil {
@@ -99,35 +101,55 @@ func run() error {
 	}
 
 	// Initialize Redis with retry mechanism
-	redis, err := database.NewRedisConnectionWithRetry(cfg.Redis, errorRecoveryManager)
+	redisClient, err := database.NewRedisConnectionWithRetry(cfg.Redis, errorRecoveryManager)
 	if err != nil {
-		logrusLogger.WithError(err).Fatal("Failed to connect to Redis")
+		logrusLogger.WithError(err).Error("Failed to connect to Redis - continuing without cache")
+		// Don't fail startup on Redis connection issues, continue without cache
+		redisClient = nil
+	} else {
+		defer redisClient.Close()
 	}
-	defer redis.Close()
+
+	// Helper function to safely get Redis client
+	getRedisClient := func() *redis.Client {
+		if redisClient != nil {
+			return redisClient.Client
+		}
+		return nil
+	}
 
 	// Initialize blacklist cache with database persistence
 	blacklistRepo := database.NewBlacklistRepository(db.Pool)
-	blacklistCache := cache.NewRedisBlacklistCache(redis.Client, blacklistRepo)
+	var blacklistCache cache.BlacklistCache
+	if redisClient != nil {
+		blacklistCache = cache.NewRedisBlacklistCache(redisClient.Client, blacklistRepo)
+	} else {
+		// Fallback to in-memory cache if Redis is not available
+		blacklistCache = cache.NewInMemoryBlacklistCache()
+	}
 
 	// Initialize CCXT service with blacklist cache
 	ccxtService := ccxt.NewService(&cfg.CCXT, logrusLogger, blacklistCache)
 
+	// Initialize JWT authentication middleware
+	authMiddleware := middleware.NewAuthMiddleware(cfg.Auth.JWTSecret)
+
 	// Initialize cache analytics service
-	cacheAnalyticsService := services.NewCacheAnalyticsService(redis.Client)
+	cacheAnalyticsService := services.NewCacheAnalyticsService(getRedisClient())
 
 	// Start periodic reporting of cache stats
 	ctx := context.Background()
 	cacheAnalyticsService.StartPeriodicReporting(ctx, 5*time.Minute)
 
 	// Initialize and perform cache warming
-	cacheWarmingService := services.NewCacheWarmingService(redis.Client, ccxtService, db)
+	cacheWarmingService := services.NewCacheWarmingService(getRedisClient(), ccxtService, db)
 	if err := cacheWarmingService.WarmCache(ctx); err != nil {
 		logrusLogger.WithError(err).Warn("Cache warming failed")
 		// Don't fail startup if cache warming fails, just log the warning
 	}
 
 	// Initialize collector service
-	collectorService := services.NewCollectorService(db, ccxtService, cfg, redis.Client, blacklistCache)
+	collectorService := services.NewCollectorService(db, ccxtService, cfg, getRedisClient(), blacklistCache)
 	if err := collectorService.Start(); err != nil {
 		logrusLogger.WithError(err).Fatal("Failed to start collector service")
 	}
@@ -136,7 +158,7 @@ func run() error {
 	// Initialize support services for futures arbitrage and cleanup
 	resourceManager := services.NewResourceManager(logrusLogger)
 	defer resourceManager.Shutdown()
-	performanceMonitor := services.NewPerformanceMonitor(logrusLogger, redis.Client, ctx)
+	performanceMonitor := services.NewPerformanceMonitor(logrusLogger, getRedisClient(), ctx)
 	defer performanceMonitor.Stop()
 
 	// Start historical data backfill in background if needed
@@ -160,7 +182,7 @@ func run() error {
 	defer arbitrageService.Stop()
 
 	// Initialize futures arbitrage service
-	futuresArbitrageService := services.NewFuturesArbitrageService(db, redis.Client, cfg, errorRecoveryManager, resourceManager, performanceMonitor)
+	futuresArbitrageService := services.NewFuturesArbitrageService(db, getRedisClient(), cfg, errorRecoveryManager, resourceManager, performanceMonitor)
 	if err := futuresArbitrageService.Start(); err != nil {
 		logrusLogger.WithError(err).Fatal("Failed to start futures arbitrage service")
 	}
@@ -183,7 +205,7 @@ func run() error {
 	signalQualityScorer := services.NewSignalQualityScorer(cfg, db, logrusLogger)
 
 	// Initialize notification service
-	notificationService := services.NewNotificationService(db, redis, cfg.Telegram.BotToken)
+	notificationService := services.NewNotificationService(db, redisClient, cfg.Telegram.BotToken)
 
 	// Initialize circuit breaker for signal processing
 	signalProcessorCircuitBreaker := services.NewCircuitBreaker(
@@ -235,7 +257,7 @@ func run() error {
 	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
 
 	// Setup routes
-	api.SetupRoutes(router, db, redis, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram)
+	api.SetupRoutes(router, db, redisClient, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram, authMiddleware)
 
 	// Create HTTP server with security timeouts
 	srv := &http.Server{

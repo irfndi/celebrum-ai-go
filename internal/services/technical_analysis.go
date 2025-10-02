@@ -128,8 +128,12 @@ func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfi
 
 // AnalyzeSymbol performs comprehensive technical analysis on a symbol
 func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, exchange string, config *IndicatorConfig) (*TechnicalAnalysisResult, error) {
-	// Stub logging for telemetry
-	_ = fmt.Sprintf("Technical analysis: symbol=%s, exchange=%s", symbol, exchange)
+	// Log analysis start with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":    symbol,
+		"exchange":  exchange,
+		"operation": "technical_analysis_start",
+	}).Debug("Starting technical analysis calculation")
 
 	// Register operation with resource manager
 	operationID := fmt.Sprintf("technical_analysis_%s_%s_%d", symbol, exchange, time.Now().UnixNano())
@@ -164,13 +168,24 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 
 	if len(priceData.Close) < 50 {
 		dataErr := fmt.Errorf("insufficient price data: need at least 50 points, got %d", len(priceData.Close))
-		// Stub logging for error
-		_ = fmt.Sprintf("Insufficient price data: %v", dataErr)
+		// Log insufficient data error with structured logging
+		tas.logger.WithFields(logrus.Fields{
+			"symbol":          symbol,
+			"exchange":        exchange,
+			"data_points":     len(priceData.Close),
+			"required_points": 50,
+			"operation":       "technical_analysis",
+		}).Warn("Insufficient price data for technical analysis")
 		return nil, dataErr
 	}
 
-	// Stub logging for price data
-	_ = fmt.Sprintf("Price data points: %d", len(priceData.Close))
+	// Log price data summary with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":      symbol,
+		"exchange":    exchange,
+		"data_points": len(priceData.Close),
+		"operation":   "technical_analysis",
+	}).Debug("Successfully fetched price data")
 
 	// Convert to asset snapshots for cinar/indicator
 	snapshots := tas.convertToSnapshots(priceData)
@@ -182,17 +197,28 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 		return nil
 	})
 	if calcErr != nil {
-		// Stub logging for error
-		_ = fmt.Sprintf("Failed to calculate indicators: %v", calcErr)
+		// Log indicator calculation error with structured logging
+		tas.logger.WithFields(logrus.Fields{
+			"symbol":    symbol,
+			"exchange":  exchange,
+			"error":     calcErr.Error(),
+			"operation": "technical_analysis",
+		}).Error("Failed to calculate technical indicators")
 		return nil, fmt.Errorf("failed to calculate indicators: %w", calcErr)
 	}
 
 	// Determine overall signal and confidence
 	overallSignal, confidence := tas.determineOverallSignal(indicators)
 
-	// Stub logging for analysis results
-	_ = fmt.Sprintf("Analysis completed: indicators=%d, signal=%s, confidence=%f",
-		len(indicators), overallSignal, confidence.InexactFloat64())
+	// Log analysis completion with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"symbol":         symbol,
+		"exchange":       exchange,
+		"indicators":     len(indicators),
+		"overall_signal": overallSignal,
+		"confidence":     confidence.InexactFloat64(),
+		"operation":      "technical_analysis",
+	}).Info("Technical analysis completed successfully")
 
 	return &TechnicalAnalysisResult{
 		Symbol:        symbol,
@@ -207,8 +233,11 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 
 // calculateAllIndicators computes all configured technical indicators
 func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.Snapshot, config *IndicatorConfig) []*IndicatorResult {
-	// Stub logging for indicator calculation
-	_ = fmt.Sprintf("Calculating indicators: snapshots=%d", len(snapshots))
+	// Log indicator calculation start with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"snapshots": len(snapshots),
+		"operation": "calculate_indicators",
+	}).Debug("Starting technical indicator calculations")
 
 	var indicators []*IndicatorResult
 
@@ -268,8 +297,11 @@ func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.S
 		}
 	}
 
-	// Stub logging for calculation results
-	_ = fmt.Sprintf("Indicators calculated: total=%d", len(indicators))
+	// Log indicator calculation completion with structured logging
+	tas.logger.WithFields(logrus.Fields{
+		"indicators_count": len(indicators),
+		"operation":        "calculate_indicators",
+	}).Debug("Technical indicator calculations completed")
 
 	return indicators
 }
@@ -441,7 +473,8 @@ func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64
 	// Calculate variance
 	variance := 0.0
 	for _, price := range window {
-		variance += math.Pow(price-mean, 2)
+		diff := price - mean
+		variance += diff * diff
 	}
 	variance /= float64(len(window))
 
@@ -522,7 +555,7 @@ func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []floa
 	if len(validResults) < dPeriod {
 		return nil
 	}
-	
+
 	dValues := make([]float64, len(validResults)-dPeriod+1)
 	for i := dPeriod - 1; i < len(validResults); i++ {
 		sum := 0.0
@@ -592,30 +625,30 @@ func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, per
 	prevSMA := sma[len(sma)-2]
 
 	// Calculate distance from SMA as percentage
-	distanceFromSMA := math.Abs(currentPrice - currentSMA) / currentSMA
-	
+	distanceFromSMA := math.Abs(currentPrice-currentSMA) / currentSMA
+
 	// Adjust signal strength based on period (longer periods = stronger signals)
 	periodMultiplier := math.Min(1.5, float64(period)/20.0) // Scale based on period
-	
+
 	// Price crossing above SMA
 	if currentPrice > currentSMA && prevPrice <= prevSMA {
-		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.8, 0.6+(distanceFromSMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price crossing below SMA
 	if currentPrice < currentSMA && prevPrice >= prevSMA {
-		strength := math.Min(0.8, 0.6 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.8, 0.6+(distanceFromSMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
-	
+
 	// Price above SMA (bullish) - adjust strength based on period and distance
 	if currentPrice > currentSMA {
-		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.7, 0.4+(distanceFromSMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price below SMA (bearish) - adjust strength based on period and distance
 	if currentPrice < currentSMA {
-		strength := math.Min(0.7, 0.4 + (distanceFromSMA * periodMultiplier))
+		strength := math.Min(0.7, 0.4+(distanceFromSMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -635,30 +668,30 @@ func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, per
 	prevEMA := ema[len(ema)-2]
 
 	// Calculate distance from EMA as percentage
-	distanceFromEMA := math.Abs(currentPrice - currentEMA) / currentEMA
-	
+	distanceFromEMA := math.Abs(currentPrice-currentEMA) / currentEMA
+
 	// EMA is more sensitive than SMA, so use higher base strength
 	// Adjust signal strength based on period
 	periodMultiplier := math.Min(1.3, float64(period)/15.0) // EMA periods typically shorter
 
 	// Price crossing above EMA (stronger signal due to EMA sensitivity)
 	if currentPrice > currentEMA && prevPrice <= prevEMA {
-		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.85, 0.7+(distanceFromEMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price crossing below EMA (stronger signal due to EMA sensitivity)
 	if currentPrice < currentEMA && prevPrice >= prevEMA {
-		strength := math.Min(0.85, 0.7 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.85, 0.7+(distanceFromEMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 	// Price above EMA (bullish)
 	if currentPrice > currentEMA {
-		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.75, 0.5+(distanceFromEMA*periodMultiplier))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 	// Price below EMA (bearish)
 	if currentPrice < currentEMA {
-		strength := math.Min(0.75, 0.5 + (distanceFromEMA * periodMultiplier))
+		strength := math.Min(0.75, 0.5+(distanceFromEMA*periodMultiplier))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -732,19 +765,19 @@ func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValu
 	bandWidth := currentUpper - currentLower
 	distanceFromSMA := math.Abs(currentPrice - currentSMA)
 	positionInBand := (currentPrice - currentLower) / bandWidth
-	
+
 	// Adjust signal strength based on period (longer periods = more reliable signals)
 	periodMultiplier := math.Min(1.4, float64(period)/25.0) // BB typically use longer periods
 
 	// Price near lower band (potential buy) - stronger signal for longer periods
 	if currentPrice <= currentLower*1.02 {
-		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		strength := math.Min(0.8, 0.6+(periodMultiplier*0.2))
 		return "buy", decimal.NewFromFloat(strength)
 	}
 
 	// Price near upper band (potential sell) - stronger signal for longer periods
 	if currentPrice >= currentUpper*0.98 {
-		strength := math.Min(0.8, 0.6 + (periodMultiplier * 0.2))
+		strength := math.Min(0.8, 0.6+(periodMultiplier*0.2))
 		return "sell", decimal.NewFromFloat(strength)
 	}
 
@@ -756,11 +789,11 @@ func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValu
 	// Price between bands - use position and period to determine signal
 	if positionInBand < 0.3 {
 		// Lower half of bands - slightly bearish unless momentum suggests otherwise
-		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		strength := math.Min(0.6, 0.4+(periodMultiplier*0.15))
 		return "sell", decimal.NewFromFloat(strength)
 	} else if positionInBand > 0.7 {
 		// Upper half of bands - slightly bullish unless momentum suggests otherwise
-		strength := math.Min(0.6, 0.4 + (periodMultiplier * 0.15))
+		strength := math.Min(0.6, 0.4+(periodMultiplier*0.15))
 		return "buy", decimal.NewFromFloat(strength)
 	} else {
 		// Middle range - neutral

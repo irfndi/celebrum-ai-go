@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api/handlers/testmocks"
-	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

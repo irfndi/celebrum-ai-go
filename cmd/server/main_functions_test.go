@@ -10,11 +10,26 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
-	"github.com/irfandi/celebrum-ai-go/internal/config"
 )
+
+// Helper functions for environment variable management with proper error handling
+func mustSetEnv(t *testing.T, key, value string) {
+	t.Helper()
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatalf("Failed to set env %s: %v", key, err)
+	}
+}
+
+func mustUnsetEnv(t *testing.T, key string) {
+	t.Helper()
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Failed to unset env %s: %v", key, err)
+	}
+}
 
 // TestMainFunctionBasic tests the main function in a controlled environment
 func TestMainFunctionBasic(t *testing.T) {
@@ -39,46 +54,46 @@ func TestMainFunctionBasic(t *testing.T) {
 
 	// Set test environment
 	testEnv := map[string]string{
-		"ENVIRONMENT":                    "test",
-		"LOG_LEVEL":                     "error",
-		"SERVER_PORT":                   "8083",
-		"DATABASE_HOST":                 "localhost",
-		"DATABASE_PORT":                 "5432",
-		"DATABASE_USER":                 "testuser",
-		"DATABASE_PASSWORD":             "testpass",
-		"DATABASE_DBNAME":               "testdb",
-		"DATABASE_SSLMODE":              "disable",
-		"REDIS_HOST":                    "localhost",
-		"REDIS_PORT":                    "6379",
-		"REDIS_PASSWORD":                "",
-		"REDIS_DB":                      "0",
+		"ENVIRONMENT":                  "test",
+		"LOG_LEVEL":                    "error",
+		"SERVER_PORT":                  "8083",
+		"DATABASE_HOST":                "localhost",
+		"DATABASE_PORT":                "5432",
+		"DATABASE_USER":                "testuser",
+		"DATABASE_PASSWORD":            "testpass",
+		"DATABASE_DBNAME":              "testdb",
+		"DATABASE_SSLMODE":             "disable",
+		"REDIS_HOST":                   "localhost",
+		"REDIS_PORT":                   "6379",
+		"REDIS_PASSWORD":               "",
+		"REDIS_DB":                     "0",
 		"TELEMETRY_ENABLED":            "false",
-		"TELEMETRY_OTLP_ENDPOINT":       "http://localhost:4318",
-		"TELEMETRY_SERVICE_NAME":        "test-service",
-		"TELEMETRY_SERVICE_VERSION":     "test-version",
-		"TELEMETRY_LOG_LEVEL":           "error",
-		"CLEANUP_INTERVAL":              "1",
-		"CLEANUP_ENABLE_SMART_CLEANUP":  "false",
+		"TELEMETRY_OTLP_ENDPOINT":      "http://localhost:4318",
+		"TELEMETRY_SERVICE_NAME":       "test-service",
+		"TELEMETRY_SERVICE_VERSION":    "test-version",
+		"TELEMETRY_LOG_LEVEL":          "error",
+		"CLEANUP_INTERVAL":             "1",
+		"CLEANUP_ENABLE_SMART_CLEANUP": "false",
 		"BACKFILL_ENABLED":             "false",
 		"ARBITRAGE_ENABLED":            "false",
-		"CCXT_SERVICE_URL":              "http://localhost:3001",
+		"CCXT_SERVICE_URL":             "http://localhost:3000",
 		"CCXT_TIMEOUT":                 "5",
-		"TELEGRAM_BOT_TOKEN":            "",
+		"TELEGRAM_BOT_TOKEN":           "",
 	}
 
 	// Set test environment
 	for key, value := range testEnv {
-		os.Setenv(key, value)
+		mustSetEnv(t, key, value)
 	}
 
 	// Restore environment after test
 	defer func() {
 		for key, value := range originalEnv {
-			os.Setenv(key, value)
+			mustSetEnv(t, key, value)
 		}
 		for key := range testEnv {
 			if _, exists := originalEnv[key]; !exists {
-				os.Unsetenv(key)
+				mustUnsetEnv(t, key)
 			}
 		}
 	}()
@@ -182,7 +197,7 @@ func TestServerComponents(t *testing.T) {
 func TestConfigurationLoadingDirect(t *testing.T) {
 	// Test with default configuration
 	cfg, err := config.Load()
-	
+
 	// In test environment, this might fail due to missing config file
 	if err != nil {
 		assert.Contains(t, err.Error(), "Config File")
@@ -276,8 +291,8 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 	testValue := "test_value"
 
 	// Set environment variable
-	os.Setenv(testKey, testValue)
-	defer os.Unsetenv(testKey)
+	mustSetEnv(t, testKey, testValue)
+	defer mustUnsetEnv(t, testKey)
 
 	// Read it back
 	retrieved := os.Getenv(testKey)
@@ -285,8 +300,8 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 
 	// Test empty environment variable
 	emptyKey := "TEST_CELEBRUM_AI_EMPTY"
-	os.Setenv(emptyKey, "")
-	defer os.Unsetenv(emptyKey)
+	mustSetEnv(t, emptyKey, "")
+	defer mustUnsetEnv(t, emptyKey)
 
 	retrieved = os.Getenv(emptyKey)
 	assert.Equal(t, "", retrieved)

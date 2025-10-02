@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
+	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
 
 type AnalysisHandler struct {
@@ -165,7 +165,7 @@ func (h *AnalysisHandler) getOHLCVData(ctx context.Context, symbol, exchange, ti
 	if h.db == nil {
 		return nil, fmt.Errorf("failed to query OHLCV data: database connection is nil")
 	}
-	
+
 	// Try to get data from database first (market_data table)
 	query := `
 		SELECT timestamp, bid as close, ask as open,
@@ -208,7 +208,7 @@ func (h *AnalysisHandler) simulateOHLCVFromTickers(ctx context.Context, symbol, 
 	if h.db == nil {
 		return nil, fmt.Errorf("failed to query ticker data: database connection is nil")
 	}
-	
+
 	query := `
 		SELECT timestamp, bid, ask, volume
 		FROM market_data
@@ -539,7 +539,7 @@ func (h *AnalysisHandler) getAllTradingSignals(ctx context.Context, timeframe st
 	if h.db == nil {
 		return nil, fmt.Errorf("failed to query active pairs: database connection is nil")
 	}
-	
+
 	// Get active trading pairs from recent market data
 	query := `
 		SELECT DISTINCT symbol, exchange

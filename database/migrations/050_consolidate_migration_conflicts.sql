@@ -61,29 +61,22 @@ BEGIN
             is_active BOOLEAN NOT NULL DEFAULT true
         );
 
-        -- Create view for funding arbitrage opportunities (using existing table structure)
+        -- Create view for funding arbitrage opportunities aligned with current table schema
         CREATE OR REPLACE VIEW v_funding_arbitrage_opportunities AS
         SELECT 
             fao.id,
-            tp.symbol,
-            tp.base_currency,
-            tp.quote_currency,
-            le.name as long_exchange,
-            se.name as short_exchange,
+            (fao.base_currency || '/' || fao.quote_currency) AS symbol,
+            fao.base_currency,
+            fao.quote_currency,
+            fao.long_exchange,
+            fao.short_exchange,
             fao.long_funding_rate,
             fao.short_funding_rate,
             fao.net_funding_rate,
-            fao.estimated_profit_8h,
-            fao.estimated_profit_daily,
-            fao.estimated_profit_percentage,
-            fao.risk_score,
             fao.detected_at,
             fao.expires_at,
             fao.is_active
         FROM funding_arbitrage_opportunities fao
-        LEFT JOIN trading_pairs tp ON fao.trading_pair_id = tp.id
-        LEFT JOIN exchanges le ON fao.long_exchange_id = le.id
-        LEFT JOIN exchanges se ON fao.short_exchange_id = se.id
         WHERE fao.is_active = true AND (fao.expires_at IS NULL OR fao.expires_at > NOW());
 
         -- Remove symbol column from funding_rates if it exists

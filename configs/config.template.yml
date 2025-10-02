@@ -28,7 +28,7 @@ database:
   host: ${DATABASE_HOST:-localhost}
   port: ${DATABASE_PORT:-5432}
   user: ${DATABASE_USER:-postgres}
-  password: ${DATABASE_PASSWORD:-postgres}
+  password: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env file}
   dbname: ${DATABASE_DBNAME:-celebrum_ai}
   sslmode: ${DATABASE_SSLMODE:-disable}
   database_url: ${DATABASE_URL:-}

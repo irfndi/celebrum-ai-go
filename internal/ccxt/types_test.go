@@ -1,17 +1,17 @@
 package ccxt
 
 import (
-    "context"
-    "fmt"
-    "testing"
-    "time"
+	"context"
+	"fmt"
+	"testing"
+	"time"
 
-    "github.com/irfandi/celebrum-ai-go/internal/cache"
-    "github.com/irfandi/celebrum-ai-go/internal/config"
-    "github.com/irfandi/celebrum-ai-go/internal/models"
-    "github.com/shopspring/decimal"
-    "github.com/sirupsen/logrus"
-    "github.com/stretchr/testify/assert"
+	"github.com/irfandi/celebrum-ai-go/internal/cache"
+	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/shopspring/decimal"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
 // MockClient implements the Client interface for testing
@@ -163,7 +163,7 @@ func (m *MockClient) BaseURL() string {
 	if m.BaseURLFunc != nil {
 		return m.BaseURLFunc()
 	}
-	return "http://localhost:3001"
+	return "http://localhost:3000"
 }
 
 // MockBlacklistCache implements the BlacklistCache interface for testing
@@ -241,7 +241,7 @@ func (m *MockBlacklistCache) GetBlacklistedSymbols() ([]cache.BlacklistCacheEntr
 // Test Service struct initialization
 func TestService_Struct(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}
 
@@ -259,7 +259,7 @@ func TestService_Struct(t *testing.T) {
 // Test GetSupportedExchanges with empty exchanges
 func TestService_GetSupportedExchanges_Empty(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}
 
@@ -275,7 +275,7 @@ func TestService_GetSupportedExchanges_Empty(t *testing.T) {
 // Test GetSupportedExchanges with populated exchanges
 func TestService_GetSupportedExchanges_Populated(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}
 
@@ -304,7 +304,7 @@ func TestService_Initialize_Success(t *testing.T) {
 			return nil // Successful load
 		},
 	}
-	
+
 	client := &MockClient{
 		GetExchangesFunc: func(ctx context.Context) (*ExchangesResponse, error) {
 			return &ExchangesResponse{
@@ -315,7 +315,7 @@ func TestService_Initialize_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -334,13 +334,13 @@ func TestService_Initialize_Success(t *testing.T) {
 func TestService_Initialize_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := &MockBlacklistCache{}
-	
+
 	client := &MockClient{
 		GetExchangesFunc: func(ctx context.Context) (*ExchangesResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -361,7 +361,7 @@ func TestService_Initialize_BlacklistCacheError(t *testing.T) {
 			return assert.AnError
 		},
 	}
-	
+
 	client := &MockClient{
 		GetExchangesFunc: func(ctx context.Context) (*ExchangesResponse, error) {
 			return &ExchangesResponse{
@@ -371,7 +371,7 @@ func TestService_Initialize_BlacklistCacheError(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -388,18 +388,18 @@ func TestService_Initialize_BlacklistCacheError(t *testing.T) {
 func TestService_IsHealthy_Healthy(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		HealthCheckFunc: func(ctx context.Context) error {
 			return nil // Healthy
 		},
 	}
-	
+
 	service := NewService(&config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}, logger, blacklistCache)
-	
+
 	// Replace the client with our mock
 	service.client = client
 
@@ -411,18 +411,18 @@ func TestService_IsHealthy_Healthy(t *testing.T) {
 func TestService_IsHealthy_Unhealthy(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		HealthCheckFunc: func(ctx context.Context) error {
 			return assert.AnError // Unhealthy
 		},
 	}
-	
+
 	service := NewService(&config.CCXTConfig{
-		ServiceURL: "http://localhost:3001",
+		ServiceURL: "http://localhost:3000",
 		Timeout:    30,
 	}, logger, blacklistCache)
-	
+
 	// Replace the client with our mock
 	service.client = client
 
@@ -430,12 +430,11 @@ func TestService_IsHealthy_Unhealthy(t *testing.T) {
 	assert.False(t, healthy)
 }
 
-
 // Test Service FetchSingleTicker function with successful response
 func TestService_FetchSingleTicker_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTickerFunc: func(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
 			return &TickerResponse{
@@ -449,36 +448,36 @@ func TestService_FetchSingleTicker_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
 		logger:         logger,
 	}
 
-    marketPrice, err := service.FetchSingleTicker(context.Background(), "binance", "BTC/USDT")
-    assert.NoError(t, err)
-    mp, ok := marketPrice.(*models.MarketPrice)
-    if !ok {
-        t.Fatalf("expected *models.MarketPrice, got %T", marketPrice)
-    }
-    assert.Equal(t, "binance", mp.ExchangeName)
-    assert.Equal(t, "BTC/USDT", mp.Symbol)
-    assert.Equal(t, decimal.NewFromFloat(50000.0), mp.Price)
-    assert.Equal(t, decimal.NewFromFloat(1000.0), mp.Volume)
+	marketPrice, err := service.FetchSingleTicker(context.Background(), "binance", "BTC/USDT")
+	assert.NoError(t, err)
+	mp, ok := marketPrice.(*models.MarketPrice)
+	if !ok {
+		t.Fatalf("expected *models.MarketPrice, got %T", marketPrice)
+	}
+	assert.Equal(t, "binance", mp.ExchangeName)
+	assert.Equal(t, "BTC/USDT", mp.Symbol)
+	assert.Equal(t, decimal.NewFromFloat(50000.0), mp.Price)
+	assert.Equal(t, decimal.NewFromFloat(1000.0), mp.Volume)
 }
 
 // Test Service FetchSingleTicker function with client error
 func TestService_FetchSingleTicker_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTickerFunc: func(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -495,7 +494,7 @@ func TestService_FetchSingleTicker_ClientError(t *testing.T) {
 func TestService_FetchOrderBook_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetOrderBookFunc: func(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
 			return &OrderBookResponse{
@@ -511,7 +510,7 @@ func TestService_FetchOrderBook_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -532,13 +531,13 @@ func TestService_FetchOrderBook_Success(t *testing.T) {
 func TestService_FetchOrderBook_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetOrderBookFunc: func(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -555,7 +554,7 @@ func TestService_FetchOrderBook_ClientError(t *testing.T) {
 func TestService_FetchOHLCV_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetOHLCVFunc: func(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
 			return &OHLCVResponse{
@@ -575,7 +574,7 @@ func TestService_FetchOHLCV_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -599,13 +598,13 @@ func TestService_FetchOHLCV_Success(t *testing.T) {
 func TestService_FetchOHLCV_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetOHLCVFunc: func(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -622,7 +621,7 @@ func TestService_FetchOHLCV_ClientError(t *testing.T) {
 func TestService_FetchTrades_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTradesFunc: func(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
 			return &TradesResponse{
@@ -642,7 +641,7 @@ func TestService_FetchTrades_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -665,13 +664,13 @@ func TestService_FetchTrades_Success(t *testing.T) {
 func TestService_FetchTrades_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTradesFunc: func(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -688,17 +687,17 @@ func TestService_FetchTrades_ClientError(t *testing.T) {
 func TestService_FetchMarkets_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetMarketsFunc: func(ctx context.Context, exchange string) (*MarketsResponse, error) {
 			return &MarketsResponse{
 				Exchange: exchange,
-				Symbols: []string{"BTC/USDT", "ETH/USDT", "BNB/USDT"},
+				Symbols:  []string{"BTC/USDT", "ETH/USDT", "BNB/USDT"},
 				Count:    3,
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -719,13 +718,13 @@ func TestService_FetchMarkets_Success(t *testing.T) {
 func TestService_FetchMarkets_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetMarketsFunc: func(ctx context.Context, exchange string) (*MarketsResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -742,7 +741,7 @@ func TestService_FetchMarkets_ClientError(t *testing.T) {
 func TestService_CalculateArbitrageOpportunities_Success(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTickersFunc: func(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
 			return &TickersResponse{
@@ -767,7 +766,7 @@ func TestService_CalculateArbitrageOpportunities_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -778,7 +777,7 @@ func TestService_CalculateArbitrageOpportunities_Success(t *testing.T) {
 	opportunities, err := service.CalculateArbitrageOpportunities(context.Background(), []string{"binance", "kraken"}, []string{"BTC/USDT"}, minProfit)
 	assert.NoError(t, err)
 	assert.Len(t, opportunities, 1)
-	
+
 	opportunity := opportunities[0]
 	assert.Equal(t, "BTC/USDT", opportunity.Symbol)
 	assert.Equal(t, "binance", opportunity.BuyExchange)
@@ -792,7 +791,7 @@ func TestService_CalculateArbitrageOpportunities_Success(t *testing.T) {
 func TestService_CalculateArbitrageOpportunities_InsufficientProfit(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTickersFunc: func(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
 			return &TickersResponse{
@@ -817,7 +816,7 @@ func TestService_CalculateArbitrageOpportunities_InsufficientProfit(t *testing.T
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -834,13 +833,13 @@ func TestService_CalculateArbitrageOpportunities_InsufficientProfit(t *testing.T
 func TestService_CalculateArbitrageOpportunities_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetTickersFunc: func(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
 			return nil, assert.AnError
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -858,7 +857,7 @@ func TestService_CalculateArbitrageOpportunities_ClientError(t *testing.T) {
 func TestService_CalculateArbitrageOpportunities_EmptyExchanges(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	service := &Service{
 		client:         &MockClient{},
 		blacklistCache: blacklistCache,
@@ -876,7 +875,7 @@ func TestService_CalculateArbitrageOpportunities_EmptyExchanges(t *testing.T) {
 func TestService_FetchFundingRate(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	expectedFundingRate := &FundingRate{
 		Symbol:           "BTC/USDT",
 		FundingRate:      0.0001,
@@ -886,13 +885,13 @@ func TestService_FetchFundingRate(t *testing.T) {
 		IndexPrice:       50000.0,
 		Timestamp:        UnixTimestamp(time.Now()),
 	}
-	
+
 	client := &MockClient{
 		GetFundingRateFunc: func(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
 			return expectedFundingRate, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -908,13 +907,13 @@ func TestService_FetchFundingRate(t *testing.T) {
 func TestService_FetchFundingRate_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetFundingRateFunc: func(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
 			return nil, fmt.Errorf("exchange not found")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -931,7 +930,7 @@ func TestService_FetchFundingRate_Error(t *testing.T) {
 func TestService_FetchFundingRates(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	expectedFundingRates := []FundingRate{
 		{
 			Symbol:           "BTC/USDT",
@@ -952,13 +951,13 @@ func TestService_FetchFundingRates(t *testing.T) {
 			Timestamp:        UnixTimestamp(time.Now()),
 		},
 	}
-	
+
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 			return expectedFundingRates, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -974,13 +973,13 @@ func TestService_FetchFundingRates(t *testing.T) {
 func TestService_FetchFundingRates_EmptySymbols(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 			return []FundingRate{}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -996,13 +995,13 @@ func TestService_FetchFundingRates_EmptySymbols(t *testing.T) {
 func TestService_FetchFundingRates_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 			return nil, fmt.Errorf("exchange not found")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1019,7 +1018,7 @@ func TestService_FetchFundingRates_Error(t *testing.T) {
 func TestService_FetchAllFundingRates(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	expectedFundingRates := []FundingRate{
 		{
 			Symbol:           "BTC/USDT",
@@ -1040,13 +1039,13 @@ func TestService_FetchAllFundingRates(t *testing.T) {
 			Timestamp:        UnixTimestamp(time.Now()),
 		},
 	}
-	
+
 	client := &MockClient{
 		GetAllFundingRatesFunc: func(ctx context.Context, exchange string) ([]FundingRate, error) {
 			return expectedFundingRates, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1062,13 +1061,13 @@ func TestService_FetchAllFundingRates(t *testing.T) {
 func TestService_FetchAllFundingRates_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetAllFundingRatesFunc: func(ctx context.Context, exchange string) ([]FundingRate, error) {
 			return nil, fmt.Errorf("exchange not found")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1085,33 +1084,35 @@ func TestService_FetchAllFundingRates_Error(t *testing.T) {
 func TestService_CalculateFundingRateArbitrage(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client with funding rate data that creates arbitrage opportunity
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      0.0001, // 0.01%
-						MarkPrice:        50000.0,
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: 0.0001, // 0.01%
+						MarkPrice:   50000.0,
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      -0.002, // -0.2% (negative = you receive funding)
-						MarkPrice:        50000.0,
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: -0.002, // -0.2% (negative = you receive funding)
+						MarkPrice:   50000.0,
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1125,49 +1126,51 @@ func TestService_CalculateFundingRateArbitrage(t *testing.T) {
 	opportunities, err := service.CalculateFundingRateArbitrage(context.Background(), symbols, exchanges, minProfit)
 	assert.NoError(t, err)
 	assert.Len(t, opportunities, 1)
-	
+
 	opportunity := opportunities[0]
 	assert.Equal(t, "BTC/USDT", opportunity.Symbol)
-	assert.Equal(t, "bybit", opportunity.LongExchange)   // Negative funding rate (receive funding)
-	assert.Equal(t, "binance", opportunity.ShortExchange)  // Positive funding rate (pay funding)
+	assert.Equal(t, "bybit", opportunity.LongExchange)    // Negative funding rate (receive funding)
+	assert.Equal(t, "binance", opportunity.ShortExchange) // Positive funding rate (pay funding)
 	assert.Equal(t, -0.002, opportunity.LongFundingRate)
 	assert.Equal(t, 0.0001, opportunity.ShortFundingRate)
 	assert.True(t, opportunity.EstimatedProfitDaily >= minProfit)
 	assert.Equal(t, 0.0, opportunity.PriceDifference) // Same mark price
-	assert.Equal(t, 1.0, opportunity.RiskScore) // No price difference
+	assert.Equal(t, 1.0, opportunity.RiskScore)       // No price difference
 }
 
 // Test Service CalculateFundingRateArbitrage function with insufficient profit
 func TestService_CalculateFundingRateArbitrage_InsufficientProfit(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client with funding rate data that has very small difference
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      0.0001, // 0.01%
-						MarkPrice:        50000.0,
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: 0.0001, // 0.01%
+						MarkPrice:   50000.0,
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      0.00005, // 0.005% (very small difference)
-						MarkPrice:        50000.0,
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: 0.00005, // 0.005% (very small difference)
+						MarkPrice:   50000.0,
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1187,33 +1190,35 @@ func TestService_CalculateFundingRateArbitrage_InsufficientProfit(t *testing.T) 
 func TestService_CalculateFundingRateArbitrage_PriceDifferenceRisk(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client with funding rate data but different mark prices
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
-			if exchange == "binance" {
+			switch exchange {
+			case "binance":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      0.0001, // 0.01%
-						MarkPrice:        50000.0,
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: 0.0001, // 0.01%
+						MarkPrice:   50000.0,
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
-			} else if exchange == "bybit" {
+			case "bybit":
 				return []FundingRate{
 					{
-						Symbol:           "BTC/USDT",
-						FundingRate:      -0.002, // -0.2% (creates good arbitrage opportunity)
-						MarkPrice:        50500.0, // 1% higher price
-						Timestamp:        UnixTimestamp(time.Now()),
+						Symbol:      "BTC/USDT",
+						FundingRate: -0.002,  // -0.2% (creates good arbitrage opportunity)
+						MarkPrice:   50500.0, // 1% higher price
+						Timestamp:   UnixTimestamp(time.Now()),
 					},
 				}, nil
+			default:
+				return []FundingRate{}, nil
 			}
-			return []FundingRate{}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1227,31 +1232,31 @@ func TestService_CalculateFundingRateArbitrage_PriceDifferenceRisk(t *testing.T)
 	opportunities, err := service.CalculateFundingRateArbitrage(context.Background(), symbols, exchanges, minProfit)
 	assert.NoError(t, err)
 	assert.Len(t, opportunities, 1)
-	
+
 	opportunity := opportunities[0]
-	assert.Equal(t, -500.0, opportunity.PriceDifference) // 50000 - 50500 (short - long)
+	assert.Equal(t, -500.0, opportunity.PriceDifference)                       // 50000 - 50500 (short - long)
 	assert.Equal(t, 0.9900990099009901, opportunity.PriceDifferencePercentage) // |50000-50500|/50500 * 100
-	assert.Equal(t, 2.0, opportunity.RiskScore) // Higher risk due to price difference > 0.5%
+	assert.Equal(t, 2.0, opportunity.RiskScore)                                // Higher risk due to price difference > 0.5%
 }
 
 // Test Service CalculateFundingRateArbitrage function with insufficient exchanges
 func TestService_CalculateFundingRateArbitrage_InsufficientExchanges(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 			return []FundingRate{
 				{
-					Symbol:           "BTC/USDT",
-					FundingRate:      0.0001,
-					MarkPrice:        50000.0,
-					Timestamp:        UnixTimestamp(time.Now()),
+					Symbol:      "BTC/USDT",
+					FundingRate: 0.0001,
+					MarkPrice:   50000.0,
+					Timestamp:   UnixTimestamp(time.Now()),
 				},
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1271,13 +1276,13 @@ func TestService_CalculateFundingRateArbitrage_InsufficientExchanges(t *testing.
 func TestService_CalculateFundingRateArbitrage_ClientError(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	client := &MockClient{
 		GetFundingRatesFunc: func(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 			return nil, fmt.Errorf("exchange error")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1299,7 +1304,7 @@ func TestService_CalculateFundingRateArbitrage_ClientError(t *testing.T) {
 func TestService_GetExchangeConfig(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client with exchange config response
 	client := &MockClient{
 		GetExchangeConfigFunc: func(ctx context.Context) (*ExchangeConfigResponse, error) {
@@ -1315,7 +1320,7 @@ func TestService_GetExchangeConfig(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1325,7 +1330,7 @@ func TestService_GetExchangeConfig(t *testing.T) {
 	config, err := service.GetExchangeConfig(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, config)
-	
+
 	assert.Equal(t, []string{"disabled_exchange"}, config.Config.BlacklistedExchanges)
 	assert.Equal(t, []string{"binance", "bybit"}, config.Config.PriorityExchanges)
 	assert.Equal(t, []string{"binance", "bybit", "okx"}, config.ActiveExchanges)
@@ -1337,14 +1342,14 @@ func TestService_GetExchangeConfig(t *testing.T) {
 func TestService_GetExchangeConfig_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		GetExchangeConfigFunc: func(ctx context.Context) (*ExchangeConfigResponse, error) {
 			return nil, fmt.Errorf("failed to get exchange config")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1361,7 +1366,7 @@ func TestService_GetExchangeConfig_Error(t *testing.T) {
 func TestService_AddExchangeToBlacklist(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client
 	client := &MockClient{
 		AddExchangeToBlacklistFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
@@ -1374,7 +1379,7 @@ func TestService_AddExchangeToBlacklist(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1386,10 +1391,10 @@ func TestService_AddExchangeToBlacklist(t *testing.T) {
 	response, err := service.AddExchangeToBlacklist(context.Background(), exchange)
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
-	
+
 	assert.Equal(t, "Exchange added to blacklist successfully", response.Message)
 	assert.Contains(t, response.BlacklistedExchanges, exchange)
-	
+
 	// Verify exchange was added to blacklist cache
 	isBlacklisted, _ := blacklistCache.IsBlacklisted(exchange)
 	assert.True(t, isBlacklisted)
@@ -1399,14 +1404,14 @@ func TestService_AddExchangeToBlacklist(t *testing.T) {
 func TestService_AddExchangeToBlacklist_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		AddExchangeToBlacklistFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 			return nil, fmt.Errorf("exchange not found")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1418,7 +1423,7 @@ func TestService_AddExchangeToBlacklist_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, response)
 	assert.Contains(t, err.Error(), "exchange not found")
-	
+
 	// Note: The service adds to blacklist cache before calling client, so it will be in cache even on error
 	isBlacklisted, _ := blacklistCache.IsBlacklisted(exchange)
 	assert.True(t, isBlacklisted) // Service adds to cache first, then calls client
@@ -1428,12 +1433,12 @@ func TestService_AddExchangeToBlacklist_Error(t *testing.T) {
 func TestService_RemoveExchangeFromBlacklist(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Pre-add exchange to blacklist cache
 	blacklistCache.Add("problematic_exchange", "Manual blacklist", 0)
 	isBlacklisted, _ := blacklistCache.IsBlacklisted("problematic_exchange")
 	assert.True(t, isBlacklisted)
-	
+
 	// Setup mock client
 	client := &MockClient{
 		RemoveExchangeFromBlacklistFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
@@ -1446,7 +1451,7 @@ func TestService_RemoveExchangeFromBlacklist(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1458,10 +1463,10 @@ func TestService_RemoveExchangeFromBlacklist(t *testing.T) {
 	response, err := service.RemoveExchangeFromBlacklist(context.Background(), exchange)
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
-	
+
 	assert.Equal(t, "Exchange removed from blacklist successfully", response.Message)
 	assert.NotContains(t, response.BlacklistedExchanges, exchange)
-	
+
 	// Verify exchange was removed from blacklist cache
 	isBlacklistedRemoved, _ := blacklistCache.IsBlacklisted(exchange)
 	assert.False(t, isBlacklistedRemoved)
@@ -1471,14 +1476,14 @@ func TestService_RemoveExchangeFromBlacklist(t *testing.T) {
 func TestService_RemoveExchangeFromBlacklist_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		RemoveExchangeFromBlacklistFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 			return nil, fmt.Errorf("exchange not in blacklist")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1496,7 +1501,7 @@ func TestService_RemoveExchangeFromBlacklist_Error(t *testing.T) {
 func TestService_RefreshExchanges(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client
 	client := &MockClient{
 		RefreshExchangesFunc: func(ctx context.Context) (*ExchangeManagementResponse, error) {
@@ -1509,7 +1514,7 @@ func TestService_RefreshExchanges(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1519,7 +1524,7 @@ func TestService_RefreshExchanges(t *testing.T) {
 	response, err := service.RefreshExchanges(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
-	
+
 	assert.Equal(t, "Exchanges refreshed successfully", response.Message)
 	assert.Equal(t, []string{"binance", "bybit", "okx"}, response.ActiveExchanges)
 	assert.Equal(t, []string{"binance", "bybit", "okx", "coinbase"}, response.AvailableExchanges)
@@ -1529,14 +1534,14 @@ func TestService_RefreshExchanges(t *testing.T) {
 func TestService_RefreshExchanges_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		RefreshExchangesFunc: func(ctx context.Context) (*ExchangeManagementResponse, error) {
 			return nil, fmt.Errorf("failed to refresh exchanges")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1553,7 +1558,7 @@ func TestService_RefreshExchanges_Error(t *testing.T) {
 func TestService_AddExchange(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client
 	client := &MockClient{
 		AddExchangeFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
@@ -1566,7 +1571,7 @@ func TestService_AddExchange(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1578,7 +1583,7 @@ func TestService_AddExchange(t *testing.T) {
 	response, err := service.AddExchange(context.Background(), exchange)
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
-	
+
 	assert.Equal(t, "Exchange added successfully", response.Message)
 	assert.Contains(t, response.ActiveExchanges, exchange)
 	assert.Contains(t, response.AvailableExchanges, exchange)
@@ -1588,14 +1593,14 @@ func TestService_AddExchange(t *testing.T) {
 func TestService_FetchMarketData_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		GetTickersFunc: func(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
 			return nil, fmt.Errorf("network error")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,
@@ -1604,7 +1609,7 @@ func TestService_FetchMarketData_Error(t *testing.T) {
 
 	exchanges := []string{"binance"}
 	symbols := []string{"BTC/USDT"}
-	
+
 	marketData, err := service.FetchMarketData(context.Background(), exchanges, symbols)
 	assert.Error(t, err)
 	assert.Nil(t, marketData)
@@ -1615,14 +1620,14 @@ func TestService_FetchMarketData_Error(t *testing.T) {
 func TestService_AddExchange_Error(t *testing.T) {
 	logger := logrus.New()
 	blacklistCache := cache.NewInMemoryBlacklistCache()
-	
+
 	// Setup mock client that returns error
 	client := &MockClient{
 		AddExchangeFunc: func(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 			return nil, fmt.Errorf("exchange already exists")
 		},
 	}
-	
+
 	service := &Service{
 		client:         client,
 		blacklistCache: blacklistCache,

@@ -3,7 +3,6 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -13,8 +12,7 @@ import (
 func TestNewAdminMiddleware(t *testing.T) {
 	t.Run("with environment variable", func(t *testing.T) {
 		// Set environment variable with secure 32+ character key
-		_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
-		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+		t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
@@ -27,28 +25,27 @@ func TestNewAdminMiddleware(t *testing.T) {
 
 	t.Run("with default key validation", func(t *testing.T) {
 		// Test default key 1
-		_ = os.Setenv("ADMIN_API_KEY", "admin-dev-key-change-in-production")
-		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+		t.Setenv("ADMIN_API_KEY", "admin-dev-key-change-in-production")
 
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
+		t.Skip("Refactor NewAdminMiddleware to return an error from a validate() helper so we can assert failure without log.Fatal")
 	})
 
 	t.Run("with short key validation", func(t *testing.T) {
 		// Test short key (less than 32 characters)
-		_ = os.Setenv("ADMIN_API_KEY", "short-key")
-		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+		t.Setenv("ADMIN_API_KEY", "short-key")
 
 		// This should call log.Fatal and exit, so we can't test it directly
 		// In production, this would prevent the application from starting
 		// We'll just verify the logic exists by checking the function doesn't panic with valid keys
+		t.Skip("Refactor NewAdminMiddleware to return an error from a validate() helper so we can assert failure without log.Fatal")
 	})
 
 	t.Run("with exactly 32 character key", func(t *testing.T) {
 		// Test with exactly 32 characters (minimum allowed)
-		_ = os.Setenv("ADMIN_API_KEY", "12345678901234567890123456789012")
-		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+		t.Setenv("ADMIN_API_KEY", "12345678901234567890123456789012")
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
@@ -57,8 +54,7 @@ func TestNewAdminMiddleware(t *testing.T) {
 
 	t.Run("with long key", func(t *testing.T) {
 		// Test with long key (more than 32 characters)
-		_ = os.Setenv("ADMIN_API_KEY", "very-long-admin-key-that-is-much-longer-than-32-characters")
-		defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+		t.Setenv("ADMIN_API_KEY", "very-long-admin-key-that-is-much-longer-than-32-characters")
 
 		am := NewAdminMiddleware()
 		assert.NotNil(t, am)
@@ -68,8 +64,7 @@ func TestNewAdminMiddleware(t *testing.T) {
 
 func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 	// Set up test environment with secure 32+ character key
-	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
-	defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+	t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 
 	am := NewAdminMiddleware()
 	gin.SetMode(gin.TestMode)
@@ -191,8 +186,7 @@ func TestAdminMiddleware_RequireAdminAuth(t *testing.T) {
 }
 
 func TestAdminMiddleware_ValidateAdminKey(t *testing.T) {
-	_ = os.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
-	defer func() { _ = os.Unsetenv("ADMIN_API_KEY") }()
+	t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
 
 	am := NewAdminMiddleware()
 

@@ -9,6 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Package middleware provides HTTP middleware components for authentication,
+// authorization, telemetry, and other cross-cutting concerns.
+
 // AdminMiddleware provides admin authentication middleware
 type AdminMiddleware struct {
 	apiKey string

@@ -252,37 +252,37 @@ func (m *MockCCXTService) AddExchange(ctx context.Context, exchange string) (*cc
 }
 
 func (m *MockCCXTService) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]ccxt.MarketPriceInterface, error) {
-    args := m.Called(ctx, exchanges, symbols)
-    if args.Get(0) == nil {
-        return nil, args.Error(1)
-    }
-    // Support multiple input types for convenience in tests
-    switch v := args.Get(0).(type) {
-    case []ccxt.MarketPriceInterface:
-        return v, args.Error(1)
-    case []models.MarketPrice:
-        converted := make([]ccxt.MarketPriceInterface, len(v))
-        for i := range v {
-            converted[i] = &v[i]
-        }
-        return converted, args.Error(1)
-    case []*models.MarketPrice:
-        converted := make([]ccxt.MarketPriceInterface, len(v))
-        for i := range v {
-            converted[i] = v[i]
-        }
-        return converted, args.Error(1)
-    default:
-        return nil, args.Error(1)
-    }
+	args := m.Called(ctx, exchanges, symbols)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	// Support multiple input types for convenience in tests
+	switch v := args.Get(0).(type) {
+	case []ccxt.MarketPriceInterface:
+		return v, args.Error(1)
+	case []models.MarketPrice:
+		converted := make([]ccxt.MarketPriceInterface, len(v))
+		for i := range v {
+			converted[i] = &v[i]
+		}
+		return converted, args.Error(1)
+	case []*models.MarketPrice:
+		converted := make([]ccxt.MarketPriceInterface, len(v))
+		for i := range v {
+			converted[i] = v[i]
+		}
+		return converted, args.Error(1)
+	default:
+		return nil, args.Error(1)
+	}
 }
 
 func (m *MockCCXTService) FetchSingleTicker(ctx context.Context, exchange, symbol string) (ccxt.MarketPriceInterface, error) {
-    args := m.Called(ctx, exchange, symbol)
-    if args.Get(0) == nil {
-        return nil, args.Error(1)
-    }
-    return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
+	args := m.Called(ctx, exchange, symbol)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(ccxt.MarketPriceInterface), args.Error(1)
 }
 
 func (m *MockCCXTService) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*ccxt.OrderBookResponse, error) {

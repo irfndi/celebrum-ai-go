@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -20,6 +21,7 @@ type Config struct {
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
 	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
+	Auth        AuthConfig       `mapstructure:"auth"`
 }
 
 type ServerConfig struct {
@@ -39,6 +41,18 @@ type DatabaseConfig struct {
 	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
 	ConnMaxLifetime string `mapstructure:"conn_max_lifetime"`
 	ConnMaxIdleTime string `mapstructure:"conn_max_idle_time"`
+	// PostgreSQL 18 specific optimizations
+	ApplicationName       string `mapstructure:"application_name"`
+	ConnectTimeout        int    `mapstructure:"connect_timeout"`
+	StatementTimeout      int    `mapstructure:"statement_timeout"`
+	QueryTimeout          int    `mapstructure:"query_timeout"`
+	PoolTimeout           int    `mapstructure:"pool_timeout"`
+	PoolHealthCheckPeriod int    `mapstructure:"pool_health_check_period"`
+	PoolMaxLifetime       int    `mapstructure:"pool_max_lifetime"`
+	PoolIdleTimeout       int    `mapstructure:"pool_idle_timeout"`
+	EnableAsync           bool   `mapstructure:"enable_async"`
+	AsyncBatchSize        int    `mapstructure:"async_batch_size"`
+	AsyncConcurrency      int    `mapstructure:"async_concurrency"`
 }
 
 type RedisConfig struct {
@@ -104,14 +118,14 @@ type MarketDataConfig struct {
 }
 
 type ArbitrageConfig struct {
-	MinProfitThreshold float64 `mapstructure:"min_profit_threshold"`
-	MaxTradeAmount     float64 `mapstructure:"max_trade_amount"`
-	CheckInterval      string  `mapstructure:"check_interval"`
+	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
+	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
+	CheckInterval      string   `mapstructure:"check_interval"`
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
-	Enabled            bool    `mapstructure:"enabled"`
-	IntervalSeconds    int     `mapstructure:"interval_seconds"`
-	MaxAgeMinutes      int     `mapstructure:"max_age_minutes"`
-	BatchSize          int     `mapstructure:"batch_size"`
+	Enabled            bool     `mapstructure:"enabled"`
+	IntervalSeconds    int      `mapstructure:"interval_seconds"`
+	MaxAgeMinutes      int      `mapstructure:"max_age_minutes"`
+	BatchSize          int      `mapstructure:"batch_size"`
 }
 
 type BlacklistConfig struct {
@@ -120,6 +134,10 @@ type BlacklistConfig struct {
 	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
 	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
 	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
+}
+
+type AuthConfig struct {
+	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
 func Load() (*Config, error) {
@@ -135,6 +153,10 @@ func Load() (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
+	// Map legacy environment variables for JWT secret
+	_ = viper.BindEnv("auth.jwt_secret", "JWT_SECRET")
+	_ = viper.BindEnv("security.jwt_secret", "JWT_SECRET")
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
@@ -145,6 +167,19 @@ func Load() (*Config, error) {
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
+		return nil, err
+	}
+
+	// Backfill JWT secret from legacy security configuration if needed
+	if config.Auth.JWTSecret == "" {
+		config.Auth.JWTSecret = strings.TrimSpace(viper.GetString("auth.jwt_secret"))
+	}
+	if config.Auth.JWTSecret == "" {
+		config.Auth.JWTSecret = strings.TrimSpace(viper.GetString("security.jwt_secret"))
+	}
+
+	// Validate critical security settings
+	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
 
@@ -164,7 +199,8 @@ func setDefaults() {
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
-	viper.SetDefault("database.password", "postgres")
+	// Set default password for testing (must be overridden in production)
+	viper.SetDefault("database.password", "change-me-in-production")
 	viper.SetDefault("database.dbname", "celebrum_ai")
 	viper.SetDefault("database.sslmode", "disable")
 	viper.SetDefault("database.database_url", "")
@@ -237,6 +273,9 @@ func setDefaults() {
 	viper.SetDefault("blacklist.long_ttl", "72h")
 	viper.SetDefault("blacklist.use_redis", true)
 	viper.SetDefault("blacklist.retry_after_clear", true)
+
+	// Auth
+	viper.SetDefault("auth.jwt_secret", "")
 }
 
 // GetServiceURL returns the CCXT service URL
@@ -247,4 +286,40 @@ func (c *CCXTConfig) GetServiceURL() string {
 // GetTimeout returns the CCXT service timeout in seconds
 func (c *CCXTConfig) GetTimeout() int {
 	return c.Timeout
+}
+
+// validateConfig validates critical security and operational settings
+func validateConfig(config *Config) error {
+	// Validate JWT secret for production environments
+	if config.Environment == "production" || config.Environment == "staging" {
+		if config.Auth.JWTSecret == "" {
+			return fmt.Errorf("JWT_SECRET cannot be empty in %s environment. Please set a secure JWT secret", config.Environment)
+		}
+
+		// Validate JWT secret complexity (minimum 32 characters for security)
+		if len(config.Auth.JWTSecret) < 32 {
+			return fmt.Errorf("JWT_SECRET must be at least 32 characters long in %s environment for security", config.Environment)
+		}
+
+		// Check for common insecure JWT secrets
+		insecureSecrets := []string{
+			"test-jwt-secret",
+			"secret",
+			"jwt-secret",
+			"default-secret",
+			"test-jwt-secret-for-ci",
+			"test-jwt-secret-for-ci-only",
+			"changeme",
+			"password",
+			"123456",
+		}
+
+		for _, insecure := range insecureSecrets {
+			if config.Auth.JWTSecret == insecure {
+				return fmt.Errorf("JWT_SECRET '%s' is insecure and not allowed in %s environment. Please use a secure, randomly generated secret", insecure, config.Environment)
+			}
+		}
+	}
+
+	return nil
 }

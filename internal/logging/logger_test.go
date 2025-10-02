@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	otellog "go.opentelemetry.io/otel/log"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	)
-
+	otellog "go.opentelemetry.io/otel/log"
+)
 
 // testLogger implements the Logger interface for testing
 type testLogger struct {
@@ -454,13 +453,13 @@ func TestOTLPLogger_Shutdown(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 
-	// Test shutdown with nil context
-	err = logger.Shutdown(nil)
-	assert.NoError(t, err)
-
-	// Test shutdown with context
 	ctx := context.Background()
 	err = logger.Shutdown(ctx)
+	assert.NoError(t, err)
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = logger.Shutdown(shutdownCtx)
 	assert.NoError(t, err)
 }
 
@@ -568,10 +567,10 @@ func TestParseLogrusLevel(t *testing.T) {
 		{"warning", logrus.WarnLevel},
 		{"error", logrus.ErrorLevel},
 		{"info", logrus.InfoLevel},
-		{"INFO", logrus.InfoLevel}, // case insensitive
-		{"DEBUG", logrus.DebugLevel}, // case insensitive
+		{"INFO", logrus.InfoLevel},    // case insensitive
+		{"DEBUG", logrus.DebugLevel},  // case insensitive
 		{"invalid", logrus.InfoLevel}, // default to info
-		{"", logrus.InfoLevel}, // empty string defaults to info
+		{"", logrus.InfoLevel},        // empty string defaults to info
 	}
 
 	for _, tt := range tests {
@@ -793,7 +792,7 @@ func TestFallbackLogger_Logger(t *testing.T) {
 // Mock OTLP Logger for testing
 type mockOTLPLogger struct {
 	otellog.Logger // Embed the Logger interface
-	enabled       bool
+	enabled        bool
 }
 
 func (m *mockOTLPLogger) Enabled(ctx context.Context, params otellog.EnabledParameters) bool {
@@ -808,7 +807,7 @@ func (m *mockOTLPLogger) Emit(ctx context.Context, record otellog.Record) {
 func TestNewOTLPHandler(t *testing.T) {
 	// Create a mock OTLP logger
 	mockLogger := &mockOTLPLogger{enabled: true}
-	
+
 	handler := NewOTLPHandler(mockLogger)
 	assert.NotNil(t, handler)
 	assert.Equal(t, mockLogger, handler.logger)
@@ -817,9 +816,9 @@ func TestNewOTLPHandler(t *testing.T) {
 func TestOTLPHandler_Enabled(t *testing.T) {
 	mockLogger := &mockOTLPLogger{enabled: true}
 	handler := NewOTLPHandler(mockLogger)
-	
+
 	ctx := context.Background()
-	
+
 	// Test with different levels - should always return true in our implementation
 	assert.True(t, handler.Enabled(ctx, slog.LevelDebug))
 	assert.True(t, handler.Enabled(ctx, slog.LevelInfo))
@@ -830,9 +829,9 @@ func TestOTLPHandler_Enabled(t *testing.T) {
 func TestOTLPHandler_Handle(t *testing.T) {
 	mockLogger := &mockOTLPLogger{enabled: true}
 	handler := NewOTLPHandler(mockLogger)
-	
+
 	ctx := context.Background()
-	
+
 	// Create a test record
 	now := time.Now()
 	record := slog.Record{
@@ -840,11 +839,11 @@ func TestOTLPHandler_Handle(t *testing.T) {
 		Level:   slog.LevelInfo,
 		Message: "Test message",
 	}
-	
+
 	// Add some attributes
 	record.AddAttrs(slog.String("service", "test-service"))
 	record.AddAttrs(slog.Int("user_id", 123))
-	
+
 	// Test that Handle doesn't panic
 	err := handler.Handle(ctx, record)
 	assert.NoError(t, err)
@@ -853,14 +852,14 @@ func TestOTLPHandler_Handle(t *testing.T) {
 func TestOTLPHandler_WithAttrs(t *testing.T) {
 	mockLogger := &mockOTLPLogger{enabled: true}
 	handler := NewOTLPHandler(mockLogger)
-	
+
 	attrs := []slog.Attr{
 		slog.String("component", "test-component"),
 		slog.Int("version", 1),
 	}
-	
+
 	newHandler := handler.WithAttrs(attrs)
-	
+
 	// Should return the same handler instance (current implementation)
 	assert.NotNil(t, newHandler)
 }
@@ -868,10 +867,10 @@ func TestOTLPHandler_WithAttrs(t *testing.T) {
 func TestOTLPHandler_WithGroup(t *testing.T) {
 	mockLogger := &mockOTLPLogger{enabled: true}
 	handler := NewOTLPHandler(mockLogger)
-	
+
 	groupName := "test-group"
 	newHandler := handler.WithGroup(groupName)
-	
+
 	// Should return the same handler instance (current implementation)
 	assert.NotNil(t, newHandler)
 }

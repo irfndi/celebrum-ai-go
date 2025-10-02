@@ -375,9 +375,12 @@ func TestResourceOptimizer_ConcurrentAccess(t *testing.T) {
 	// Let goroutines complete
 	time.Sleep(50 * time.Millisecond)
 
+	// Get performance history with proper synchronization
+	history := ro.GetPerformanceHistory(100) // Get up to 100 entries
+
 	// Should not panic and data should be consistent
-	assert.GreaterOrEqual(t, len(ro.performanceHistory), 0)
-	assert.LessOrEqual(t, len(ro.performanceHistory), config.MaxHistorySize)
+	assert.GreaterOrEqual(t, len(history), 0)
+	assert.LessOrEqual(t, len(history), config.MaxHistorySize)
 }
 
 func TestResourceOptimizer_min(t *testing.T) {

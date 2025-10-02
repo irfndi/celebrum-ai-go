@@ -150,7 +150,7 @@ run_pre_deployment_checks() {
 
 # Check if current ref is deployable
 is_deployable_ref() {
-    local deployable_branches=("main" "master" "develop" "staging" "production")
+    local deployable_branches=("main" "master" "develop" "development" "staging" "production")
     local deployable_patterns=("release/*" "hotfix/*")
     
     # Check exact branch matches

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 
@@ -31,41 +32,47 @@ func NewSpotArbitrageCalculator() *SpotArbitrageCalculator {
 // CalculateArbitrageOpportunities calculates arbitrage opportunities from market data
 func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
 	var opportunities []models.ArbitrageOpportunity
-	
+
 	// For each symbol, find arbitrage opportunities between exchanges
 	for _, exchangeData := range marketData {
 		if len(exchangeData) < 2 {
 			continue
 		}
-		
+
 		// Find the lowest and highest prices for this symbol
 		var lowestPrice, highestPrice decimal.Decimal
 		var lowestExchange, highestExchange *models.Exchange
 		var lowestPair *models.TradingPair
-		
+
 		for _, data := range exchangeData {
+			// Skip data with nil trading pair
+			if data.TradingPair == nil {
+				continue
+			}
+
 			if lowestExchange == nil || data.LastPrice.LessThan(lowestPrice) {
 				lowestPrice = data.LastPrice
 				lowestExchange = data.Exchange
 				lowestPair = data.TradingPair
 			}
+
 			if highestExchange == nil || data.LastPrice.GreaterThan(highestPrice) {
 				highestPrice = data.LastPrice
 				highestExchange = data.Exchange
 			}
 		}
-		
+
 		// Calculate profit percentage
 		if !lowestPrice.IsZero() {
 			profitPercentage := highestPrice.Sub(lowestPrice).Div(lowestPrice).Mul(decimal.NewFromInt(100))
-			
+
 			// Only consider opportunities with meaningful profit
 			if profitPercentage.GreaterThan(decimal.NewFromFloat(0.1)) {
 				opportunity := models.ArbitrageOpportunity{
 					ID:               uuid.New().String(),
-					BuyExchangeID:   lowestExchange.ID,
-					SellExchangeID:  highestExchange.ID,
-					TradingPairID:   lowestPair.ID,
+					BuyExchangeID:    lowestExchange.ID,
+					SellExchangeID:   highestExchange.ID,
+					TradingPairID:    lowestPair.ID,
 					BuyPrice:         lowestPrice,
 					SellPrice:        highestPrice,
 					ProfitPercentage: profitPercentage,
@@ -79,7 +86,7 @@ func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context
 			}
 		}
 	}
-	
+
 	return opportunities, nil
 }
 
@@ -94,17 +101,17 @@ type ArbitrageServiceConfig struct {
 
 // ArbitrageService handles periodic calculation and storage of arbitrage opportunities
 type ArbitrageService struct {
-	db                *database.PostgresDB
-	config            *config.Config
-	arbitrageConfig   ArbitrageServiceConfig
-	calculator        ArbitrageCalculator
-	ctx               context.Context
-	cancel            context.CancelFunc
-	wg                sync.WaitGroup
-	isRunning         bool
-	mu                sync.RWMutex
-	logger            *logrus.Logger
-	lastCalculation   time.Time
+	db                 *database.PostgresDB
+	config             *config.Config
+	arbitrageConfig    ArbitrageServiceConfig
+	calculator         ArbitrageCalculator
+	ctx                context.Context
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
+	isRunning          bool
+	mu                 sync.RWMutex
+	logger             *logrus.Logger
+	lastCalculation    time.Time
 	opportunitiesFound int
 }
 
@@ -114,7 +121,7 @@ func NewArbitrageService(db *database.PostgresDB, cfg *config.Config, calculator
 
 	// Parse configuration with defaults
 	arbitrageConfig := ArbitrageServiceConfig{
-		IntervalSeconds: 60, // 1 minute default
+		IntervalSeconds: 60,  // 1 minute default
 		MinProfit:       0.5, // 0.5% minimum profit
 		MaxAgeMinutes:   30,  // 30 minutes max age for opportunities
 		BatchSize:       100, // Process 100 trading pairs at a time
@@ -165,7 +172,7 @@ func (s *ArbitrageService) Start() error {
 	s.isRunning = true
 	s.mu.Unlock()
 
-	s.logger.Info("Starting arbitrage service", 
+	s.logger.Info("Starting arbitrage service",
 		"interval_seconds", s.arbitrageConfig.IntervalSeconds,
 		"min_profit", s.arbitrageConfig.MinProfit,
 		"max_age_minutes", s.arbitrageConfig.MaxAgeMinutes,
@@ -266,7 +273,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 
 	// Step 4: Filter opportunities by minimum profit threshold
 	validOpportunities := s.filterOpportunities(opportunities)
-	
+
 	// Step 5: Store valid opportunities in database
 	if err := s.storeOpportunities(validOpportunities); err != nil {
 		return fmt.Errorf("failed to store opportunities: %w", err)
@@ -279,7 +286,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 	s.mu.Unlock()
 
 	duration := time.Since(startTime)
-	s.logger.Info("Arbitrage calculation completed", 
+	s.logger.Info("Arbitrage calculation completed",
 		"duration_ms", duration.Milliseconds(),
 		"opportunities_found", len(validOpportunities),
 		"total_calculated", len(opportunities),
@@ -316,14 +323,14 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 	defer rows.Close()
 
 	marketData := make(map[string][]models.MarketData)
-	
+
 	for rows.Next() {
 		var data models.MarketData
 		var exchangeName string
 		var symbol string
-		
+
 		err := rows.Scan(
-			&data.ID, &data.ExchangeID, &data.TradingPairID, &data.LastPrice, 
+			&data.ID, &data.ExchangeID, &data.TradingPairID, &data.LastPrice,
 			&data.Volume24h, &data.Timestamp, &data.CreatedAt, &exchangeName, &symbol,
 		)
 		if err != nil {
@@ -353,7 +360,7 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 // filterOpportunities filters arbitrage opportunities based on configuration thresholds
 func (s *ArbitrageService) filterOpportunities(opportunities []models.ArbitrageOpportunity) []models.ArbitrageOpportunity {
 	var filtered []models.ArbitrageOpportunity
-	
+
 	for _, opp := range opportunities {
 		// Check minimum profit threshold
 		if opp.ProfitPercentage.LessThan(decimal.NewFromFloat(s.arbitrageConfig.MinProfit)) {
@@ -404,12 +411,16 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 	if s.db == nil || s.db.Pool == nil {
 		return fmt.Errorf("database pool is not available")
 	}
-	
+
 	tx, err := s.db.Pool.Begin(s.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(s.ctx)
+	defer func() {
+		if err := tx.Rollback(s.ctx); err != nil && err != pgx.ErrTxClosed {
+			s.logger.Error("Failed to rollback transaction", "error", err)
+		}
+	}()
 
 	for _, opp := range opportunities {
 		// Generate UUID for the opportunity if not already set
@@ -442,8 +453,8 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 		)
 
 		if err != nil {
-			s.logger.WithError(err).Error("Failed to insert opportunity", 
-				"buy_exchange", opp.BuyExchangeID, 
+			s.logger.WithError(err).Error("Failed to insert opportunity",
+				"buy_exchange", opp.BuyExchangeID,
 				"sell_exchange", opp.SellExchangeID,
 				"symbol", opp.TradingPair != nil)
 			return fmt.Errorf("failed to insert opportunity: %w", err)
@@ -463,10 +474,10 @@ func (s *ArbitrageService) cleanupOldOpportunities() error {
 	if s.db == nil || s.db.Pool == nil {
 		return fmt.Errorf("database pool is not available")
 	}
-	
+
 	// Since the table uses expires_at instead of is_active, we can just delete expired opportunities
 	// or we can leave them for historical analysis. For now, let's just log expired ones.
-	
+
 	query := `
 		SELECT COUNT(*) 
 		FROM arbitrage_opportunities 
@@ -501,7 +512,7 @@ func (s *ArbitrageService) GetActiveOpportunities(ctx context.Context, limit int
 	if s.db == nil || s.db.Pool == nil {
 		return nil, fmt.Errorf("database pool is not available")
 	}
-	
+
 	query := `
 		SELECT 
 			ao.id, ao.buy_exchange_id, ao.sell_exchange_id, ao.trading_pair_id,
@@ -524,11 +535,11 @@ func (s *ArbitrageService) GetActiveOpportunities(ctx context.Context, limit int
 	defer rows.Close()
 
 	var opportunities []models.ArbitrageOpportunity
-	
+
 	for rows.Next() {
 		var opp models.ArbitrageOpportunity
 		var buyExchangeName, sellExchangeName, symbol, baseCurrency, quoteCurrency string
-		
+
 		err := rows.Scan(
 			&opp.ID, &opp.BuyExchangeID, &opp.SellExchangeID, &opp.TradingPairID,
 			&opp.BuyPrice, &opp.SellPrice, &opp.ProfitPercentage, &opp.DetectedAt, &opp.ExpiresAt,
@@ -544,9 +555,9 @@ func (s *ArbitrageService) GetActiveOpportunities(ctx context.Context, limit int
 		opp.BuyExchange = &models.Exchange{ID: opp.BuyExchangeID, Name: buyExchangeName}
 		opp.SellExchange = &models.Exchange{ID: opp.SellExchangeID, Name: sellExchangeName}
 		opp.TradingPair = &models.TradingPair{
-			ID:           opp.TradingPairID,
-			Symbol:       symbol,
-			BaseCurrency: baseCurrency,
+			ID:            opp.TradingPairID,
+			Symbol:        symbol,
+			BaseCurrency:  baseCurrency,
 			QuoteCurrency: quoteCurrency,
 		}
 

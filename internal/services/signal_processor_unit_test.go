@@ -13,7 +13,7 @@ import (
 func TestSignalProcessor_Config(t *testing.T) {
 	// This test focuses on verifying the default configuration
 	// without requiring full dependency injection
-	
+
 	// Test default configuration values
 	config := &SignalProcessorConfig{
 		BatchSize:           100,
@@ -137,25 +137,25 @@ func TestSignalProcessor_ContextHandling(t *testing.T) {
 func TestSignalProcessor_TimeHandling(t *testing.T) {
 	// Test time calculations for signal processing
 	now := time.Now()
-	
+
 	// Test signal TTL calculation
 	ttl := 24 * time.Hour
 	expiryTime := now.Add(ttl)
-	
+
 	assert.True(t, expiryTime.After(now))
 	assert.Equal(t, ttl, expiryTime.Sub(now))
 
 	// Test processing interval
 	interval := 5 * time.Minute
 	nextProcessing := now.Add(interval)
-	
+
 	assert.True(t, nextProcessing.After(now))
 	assert.Equal(t, interval, nextProcessing.Sub(now))
 
 	// Test retry delay
 	retryDelay := 30 * time.Second
 	retryTime := now.Add(retryDelay)
-	
+
 	assert.True(t, retryTime.After(now))
 	assert.Equal(t, retryDelay, retryTime.Sub(now))
 }
@@ -231,11 +231,11 @@ func (m *MockWriter) Write(p []byte) (n int, err error) {
 // TestSignalProcessor_ErrorScenarios tests error handling patterns
 func TestSignalProcessor_ErrorScenarios(t *testing.T) {
 	// Test error scenarios that don't require full processor initialization
-	
+
 	// Test context cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	// Verify context is cancelled
 	assert.Error(t, ctx.Err())
 	assert.Equal(t, context.Canceled, ctx.Err())
@@ -243,7 +243,7 @@ func TestSignalProcessor_ErrorScenarios(t *testing.T) {
 	// Test timeout context
 	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer timeoutCancel()
-	
+
 	// Wait for timeout
 	time.Sleep(time.Millisecond * 2)
 	assert.Error(t, timeoutCtx.Err())
@@ -253,11 +253,11 @@ func TestSignalProcessor_ErrorScenarios(t *testing.T) {
 // TestSignalProcessor_ConcurrentSafety tests concurrent safety patterns
 func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 	// Test concurrent safety patterns that can be verified without full processor
-	
+
 	// Test channel operations
 	done := make(chan bool)
 	results := make(chan int, 10)
-	
+
 	// Start multiple goroutines
 	for i := 0; i < 10; i++ {
 		go func(id int) {
@@ -270,11 +270,11 @@ func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 			done <- true
 		}(i)
 	}
-	
+
 	// Collect results
 	completed := 0
 	receivedResults := make([]int, 0)
-	
+
 	// We need to receive 20 messages total: 10 results + 10 done signals
 	// Use separate loops to ensure we get all messages
 	for len(receivedResults) < 10 {
@@ -285,7 +285,7 @@ func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 			t.Fatal("Test timed out waiting for results")
 		}
 	}
-	
+
 	for completed < 10 {
 		select {
 		case <-done:
@@ -294,17 +294,17 @@ func TestSignalProcessor_ConcurrentSafety(t *testing.T) {
 			t.Fatal("Test timed out waiting for completion signals")
 		}
 	}
-	
+
 	// Verify all goroutines completed and all results were received
 	assert.Equal(t, 10, completed)
 	assert.Len(t, receivedResults, 10)
-	
+
 	// Verify all IDs from 0-9 are present (order may vary)
 	expectedIDs := make(map[int]bool)
 	for i := 0; i < 10; i++ {
 		expectedIDs[i] = true
 	}
-	
+
 	for _, id := range receivedResults {
 		assert.True(t, expectedIDs[id], "ID %d should be in expected range", id)
 		delete(expectedIDs, id)

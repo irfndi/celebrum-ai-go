@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
-	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/shopspring/decimal"
 )
 

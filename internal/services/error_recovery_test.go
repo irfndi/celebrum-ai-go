@@ -14,9 +14,9 @@ import (
 // TestErrorRecoveryManager_NewErrorRecoveryManager tests error recovery manager creation
 func TestErrorRecoveryManager_NewErrorRecoveryManager(t *testing.T) {
 	logger := logrus.New()
-	
+
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	assert.NotNil(t, erm)
 	assert.Equal(t, logger, erm.logger)
 	assert.NotNil(t, erm.circuitBreakers)
@@ -29,15 +29,15 @@ func TestErrorRecoveryManager_NewErrorRecoveryManager(t *testing.T) {
 func TestErrorRecoveryManager_RegisterCircuitBreaker(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register a circuit breaker
 	erm.RegisterCircuitBreaker("test_operation", 3, 5*time.Second)
-	
+
 	// Verify it was registered
 	erm.mu.RLock()
 	cb, exists := erm.circuitBreakers["test_operation"]
 	erm.mu.RUnlock()
-	
+
 	assert.True(t, exists)
 	assert.NotNil(t, cb)
 }
@@ -46,7 +46,7 @@ func TestErrorRecoveryManager_RegisterCircuitBreaker(t *testing.T) {
 func TestErrorRecoveryManager_RegisterRetryPolicy(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	policy := &RetryPolicy{
 		MaxRetries:    3,
 		InitialDelay:  100 * time.Millisecond,
@@ -54,15 +54,15 @@ func TestErrorRecoveryManager_RegisterRetryPolicy(t *testing.T) {
 		BackoffFactor: 2.0,
 		JitterEnabled: true,
 	}
-	
+
 	// Register a retry policy
 	erm.RegisterRetryPolicy("test_operation", policy)
-	
+
 	// Verify it was registered
 	erm.mu.RLock()
 	retrievedPolicy, exists := erm.retryPolicies["test_operation"]
 	erm.mu.RUnlock()
-	
+
 	assert.True(t, exists)
 	assert.Equal(t, policy, retrievedPolicy)
 }
@@ -71,13 +71,13 @@ func TestErrorRecoveryManager_RegisterRetryPolicy(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRecovery_Success(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	operation := func() (interface{}, error) {
 		return "success", nil
 	}
-	
+
 	result := erm.ExecuteWithRecovery(context.Background(), "test_operation", operation, nil)
-	
+
 	assert.True(t, result.Success)
 	assert.Equal(t, "success", result.Data)
 	assert.Nil(t, result.Error)
@@ -90,13 +90,13 @@ func TestErrorRecoveryManager_ExecuteWithRecovery_Success(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRecovery_Failure(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	operation := func() (interface{}, error) {
 		return nil, errors.New("operation failed")
 	}
-	
+
 	result := erm.ExecuteWithRecovery(context.Background(), "test_operation", operation, nil)
-	
+
 	assert.False(t, result.Success)
 	assert.Nil(t, result.Data)
 	assert.Error(t, result.Error)
@@ -109,17 +109,17 @@ func TestErrorRecoveryManager_ExecuteWithRecovery_Failure(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRecovery_Fallback(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	operation := func() (interface{}, error) {
 		return nil, errors.New("operation failed")
 	}
-	
+
 	fallback := func() (interface{}, error) {
 		return "fallback_success", nil
 	}
-	
+
 	result := erm.ExecuteWithRecovery(context.Background(), "test_operation", operation, fallback)
-	
+
 	assert.True(t, result.Success)
 	assert.Equal(t, "fallback_success", result.Data)
 	assert.True(t, result.FallbackUsed)
@@ -129,7 +129,7 @@ func TestErrorRecoveryManager_ExecuteWithRecovery_Fallback(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRetry(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register a retry policy
 	policy := &RetryPolicy{
 		MaxRetries:    2,
@@ -139,7 +139,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry(t *testing.T) {
 		JitterEnabled: false,
 	}
 	erm.RegisterRetryPolicy("test_operation", policy)
-	
+
 	attempts := 0
 	operation := func() (interface{}, error) {
 		attempts++
@@ -148,9 +148,9 @@ func TestErrorRecoveryManager_ExecuteWithRetry(t *testing.T) {
 		}
 		return "success_after_retry", nil
 	}
-	
+
 	result := erm.ExecuteWithRecovery(context.Background(), "test_operation", operation, nil)
-	
+
 	assert.True(t, result.Success)
 	assert.Equal(t, "success_after_retry", result.Data)
 	assert.True(t, result.Recovered)
@@ -161,7 +161,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRetry_ContextCancellation(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register a retry policy
 	policy := &RetryPolicy{
 		MaxRetries:    5,
@@ -171,16 +171,16 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ContextCancellation(t *testing.T)
 		JitterEnabled: false,
 	}
 	erm.RegisterRetryPolicy("test_operation", policy)
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	operation := func() (interface{}, error) {
 		cancel() // Cancel context during first attempt
 		return nil, errors.New("operation failed")
 	}
-	
+
 	result := erm.ExecuteWithRecovery(ctx, "test_operation", operation, nil)
-	
+
 	assert.False(t, result.Success)
 	assert.Equal(t, context.Canceled, result.Error)
 }
@@ -189,7 +189,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ContextCancellation(t *testing.T)
 func TestErrorRecoveryManager_CalculateDelay(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	policy := &RetryPolicy{
 		MaxRetries:    3,
 		InitialDelay:  100 * time.Millisecond,
@@ -197,10 +197,10 @@ func TestErrorRecoveryManager_CalculateDelay(t *testing.T) {
 		BackoffFactor: 2.0,
 		JitterEnabled: false,
 	}
-	
+
 	delay := erm.calculateDelay(100*time.Millisecond, policy)
 	assert.Equal(t, 100*time.Millisecond, delay)
-	
+
 	// Test with jitter enabled
 	policy.JitterEnabled = true
 	delay = erm.calculateDelay(100*time.Millisecond, policy)
@@ -211,14 +211,14 @@ func TestErrorRecoveryManager_CalculateDelay(t *testing.T) {
 func TestErrorRecoveryManager_DegradationMode(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Initially not in degradation mode
 	assert.False(t, erm.IsInDegradationMode())
-	
+
 	// Enable degradation mode
 	erm.EnableDegradationMode()
 	assert.True(t, erm.IsInDegradationMode())
-	
+
 	// Disable degradation mode
 	erm.DisableDegradationMode()
 	assert.False(t, erm.IsInDegradationMode())
@@ -228,14 +228,14 @@ func TestErrorRecoveryManager_DegradationMode(t *testing.T) {
 func TestErrorRecoveryManager_GetCircuitBreakerStatus(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Initially empty status
 	status := erm.GetCircuitBreakerStatus()
 	assert.Empty(t, status)
-	
+
 	// Register a circuit breaker
 	erm.RegisterCircuitBreaker("test_operation", 3, 5*time.Second)
-	
+
 	// Check status
 	status = erm.GetCircuitBreakerStatus()
 	assert.NotEmpty(t, status)
@@ -246,14 +246,14 @@ func TestErrorRecoveryManager_GetCircuitBreakerStatus(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	ctx := context.Background()
-	
+
 	// Test successful operation
 	operation := func() error {
 		return nil
 	}
-	
+
 	err := erm.ExecuteWithRetry(ctx, "test_operation", operation)
 	assert.NoError(t, err)
 }
@@ -262,7 +262,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly(t *testing.T) {
 func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly_WithRetries(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register a retry policy
 	policy := &RetryPolicy{
 		MaxRetries:    2,
@@ -272,7 +272,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly_WithRetries(t *testing.
 		JitterEnabled: false,
 	}
 	erm.RegisterRetryPolicy("test_operation", policy)
-	
+
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -281,7 +281,7 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly_WithRetries(t *testing.
 		}
 		return nil
 	}
-	
+
 	err := erm.ExecuteWithRetry(context.Background(), "test_operation", operation)
 	assert.NoError(t, err)
 	assert.Equal(t, 3, attempts)
@@ -290,13 +290,13 @@ func TestErrorRecoveryManager_ExecuteWithRetry_ErrorOnly_WithRetries(t *testing.
 // TestErrorRecoveryManager_DefaultRetryPolicies tests default retry policies
 func TestErrorRecoveryManager_DefaultRetryPolicies(t *testing.T) {
 	policies := DefaultRetryPolicies()
-	
+
 	assert.NotEmpty(t, policies)
 	assert.Contains(t, policies, "api_call")
 	assert.Contains(t, policies, "database_operation")
 	assert.Contains(t, policies, "redis_operation")
 	assert.Contains(t, policies, "concurrent_operation")
-	
+
 	// Verify default values
 	apiPolicy := policies["api_call"]
 	assert.Equal(t, 3, apiPolicy.MaxRetries)
@@ -310,7 +310,7 @@ func TestErrorRecoveryManager_DefaultRetryPolicies(t *testing.T) {
 func TestErrorRecoveryManager_ConcurrentOperations(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register retry policy
 	policy := &RetryPolicy{
 		MaxRetries:    2,
@@ -320,31 +320,31 @@ func TestErrorRecoveryManager_ConcurrentOperations(t *testing.T) {
 		JitterEnabled: false,
 	}
 	erm.RegisterRetryPolicy("concurrent_test", policy)
-	
+
 	var wg sync.WaitGroup
 	results := make(chan bool, 10)
-	
+
 	// Test concurrent operations
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			operation := func() (interface{}, error) {
 				if id%3 == 0 {
 					return nil, errors.New("simulated failure")
 				}
 				return "success", nil
 			}
-			
+
 			result := erm.ExecuteWithRecovery(context.Background(), "concurrent_test", operation, nil)
 			results <- result.Success
 		}(i)
 	}
-	
+
 	wg.Wait()
 	close(results)
-	
+
 	// Count successful operations
 	successCount := 0
 	for success := range results {
@@ -352,7 +352,7 @@ func TestErrorRecoveryManager_ConcurrentOperations(t *testing.T) {
 			successCount++
 		}
 	}
-	
+
 	// Should have some successes (operations that didn't fail)
 	assert.Greater(t, successCount, 0)
 }
@@ -361,7 +361,7 @@ func TestErrorRecoveryManager_ConcurrentOperations(t *testing.T) {
 func TestErrorRecoveryManager_TimeHandling(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Register retry policy
 	policy := &RetryPolicy{
 		MaxRetries:    1,
@@ -371,13 +371,13 @@ func TestErrorRecoveryManager_TimeHandling(t *testing.T) {
 		JitterEnabled: false,
 	}
 	erm.RegisterRetryPolicy("time_test", policy)
-	
+
 	operation := func() (interface{}, error) {
 		return nil, errors.New("always fails")
 	}
-	
+
 	result := erm.ExecuteWithRecovery(context.Background(), "time_test", operation, nil)
-	
+
 	duration := result.Duration
 	assert.GreaterOrEqual(t, duration, 50*time.Millisecond)
 	assert.Less(t, duration, 200*time.Millisecond) // Should be reasonable
@@ -387,18 +387,18 @@ func TestErrorRecoveryManager_TimeHandling(t *testing.T) {
 func TestErrorRecoveryManager_StateManagement(t *testing.T) {
 	logger := logrus.New()
 	erm := NewErrorRecoveryManager(logger)
-	
+
 	// Test initial state
 	assert.False(t, erm.IsInDegradationMode())
 	assert.True(t, erm.fallbackEnabled)
-	
+
 	// Test state transitions
 	erm.EnableDegradationMode()
 	assert.True(t, erm.IsInDegradationMode())
-	
+
 	erm.DisableDegradationMode()
 	assert.False(t, erm.IsInDegradationMode())
-	
+
 	// Test concurrent state access
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -410,7 +410,7 @@ func TestErrorRecoveryManager_StateManagement(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	
+
 	// Final state should be consistent
 	assert.False(t, erm.IsInDegradationMode())
 }

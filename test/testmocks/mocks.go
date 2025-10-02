@@ -521,3 +521,8 @@ func (m *MockCacheAnalyticsService) RecordCacheHit(category string) {
 func (m *MockCacheAnalyticsService) RecordCacheMiss(category string) {
 	m.Called(category)
 }
+
+func (m *MockSpotArbitrageCalculator) GetCalculatorStats() map[string]interface{} {
+	args := m.Called()
+	return args.Get(0).(map[string]interface{})
+}

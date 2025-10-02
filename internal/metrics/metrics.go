@@ -7,6 +7,9 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
 )
 
+// Package metrics provides collection and reporting functionality for application metrics
+// including arbitrage opportunities, exchange health, and performance indicators.
+
 // MetricType represents the type of metric being recorded
 type MetricType string
 

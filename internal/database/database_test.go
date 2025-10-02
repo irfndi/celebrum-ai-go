@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +142,31 @@ func TestNewPostgresConnection_InvalidConfig(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, db)
 	assert.Contains(t, err.Error(), "failed to parse database config")
+}
+
+// Test optimized database connection for test environment
+func TestNewPostgresConnection_TestEnvironment(t *testing.T) {
+	// Set test environment
+	t.Setenv("CI_ENVIRONMENT", "test")
+	t.Setenv("RUN_TESTS", "true")
+
+	// Test with valid config but using test optimizations
+	cfg := &config.DatabaseConfig{
+		Host:     "localhost",
+		Port:     5432,
+		User:     "test",
+		Password: "test",
+		DBName:   "test",
+		SSLMode:  "disable",
+	}
+
+	// This should use the optimized test connection path and fail quickly
+	db, err := NewPostgresConnection(cfg)
+	// We expect this to fail gracefully without long timeouts due to no database running
+	assert.Error(t, err)
+	assert.Nil(t, db)
+	// Should fail quickly with connection error, not timeout
+	assert.Contains(t, err.Error(), "failed to connect")
 }
 
 func TestNewPostgresConnection_InvalidDurationConfig(t *testing.T) {
@@ -983,15 +1009,15 @@ func TestNewRedisConnection_UnreachableHost(t *testing.T) {
 // Test NewRedisConnectionWithRetry with nil error recovery manager
 func TestNewRedisConnectionWithRetry_NilErrorRecovery(t *testing.T) {
 	cfg := config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
+		Host:     "invalid-host-that-does-not-exist",
+		Port:     9999,
 		Password: "",
 		DB:       0,
 	}
 
 	// Test with nil error recovery manager (should use fallback)
 	client, err := NewRedisConnectionWithRetry(cfg, nil)
-	// We expect this to fail because we don't have Redis running
+	// We expect this to fail because we're using an invalid host
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
@@ -1025,7 +1051,10 @@ func TestNewPostgresConnection_ValidDatabaseURL(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool configuration
@@ -1315,7 +1344,10 @@ func TestNewPostgresConnection_MinimalConfig(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with connection pool edge cases
@@ -1342,28 +1374,40 @@ func TestNewPostgresConnection_ConnectionPoolEdgeCases(t *testing.T) {
 
 // Test additional Redis configuration scenarios
 func TestNewRedisConnection_AdditionalScenarios(t *testing.T) {
+	// Use unreachable addresses and invalid credentials that will fail in any environment
+
+	// Test with completely invalid port number (outside valid range)
 	cfg := config.RedisConfig{
 		Host:     "localhost",
-		Port:     6379,
+		Port:     99999, // Invalid port number
 		Password: "",
 		DB:       0,
 	}
-
-	// Test with different port numbers
-	cfg.Port = 6380
 	_, err := NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
 
-	// Test with different DB numbers
+	// Test with invalid host that cannot resolve
+	cfg.Host = "nonexistent-test-host.invalid-domain-xyz.com"
 	cfg.Port = 6379
-	cfg.DB = 1
+	cfg.DB = 0
 	_, err = NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
 
-	// Test with password
-	cfg.Password = "testpass"
+	// Test with invalid password on localhost with very short timeout
+	cfg.Host = "127.0.0.1" // Use IP instead of localhost
+	cfg.Port = 6379
+	cfg.Password = "definitely-wrong-password-12345"
+	_, err = NewRedisConnection(cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to connect to Redis")
+
+	// Test with reserved port that shouldn't have Redis
+	cfg.Host = "localhost"
+	cfg.Port = 80 // HTTP port, unlikely to have Redis
+	cfg.Password = ""
+	cfg.DB = 0
 	_, err = NewRedisConnection(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Redis")
@@ -1526,7 +1570,10 @@ func TestNewPostgresConnection_ExcessivePoolValues(t *testing.T) {
 	// We expect this to fail because we don't have a real database
 	assert.Error(t, err)
 	assert.Nil(t, db)
-	assert.Contains(t, err.Error(), "failed to ping database")
+	// Should fail with connection error (either from test optimized path or normal path)
+	assert.True(t,
+		strings.Contains(err.Error(), "failed to ping database") ||
+			strings.Contains(err.Error(), "failed to connect"))
 }
 
 // Test NewPostgresConnection with invalid duration formats

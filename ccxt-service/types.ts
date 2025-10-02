@@ -1,8 +1,8 @@
-import type { Exchange, Ticker, OrderBook, OHLCV } from 'ccxt';
+import type { Exchange, Ticker, OrderBook, OHLCV } from "ccxt";
 
 // API Response Types
 export interface HealthResponse {
-  status: 'healthy' | 'unhealthy';
+  status: "healthy" | "unhealthy";
   timestamp: string;
   service: string;
   version: string;

@@ -229,11 +229,12 @@ git pull origin main
 ./scripts/deploy.sh production
 ```
 
-#### Docker Deployment
+#### Docker Deployment (via Makefile)
 
 ```bash
-# Build and start all services
-docker compose up -d
+# Build and run with Compose using Make targets
+make docker-build     # build images
+make docker-run       # start stack (Compose)
 
 # Check service status
 docker compose ps
@@ -242,7 +243,7 @@ docker compose ps
 docker compose logs -f app
 
 # Stop services
-docker compose down
+make dev-down         # or: docker compose down
 ```
 
 ### Production Deployment Script

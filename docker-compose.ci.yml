@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database for CI
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: celebrum-postgres-ci
     restart: unless-stopped
     environment:
@@ -86,7 +86,7 @@ services:
       - REDIS_PORT=6379
       - CCXT_SERVICE_URL=http://ccxt-service:3000
       - CCXT_TIMEOUT=30
-      - JWT_SECRET=${JWT_SECRET:-test-jwt-secret-for-ci} # SECURITY: Use environment variable
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set for CI security} # SECURITY: Required environment variable
       - SERVER_PORT=8080
     volumes:
       - app_data_ci:/data

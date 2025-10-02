@@ -1,0 +1,21 @@
+version: 2
+paths:
+  - exclude:
+      - "signoz/**"
+      - "**/coverage/**"
+      - "coverage/**"
+      - "**/*.out"
+      - "docs/**"
+      - ".trae/**"
+      - "ccxt-service/*.test.ts"
+      - "ccxt-service/test-*.js"
+      - "**/*_test.go"
+      - "test/**"
+secrets:
+  ignored-matches:
+    - name: test-secret-key
+      match: test-secret-key
+    - name: test-admin-key
+      match: test-admin-key
+    - name: secret-key-placeholder
+      match: replace-with-secure-secret

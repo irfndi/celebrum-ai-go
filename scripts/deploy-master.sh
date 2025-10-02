@@ -569,7 +569,7 @@ verify_deployment() {
     
     # Test critical endpoints
     log "Testing critical endpoints..."
-    local endpoints=("http://localhost:8080/health" "http://localhost:3001/health")
+    local endpoints=("http://localhost:8080/health" "http://localhost:3000/health")
     
     for endpoint in "${endpoints[@]}"; do
         if curl -sf "$endpoint" > /dev/null 2>&1; then
