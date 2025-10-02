@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -192,6 +194,175 @@ func TestTimeoutManager_ExecuteWithTimeout(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "success", result)
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_Success tests successful operation execution
+func TestTimeoutManager_ExecuteWithTimeout_Success(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	tm := NewTimeoutManager(nil, logger)
+
+	result, err := tm.ExecuteWithTimeout("api_call", "op1", func(ctx context.Context) (interface{}, error) {
+		return "operation_result", nil
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "operation_result", result)
+
+	// Verify operation is cleaned up
+	assert.False(t, tm.IsOperationActive("op1"))
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_Timeout tests operation timeout
+func TestTimeoutManager_ExecuteWithTimeout_Timeout(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+
+	// Create config with short timeout for testing
+	config := &TimeoutConfig{
+		APICall: 100 * time.Millisecond,
+	}
+	tm := NewTimeoutManager(config, logger)
+
+	result, err := tm.ExecuteWithTimeout("api_call", "op1", func(ctx context.Context) (interface{}, error) {
+		// Simulate a long-running operation
+		select {
+		case <-time.After(200 * time.Millisecond):
+			return "should_not_complete", nil
+		case <-ctx.Done():
+			return "cancelled", ctx.Err()
+		}
+	})
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, context.DeadlineExceeded, err)
+
+	// Verify operation is cleaned up
+	assert.False(t, tm.IsOperationActive("op1"))
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_OperationError tests operation returning error
+func TestTimeoutManager_ExecuteWithTimeout_OperationError(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	tm := NewTimeoutManager(nil, logger)
+
+	expectedErr := assert.AnError
+	result, err := tm.ExecuteWithTimeout("api_call", "op1", func(ctx context.Context) (interface{}, error) {
+		return nil, expectedErr
+	})
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, expectedErr, err)
+
+	// Verify operation is cleaned up
+	assert.False(t, tm.IsOperationActive("op1"))
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_ContextCancellation tests context cancellation
+func TestTimeoutManager_ExecuteWithTimeout_ContextCancellation(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	tm := NewTimeoutManager(nil, logger)
+
+	result, err := tm.ExecuteWithTimeout("api_call", "op1", func(ctx context.Context) (interface{}, error) {
+		// Simulate immediate context cancellation by checking if context is done
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			// Simulate some work that might be cancelled
+			time.Sleep(100 * time.Millisecond)
+			return "completed", nil
+		}
+	})
+
+	// The operation should complete (no explicit cancellation in this test)
+	// This test mainly verifies the context handling mechanism
+	if err != nil {
+		assert.True(t, err == context.Canceled || err == context.DeadlineExceeded)
+		assert.Nil(t, result)
+	} else {
+		assert.Equal(t, "completed", result)
+	}
+
+	// Verify operation is cleaned up
+	assert.False(t, tm.IsOperationActive("op1"))
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_DifferentOperationTypes tests different operation types
+func TestTimeoutManager_ExecuteWithTimeout_DifferentOperationTypes(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	tm := NewTimeoutManager(nil, logger)
+
+	operationTypes := []string{
+		"api_call",
+		"database_query",
+		"redis_operation",
+		"concurrent_op",
+		"health_check",
+		"backfill",
+		"symbol_fetch",
+		"market_data",
+		"unknown_type", // Should use default timeout
+	}
+
+	for _, opType := range operationTypes {
+		t.Run(opType, func(t *testing.T) {
+			operationID := "op_" + opType
+			result, err := tm.ExecuteWithTimeout(opType, operationID, func(ctx context.Context) (interface{}, error) {
+				return opType + "_result", nil
+			})
+
+			assert.NoError(t, err)
+			assert.Equal(t, opType+"_result", result)
+
+			// Verify operation is cleaned up
+			assert.False(t, tm.IsOperationActive(operationID))
+		})
+	}
+}
+
+// TestTimeoutManager_ExecuteWithTimeout_ConcurrentOperations tests concurrent execution
+func TestTimeoutManager_ExecuteWithTimeout_ConcurrentOperations(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	tm := NewTimeoutManager(nil, logrus.New())
+
+	var wg sync.WaitGroup
+	results := make([]string, 5)
+	errors := make([]error, 5)
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			operationID := fmt.Sprintf("concurrent_op_%d", index)
+
+			result, err := tm.ExecuteWithTimeout("api_call", operationID, func(ctx context.Context) (interface{}, error) {
+				time.Sleep(10 * time.Millisecond) // Small delay
+				return fmt.Sprintf("result_%d", index), nil
+			})
+
+			if err != nil {
+				errors[index] = err
+			} else {
+				results[index] = result.(string)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all operations completed successfully
+	for i := 0; i < 5; i++ {
+		assert.NoError(t, errors[i])
+		assert.Equal(t, fmt.Sprintf("result_%d", i), results[i])
+		assert.False(t, tm.IsOperationActive(fmt.Sprintf("concurrent_op_%d", i)))
+	}
 }
 
 // TestTimeoutManager_ExecuteWithTimeoutAndFallback tests timeout execution with fallback

@@ -551,3 +551,224 @@ func TestCircuitBreakerManager_GetAllStats_AfterReset(t *testing.T) {
 	// Breaker should be closed
 	assert.False(t, breaker.IsOpen())
 }
+
+func TestCircuitBreaker_canExecute_ClosedState(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Initially in closed state, should allow execution
+	assert.True(t, breaker.canExecute())
+	assert.Equal(t, Closed, breaker.GetState())
+
+	// Simulate some failures
+	breaker.failureCount = 2
+	assert.True(t, breaker.canExecute()) // Still below threshold
+
+	// Exceed failure threshold
+	breaker.failureCount = 3
+	breaker.setState(Open)                                     // Manually set to open to test reset logic
+	breaker.lastFailureTime = time.Now().Add(-2 * time.Minute) // Old failure
+
+	// Should still not allow because state is open
+	assert.False(t, breaker.canExecute())
+}
+
+func TestCircuitBreaker_canExecute_OpenState(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Set to open state
+	breaker.setState(Open)
+	breaker.lastStateChange = time.Now()
+
+	// Should not allow execution immediately after opening
+	assert.False(t, breaker.canExecute())
+
+	// Should not allow if timeout hasn't passed
+	assert.False(t, breaker.canExecute())
+
+	// Simulate timeout passing
+	breaker.lastStateChange = time.Now().Add(-2 * time.Minute)
+
+	// Should now allow execution and transition to half-open
+	assert.True(t, breaker.canExecute())
+	assert.Equal(t, HalfOpen, breaker.GetState())
+	assert.Equal(t, 0, breaker.requestCount)
+	assert.Equal(t, 0, breaker.successCount)
+}
+
+func TestCircuitBreaker_canExecute_HalfOpenState(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Set to half-open state
+	breaker.setState(HalfOpen)
+
+	// Should allow execution while under max requests
+	for i := 0; i < config.MaxRequests; i++ {
+		assert.True(t, breaker.canExecute(), "Should allow request %d", i)
+		breaker.requestCount++
+	}
+
+	// Should not allow execution when max requests reached
+	assert.False(t, breaker.canExecute())
+
+	// Test with different max requests
+	breaker.requestCount = 0
+	config.MaxRequests = 1
+	breaker.config = config
+
+	assert.True(t, breaker.canExecute())
+	breaker.requestCount++
+	assert.False(t, breaker.canExecute())
+}
+
+func TestCircuitBreaker_canExecute_ResetTimeout(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     100 * time.Millisecond, // Short timeout for testing
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Set some failures and old last failure time
+	breaker.failureCount = 2
+	breaker.lastFailureTime = time.Now().Add(-200 * time.Millisecond) // Older than reset timeout
+
+	// Should reset failure count and allow execution
+	assert.True(t, breaker.canExecute())
+	assert.Equal(t, 0, breaker.failureCount)
+
+	// Test with recent failure
+	breaker.failureCount = 2
+	breaker.lastFailureTime = time.Now().Add(-50 * time.Millisecond) // Recent failure
+
+	// Should still allow but not reset
+	assert.True(t, breaker.canExecute())
+	assert.Equal(t, 2, breaker.failureCount) // Not reset
+}
+
+func TestCircuitBreaker_canExecute_UnknownState(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Set to invalid state (this would be unusual but tests the default case)
+	breaker.state = CircuitBreakerState(99)
+
+	// Should not allow execution for unknown state
+	assert.False(t, breaker.canExecute())
+}
+
+func TestCircuitBreaker_canExecute_StateTransitions(t *testing.T) {
+	logger := logrus.New()
+	config := CircuitBreakerConfig{
+		FailureThreshold: 2,
+		SuccessThreshold: 2,
+		Timeout:          50 * time.Millisecond,
+		MaxRequests:      3,
+		ResetTimeout:     time.Minute,
+	}
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+
+	// Test Closed -> Open transition
+	assert.True(t, breaker.canExecute()) // Closed state
+	breaker.setState(Open)
+	breaker.lastStateChange = time.Now()
+	assert.False(t, breaker.canExecute()) // Open state
+
+	// Test Open -> HalfOpen transition
+	breaker.lastStateChange = time.Now().Add(-100 * time.Millisecond) // Timeout passed
+	assert.True(t, breaker.canExecute())                              // Should transition to half-open
+	assert.Equal(t, HalfOpen, breaker.GetState())
+
+	// Test HalfOpen request limiting
+	assert.True(t, breaker.canExecute()) // Request 1
+	breaker.requestCount++
+	assert.True(t, breaker.canExecute()) // Request 2
+	breaker.requestCount++
+	assert.True(t, breaker.canExecute()) // Request 3
+	breaker.requestCount++
+	assert.False(t, breaker.canExecute()) // Max requests reached
+}
+
+func TestCircuitBreaker_canExecute_ConcurrentAccess(t *testing.T) {
+	config := CircuitBreakerConfig{
+		FailureThreshold: 2,
+		Timeout:          5 * time.Millisecond,
+		MaxRequests:      1,
+	}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+
+	breaker := NewCircuitBreaker("test-breaker", config, logger)
+	breaker.setState(HalfOpen)
+
+	// Manually set requestCount to test the limit
+	breaker.requestCount = 0
+
+	// Test that canExecute respects the MaxRequests limit
+	result1 := breaker.canExecute()
+	assert.True(t, result1, "First request should be allowed")
+
+	// Simulate the request count increment (this would happen in Execute)
+	breaker.requestCount = 1
+
+	result2 := breaker.canExecute()
+	assert.False(t, result2, "Second request should be rejected when MaxRequests=1")
+
+	// Test concurrent access - all should see the same requestCount
+	var wg sync.WaitGroup
+	results := make([]bool, 10)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			results[index] = breaker.canExecute()
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All should be false since requestCount >= MaxRequests
+	for i, result := range results {
+		assert.False(t, result, "Concurrent request %d should be rejected", i)
+	}
+}

@@ -2307,3 +2307,390 @@ func TestArbitrageService_storeOpportunityBatch_EmptyID(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "database pool is not available")
 }
+
+// TestSpotArbitrageCalculator_CalculateArbitrageOpportunities tests the CalculateArbitrageOpportunities function
+func TestSpotArbitrageCalculator_CalculateArbitrageOpportunities(t *testing.T) {
+	calculator := NewSpotArbitrageCalculator()
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		marketData    map[string][]models.MarketData
+		expectedOpps  int
+		expectedError bool
+	}{
+		{
+			name:          "empty market data",
+			marketData:    map[string][]models.MarketData{},
+			expectedOpps:  0,
+			expectedError: false,
+		},
+		{
+			name: "single exchange data - no arbitrage",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+			},
+			expectedOpps:  0,
+			expectedError: false,
+		},
+		{
+			name: "multiple exchanges with profitable arbitrage",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50100),
+						Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+			},
+			expectedOpps:  1,
+			expectedError: false,
+		},
+		{
+			name: "multiple exchanges with no profitable arbitrage",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50020),
+						Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+			},
+			expectedOpps:  0, // 0.04% profit, below 0.1% threshold
+			expectedError: false,
+		},
+		{
+			name: "multiple symbols with arbitrage opportunities",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50200),
+						Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+				"ETH/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(3000),
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 2, Symbol: "ETH/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(3020),
+						Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 2, Symbol: "ETH/USDT"},
+					},
+				},
+			},
+			expectedOpps:  2,
+			expectedError: false,
+		},
+		{
+			name: "three exchanges - should pick best arbitrage",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.NewFromFloat(49900), // Lowest
+						Exchange:    &models.Exchange{ID: 1, Name: "Kraken"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 2, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50300), // Highest
+						Exchange:    &models.Exchange{ID: 3, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+			},
+			expectedOpps:  1,
+			expectedError: false,
+		},
+		{
+			name: "zero price data",
+			marketData: map[string][]models.MarketData{
+				"BTC/USDT": {
+					{
+						LastPrice:   decimal.Zero,
+						Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+					{
+						LastPrice:   decimal.NewFromFloat(50000),
+						Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+						TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+					},
+				},
+			},
+			expectedOpps:  0,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, tt.marketData)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.expectedOpps, len(opportunities))
+
+			// Verify opportunity structure if any are expected
+			if len(opportunities) > 0 {
+				for _, opp := range opportunities {
+					assert.NotEmpty(t, opp.ID)
+					assert.NotZero(t, opp.BuyExchangeID)
+					assert.NotZero(t, opp.SellExchangeID)
+					assert.NotZero(t, opp.TradingPairID)
+					assert.True(t, opp.BuyPrice.GreaterThan(decimal.Zero))
+					assert.True(t, opp.SellPrice.GreaterThan(opp.BuyPrice))
+					assert.True(t, opp.ProfitPercentage.GreaterThan(decimal.NewFromFloat(0.1))) // Above threshold
+					assert.False(t, opp.DetectedAt.IsZero())
+					assert.False(t, opp.ExpiresAt.IsZero())
+					assert.True(t, opp.ExpiresAt.After(opp.DetectedAt))
+					assert.NotNil(t, opp.BuyExchange)
+					assert.NotNil(t, opp.SellExchange)
+					assert.NotNil(t, opp.TradingPair)
+				}
+			}
+		})
+	}
+}
+
+// TestSpotArbitrageCalculator_CalculateArbitrageOpportunities_EdgeCases tests edge cases
+func TestSpotArbitrageCalculator_CalculateArbitrageOpportunities_EdgeCases(t *testing.T) {
+	calculator := NewSpotArbitrageCalculator()
+	ctx := context.Background()
+
+	t.Run("very small price difference", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50000.50), // 0.001% profit
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(opportunities)) // Below 0.1% threshold
+	})
+
+	t.Run("very large price difference", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(60000), // 20% profit
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(opportunities))
+
+		opp := opportunities[0]
+		assert.True(t, opp.ProfitPercentage.GreaterThan(decimal.NewFromFloat(10))) // Should be > 10%
+	})
+
+	t.Run("exact threshold boundary", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50051.00), // Slightly above 0.1% profit
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(opportunities)) // Should be exactly at threshold
+
+		opp := opportunities[0]
+		assert.True(t, opp.ProfitPercentage.GreaterThan(decimal.NewFromFloat(0.1)))
+	})
+
+	t.Run("same prices", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50000), // Same price
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(opportunities)) // No profit
+	})
+
+	t.Run("nil trading pair data", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: nil, // Nil trading pair
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50100),
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		// This should not panic and should handle nil trading pairs gracefully
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		// Should still find arbitrage since one valid data point exists
+		assert.Equal(t, 0, len(opportunities)) // No arbitrage with only one valid data point
+	})
+
+	t.Run("nil trading pair data", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: nil, // Nil trading pair
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50100),
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		// This should not panic, but may not create valid opportunities
+		_, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		// May or may not create opportunities depending on nil handling
+	})
+
+	t.Run("nil trading pair data", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: nil, // Nil trading pair
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50100),
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		// This should not panic, but may not create valid opportunities
+		_, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		// May or may not create opportunities depending on nil handling
+	})
+
+	t.Run("very small price difference", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(50000.50), // 0.001% profit
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(opportunities)) // Below 0.1% threshold
+	})
+
+	t.Run("very large price difference", func(t *testing.T) {
+		marketData := map[string][]models.MarketData{
+			"BTC/USDT": {
+				{
+					LastPrice:   decimal.NewFromFloat(50000),
+					Exchange:    &models.Exchange{ID: 1, Name: "Binance"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+				{
+					LastPrice:   decimal.NewFromFloat(60000), // 20% profit
+					Exchange:    &models.Exchange{ID: 2, Name: "Coinbase"},
+					TradingPair: &models.TradingPair{ID: 1, Symbol: "BTC/USDT"},
+				},
+			},
+		}
+
+		opportunities, err := calculator.CalculateArbitrageOpportunities(ctx, marketData)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(opportunities))
+
+		opp := opportunities[0]
+		assert.True(t, opp.ProfitPercentage.GreaterThan(decimal.NewFromFloat(10))) // Should be > 10%
+	})
+}

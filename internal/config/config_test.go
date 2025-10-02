@@ -158,7 +158,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 	assert.Equal(t, "localhost", config.Database.Host)
 	assert.Equal(t, 5432, config.Database.Port)
 	assert.Equal(t, "postgres", config.Database.User)
-	assert.Equal(t, "postgres", config.Database.Password)
+	assert.Equal(t, "change-me-in-production", config.Database.Password)
 	assert.Equal(t, "celebrum_ai", config.Database.DBName)
 	assert.Equal(t, "disable", config.Database.SSLMode)
 	assert.Equal(t, "", config.Database.DatabaseURL)

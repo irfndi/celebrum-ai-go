@@ -305,6 +305,136 @@ instantaneous_ops_per_sec:10
 	assert.Len(t, result, 1)
 }
 
+// TestCacheAnalyticsService_parseRedisInfo_Comprehensive tests parseRedisInfo with various edge cases
+func TestCacheAnalyticsService_parseRedisInfo_Comprehensive(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	defer redisServer.Close()
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisServer.Addr(),
+	})
+
+	service := NewCacheAnalyticsService(redisClient)
+
+	// Test with nil/empty input
+	result := service.parseRedisInfo("")
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with only comments and empty lines
+	infoOutput := `# This is a comment
+# Another comment
+
+# Yet another comment
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with valid key-value pairs and various whitespace
+	infoOutput = `key1:value1
+  key2  :  value2  
+key3:value3
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "value1", result["key1"])
+	assert.Equal(t, "value2", result["key2"])
+	assert.Equal(t, "value3", result["key3"])
+
+	// Test with lines without colons (should be ignored)
+	infoOutput = `invalid_line1
+key1:value1
+invalid_line2
+key2:value2
+another_invalid_line
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "value1", result["key1"])
+	assert.Equal(t, "value2", result["key2"])
+	assert.Len(t, result, 2)
+
+	// Test with multiple colons (should split on first colon only)
+	infoOutput = `key1:value1:extra:stuff
+key2:value2
+key3:value3:with:more:colons
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "value1:extra:stuff", result["key1"])
+	assert.Equal(t, "value2", result["key2"])
+	assert.Equal(t, "value3:with:more:colons", result["key3"])
+
+	// Test with empty values
+	infoOutput = `key1:
+key2:value2
+:key3
+key4:value4
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "", result["key1"])
+	assert.Equal(t, "value2", result["key2"])
+	assert.Equal(t, "key3", result[""]) // Empty key
+	assert.Equal(t, "value4", result["key4"])
+
+	// Test with mixed content (comments, valid lines, invalid lines)
+	infoOutput = `# Server section
+redis_version:7.0.0
+redis_mode:standalone
+
+# Memory section
+used_memory:1572864
+used_memory_human:1.5M
+
+invalid_line_without_colon
+maxmemory:2097152
+
+# Empty line above and below
+
+# Stats section
+keyspace_hits:1000
+keyspace_misses:200
+another_invalid_line
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "7.0.0", result["redis_version"])
+	assert.Equal(t, "standalone", result["redis_mode"])
+	assert.Equal(t, "1572864", result["used_memory"])
+	assert.Equal(t, "1.5M", result["used_memory_human"])
+	assert.Equal(t, "2097152", result["maxmemory"])
+	assert.Equal(t, "1000", result["keyspace_hits"])
+	assert.Equal(t, "200", result["keyspace_misses"])
+	assert.Len(t, result, 7)
+
+	// Test with special characters in values
+	infoOutput = `key1:value with spaces
+key2:value-with-dashes
+key3:value_with_underscores
+key4:value.with.dots
+key5:value/with/slashes
+key6:value\with\backslashes
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "value with spaces", result["key1"])
+	assert.Equal(t, "value-with-dashes", result["key2"])
+	assert.Equal(t, "value_with_underscores", result["key3"])
+	assert.Equal(t, "value.with.dots", result["key4"])
+	assert.Equal(t, "value/with/slashes", result["key5"])
+	assert.Equal(t, "value\\with\\backslashes", result["key6"])
+
+	// Test with numeric values
+	infoOutput = `integer_value:42
+float_value:3.14159
+negative_value:-100
+zero_value:0
+large_value:9223372036854775807
+`
+	result = service.parseRedisInfo(infoOutput)
+	assert.Equal(t, "42", result["integer_value"])
+	assert.Equal(t, "3.14159", result["float_value"])
+	assert.Equal(t, "-100", result["negative_value"])
+	assert.Equal(t, "0", result["zero_value"])
+	assert.Equal(t, "9223372036854775807", result["large_value"])
+}
+
 func TestCacheAnalyticsService_StartPeriodicReporting(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	defer redisServer.Close()

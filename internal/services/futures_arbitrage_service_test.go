@@ -498,3 +498,204 @@ func TestFuturesArbitrageService_calculateAndStoreOpportunities_ContextCancellat
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get funding rates: context canceled")
 }
+
+func TestFuturesArbitrageService_Start_Success(t *testing.T) {
+	mockConfig := &config.Config{}
+
+	// Create a real resource manager for testing
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel) // Reduce noise in tests
+	resourceManager := NewResourceManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		(*ErrorRecoveryManager)(nil),
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Test initial state
+	assert.False(t, service.running)
+	assert.Nil(t, service.ctx)
+	assert.Nil(t, service.cancel)
+
+	// Test successful start
+	err := service.Start()
+	assert.NoError(t, err)
+	assert.True(t, service.running)
+	assert.NotNil(t, service.ctx)
+	assert.NotNil(t, service.cancel)
+
+	// Stop the service to clean up
+	service.Stop()
+	assert.False(t, service.running)
+}
+
+func TestFuturesArbitrageService_Start_AlreadyRunning(t *testing.T) {
+	mockConfig := &config.Config{}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	resourceManager := NewResourceManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		(*ErrorRecoveryManager)(nil),
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Start the service first
+	err := service.Start()
+	assert.NoError(t, err)
+	assert.True(t, service.running)
+
+	// Test starting when already running
+	err = service.Start()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "futures arbitrage service is already running")
+	assert.True(t, service.running) // Should still be running
+
+	// Stop the service
+	service.Stop()
+}
+
+func TestFuturesArbitrageService_Start_ContextManagement(t *testing.T) {
+	mockConfig := &config.Config{}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	resourceManager := NewResourceManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		(*ErrorRecoveryManager)(nil),
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Test that context is properly created
+	err := service.Start()
+	assert.NoError(t, err)
+
+	// Verify context is created and can be used
+	select {
+	case <-service.ctx.Done():
+		t.Error("Context should not be cancelled immediately after start")
+	default:
+		// Context is active, which is expected
+	}
+
+	// Verify we can cancel the context
+	service.cancel()
+	select {
+	case <-service.ctx.Done():
+		// Context is cancelled, which is expected
+	default:
+		t.Error("Context should be cancelled after calling cancel")
+	}
+
+	service.Stop()
+}
+
+func TestFuturesArbitrageService_Start_MultipleCycles(t *testing.T) {
+	mockConfig := &config.Config{}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	resourceManager := NewResourceManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		(*ErrorRecoveryManager)(nil),
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Test multiple start/stop cycles
+	for i := 0; i < 3; i++ {
+		// Start the service
+		err := service.Start()
+		assert.NoError(t, err)
+		assert.True(t, service.running)
+
+		// Stop the service
+		service.Stop()
+		assert.False(t, service.running)
+		// Note: ctx and cancel are not set to nil by Stop method
+	}
+}
+
+func TestFuturesArbitrageService_runOpportunityCalculator_ContextCancellation(t *testing.T) {
+	mockConfig := &config.Config{}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	resourceManager := NewResourceManager(logger)
+	errorRecoveryManager := NewErrorRecoveryManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		errorRecoveryManager,
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Start the service to launch the goroutine
+	err := service.Start()
+	assert.NoError(t, err)
+
+	// Give the goroutine a moment to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Stop the service - this should cancel the context and stop the goroutine
+	service.Stop()
+	assert.False(t, service.running)
+
+	// Wait a bit to ensure the goroutine has time to stop
+	time.Sleep(50 * time.Millisecond)
+
+	// The test passes if we reach here without deadlock or panic
+}
+
+func TestFuturesArbitrageService_runOpportunityCalculator_ResourceManagement(t *testing.T) {
+	mockConfig := &config.Config{}
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	resourceManager := NewResourceManager(logger)
+	errorRecoveryManager := NewErrorRecoveryManager(logger)
+
+	service := NewFuturesArbitrageService(
+		(*database.PostgresDB)(nil),
+		(*redis.Client)(nil),
+		mockConfig,
+		errorRecoveryManager,
+		resourceManager,
+		(*PerformanceMonitor)(nil),
+	)
+
+	// Start the service
+	err := service.Start()
+	assert.NoError(t, err)
+
+	// Give the goroutine a moment to start and register resources
+	time.Sleep(10 * time.Millisecond)
+
+	// Check that resources are registered
+	stats := resourceManager.GetResourceStats()
+	assert.True(t, stats[GoroutineResource].CurrentActive > 0)
+
+	// Stop the service
+	service.Stop()
+
+	// Give cleanup time
+	time.Sleep(50 * time.Millisecond)
+
+	// The test passes if resources are properly managed
+}

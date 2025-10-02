@@ -45,11 +45,17 @@ func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context
 		var lowestPair *models.TradingPair
 
 		for _, data := range exchangeData {
+			// Skip data with nil trading pair
+			if data.TradingPair == nil {
+				continue
+			}
+
 			if lowestExchange == nil || data.LastPrice.LessThan(lowestPrice) {
 				lowestPrice = data.LastPrice
 				lowestExchange = data.Exchange
 				lowestPair = data.TradingPair
 			}
+
 			if highestExchange == nil || data.LastPrice.GreaterThan(highestPrice) {
 				highestPrice = data.LastPrice
 				highestExchange = data.Exchange
