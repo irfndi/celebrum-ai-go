@@ -123,7 +123,7 @@ jobs:
       CI_ENVIRONMENT: "test"
     services:
       postgres:
-        image: postgres:15
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB: celebrum_test
