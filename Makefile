@@ -265,14 +265,6 @@ deploy-staging: build ## Deploy to staging VPS using systemd
 	@echo "$(GREEN)Deploying to staging VPS...$(NC)"
 	./scripts/deploy-binary.sh staging
 
-deploy-binary: build ## Deploy binary to VPS (alias for deploy)
-	@echo "$(GREEN)Deploying binary to VPS...$(NC)"
-	./scripts/deploy-binary.sh production
-
-deploy-binary-staging: build ## Deploy binary to staging VPS
-	@echo "$(GREEN)Deploying binary to staging VPS...$(NC)"
-	./scripts/deploy-binary.sh staging
-
 deploy-manual: build ## Manual deployment with rsync
 	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
 	./scripts/deploy.sh production
@@ -283,16 +275,16 @@ setup-staging: ## Set up staging environment
 
 deploy-rollback: ## Rollback deployment
 	@echo "$(GREEN)Rolling back deployment...$(NC)"
-	./scripts/deploy-enhanced.sh --rollback
+	DEPLOYMENT_TYPE=rollback ./scripts/deploy-master.sh
 
 ## Docker (alternative deployment method)
 deploy-docker: docker-build ## Deploy using Docker (alternative to systemd)
 	@echo "$(GREEN)Deploying with Docker...$(NC)"
-	./scripts/deploy-enhanced.sh production
+	DEPLOYMENT_TYPE=docker ENVIRONMENT=production ./scripts/deploy-master.sh
 
 deploy-docker-staging: docker-build ## Deploy to staging using Docker
 	@echo "$(GREEN)Deploying to staging with Docker...$(NC)"
-	./scripts/deploy-enhanced.sh staging
+	DEPLOYMENT_TYPE=docker ENVIRONMENT=staging ./scripts/deploy-master.sh
 
 ## CI/CD
 ci-test: ## Run CI tests with proper environment

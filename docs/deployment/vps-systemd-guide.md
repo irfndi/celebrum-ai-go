@@ -24,6 +24,10 @@ This guide covers two deployment patterns for multiple applications on VPS:
 - **Shared Resources**: Applications share a single database/cache instance (lower overhead)
 - **Fully Isolated**: Each application has its own database/cache instances (maximum isolation)
 
+### Security Note
+
+> **Important**: For production environments, always run applications as a non-privileged user (e.g., `celebrum`), not as `root`. Running services as root is a security risk—if the application is compromised, an attacker could gain full root access to the server. The examples in this guide use a dedicated `celebrum` user for application services while database services run as their standard users (`postgres`, `redis`).
+
 ### Prerequisites
 
 - Linux VPS with systemd (Ubuntu 24+)
@@ -31,6 +35,7 @@ This guide covers two deployment patterns for multiple applications on VPS:
 - Redis 6+ (or compatible cache layer)
 - Basic Linux/systemd knowledge
 - SSH access to VPS
+- Dedicated non-root user for applications (e.g., `celebrum`)
 
 ### System Requirements
 
@@ -49,7 +54,7 @@ Resource limits are adjustable per application needs.
 
 All applications connect to a single database and cache instance.
 
-```
+```text
 ┌─────────────────────────────────────┐
 │     VPS (12GB RAM, 8 CPU)          │
 ├─────────────────────────────────────┤
@@ -85,7 +90,7 @@ All applications connect to a single database and cache instance.
 
 Each application has dedicated database and cache instances on unique ports.
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │         VPS (12GB RAM, 8 CPU)                   │
 ├──────────────────────────────────────────────────┤
@@ -127,7 +132,7 @@ Each application has dedicated database and cache instances on unique ports.
 
 ### Directory Structure
 
-```
+```text
 /root/
 ├── apps/
 │   ├── app1/
@@ -239,15 +244,15 @@ Wants=postgres.service redis.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/apps/app1
+User=celebrum
+WorkingDirectory=/home/celebrum/apps/app1
 Environment="APP_NAME=app1"
 Environment="DB_HOST=localhost"
 Environment="DB_PORT=5432"
 Environment="REDIS_HOST=localhost"
 Environment="REDIS_PORT=6379"
 
-ExecStart=/root/apps/app1/venv/bin/python /root/apps/app1/main.py
+ExecStart=/home/celebrum/apps/app1/venv/bin/python /home/celebrum/apps/app1/main.py
 
 Restart=always
 RestartSec=5
@@ -466,15 +471,15 @@ Wants=app1-postgres.service app1-redis.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/apps/app1
+User=celebrum
+WorkingDirectory=/home/celebrum/apps/app1
 Environment="APP_NAME=app1"
 Environment="DB_HOST=localhost"
 Environment="DB_PORT=5433"
 Environment="REDIS_HOST=localhost"
 Environment="REDIS_PORT=6380"
 
-ExecStart=/root/apps/app1/venv/bin/python /root/apps/app1/main.py
+ExecStart=/home/celebrum/apps/app1/venv/bin/python /home/celebrum/apps/app1/main.py
 
 Restart=always
 RestartSec=5
