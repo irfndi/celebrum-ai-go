@@ -793,6 +793,8 @@ echo "[$(date)] Cleanup: old backups removed" >> $LOG_FILE
 
 ### Backup Script (All Apps - Shared Resources)
 
+> **Note**: This backup script is for the **Shared Resources** architecture where Redis uses the standard system path `/var/lib/redis/`. For Fully Isolated setups, use per-app backup scripts targeting `/home/celebrum/apps/appN/cache/data/`.
+
 **File**: `/home/celebrum/backup-all.sh`
 
 ```bash
@@ -853,6 +855,8 @@ echo "[$(date)] ====== BACKUP END ======" >> $LOG_FILE
 ```
 
 ### Restore from Backup
+
+> **Note**: The restore commands below are for the **Shared Resources** architecture. For Fully Isolated setups, adjust Redis paths to `/home/celebrum/apps/appN/cache/data/dump.rdb`.
 
 ```bash
 # Restore app1 data directory
