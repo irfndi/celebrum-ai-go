@@ -24,6 +24,10 @@ This guide covers two deployment patterns for multiple applications on VPS:
 - **Shared Resources**: Applications share a single database/cache instance (lower overhead)
 - **Fully Isolated**: Each application has its own database/cache instances (maximum isolation)
 
+### Security Note
+
+> **Important**: For production environments, always run applications as a non-privileged user (e.g., `celebrum`), not as `root`. Running services as root is a security risk—if the application is compromised, an attacker could gain full root access to the server. The examples in this guide use a dedicated `celebrum` user for application services while database services run as their standard users (`postgres`, `redis`).
+
 ### Prerequisites
 
 - Linux VPS with systemd (Ubuntu 24+)
@@ -31,6 +35,7 @@ This guide covers two deployment patterns for multiple applications on VPS:
 - Redis 6+ (or compatible cache layer)
 - Basic Linux/systemd knowledge
 - SSH access to VPS
+- Dedicated non-root user for applications (e.g., `celebrum`)
 
 ### System Requirements
 
@@ -49,7 +54,7 @@ Resource limits are adjustable per application needs.
 
 All applications connect to a single database and cache instance.
 
-```
+```text
 ┌─────────────────────────────────────┐
 │     VPS (12GB RAM, 8 CPU)          │
 ├─────────────────────────────────────┤
@@ -85,7 +90,7 @@ All applications connect to a single database and cache instance.
 
 Each application has dedicated database and cache instances on unique ports.
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │         VPS (12GB RAM, 8 CPU)                   │
 ├──────────────────────────────────────────────────┤
@@ -127,8 +132,10 @@ Each application has dedicated database and cache instances on unique ports.
 
 ### Directory Structure
 
-```
-/root/
+> **Note**: This structure uses `/home/celebrum/` for application files. Database services (postgres, redis) use their standard data directories.
+
+```text
+/home/celebrum/
 ├── apps/
 │   ├── app1/
 │   │   ├── main.py (or server.js, etc.)
@@ -177,10 +184,10 @@ Before=app1.service app2.service
 [Service]
 Type=simple
 User=postgres
-WorkingDirectory=/root/apps/postgres
+WorkingDirectory=/var/lib/postgresql
 ExecStart=/usr/lib/postgresql/15/bin/postgres \
-    -D /root/apps/postgres/data \
-    -c config_file=/root/apps/postgres/postgresql.conf
+    -D /var/lib/postgresql/data \
+    -c config_file=/etc/postgresql/15/main/postgresql.conf
 
 Restart=always
 RestartSec=5
@@ -209,8 +216,8 @@ Before=app1.service app2.service
 [Service]
 Type=simple
 User=redis
-WorkingDirectory=/root/apps/redis
-ExecStart=/usr/bin/redis-server /root/apps/redis/redis.conf
+WorkingDirectory=/var/lib/redis
+ExecStart=/usr/bin/redis-server /etc/redis/redis.conf
 
 Restart=always
 RestartSec=5
@@ -239,15 +246,15 @@ Wants=postgres.service redis.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/apps/app1
+User=celebrum
+WorkingDirectory=/home/celebrum/apps/app1
 Environment="APP_NAME=app1"
 Environment="DB_HOST=localhost"
 Environment="DB_PORT=5432"
 Environment="REDIS_HOST=localhost"
 Environment="REDIS_PORT=6379"
 
-ExecStart=/root/apps/app1/venv/bin/python /root/apps/app1/main.py
+ExecStart=/home/celebrum/apps/app1/venv/bin/python /home/celebrum/apps/app1/main.py
 
 Restart=always
 RestartSec=5
@@ -281,36 +288,15 @@ WantedBy=multi-user.target
 ### Initialization & Startup
 
 ```bash
-# Create directories
-mkdir -p /root/apps/{postgres/data,redis/data,app1/data,app2/data}
+# Create system user for applications (if not exists)
+sudo useradd -r -m -s /bin/bash celebrum
 
-# Initialize PostgreSQL
-sudo -u postgres initdb -D /root/apps/postgres/data
+# Create application directories
+sudo -u celebrum mkdir -p /home/celebrum/apps/{app1/data,app2/data}
+sudo -u celebrum mkdir -p /home/celebrum/backups
 
-# Configure PostgreSQL
-cat > /root/apps/postgres/postgresql.conf << 'EOF'
-port = 5432
-data_directory = '/root/apps/postgres/data'
-listen_addresses = 'localhost'
-max_connections = 100
-shared_buffers = 256MB
-effective_cache_size = 1GB
-log_directory = '/root/apps/postgres'
-EOF
-
-# Configure Redis
-cat > /root/apps/redis/redis.conf << 'EOF'
-port 6379
-dir /root/apps/redis/data
-bind 127.0.0.1
-maxmemory 1gb
-save 900 1
-appendonly yes
-EOF
-
-# Set permissions
-chown -R postgres:postgres /root/apps/postgres
-chown -R redis:redis /root/apps/redis
+# PostgreSQL uses standard paths (already configured via apt install)
+# Redis uses standard paths (already configured via apt install)
 
 # Load services
 sudo systemctl daemon-reload
@@ -327,8 +313,10 @@ sudo systemctl status postgres.service redis.service
 
 ### Directory Structure
 
-```
-/root/
+> **Note**: This structure uses `/home/celebrum/` for application files. Database services run as their standard users but with isolated data directories.
+
+```text
+/home/celebrum/
 ├── apps/
 │   ├── app1/
 │   │   ├── main.py
@@ -466,15 +454,15 @@ Wants=app1-postgres.service app1-redis.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/apps/app1
+User=celebrum
+WorkingDirectory=/home/celebrum/apps/app1
 Environment="APP_NAME=app1"
 Environment="DB_HOST=localhost"
 Environment="DB_PORT=5433"
 Environment="REDIS_HOST=localhost"
 Environment="REDIS_PORT=6380"
 
-ExecStart=/root/apps/app1/venv/bin/python /root/apps/app1/main.py
+ExecStart=/home/celebrum/apps/app1/venv/bin/python /home/celebrum/apps/app1/main.py
 
 Restart=always
 RestartSec=5
@@ -758,8 +746,8 @@ fi
 
 ### Backup Structure
 
-```
-/root/backups/
+```text
+/home/celebrum/backups/
 ├── app1/
 │   ├── app1-db-2025-11-27_120000.sql
 │   ├── app1-data-2025-11-27_120000.tar.gz
@@ -774,7 +762,7 @@ fi
 
 ### Backup Script (Single App)
 
-**File**: `/root/backup-app1.sh`
+**File**: `/home/celebrum/backup-app1.sh`
 
 ```bash
 #!/bin/bash
