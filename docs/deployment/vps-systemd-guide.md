@@ -288,8 +288,8 @@ WantedBy=multi-user.target
 ### Initialization & Startup
 
 ```bash
-# Create user for applications (if not exists)
-sudo useradd -m -s /bin/bash celebrum
+# Create system user for applications (if not exists)
+sudo useradd -r -m -s /bin/bash celebrum
 
 # Create application directories
 sudo -u celebrum mkdir -p /home/celebrum/apps/{app1/data,app2/data}
