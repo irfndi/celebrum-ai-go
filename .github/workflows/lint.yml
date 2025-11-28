@@ -3,8 +3,20 @@ name: Lint
 on:
   push:
     branches: [ main, develop, development ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
+      - '.github/workflows/lint.yml'
   pull_request:
     branches: [ main, develop, development ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
+      - '.github/workflows/lint.yml'
   workflow_dispatch:
 
 jobs:
@@ -19,14 +31,13 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.25.0'
+        cache: true
     
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v7
       with:
         version: v2.5.0
         args: --timeout=5m
-        skip-cache: true
-        skip-save-cache: true
       env:
         GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
         

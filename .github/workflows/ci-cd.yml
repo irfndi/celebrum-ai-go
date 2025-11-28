@@ -160,25 +160,15 @@ jobs:
         with:
           bun-version: 1.2.21
 
-      - name: Clean up existing cache
-        run: |
-          go clean -cache -modcache -testcache
-          # Clean up any conflicting cached files
-          rm -rf ~/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1
-          rm -rf ~/go/pkg/mod/go.yaml.in/yaml/v3@v3.0.4
-          rm -rf ~/.cache/go-build
-
-      - name: Cache Go modules
+      - name: Cache Bun dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/go.mod') }}
+            ~/.bun/install/cache
+            ccxt-service/node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('ccxt-service/bun.lockb', 'ccxt-service/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
-            ${{ runner.os }}-go-${{ hashFiles('**/go.mod') }}-
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         run: |
@@ -258,6 +248,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache Trivy database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
         with:
@@ -265,6 +263,8 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
+        env:
+          TRIVY_CACHE_DIR: ~/.cache/trivy
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
@@ -320,7 +320,7 @@ jobs:
 
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
