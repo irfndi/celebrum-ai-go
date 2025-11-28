@@ -649,7 +649,6 @@ func TestNotificationService_checkRateLimit_Comprehensive(t *testing.T) {
 	})
 }
 
-
 func TestNotificationService_logNotification(t *testing.T) {
 	// Test with nil database - expect panic due to nil database access
 	ns := NewNotificationService(nil, nil, "")
