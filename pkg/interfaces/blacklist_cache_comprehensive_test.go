@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -252,7 +253,7 @@ func TestMockBlacklistCache_ConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
-			symbol := "TEST" + string(rune('A'+idx)) + "/USDT"
+			symbol := fmt.Sprintf("TEST%d/USDT", idx)
 			cache.Add(symbol, "Reason", time.Hour)
 			cache.IsBlacklisted(symbol)
 			cache.GetStats()
@@ -275,7 +276,7 @@ func TestMockSymbolCache_ConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
-			exchangeID := "exchange" + string(rune('A'+idx))
+			exchangeID := fmt.Sprintf("exchange%d", idx)
 			cache.Set(exchangeID, []string{"BTC/USDT"})
 			cache.Get(exchangeID)
 			cache.GetStats()
