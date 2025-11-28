@@ -267,7 +267,7 @@ deploy-staging: build ## Deploy to staging VPS using systemd
 
 deploy-manual: build ## Manual deployment with rsync
 	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
-	./scripts/deploy.sh production
+	./scripts/deploy-manual.sh production
 
 setup-staging: ## Set up staging environment
 	@echo "$(GREEN)Setting up staging environment...$(NC)"

@@ -392,10 +392,10 @@ Before=app1.service
 [Service]
 Type=simple
 User=postgres
-WorkingDirectory=/root/apps/app1/db
+WorkingDirectory=/home/celebrum/apps/app1/db
 ExecStart=/usr/lib/postgresql/15/bin/postgres \
-    -D /root/apps/app1/db/data \
-    -c config_file=/root/apps/app1/db/postgresql.conf
+    -D /home/celebrum/apps/app1/db/data \
+    -c config_file=/home/celebrum/apps/app1/db/postgresql.conf
 
 Restart=always
 RestartSec=5
@@ -424,8 +424,8 @@ Before=app1.service
 [Service]
 Type=simple
 User=redis
-WorkingDirectory=/root/apps/app1/cache
-ExecStart=/usr/bin/redis-server /root/apps/app1/cache/redis.conf
+WorkingDirectory=/home/celebrum/apps/app1/cache
+ExecStart=/usr/bin/redis-server /home/celebrum/apps/app1/cache/redis.conf
 
 Restart=always
 RestartSec=5
@@ -497,38 +497,38 @@ WantedBy=multi-user.target
 
 ```bash
 # Create directories
-mkdir -p /root/apps/app1/{db/data,cache/data,data}
+sudo -u celebrum mkdir -p /home/celebrum/apps/app1/{db/data,cache/data,data}
 
 # Initialize PostgreSQL on port 5433
-sudo -u postgres initdb -D /root/apps/app1/db/data
+sudo -u postgres initdb -D /home/celebrum/apps/app1/db/data
 
 # Configure PostgreSQL
-cat > /root/apps/app1/db/postgresql.conf << 'EOF'
+cat > /home/celebrum/apps/app1/db/postgresql.conf << 'EOF'
 port = 5433
-data_directory = '/root/apps/app1/db/data'
+data_directory = '/home/celebrum/apps/app1/db/data'
 listen_addresses = 'localhost'
 max_connections = 20
 shared_buffers = 128MB
 effective_cache_size = 256MB
-log_directory = '/root/apps/app1/db'
+log_directory = '/home/celebrum/apps/app1/db'
 EOF
 
 # Configure Redis on port 6380
-cat > /root/apps/app1/cache/redis.conf << 'EOF'
+cat > /home/celebrum/apps/app1/cache/redis.conf << 'EOF'
 port 6380
-dir /root/apps/app1/cache/data
+dir /home/celebrum/apps/app1/cache/data
 bind 127.0.0.1
 maxmemory 256mb
 save 900 1
 appendonly yes
 loglevel notice
-logfile "/root/apps/app1/cache/redis.log"
+logfile "/home/celebrum/apps/app1/cache/redis.log"
 EOF
 
 # Set permissions
-chown -R postgres:postgres /root/apps/app1/db
-chown -R redis:redis /root/apps/app1/cache
-chmod 700 /root/apps/app1/db/data
+chown -R postgres:postgres /home/celebrum/apps/app1/db
+chown -R redis:redis /home/celebrum/apps/app1/cache
+chmod 700 /home/celebrum/apps/app1/db/data
 
 # Load and start
 sudo systemctl daemon-reload
@@ -545,7 +545,7 @@ For each additional app (app2, app3, etc.), repeat the steps above with:
 - Incremented database port (5434, 5435, 5436, etc.)
 - Incremented Redis port (6381, 6382, 6383, etc.)
 - Different service names (app2-postgres.service, app2-redis.service, app2.service, app2-stack.target)
-- Different working directories (/root/apps/app2/, etc.)
+- Different working directories (/home/celebrum/apps/app2/, etc.)
 
 ---
 
@@ -622,7 +622,7 @@ StartLimitBurst=5
 
 ### Basic Status Monitor Script
 
-**File**: `/root/monitor.sh`
+**File**: `/home/celebrum/monitor.sh`
 
 ```bash
 #!/bin/bash
@@ -673,13 +673,13 @@ echo "SUMMARY: ✅ $RUNNING Running  |  ❌ $FAILED Failed"
 **Make executable and schedule:**
 
 ```bash
-chmod +x /root/monitor.sh
+chmod +x /home/celebrum/monitor.sh
 
 # Manual run
-/root/monitor.sh
+/home/celebrum/monitor.sh
 
 # Cron: every 5 minutes
-*/5 * * * * /root/monitor.sh >> /var/log/app-monitor.log 2>&1
+*/5 * * * * /home/celebrum/monitor.sh >> /var/log/app-monitor.log 2>&1
 ```
 
 ### Real-Time Monitoring Tools
@@ -697,7 +697,7 @@ sudo journalctl -u app1.service -u app2.service -u postgres.service -u redis.ser
 
 ### Health Check Script
 
-**File**: `/root/health-check.sh`
+**File**: `/home/celebrum/health-check.sh`
 
 ```bash
 #!/bin/bash
@@ -737,7 +737,7 @@ fi
 **Schedule every 5 minutes:**
 
 ```cron
-*/5 * * * * /root/health-check.sh > /dev/null 2>&1
+*/5 * * * * /home/celebrum/health-check.sh > /dev/null 2>&1
 ```
 
 ---
@@ -767,8 +767,8 @@ fi
 ```bash
 #!/bin/bash
 
-APP_DIR="/root/apps/app1"
-BACKUP_DIR="/root/backups/app1"
+APP_DIR="/home/celebrum/apps/app1"
+BACKUP_DIR="/home/celebrum/backups/app1"
 TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 LOG_FILE="/var/log/backup-app1.log"
 
@@ -793,12 +793,12 @@ echo "[$(date)] Cleanup: old backups removed" >> $LOG_FILE
 
 ### Backup Script (All Apps - Shared Resources)
 
-**File**: `/root/backup-all.sh`
+**File**: `/home/celebrum/backup-all.sh`
 
 ```bash
 #!/bin/bash
 
-BACKUP_DIR="/root/backups"
+BACKUP_DIR="/home/celebrum/backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 LOG_FILE="/var/log/backup-all.log"
 
@@ -806,7 +806,7 @@ echo "[$(date)] ====== BACKUP START ======" >> $LOG_FILE
 
 # Backup each app
 for app in app1 app2 app3; do
-    APP_DIR="/root/apps/$app"
+    APP_DIR="/home/celebrum/apps/$app"
     
     if [ -d "$APP_DIR/data" ]; then
         mkdir -p "$BACKUP_DIR/$app"
@@ -822,10 +822,10 @@ if command -v pg_dump &> /dev/null; then
     echo "[$(date)] PostgreSQL backup: SUCCESS" >> $LOG_FILE
 fi
 
-# Backup shared Redis
-if [ -d "/root/apps/redis/data" ]; then
+# Backup shared Redis (using standard path)
+if [ -f "/var/lib/redis/dump.rdb" ]; then
     mkdir -p "$BACKUP_DIR/redis"
-    cp /root/apps/redis/data/dump.rdb "$BACKUP_DIR/redis/redis-$TIMESTAMP.rdb" 2>/dev/null
+    cp /var/lib/redis/dump.rdb "$BACKUP_DIR/redis/redis-$TIMESTAMP.rdb" 2>/dev/null
     echo "[$(date)] Redis backup: SUCCESS" >> $LOG_FILE
 fi
 
@@ -841,29 +841,30 @@ echo "[$(date)] ====== BACKUP END ======" >> $LOG_FILE
 
 ```cron
 # Daily backup at 2 AM
-0 2 * * * /root/backup-all.sh > /dev/null 2>&1
+0 2 * * * /home/celebrum/backup-all.sh > /dev/null 2>&1
 
 # Or every 6 hours
-0 */6 * * * /root/backup-all.sh > /dev/null 2>&1
+0 */6 * * * /home/celebrum/backup-all.sh > /dev/null 2>&1
 
 # Or every day at multiple times
-0 2 * * * /root/backup-app1.sh > /dev/null 2>&1
-0 2 * * * /root/backup-app2.sh > /dev/null 2>&1
-0 14 * * * /root/backup-app1.sh > /dev/null 2>&1
+0 2 * * * /home/celebrum/backup-app1.sh > /dev/null 2>&1
+0 2 * * * /home/celebrum/backup-app2.sh > /dev/null 2>&1
+0 14 * * * /home/celebrum/backup-app1.sh > /dev/null 2>&1
 ```
 
 ### Restore from Backup
 
 ```bash
 # Restore app1 data directory
-cd /root/apps/app1
-tar -xzf /root/backups/app1/app1-data-2025-11-27_120000.tar.gz
+cd /home/celebrum/apps/app1
+tar -xzf /home/celebrum/backups/app1/app1-data-2025-11-27_120000.tar.gz
 
 # Restore PostgreSQL database
-sudo -u postgres psql < /root/backups/postgres/postgres-2025-11-27_120000.sql
+sudo -u postgres psql < /home/celebrum/backups/postgres/postgres-2025-11-27_120000.sql
 
 # Restore Redis data
-cp /root/backups/redis/redis-2025-11-27_120000.rdb /root/apps/redis/data/dump.rdb
+sudo cp /home/celebrum/backups/redis/redis-2025-11-27_120000.rdb /var/lib/redis/dump.rdb
+sudo chown redis:redis /var/lib/redis/dump.rdb
 sudo systemctl restart redis.service
 
 # Restart application
@@ -949,10 +950,10 @@ sudo systemctl enable app1.service
 sudo systemctl disable app1.service
 
 # Manually trigger backup
-/root/backup-all.sh
+/home/celebrum/backup-all.sh
 
 # Check backup status
-ls -lah /root/backups/
+ls -lah /home/celebrum/backups/
 ```
 
 ### Troubleshooting
