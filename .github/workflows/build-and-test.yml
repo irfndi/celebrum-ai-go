@@ -3,8 +3,24 @@ name: Build and Test
 on:
   push:
     branches: [ main, develop, development ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'ccxt-service/**'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - '.github/workflows/build-and-test.yml'
   pull_request:
     branches: [ main, develop, development ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'ccxt-service/**'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - '.github/workflows/build-and-test.yml'
   workflow_dispatch:
 
 env:
@@ -21,15 +37,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
           
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-            
       - name: Install dependencies
         run: go mod download
         
@@ -41,8 +50,6 @@ jobs:
         with:
           version: v2.5.0
           args: --timeout=5m
-          skip-cache: true
-          skip-save-cache: true
         env:
           GOLANGCI_LINT_CACHE: /tmp/.cache/golangci-lint
       
@@ -74,6 +81,16 @@ jobs:
         with:
           bun-version: 1.2.21
           
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ccxt-service/node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('ccxt-service/bun.lockb', 'ccxt-service/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+          
       - name: Install dependencies
         run: bun install
         
@@ -93,16 +110,32 @@ jobs:
         uses: docker/setup-buildx-action@v3
         
       - name: Build API server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: celebrum-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Save API server image
         run: |
-          docker build -t celebrum-api:${{ github.sha }} .
           docker save celebrum-api:${{ github.sha }} > celebrum-api.tar
-          docker images | grep celebrum-api
           
       - name: Build CCXT service image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ccxt-service
+          push: false
+          load: true
+          tags: celebrum-ccxt:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Save CCXT service image
         run: |
-          cd ccxt-service
-          docker build -t celebrum-ccxt:${{ github.sha }} .
-          docker save celebrum-ccxt:${{ github.sha }} > ../celebrum-ccxt.tar
+          docker save celebrum-ccxt:${{ github.sha }} > celebrum-ccxt.tar
           
       - name: Create deployment package
         run: |
@@ -139,6 +172,14 @@ jobs:
           tar -xzf deployment-package-${{ github.sha }}.tar.gz
           cd deployment-package
           docker load < celebrum-api.tar
+
+      - name: Cache Trivy database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
           
       - name: Aqua Security Trivy
         id: trivy
@@ -147,6 +188,8 @@ jobs:
           image-ref: 'celebrum-api:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
+        env:
+          TRIVY_CACHE_DIR: ~/.cache/trivy
           
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
