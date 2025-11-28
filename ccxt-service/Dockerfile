@@ -17,7 +17,7 @@ COPY . .
 RUN bun run build
 
 # Production stage - optimized runtime
-FROM alpine:latest AS production
+FROM alpine:3.21 AS production
 
 # Install only essential runtime dependencies
 RUN apk --no-cache add ca-certificates curl
@@ -48,7 +48,7 @@ USER appuser
 CMD ["bun", "run", "start:bun"]
 
 # Binary extraction stage - for artifact deployment
-FROM alpine:latest AS binary
+FROM alpine:3.21 AS binary
 
 # Install minimal runtime
 RUN apk --no-cache add ca-certificates

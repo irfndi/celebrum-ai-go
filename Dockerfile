@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
     chmod +x main
 
 # Production stage
-FROM alpine:latest AS production
+FROM alpine:3.21 AS production
 
 # Install only essential runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata wget curl
