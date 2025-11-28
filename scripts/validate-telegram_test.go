@@ -180,14 +180,16 @@ func TestBotCreationSuccess(t *testing.T) {
 	// Either success (unlikely) or expected error is acceptable
 	if err != nil {
 		errorMsg := err.Error()
-		// Check for common network-related errors
+		// Check for common network-related errors (specific patterns)
 		isExpectedError := strings.Contains(errorMsg, "unauthorized") ||
 			strings.Contains(errorMsg, "token") ||
 			strings.Contains(errorMsg, "network") ||
 			strings.Contains(errorMsg, "dial tcp") ||
 			strings.Contains(errorMsg, "lookup") ||
-			strings.Contains(errorMsg, "error") ||
-			strings.Contains(errorMsg, "request")
+			strings.Contains(errorMsg, "connection") ||
+			strings.Contains(errorMsg, "timeout") ||
+			strings.Contains(errorMsg, "getMe") ||
+			strings.Contains(errorMsg, "do request")
 		assert.True(t, isExpectedError, "Expected a network or auth error, got: %s", errorMsg)
 	}
 }
@@ -360,13 +362,15 @@ func TestErrorScenarios(t *testing.T) {
 				// Even valid format might fail due to actual API, so we check for specific errors
 				if err != nil {
 					errorMsg := err.Error()
-					// Check for common network-related errors
+					// Check for common network-related errors (specific patterns)
 					isExpectedError := strings.Contains(errorMsg, "unauthorized") ||
 						strings.Contains(errorMsg, "network") ||
 						strings.Contains(errorMsg, "dial tcp") ||
 						strings.Contains(errorMsg, "lookup") ||
-						strings.Contains(errorMsg, "error") ||
-						strings.Contains(errorMsg, "request")
+						strings.Contains(errorMsg, "connection") ||
+						strings.Contains(errorMsg, "timeout") ||
+						strings.Contains(errorMsg, "getMe") ||
+						strings.Contains(errorMsg, "do request")
 					assert.True(t, isExpectedError, "Expected a network or auth error, got: %s", errorMsg)
 				}
 			}
