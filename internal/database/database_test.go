@@ -1533,9 +1533,11 @@ func TestNewRedisConnection_ErrorScenarios(t *testing.T) {
 	_, err = NewRedisConnection(cfg2)
 	// This might succeed if it defaults to localhost and localhost is available
 	if err != nil {
+		// Verify it's actually a Redis connection error
 		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to connect to Redis", "expected Redis connection error")
 	} else {
-		t.Log("Warning: Redis connection with empty host succeeded (defaulted to localhost).")
+		t.Skip("Skipping: Redis connection with empty host succeeded (likely defaulted to localhost). This test is environment-dependent.")
 	}
 }
 
