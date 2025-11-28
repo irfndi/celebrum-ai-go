@@ -332,7 +332,7 @@ sudo systemctl status postgres.service redis.service
 
 ### Directory Structure
 
-```
+```text
 /root/
 ├── apps/
 │   ├── app1/
@@ -763,7 +763,7 @@ fi
 
 ### Backup Structure
 
-```
+```text
 /root/backups/
 ├── app1/
 │   ├── app1-db-2025-11-27_120000.sql
