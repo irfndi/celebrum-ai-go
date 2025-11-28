@@ -255,26 +255,27 @@ db-seed: ## Seed database with sample data
 	@echo "$(GREEN)Seeding database...$(NC)"
 	./bin/$(APP_NAME) seed
 
-## Deployment
-deploy: ## Deploy to production
-	@echo "$(GREEN)Deploying to production...$(NC)"
-	./scripts/deploy-enhanced.sh production
+## Deployment (systemd-based - recommended for VPS)
+deploy: build ## Deploy to production VPS using systemd (recommended)
+	@echo "$(GREEN)Deploying to production VPS...$(NC)"
+	@echo "$(YELLOW)See docs/deployment/vps-systemd-guide.md for setup instructions$(NC)"
+	./scripts/deploy-binary.sh production
 
-deploy-staging: ## Deploy to staging
-	@echo "$(GREEN)Deploying to staging...$(NC)"
-	./scripts/deploy-enhanced.sh staging
+deploy-staging: build ## Deploy to staging VPS using systemd
+	@echo "$(GREEN)Deploying to staging VPS...$(NC)"
+	./scripts/deploy-binary.sh staging
+
+deploy-binary: build ## Deploy binary to VPS (alias for deploy)
+	@echo "$(GREEN)Deploying binary to VPS...$(NC)"
+	./scripts/deploy-binary.sh production
+
+deploy-binary-staging: build ## Deploy binary to staging VPS
+	@echo "$(GREEN)Deploying binary to staging VPS...$(NC)"
+	./scripts/deploy-binary.sh staging
 
 deploy-manual: build ## Manual deployment with rsync
 	@echo "$(GREEN)Manual deployment with rsync...$(NC)"
 	./scripts/deploy.sh production
-
-deploy-binary: build ## Deploy using binary deployment
-	@echo "$(GREEN)Deploying using binary deployment...$(NC)"
-	./scripts/deploy-binary.sh production
-
-deploy-binary-staging: build ## Deploy to staging using binary deployment
-	@echo "$(GREEN)Deploying to staging using binary deployment...$(NC)"
-	./scripts/deploy-binary.sh staging
 
 setup-staging: ## Set up staging environment
 	@echo "$(GREEN)Setting up staging environment...$(NC)"
@@ -283,6 +284,15 @@ setup-staging: ## Set up staging environment
 deploy-rollback: ## Rollback deployment
 	@echo "$(GREEN)Rolling back deployment...$(NC)"
 	./scripts/deploy-enhanced.sh --rollback
+
+## Docker (alternative deployment method)
+deploy-docker: docker-build ## Deploy using Docker (alternative to systemd)
+	@echo "$(GREEN)Deploying with Docker...$(NC)"
+	./scripts/deploy-enhanced.sh production
+
+deploy-docker-staging: docker-build ## Deploy to staging using Docker
+	@echo "$(GREEN)Deploying to staging with Docker...$(NC)"
+	./scripts/deploy-enhanced.sh staging
 
 ## CI/CD
 ci-test: ## Run CI tests with proper environment
