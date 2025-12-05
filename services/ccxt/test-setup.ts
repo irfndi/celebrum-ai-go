@@ -7,7 +7,7 @@ if (!process.env.ADMIN_API_KEY || process.env.ADMIN_API_KEY.length < 32) {
 }
 
 // Prevent tracing side-effects in tests
-mock.module("./tracing", () => ({}));
+// mock.module("./tracing", () => ({}));
 
 // Mock CCXT to avoid network and control exchanges
 mock.module("ccxt", () => {
