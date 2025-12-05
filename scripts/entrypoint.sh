@@ -51,8 +51,14 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     
     # Debug: Log what environment variables are available
     log "Database environment check:"
-    log "  DATABASE_URL: ${DATABASE_URL:+<set>}${DATABASE_URL:-<not set>}"
-    log "  DATABASE_HOST: ${DATABASE_HOST:+$DATABASE_HOST}${DATABASE_HOST:-<not set>}"
+    if [ -n "$DATABASE_URL" ]; then
+        # Show first 30 chars of URL for debugging (don't expose full password)
+        URL_PREFIX=$(echo "$DATABASE_URL" | cut -c1-30)
+        log "  DATABASE_URL: set (starts with: ${URL_PREFIX}...)"
+    else
+        log "  DATABASE_URL: <not set>"
+    fi
+    log "  DATABASE_HOST: ${DATABASE_HOST:-<not set>}"
     log "  DATABASE_PORT: ${DATABASE_PORT:-<not set>}"
     log "  DATABASE_USER: ${DATABASE_USER:-<not set>}"
     log "  DATABASE_DBNAME: ${DATABASE_DBNAME:-<not set>}"
