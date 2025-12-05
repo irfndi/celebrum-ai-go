@@ -301,10 +301,13 @@ func TestGetTestRedisOptions_MiniredisIntegration(t *testing.T) {
 	if err != nil {
 		if strings.Contains(err.Error(), "operation not permitted") {
 			t.Skip("miniredis cannot bind in this environment; skipping integration test")
+			return
 		}
+		assert.NoError(t, err)
 	}
-	assert.NoError(t, err)
-	defer s.Close()
+	t.Cleanup(func() {
+		s.Close()
+	})
 
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
 	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
@@ -333,10 +336,13 @@ func TestGetTestRedisClient_MiniredisIntegration(t *testing.T) {
 	if err != nil {
 		if strings.Contains(err.Error(), "operation not permitted") {
 			t.Skip("miniredis cannot bind in this environment; skipping integration test")
+			return
 		}
+		assert.NoError(t, err)
 	}
-	assert.NoError(t, err)
-	defer s.Close()
+	t.Cleanup(func() {
+		s.Close()
+	})
 
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
 	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)

@@ -328,10 +328,10 @@ func TestSignalProcessor_FallbackQualityAssessment(t *testing.T) {
 	defer sp.cancel()
 
 	tests := []struct {
-		name     string
-		signal   *AggregatedSignal
-		minVal   float64
-		maxVal   float64
+		name   string
+		signal *AggregatedSignal
+		minVal float64
+		maxVal float64
 	}{
 		{
 			name: "BUY action with high confidence",
@@ -648,10 +648,10 @@ func TestSignalProcessor_ApplyBatchQualityFiltering(t *testing.T) {
 	defer sp.cancel()
 
 	results := []ProcessingResult{
-		{SignalID: "1", QualityScore: 0.9, Error: nil},  // Pass
-		{SignalID: "2", QualityScore: 0.5, Error: nil},  // Fail quality
-		{SignalID: "3", QualityScore: 0.8, Error: nil},  // Pass
-		{SignalID: "4", QualityScore: 0.7, Error: nil},  // Pass (at threshold)
+		{SignalID: "1", QualityScore: 0.9, Error: nil},                      // Pass
+		{SignalID: "2", QualityScore: 0.5, Error: nil},                      // Fail quality
+		{SignalID: "3", QualityScore: 0.8, Error: nil},                      // Pass
+		{SignalID: "4", QualityScore: 0.7, Error: nil},                      // Pass (at threshold)
 		{SignalID: "5", QualityScore: 0.3, Error: errors.New("test error")}, // Pass (errors pass through)
 	}
 

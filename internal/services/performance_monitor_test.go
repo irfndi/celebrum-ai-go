@@ -453,10 +453,12 @@ func TestPerformanceMonitor_WithNilRedis(t *testing.T) {
 func getTestRedisClient(t *testing.T) *redis.Client {
 	mr, err := miniredis.Run()
 	if err != nil {
+		// If we cannot bind due to "operation not permitted", skip the test.
+		// All other errors are considered fatal and should fail the test.
 		if strings.Contains(err.Error(), "operation not permitted") {
 			t.Skip("miniredis cannot bind in this environment; skipping Redis-backed performance monitor tests")
 		}
-		t.Fatalf("failed to start miniredis: %v", err)
+		t.Fatalf("failed to start miniredis (not 'operation not permitted'): %v", err)
 	}
 	t.Cleanup(mr.Close)
 

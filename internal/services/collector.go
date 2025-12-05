@@ -1156,6 +1156,10 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	}
 
 	// Save market data to database with proper column mapping (including bid/ask for arbitrage)
+	// NOTE: BidVolume and AskVolume are currently set to zero because CCXT ticker endpoint
+	// does not provide these values. To get actual bid/ask volumes, the order book would need
+	// to be fetched separately, which would significantly increase API calls and rate limits.
+	// These fields are reserved for future implementation when order book data is integrated.
 	_, err = c.db.Pool.Exec(c.ctx,
 		`INSERT INTO market_data (
 			exchange_id, trading_pair_id, 
