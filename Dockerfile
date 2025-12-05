@@ -27,6 +27,9 @@ RUN apk add --no-cache bash curl unzip ca-certificates && \
     curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.3" && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
+# Set PATH to include bun
+ENV PATH="/root/.bun/bin:${PATH}"
+
 # ==========================================
 # Stage 2: CCXT Service Builder (Bun)
 # ==========================================
