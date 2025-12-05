@@ -165,6 +165,9 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("auth.jwt_secret", "JWT_SECRET")
 	_ = viper.BindEnv("security.jwt_secret", "JWT_SECRET")
 
+	// Bind standard DATABASE_URL
+	_ = viper.BindEnv("database.database_url", "DATABASE_URL")
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables

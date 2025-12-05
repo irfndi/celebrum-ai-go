@@ -134,7 +134,10 @@ func (db *PostgresDB) Exec(ctx context.Context, sql string, args ...interface{})
 func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	var dsn string
 
-	if cfg.DatabaseURL != "" {
+	// Check if Host contains a connection string (common misconfiguration or flexible usage)
+	if strings.HasPrefix(cfg.Host, "postgres://") || strings.HasPrefix(cfg.Host, "postgresql://") {
+		dsn = cfg.Host
+	} else if cfg.DatabaseURL != "" {
 		dsn = cfg.DatabaseURL
 	} else {
 		// Build DSN with PostgreSQL 18 optimizations
