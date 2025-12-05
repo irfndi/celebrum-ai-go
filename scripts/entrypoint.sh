@@ -221,10 +221,21 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         log "Waiting for database at ${DB_HOST}:${DB_PORT}..."
         until PGPASSWORD="${DB_PASSWORD}" pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}"; do
             log "Database not ready, waiting..."
+            # Try to print the actual error message using psql
+            PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" 2>&1 | head -n 1 || true
             sleep 2
         done
+        
+        # Verify credentials explicitly before proceeding
+        log "Verifying database credentials..."
+        if ! PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" >/dev/null 2>&1; then
+             log "ERROR: Database authentication failed. The provided DATABASE_PASSWORD does not match the database user '${DB_USER}'."
+             log "Detailed Error:"
+             PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" || true
+             exit 1
+        fi
     fi
-    log "Database is ready."
+    log "Database is ready and authenticated."
 
     if "$MIGRATE_SCRIPT"; then
         log "Migrations completed successfully."
