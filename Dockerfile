@@ -20,12 +20,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
     chmod +x main
 
 # ==========================================
-# Stage 2: CCXT Service Builder (Bun)
+# Base Image with Bun (shared)
 # ==========================================
-FROM alpine:3.19 AS ccxt-builder
+FROM alpine:3.19 AS bun-base
 RUN apk add --no-cache bash curl unzip ca-certificates && \
     curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.3" && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+# ==========================================
+# Stage 2: CCXT Service Builder (Bun)
+# ==========================================
+FROM bun-base AS ccxt-builder
 WORKDIR /app
 
 # Copy ccxt-service files
@@ -46,10 +51,8 @@ RUN bun install --frozen-lockfile --production
 # ==========================================
 # Stage 3: Unified Runtime (Go + Bun)
 # ==========================================
-FROM alpine:3.19 AS production
-RUN apk add --no-cache bash curl unzip ca-certificates tzdata wget postgresql-client && \
-    curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.3" && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+FROM bun-base AS production
+RUN apk add --no-cache tzdata wget postgresql-client
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
