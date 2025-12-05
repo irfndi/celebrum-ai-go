@@ -181,6 +181,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Sanitize Sentry DSN (remove surrounding spaces)
+	if config.Sentry.DSN != "" {
+		config.Sentry.DSN = strings.TrimSpace(config.Sentry.DSN)
+	}
+
 	// Backfill JWT secret from legacy security configuration if needed
 	if config.Auth.JWTSecret == "" {
 		config.Auth.JWTSecret = strings.TrimSpace(viper.GetString("auth.jwt_secret"))
