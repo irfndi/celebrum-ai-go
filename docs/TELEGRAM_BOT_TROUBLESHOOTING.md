@@ -41,7 +41,11 @@ This script checks:
    grep TELEGRAM_BOT_TOKEN .env
    ```
 2. Validate token format (should be like `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`)
+
 3. Test token with Telegram API:
+
+   > **Security Note:** The following commands will expose your bot token in shell history and process lists. Consider using `set +o history` before running these commands in production, or use a secure secret management tool.
+
    ```bash
    curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
    ```

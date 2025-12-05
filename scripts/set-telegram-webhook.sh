@@ -32,7 +32,8 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
     exit 1
 fi
 
-echo "Bot Token: ${TELEGRAM_BOT_TOKEN:0:10}... (length: ${#TELEGRAM_BOT_TOKEN})"
+# Security: Not displaying any part of the token
+echo "Bot Token: ******** (length: ${#TELEGRAM_BOT_TOKEN})"
 echo ""
 
 # Check command line argument for webhook URL
@@ -71,9 +72,9 @@ fi
 echo ""
 echo "📡 Setting webhook..."
 
-# Set webhook
+# Set webhook with URL encoding
 RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
-    -d "url=${WEBHOOK_URL}" \
+    --data-urlencode "url=${WEBHOOK_URL}" \
     -d "drop_pending_updates=true")
 
 # Check response

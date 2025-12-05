@@ -58,6 +58,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		log.Printf("[TELEGRAM] WARNING: telegramConfig is nil")
 	} else {
 		tokenLen := len(telegramConfig.BotToken)
+		// Security: Only log token length, not any part of the actual token
 		log.Printf("[TELEGRAM] Config provided: BotToken length=%d, UsePolling=%t, WebhookURL=%s", 
 			tokenLen, telegramConfig.UsePolling, telegramConfig.WebhookURL)
 	}

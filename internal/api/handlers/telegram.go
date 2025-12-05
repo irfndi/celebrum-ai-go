@@ -156,7 +156,8 @@ func (h *TelegramHandler) processUpdate(ctx context.Context, update *models.Upda
 		return fmt.Errorf("invalid message: missing from or chat")
 	}
 	
-	log.Printf("[TELEGRAM] Message received from user %d in chat %d: %s", message.From.ID, message.Chat.ID, message.Text)
+	// Security: Log message metadata without exposing user content
+	log.Printf("[TELEGRAM] Message received from user %d in chat %d (length: %d)", message.From.ID, message.Chat.ID, len(message.Text))
 
 	// Handle different commands
 	text := strings.TrimSpace(message.Text)
@@ -166,7 +167,7 @@ func (h *TelegramHandler) processUpdate(ctx context.Context, update *models.Upda
 	}
 
 	// Handle regular text messages
-	log.Printf("[TELEGRAM] Processing text message: %s", text)
+	log.Printf("[TELEGRAM] Processing text message from user %d (length: %d)", message.From.ID, len(text))
 	return h.handleTextMessage(ctx, message, text)
 }
 

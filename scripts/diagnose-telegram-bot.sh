@@ -2,7 +2,7 @@
 # Telegram Bot Diagnostic Script
 # This script diagnoses Telegram bot connectivity and configuration issues
 
-set -e
+# Note: Not using 'set -e' to allow all diagnostic checks to run even if some fail
 
 echo "🔍 Telegram Bot Diagnostics"
 echo "============================"
@@ -36,9 +36,7 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
 else
     TOKEN_LENGTH=${#TELEGRAM_BOT_TOKEN}
     echo -e "${GREEN}✅ TELEGRAM_BOT_TOKEN is set (length: $TOKEN_LENGTH)${NC}"
-    # Show first 10 characters for verification
-    TOKEN_PREFIX="${TELEGRAM_BOT_TOKEN:0:10}"
-    echo "   Token prefix: ${TOKEN_PREFIX}..."
+    # Security: Not displaying any part of the token
 fi
 
 # Check webhook URL
