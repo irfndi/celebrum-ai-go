@@ -49,6 +49,27 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         export DATABASE_URL="${DATABASE_HOST}"
     fi
 
+    # Auto-recovery: If DATABASE_URL is set but unreachable, and DATABASE_HOST works, prefer DATABASE_HOST
+    # This fixes common issues where Coolify/Platform provides a broken DATABASE_URL but correct component vars
+    if [ -n "$DATABASE_URL" ]; then
+        # Try a quick check on DATABASE_URL (timeout 2s)
+        if ! pg_isready -d "$DATABASE_URL" -t 2 >/dev/null 2>&1; then
+            # If DATABASE_URL fails, check if we have a valid DATABASE_HOST component
+            if [ -n "$DATABASE_HOST" ] && ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
+                 export CHECK_DB_PORT="${DATABASE_PORT:-5432}"
+                 export CHECK_DB_USER="${DATABASE_USER:-postgres}"
+                 export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
+                 
+                 # Try connecting with component vars
+                 if PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1; then
+                      log "WARNING: DATABASE_URL is unreachable but DATABASE_HOST is responding."
+                      log "Auto-recovery: Ignoring broken DATABASE_URL and switching to component-based config."
+                      unset DATABASE_URL
+                 fi
+            fi
+        fi
+    fi
+
     if [ -n "$DATABASE_URL" ]; then
         log "Using DATABASE_URL for connection..."
         export DATABASE_URL
