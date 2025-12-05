@@ -36,9 +36,9 @@ echo "Bot Token: ${TELEGRAM_BOT_TOKEN:0:10}... (length: ${#TELEGRAM_BOT_TOKEN})"
 echo ""
 
 # Check command line argument for webhook URL
-if [ ! -z "$1" ]; then
+if [[ -n "$1" ]]; then
     WEBHOOK_URL="$1"
-elif [ ! -z "$TELEGRAM_WEBHOOK_URL" ]; then
+elif [[ -n "$TELEGRAM_WEBHOOK_URL" ]]; then
     WEBHOOK_URL="$TELEGRAM_WEBHOOK_URL"
 else
     echo "Usage: $0 <webhook_url>"

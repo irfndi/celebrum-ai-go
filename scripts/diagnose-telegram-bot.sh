@@ -91,13 +91,13 @@ else
     
     # Check pending updates
     PENDING_COUNT=$(echo "$WEBHOOK_RESPONSE" | grep -o '"pending_update_count":[0-9]*' | cut -d':' -f2)
-    if [ ! -z "$PENDING_COUNT" ] && [ "$PENDING_COUNT" -gt 0 ]; then
+    if [[ -n "$PENDING_COUNT" ]] && [ "$PENDING_COUNT" -gt 0 ]; then
         echo -e "${YELLOW}⚠️  Pending updates: $PENDING_COUNT${NC}"
     fi
     
     # Check last error
     LAST_ERROR=$(echo "$WEBHOOK_RESPONSE" | grep -o '"last_error_message":"[^"]*"' | cut -d'"' -f4)
-    if [ ! -z "$LAST_ERROR" ]; then
+    if [[ -n "$LAST_ERROR" ]]; then
         echo -e "${RED}❌ Last webhook error: $LAST_ERROR${NC}"
     fi
 fi
@@ -151,7 +151,7 @@ echo "📊 Step 6: Database Connection Check"
 echo "------------------------------------"
 
 # Check database connection
-if [ ! -z "$DATABASE_URL" ]; then
+if [[ -n "$DATABASE_URL" ]]; then
     echo "Using DATABASE_URL for connection"
     DB_URL="$DATABASE_URL"
 else
@@ -164,7 +164,7 @@ fi
 
 # Test database connectivity (requires psql)
 if command -v psql &> /dev/null; then
-    if [ ! -z "$DATABASE_URL" ]; then
+    if [[ -n "$DATABASE_URL" ]]; then
         if psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ Database connection successful${NC}"
         else
