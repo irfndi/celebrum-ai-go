@@ -64,7 +64,6 @@ WORKDIR /app/ccxt
 COPY --from=ccxt-builder /app/node_modules ./node_modules
 COPY --from=ccxt-builder /app/dist ./dist
 COPY --from=ccxt-builder /app/package.json .
-COPY --from=ccxt-builder /app/tracing-utils.js ./dist/tracing.js
 
 WORKDIR /app
 
