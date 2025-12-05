@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Go Builder
 # ==========================================
-FROM golang:1.25 AS go-builder
+FROM golang:1.25.5 AS go-builder
 
 # Install git and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*

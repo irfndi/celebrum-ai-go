@@ -16,20 +16,11 @@ services:
       - DATABASE_DBNAME=${DATABASE_DBNAME}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      # CCXT service runs in same container, accessible via localhost
       - CCXT_SERVICE_URL=http://localhost:3000
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
-      - SENTRY_DSN=${SENTRY_DSN:-}
-      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
-    ports:
-      - "8080:8080"
-      - "3000:3000"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+    # # ports:
+    #   - "8080:8080"
+    #   - "3000:3000"
