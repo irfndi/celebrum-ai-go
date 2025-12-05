@@ -46,22 +46,19 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
 
     # Check for connection string in DATABASE_HOST
     if echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
+        log "DATABASE_HOST contains a full URL, using it as DATABASE_URL"
         export DATABASE_URL="${DATABASE_HOST}"
     fi
     
-    # Debug: Log what environment variables are available
-    log "Database environment check:"
-    if [ -n "$DATABASE_URL" ]; then
-        # Show first 30 chars of URL for debugging (don't expose full password)
-        URL_PREFIX=$(echo "$DATABASE_URL" | cut -c1-30)
-        log "  DATABASE_URL: set (starts with: ${URL_PREFIX}...)"
-    else
-        log "  DATABASE_URL: <not set>"
-    fi
-    log "  DATABASE_HOST: ${DATABASE_HOST:-<not set>}"
-    log "  DATABASE_PORT: ${DATABASE_PORT:-<not set>}"
-    log "  DATABASE_USER: ${DATABASE_USER:-<not set>}"
-    log "  DATABASE_DBNAME: ${DATABASE_DBNAME:-<not set>}"
+    # Debug: Log ALL environment variables to diagnose the issue
+    log "=== Database Environment Variables ==="
+    log "DATABASE_URL=${DATABASE_URL:-<NOT SET>}"
+    log "DATABASE_HOST=${DATABASE_HOST:-<NOT SET>}"
+    log "DATABASE_PORT=${DATABASE_PORT:-<NOT SET>}"
+    log "DATABASE_USER=${DATABASE_USER:-<NOT SET>}"
+    log "DATABASE_DBNAME=${DATABASE_DBNAME:-<NOT SET>}"
+    log "DATABASE_PASSWORD=${DATABASE_PASSWORD:+<REDACTED>}"
+    log "======================================"
 
     # Simple approach: If DATABASE_URL is set, use it directly
     if [ -n "$DATABASE_URL" ]; then
