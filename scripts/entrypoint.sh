@@ -51,14 +51,26 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     fi
     
     # Debug: Log ALL environment variables to diagnose the issue
-    # Use echo directly instead of log function to avoid issues with special characters
+    # Use printenv to see if DATABASE_URL is actually in the environment
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] === Database Environment Variables ==="
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_URL=${DATABASE_URL:-<NOT SET>}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_HOST=${DATABASE_HOST:-<NOT SET>}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PORT=${DATABASE_PORT:-<NOT SET>}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_USER=${DATABASE_USER:-<NOT SET>}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_DBNAME=${DATABASE_DBNAME:-<NOT SET>}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PASSWORD=${DATABASE_PASSWORD:+<REDACTED>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Using printenv to check DATABASE_URL:"
+    printenv | grep -E "^DATABASE_" || echo "[$(date '+%Y-%m-%d %H:%M:%S')] No DATABASE_* environment variables found"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ---"
+    
+    # Now check each variable explicitly
+    if [ -z "${DATABASE_URL+x}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_URL: <NOT SET>"
+    elif [ -z "$DATABASE_URL" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_URL: <EMPTY STRING>"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_URL: $DATABASE_URL"
+    fi
+    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_HOST: ${DATABASE_HOST:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PORT: ${DATABASE_PORT:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_USER: ${DATABASE_USER:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_DBNAME: ${DATABASE_DBNAME:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PASSWORD: ${DATABASE_PASSWORD:+<REDACTED>}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ======================================"
 
     # Simple approach: If DATABASE_URL is set, use it directly
