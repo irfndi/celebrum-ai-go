@@ -53,9 +53,23 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
 	// Initialize telegram handler with debug logging
-	log.Printf("DEBUG: About to initialize Telegram handler with config: %+v", telegramConfig)
+	log.Printf("[TELEGRAM] About to initialize Telegram handler")
+	if telegramConfig == nil {
+		log.Printf("[TELEGRAM] WARNING: telegramConfig is nil")
+	} else {
+		tokenLen := len(telegramConfig.BotToken)
+		log.Printf("[TELEGRAM] Config provided: BotToken length=%d, UsePolling=%t, WebhookURL=%s", 
+			tokenLen, telegramConfig.UsePolling, telegramConfig.WebhookURL)
+	}
+	
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
-	log.Printf("DEBUG: Telegram handler initialized: %+v", telegramHandler != nil)
+	
+	if telegramHandler == nil {
+		log.Printf("[TELEGRAM] ERROR: Telegram handler is nil after initialization")
+	} else {
+		log.Printf("[TELEGRAM] Telegram handler initialized successfully")
+	}
+	
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
