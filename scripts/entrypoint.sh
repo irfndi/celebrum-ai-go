@@ -48,6 +48,14 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     if echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
         export DATABASE_URL="${DATABASE_HOST}"
     fi
+    
+    # Debug: Log what environment variables are available
+    log "Database environment check:"
+    log "  DATABASE_URL: ${DATABASE_URL:+<set>}${DATABASE_URL:-<not set>}"
+    log "  DATABASE_HOST: ${DATABASE_HOST:+$DATABASE_HOST}${DATABASE_HOST:-<not set>}"
+    log "  DATABASE_PORT: ${DATABASE_PORT:-<not set>}"
+    log "  DATABASE_USER: ${DATABASE_USER:-<not set>}"
+    log "  DATABASE_DBNAME: ${DATABASE_DBNAME:-<not set>}"
 
     # Coolify/Docker DNS Fix:
     # Coolify may provide DATABASE_URL with internal Docker hostname that's not resolvable,
