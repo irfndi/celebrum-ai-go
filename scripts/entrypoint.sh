@@ -111,19 +111,30 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
                  fi
                  
                  # Extract port (defaults to 5432 if not found)
-                 EXTRACTED_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]\+\)/.*|\1|p')
+                 # Match :port/ or :port$ patterns
+                 EXTRACTED_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]\+\)\(/\|$\).*|\1|p')
                  EXTRACTED_PORT="${EXTRACTED_PORT:-5432}"
                  
-                 # Extract database name
-                 EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+                 # Extract database name (may be empty)
+                 # Only extract if there's a / after the port/host
+                 if echo "$DATABASE_URL" | grep -q ':[0-9]\+/'; then
+                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*:[0-9]\+/\([^?]*\).*|\1|p')
+                 elif echo "$DATABASE_URL" | grep -q '@[^:@]\+:[0-9]\+$'; then
+                     EXTRACTED_DBNAME=""
+                 else
+                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^/?]\+\)$|\1|p')
+                 fi
+                 EXTRACTED_DBNAME="${EXTRACTED_DBNAME:-postgres}"
                  
-                 # Extract username
-                 EXTRACTED_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+                 # Extract username (required)
+                 EXTRACTED_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:@]*\)[:@].*|\1|p')
+                 EXTRACTED_USER="${EXTRACTED_USER:-postgres}"
                  
-                 # Extract password
+                 # Extract password (may be empty for trust auth)
                  EXTRACTED_PASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+                 EXTRACTED_PASSWORD="${EXTRACTED_PASSWORD:-}"
                  
-                 log "Extracted: host=${EXTRACTED_HOST}, port=${EXTRACTED_PORT}, db=${EXTRACTED_DBNAME}, user=${EXTRACTED_USER}"
+                 log "Extracted from URL: host=${EXTRACTED_HOST}, port=${EXTRACTED_PORT}, db=${EXTRACTED_DBNAME}"
                  
                  # Override environment variables with extracted values
                  export DATABASE_HOST="${EXTRACTED_HOST}"
