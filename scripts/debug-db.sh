@@ -21,12 +21,16 @@ else
 fi
 echo "DATABASE_URL=${DATABASE_URL}"
 echo ""
-
-# 2. DNS Resolution
+# 2. DNS Resolution Check
 echo "Checking DNS Resolution..."
 if [ -n "$DATABASE_HOST" ]; then
     echo "Resolving $DATABASE_HOST..."
-    getent hosts "$DATABASE_HOST" || echo "FAILED to resolve $DATABASE_HOST"
+    getent hosts "$DATABASE_HOST" || echo "getent failed"
+    echo "Detailed DNS Info:"
+    cat /etc/resolv.conf
+    echo "Hosts File:"
+    cat /etc/hosts
+    cat /etc/hosts
     ping -c 1 "$DATABASE_HOST" || echo "FAILED to ping $DATABASE_HOST"
 fi
 echo ""

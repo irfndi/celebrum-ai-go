@@ -1088,6 +1088,7 @@ export default app;
 if (import.meta.main) {
   console.log(`🚀 CCXT Service starting on port ${PORT}`);
   console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(", ")}`);
+  console.log(`Starting Bun server with app.fetch type: ${typeof app.fetch}`);
   Bun.serve({
     fetch: app.fetch,
     port: Number(PORT),

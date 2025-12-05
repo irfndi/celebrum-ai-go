@@ -14,6 +14,11 @@ const profilesSampleRate = Number(
 );
 
 if (sentryDsn) {
+  // TODO: Re-enable Sentry once the Bun.serve instrumentation issue is resolved.
+  // Currently, @sentry/bun causes a "TypeError: A Proxy's 'target' should be an Object"
+  // when instrumenting Bun.serve with Hono's fetch.
+  console.warn("Sentry initialization disabled temporarily to fix Bun.serve crash.");
+  /*
   Sentry.init({
     dsn: sentryDsn,
     environment: sentryEnvironment,
@@ -29,6 +34,7 @@ if (sentryDsn) {
       : 0,
     attachStacktrace: true,
   });
+  */
 }
 
 export const isSentryEnabled = !!sentryDsn;
