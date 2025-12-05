@@ -34,6 +34,10 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Stage 2: CCXT Service Builder (Bun)
 # ==========================================
 FROM bun-base AS ccxt-builder
+
+# Ensure PATH includes bun (in case ARG declarations interfere)
+ENV PATH="/root/.bun/bin:${PATH}"
+
 WORKDIR /app
 
 # Copy ccxt-service files
@@ -55,6 +59,10 @@ RUN bun install --frozen-lockfile --production
 # Stage 3: Unified Runtime (Go + Bun)
 # ==========================================
 FROM bun-base AS production
+
+# Ensure PATH includes bun (in case ARG declarations interfere)
+ENV PATH="/root/.bun/bin:${PATH}"
+
 RUN apk add --no-cache tzdata wget postgresql-client
 
 # Create non-root user
