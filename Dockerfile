@@ -1,10 +1,10 @@
 # ==========================================
 # Stage 1: Go Builder
 # ==========================================
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.25 AS go-builder
 
 # Install git and ca-certificates
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -20,24 +20,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
     chmod +x main
 
 # ==========================================
-# Base Image with Bun (shared)
-# ==========================================
-FROM alpine:3.19 AS bun-base
-RUN apk add --no-cache bash curl unzip ca-certificates && \
-    curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.3" && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
-
-# Set PATH to include bun
-ENV PATH="/root/.bun/bin:${PATH}"
-
-# ==========================================
 # Stage 2: CCXT Service Builder (Bun)
 # ==========================================
-FROM bun-base AS ccxt-builder
-
-# Ensure PATH includes bun (in case ARG declarations interfere)
-ENV PATH="/root/.bun/bin:${PATH}"
-
+FROM oven/bun:1 AS ccxt-builder
 WORKDIR /app
 
 # Copy ccxt-service files
@@ -58,16 +43,13 @@ RUN bun install --frozen-lockfile --production
 # ==========================================
 # Stage 3: Unified Runtime (Go + Bun)
 # ==========================================
-FROM bun-base AS production
+FROM oven/bun:1 AS production
 
-# Ensure PATH includes bun (in case ARG declarations interfere)
-ENV PATH="/root/.bun/bin:${PATH}"
-
-RUN apk add --no-cache tzdata wget postgresql-client
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget curl bash postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
+RUN groupadd -g 1001 appgroup && \
+    useradd -u 1001 -g appgroup -m -s /bin/bash appuser
 
 WORKDIR /app
 
