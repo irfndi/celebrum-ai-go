@@ -1,10 +1,10 @@
 # ==========================================
 # Stage 1: Go Builder
 # ==========================================
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.25 AS go-builder
 
 # Install git and ca-certificates
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 # ==========================================
 # Stage 2: CCXT Service Builder (Bun)
 # ==========================================
-FROM oven/bun:1-alpine AS ccxt-builder
+FROM oven/bun:1 AS ccxt-builder
 WORKDIR /app
 
 # Copy ccxt-service files
@@ -43,13 +43,13 @@ RUN bun install --frozen-lockfile --production
 # ==========================================
 # Stage 3: Unified Runtime (Go + Bun)
 # ==========================================
-FROM oven/bun:1-alpine AS production
+FROM oven/bun:1 AS production
 
-RUN apk --no-cache add ca-certificates tzdata wget curl bash postgresql-client
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget curl bash postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
+RUN groupadd -g 1001 appgroup && \
+    useradd -u 1001 -g appgroup -m -s /bin/bash appuser
 
 WORKDIR /app
 
