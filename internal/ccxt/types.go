@@ -121,6 +121,10 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 		md := &models.MarketPrice{
 			ExchangeName: tickerData.Exchange,
 			Symbol:       tickerData.Ticker.Symbol,
+			Bid:          tickerData.Ticker.Bid,
+			BidVolume:    decimal.Zero, // CCXT doesn't provide bid volume in ticker, would need order book
+			Ask:          tickerData.Ticker.Ask,
+			AskVolume:    decimal.Zero, // CCXT doesn't provide ask volume in ticker, would need order book
 			Price:        tickerData.Ticker.Last,
 			Volume:       tickerData.Ticker.Volume,
 			Timestamp:    tickerData.Ticker.Timestamp.Time(),

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -19,8 +22,6 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // TelegramHandler handles Telegram webhook requests
@@ -257,21 +258,104 @@ func (h *TelegramHandler) handleOpportunitiesCommand(ctx context.Context, chatID
 	return h.sendAggregatedSignalsMessage(ctx, chatID, signals)
 }
 
+// handleStopCommand handles the /stop command
+func (h *TelegramHandler) handleStopCommand(ctx context.Context, chatID, userID int64) error {
+	if h.redis == nil {
+		return h.sendMessage(ctx, chatID, "❌ Service temporarily unavailable. Please try again later.")
+	}
+
+	// Set notification preference to false in Redis
+	// Key: telegram:user:{userID}:notifications_enabled
+	key := fmt.Sprintf("telegram:user:%d:notifications_enabled", userID)
+	if err := h.redis.Set(ctx, key, "false", 0).Err(); err != nil {
+		log.Printf("Failed to disable notifications for user %d: %v", userID, err)
+		return h.sendMessage(ctx, chatID, "❌ Failed to update settings. Please try again.")
+	}
+
+	msg := `⏸️ Notifications Paused
+
+You will no longer receive arbitrage alerts.
+
+Use /resume to start receiving alerts again.`
+
+	return h.sendMessage(ctx, chatID, msg)
+}
+
+// handleResumeCommand handles the /resume command
+func (h *TelegramHandler) handleResumeCommand(ctx context.Context, chatID, userID int64) error {
+	if h.redis == nil {
+		return h.sendMessage(ctx, chatID, "❌ Service temporarily unavailable. Please try again later.")
+	}
+
+	// Set notification preference to true in Redis
+	key := fmt.Sprintf("telegram:user:%d:notifications_enabled", userID)
+	if err := h.redis.Set(ctx, key, "true", 0).Err(); err != nil {
+		log.Printf("Failed to enable notifications for user %d: %v", userID, err)
+		return h.sendMessage(ctx, chatID, "❌ Failed to update settings. Please try again.")
+	}
+
+	msg := `▶️ Notifications Resumed
+
+You will now receive arbitrage alerts again.
+
+Use /opportunities to see current opportunities.`
+
+	return h.sendMessage(ctx, chatID, msg)
+}
+
 // handleSettingsCommand handles the /settings command
 func (h *TelegramHandler) handleSettingsCommand(ctx context.Context, chatID, userID int64) error {
-	msg := `⚙️ Alert Settings:
+	// Check current notification status
+	notificationsEnabled := true
+	if h.redis != nil {
+		key := fmt.Sprintf("telegram:user:%d:notifications_enabled", userID)
+		val, err := h.redis.Get(ctx, key).Result()
+		if err == nil && val == "false" {
+			notificationsEnabled = false
+		}
+	}
 
-🔔 Notifications: ON
-📊 Min Profit Threshold: 1.5%
+	statusIcon := "✅"
+	statusText := "ON"
+	if !notificationsEnabled {
+		statusIcon = "❌"
+		statusText = "OFF"
+	}
+
+	msg := fmt.Sprintf(`⚙️ Alert Settings:
+
+🔔 Notifications: %s %s
+📊 Min Profit Threshold: 1.5%%
 ⏰ Alert Frequency: Every 5 minutes
 💰 Subscription: Free Tier
 
-Settings management is being implemented.
-
-For now, use:
+To change settings:
 /stop - Pause notifications
 /resume - Resume notifications
-/upgrade - Upgrade to premium`
+/upgrade - Upgrade to premium for more options`, statusIcon, statusText)
+
+	return h.sendMessage(ctx, chatID, msg)
+}
+
+// handleUpgradeCommand handles the /upgrade command
+func (h *TelegramHandler) handleUpgradeCommand(ctx context.Context, chatID, userID int64) error {
+	msg := `🎯 Upgrade to Premium
+
+✨ Premium Benefits:
+• Unlimited alerts
+• Instant notifications
+• Custom profit thresholds
+• Website dashboard access
+• Priority support
+
+💰 Price: $29/month
+
+💳 Payment Options:
+1️⃣ Telegram Stars (⭐ 290)
+2️⃣ Credit Card
+3️⃣ Crypto (USDT)
+
+To upgrade, please contact our support team or visit our website (coming soon).`
 
 	return h.sendMessage(ctx, chatID, msg)
 }
@@ -340,30 +424,6 @@ func (h *TelegramHandler) handleHelpCommand(ctx context.Context, chatID int64) e
 	return h.sendMessage(ctx, chatID, msg)
 }
 
-// handleUpgradeCommand handles the /upgrade command
-func (h *TelegramHandler) handleUpgradeCommand(ctx context.Context, chatID, userID int64) error {
-	msg := `🎯 Upgrade to Premium
-
-✨ Premium Benefits:
-• Unlimited alerts
-• Instant notifications
-• Custom profit thresholds
-• Website dashboard access
-• Priority support
-
-💰 Price: $29/month
-
-💳 Payment Options:
-1️⃣ Telegram Stars (⭐ 290)
-2️⃣ Credit Card
-3️⃣ Crypto (USDT)
-
-Payment integration is being implemented.
-Contact support for early access!`
-
-	return h.sendMessage(ctx, chatID, msg)
-}
-
 // handleStatusCommand handles the /status command
 func (h *TelegramHandler) handleStatusCommand(ctx context.Context, chatID, userID int64) error {
 	// Get user from database
@@ -394,30 +454,6 @@ Use /upgrade to unlock premium features!`,
 		userIDDisplay,
 		cases.Title(language.English).String(user.SubscriptionTier),
 		user.CreatedAt.Format("Jan 2, 2006"))
-
-	return h.sendMessage(ctx, chatID, msg)
-}
-
-// handleStopCommand handles the /stop command
-func (h *TelegramHandler) handleStopCommand(ctx context.Context, chatID, userID int64) error {
-	// TODO: Implement notification pause logic
-	msg := `⏸️ Notifications Paused
-
-You will no longer receive arbitrage alerts.
-
-Use /resume to start receiving alerts again.`
-
-	return h.sendMessage(ctx, chatID, msg)
-}
-
-// handleResumeCommand handles the /resume command
-func (h *TelegramHandler) handleResumeCommand(ctx context.Context, chatID, userID int64) error {
-	// TODO: Implement notification resume logic
-	msg := `▶️ Notifications Resumed
-
-You will now receive arbitrage alerts again.
-
-Use /opportunities to see current opportunities.`
 
 	return h.sendMessage(ctx, chatID, msg)
 }

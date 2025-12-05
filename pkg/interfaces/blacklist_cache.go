@@ -37,6 +37,7 @@ type Config struct {
 	CCXT        CCXTConfig       `mapstructure:"ccxt"`
 	Telegram    TelegramConfig   `mapstructure:"telegram"`
 	Telemetry   TelemetryConfig  `mapstructure:"telemetry"`
+	Sentry      SentryConfig     `mapstructure:"sentry"`
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
 	Backfill    BackfillConfig   `mapstructure:"backfill"`
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
@@ -90,6 +91,15 @@ type TelemetryConfig struct {
 	ServiceName    string `mapstructure:"service_name"`
 	ServiceVersion string `mapstructure:"service_version"`
 	LogLevel       string `mapstructure:"log_level"`
+}
+
+type SentryConfig struct {
+	Enabled            bool    `mapstructure:"enabled"`
+	DSN                string  `mapstructure:"dsn"`
+	Environment        string  `mapstructure:"environment"`
+	Release            string  `mapstructure:"release"`
+	TracesSampleRate   float64 `mapstructure:"traces_sample_rate"`
+	ProfilesSampleRate float64 `mapstructure:"profiles_sample_rate"`
 }
 
 type CleanupConfig struct {
@@ -147,7 +157,6 @@ type BlacklistConfig struct {
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./configs")
 	viper.AddConfigPath(".")
 
 	// Set default values
@@ -230,6 +239,14 @@ func setDefaults() {
 	viper.SetDefault("telemetry.service_name", "celebrum-ai-go")
 	viper.SetDefault("telemetry.service_version", "1.0.0")
 	viper.SetDefault("telemetry.log_level", "info")
+
+	// Sentry
+	viper.SetDefault("sentry.enabled", false)
+	viper.SetDefault("sentry.dsn", "")
+	viper.SetDefault("sentry.environment", viper.GetString("environment"))
+	viper.SetDefault("sentry.release", "")
+	viper.SetDefault("sentry.traces_sample_rate", 0.2)
+	viper.SetDefault("sentry.profiles_sample_rate", 0.0)
 
 	// Cleanup - Enhanced configuration with smart cleanup
 	viper.SetDefault("cleanup.market_data.retention_hours", 36)

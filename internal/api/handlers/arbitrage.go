@@ -761,13 +761,15 @@ func (h *ArbitrageHandler) findSpreadOpportunities(ctx context.Context, minProfi
 
 	var opportunities []ArbitrageOpportunity
 
-	// Get market data for spread analysis using last_price variations
+	// Get market data with bid/ask prices for spread analysis
 	query := `
-		SELECT tp.symbol, e.name as exchange, md.last_price, md.volume_24h, md.timestamp
+		SELECT tp.symbol, e.name as exchange, 
+			md.bid, md.ask, md.last_price, md.volume_24h, md.timestamp
 		FROM market_data md
 		JOIN exchanges e ON md.exchange_id = e.id
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id
 		WHERE md.timestamp > NOW() - INTERVAL '5 minutes'
+		  AND md.bid > 0 AND md.ask > 0
 		  AND md.last_price > 0 AND md.volume_24h > 0
 	`
 	args := []interface{}{}
@@ -777,7 +779,7 @@ func (h *ArbitrageHandler) findSpreadOpportunities(ctx context.Context, minProfi
 		args = append(args, symbolFilter)
 	}
 
-	query += " ORDER BY md.timestamp DESC"
+	query += " ORDER BY tp.symbol, md.timestamp DESC"
 
 	rows, err := h.db.Pool.Query(ctx, query, args...)
 	if err != nil {
@@ -785,18 +787,104 @@ func (h *ArbitrageHandler) findSpreadOpportunities(ctx context.Context, minProfi
 	}
 	defer rows.Close()
 
+	// Group data by symbol and exchange
+	type ExchangeData struct {
+		bid       float64
+		ask       float64
+		price     float64
+		volume    float64
+		timestamp time.Time
+	}
+	marketData := make(map[string]map[string]ExchangeData)
+
 	for rows.Next() {
 		var symbol, exchange string
-		var price, volume float64
+		var bid, ask, price, volume float64
 		var timestamp time.Time
 
-		if err := rows.Scan(&symbol, &exchange, &price, &volume, &timestamp); err != nil {
+		if err := rows.Scan(&symbol, &exchange, &bid, &ask, &price, &volume, &timestamp); err != nil {
 			continue
 		}
 
-		// Skip this strategy as we don't have bid/ask data
-		// This function will return empty opportunities for now
-		continue
+		if marketData[symbol] == nil {
+			marketData[symbol] = make(map[string]ExchangeData)
+		}
+
+		// Keep only the most recent data for each exchange
+		if existing, exists := marketData[symbol][exchange]; !exists || timestamp.After(existing.timestamp) {
+			marketData[symbol][exchange] = ExchangeData{
+				bid:       bid,
+				ask:       ask,
+				price:     price,
+				volume:    volume,
+				timestamp: timestamp,
+			}
+		}
+	}
+
+	// Find spread arbitrage opportunities
+	// Buy at lowest ask, sell at highest bid
+	for symbol, exchanges := range marketData {
+		if len(exchanges) < 2 {
+			continue
+		}
+
+		// Find exchange with lowest ask (best buy price)
+		var lowestAsk struct {
+			exchange string
+			ask      float64
+			volume   float64
+		}
+
+		// Find exchange with highest bid (best sell price)
+		var highestBid struct {
+			exchange string
+			bid      float64
+			volume   float64
+		}
+
+		for exchange, data := range exchanges {
+			// Find lowest ask
+			if lowestAsk.ask == 0 || data.ask < lowestAsk.ask {
+				lowestAsk.exchange = exchange
+				lowestAsk.ask = data.ask
+				lowestAsk.volume = data.volume
+			}
+
+			// Find highest bid
+			if highestBid.bid == 0 || data.bid > highestBid.bid {
+				highestBid.exchange = exchange
+				highestBid.bid = data.bid
+				highestBid.volume = data.volume
+			}
+		}
+
+		// Calculate spread arbitrage opportunity
+		// Buy at lowestAsk, sell at highestBid
+		if lowestAsk.exchange != "" && highestBid.exchange != "" && lowestAsk.exchange != highestBid.exchange {
+			profitAmount := highestBid.bid - lowestAsk.ask
+			profitPercent := (profitAmount / lowestAsk.ask) * 100
+
+			// Only include if profit exceeds minimum threshold
+			if profitPercent >= minProfit {
+				minVol := min(lowestAsk.volume, highestBid.volume)
+
+				opportunity := ArbitrageOpportunity{
+					Symbol:          symbol,
+					BuyExchange:     lowestAsk.exchange,
+					SellExchange:    highestBid.exchange,
+					BuyPrice:        lowestAsk.ask,  // Buy at ask price
+					SellPrice:       highestBid.bid, // Sell at bid price
+					ProfitPercent:   profitPercent,
+					ProfitAmount:    profitAmount,
+					Volume:          minVol,
+					Timestamp:       time.Now(),
+					OpportunityType: "spread", // Bid/ask spread arbitrage
+				}
+
+				opportunities = append(opportunities, opportunity)
+			}
+		}
 	}
 
 	return opportunities, nil

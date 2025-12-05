@@ -43,18 +43,21 @@ A comprehensive cryptocurrency arbitrage detection and technical analysis platfo
    # Edit .env with your configuration
    ```
 
-3. **Start development environment**
+3. **Start development environment (Docker)**
    ```bash
+   # Starts App, Postgres, and Redis in Docker
+   make dev-up-orchestrated
+   ```
+
+4. **Alternative: Run locally (Go binary)**
+   ```bash
+   # Start only dependencies (Postgres/Redis)
    make dev-setup
-   ```
-
-4. **Install dependencies**
-   ```bash
-   go mod download
-   ```
-
-5. **Run the application**
-   ```bash
+   
+   # Run migrations
+   make db-migrate
+   
+   # Run app
    make run
    ```
 
@@ -134,7 +137,6 @@ make ci-check          # Run full CI suite
 │   ├── ccxt/            # CCXT service client
 │   └── utils/           # Utility functions
 ├── api/                 # API documentation
-├── configs/             # Configuration files
 ├── scripts/             # Build and deployment scripts
 ├── docs/                # Documentation
 └── tests/               # Test files
@@ -142,84 +144,24 @@ make ci-check          # Run full CI suite
 
 ## Deployment
 
-### 🚀 Enhanced Deployment & Monitoring
+### 🚀 Coolify Deployment (Recommended)
 
-The project now includes comprehensive deployment automation and monitoring:
+This project is optimized for deployment via [Coolify](https://coolify.io/).
 
-- **Zero-downtime deployments** with automatic rollback
-- **Health monitoring** for all services (PostgreSQL, Redis, CCXT, Telegram)
-- **Automated recovery** for failed services
-- **Comprehensive logging** and alerting
-- **Backup automation** before deployments
+- **Architecture**: Single Docker container (Go + Bun/CCXT)
+- **Database**: Managed PostgreSQL (via Coolify)
+- **Cache**: Managed Redis (via Coolify)
+- **Routing**: Automated via Coolify's Traefik
 
-### 📚 New Documentation
+For detailed deployment instructions, please refer to **[DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md)**.
 
-- **[Deployment Improvements Summary](docs/DEPLOYMENT_IMPROVEMENTS_SUMMARY.md)** - Complete overview of all fixes and improvements
-- **[Telegram Bot Troubleshooting](docs/TELEGRAM_BOT_TROUBLESHOOTING.md)** - Common issues and solutions
-- **[Deployment Best Practices](docs/DEPLOYMENT_BEST_PRACTICES.md)** - Comprehensive deployment guide
+### Automated CI/CD
 
-### Automated CI/CD Pipeline
+The project includes a CI/CD pipeline using GitHub Actions that automatically:
+- Runs tests, linting, and formatting on every push
+- Builds the application to ensure integrity
 
-The project includes a complete CI/CD pipeline using GitHub Actions that automatically:
-
-- **Runs tests and linting** on every push and pull request
-- **Builds and pushes Docker images** to GitHub Container Registry
-- **Deploys to production** when code is pushed to the main branch
-- **Performs health checks** and automatic rollback on failure
-
-#### Setup CI/CD
-
-1. **Configure GitHub Secrets** (see [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md)):
-   - `DIGITALOCEAN_ACCESS_TOKEN`
-   - `DEPLOY_SSH_KEY`
-   - `DEPLOY_USER`
-   - `DEPLOY_HOST`
-
-2. **Push to main branch** - deployment happens automatically!
-
-#### Local CI Checks
-
-```bash
-# Run the same checks as CI
-make ci-check
-
-# Individual CI commands
-make ci-lint      # Run linter
-make ci-test      # Run tests with race detection
-make ci-build     # Build with version info
-```
-
-### Quick Deployment Commands
-
-```bash
-# Deploy to production (zero-downtime)
-make deploy
-
-# Deploy to staging
-make deploy-staging
-
-# Check production health
-make health-prod
-
-# Check service status
-make status-prod
-
-# Monitor all services
-./scripts/health-check.sh
-
-# Auto-recover failed services
-./scripts/health-check.sh --recover
-```
-
-### Manual Deployment
-
-#### SSH Connection and Deployment
-
-```bash
-# Connect to your Digital Ocean droplet
-ssh root@your-server-ip
-
-# Navigate to your project directory
+Deployment is triggered via Coolify webhooks.
 cd /opt/celebrum-ai-go
 
 # Pull latest changes
@@ -260,7 +202,7 @@ The deployment script (`scripts/deploy.sh`) handles:
 
 The application uses a hierarchical configuration system:
 
-1. Default values in `configs/config.yaml`
+1. Default values in `config.yml`
 2. Environment-specific overrides
 3. Environment variables (highest priority)
 
@@ -282,6 +224,7 @@ go test -v ./internal/services/...
 - **Health Checks**: `/health` endpoint for service monitoring
 - **Metrics**: Prometheus metrics available at `/metrics`
 - **Logging**: Structured JSON logging with configurable levels
+- **Sentry**: Enable error and performance reporting by setting `sentry.*` in `config.yml` (Go API) and `SENTRY_DSN` for the Bun CCXT service
 
 ## Security
 

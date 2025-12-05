@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -607,6 +608,16 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 		return fmt.Errorf("telegram bot not initialized")
 	}
 
+	// Check if user has disabled notifications via Redis
+	if ns.redis != nil && user.TelegramChatID != nil {
+		key := fmt.Sprintf("telegram:user:%s:notifications_enabled", *user.TelegramChatID)
+		val, err := ns.redis.Get(ctx, key)
+		if err == nil && val == "false" {
+			ns.logger.Info("User has disabled notifications, skipping", "user_id", user.ID)
+			return nil
+		}
+	}
+
 	// Check rate limit before sending
 	allowed, err := ns.checkRateLimit(ctx, user.ID)
 	if err != nil {
@@ -660,6 +671,16 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, user userModels.User, signal *AggregatedSignal) error {
 	if ns.bot == nil {
 		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	// Check if user has disabled notifications via Redis
+	if ns.redis != nil && user.TelegramChatID != nil {
+		key := fmt.Sprintf("telegram:user:%s:notifications_enabled", *user.TelegramChatID)
+		val, err := ns.redis.Get(ctx, key)
+		if err == nil && val == "false" {
+			ns.logger.Info("User has disabled notifications, skipping", "user_id", user.ID)
+			return nil
+		}
 	}
 
 	// Check rate limit before sending

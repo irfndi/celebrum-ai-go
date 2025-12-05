@@ -761,3 +761,164 @@ func (calc *FuturesArbitrageCalculator) calculateSymbolArbitrage(
 
 	return opportunities
 }
+
+// GenerateCompleteStrategy creates a complete futures arbitrage strategy with execution details
+func (calc *FuturesArbitrageCalculator) GenerateCompleteStrategy(
+	opportunity *models.FuturesArbitrageOpportunity,
+	availableCapital decimal.Decimal,
+	riskTolerance string,
+) *models.FuturesArbitrageStrategy {
+
+	// Use default capital if not provided
+	if availableCapital.LessThanOrEqual(decimal.Zero) {
+		availableCapital = decimal.NewFromInt(1000) // $1000 fallback
+	}
+
+	// Determine position size based on risk tolerance
+	var chosenSize decimal.Decimal
+	switch riskTolerance {
+	case "low":
+		chosenSize = opportunity.MinPositionSize
+	case "high":
+		chosenSize = opportunity.OptimalPositionSize
+	default: // "medium"
+		chosenSize = opportunity.OptimalPositionSize
+	}
+
+	// Ensure position size doesn't exceed available capital
+	if chosenSize.GreaterThan(availableCapital) {
+		chosenSize = availableCapital.Mul(decimal.NewFromFloat(0.1)) // 10% of capital
+	}
+
+	// Generate LONG position details
+	longPosition := models.PositionDetails{
+		Exchange:   opportunity.LongExchange,
+		Symbol:     opportunity.Symbol,
+		Side:       "long",
+		Size:       chosenSize,
+		Leverage:   opportunity.RecommendedLeverage,
+		EntryPrice: opportunity.LongMarkPrice,
+		StopLoss: calc.calculateStopLossPrice(
+			opportunity.LongMarkPrice,
+			"long",
+			opportunity.StopLossPercentage,
+		),
+		TakeProfit: calc.calculateTakeProfitPrice(
+			opportunity.LongMarkPrice,
+			"long",
+			opportunity.NetFundingRate,
+		),
+		MarginRequired: chosenSize.Div(opportunity.RecommendedLeverage),
+		EstimatedFees:  calc.calculateFees(chosenSize),
+	}
+
+	// Generate SHORT position details
+	shortPosition := models.PositionDetails{
+		Exchange:   opportunity.ShortExchange,
+		Symbol:     opportunity.Symbol,
+		Side:       "short",
+		Size:       chosenSize,
+		Leverage:   opportunity.RecommendedLeverage,
+		EntryPrice: opportunity.ShortMarkPrice,
+		StopLoss: calc.calculateStopLossPrice(
+			opportunity.ShortMarkPrice,
+			"short",
+			opportunity.StopLossPercentage,
+		),
+		TakeProfit: calc.calculateTakeProfitPrice(
+			opportunity.ShortMarkPrice,
+			"short",
+			opportunity.NetFundingRate.Neg(),
+		),
+		MarginRequired: chosenSize.Div(opportunity.RecommendedLeverage),
+		EstimatedFees:  calc.calculateFees(chosenSize),
+	}
+
+	// Generate execution plan
+	executionOrder := calc.generateExecutionOrder(longPosition, shortPosition)
+
+	// Calculate expected returns
+	expectedReturn := opportunity.EstimatedProfitDaily.Div(chosenSize).Mul(decimal.NewFromInt(100))
+
+	// Create strategy
+	strategy := &models.FuturesArbitrageStrategy{
+		ID:   fmt.Sprintf("strategy_%s_%d", opportunity.Symbol, time.Now().Unix()),
+		Name: fmt.Sprintf("Funding Rate Arbitrage: %s", opportunity.Symbol),
+		Description: fmt.Sprintf("Long %s on %s, Short on %s. Net funding: %.4f%%",
+			opportunity.Symbol, opportunity.LongExchange, opportunity.ShortExchange,
+			opportunity.NetFundingRate.InexactFloat64()*100),
+		Opportunity:    *opportunity,
+		LongPosition:   longPosition,
+		ShortPosition:  shortPosition,
+		ExecutionOrder: executionOrder,
+		ExpectedReturn: expectedReturn,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		IsActive:       opportunity.IsActive,
+	}
+
+	return strategy
+}
+
+// Helper methods for strategy generation
+
+func (calc *FuturesArbitrageCalculator) calculateStopLossPrice(
+	entryPrice decimal.Decimal,
+	side string,
+	stopLossPercentage decimal.Decimal,
+) decimal.Decimal {
+	slFactor := stopLossPercentage.Div(decimal.NewFromInt(100))
+
+	if side == "long" {
+		// For long: stop loss is below entry
+		return entryPrice.Mul(decimal.NewFromInt(1).Sub(slFactor))
+	}
+
+	// For short: stop loss is above entry
+	return entryPrice.Mul(decimal.NewFromInt(1).Add(slFactor))
+}
+
+func (calc *FuturesArbitrageCalculator) calculateTakeProfitPrice(
+	entryPrice decimal.Decimal,
+	side string,
+	netFundingRate decimal.Decimal,
+) decimal.Decimal {
+	// Target 3x the funding rate profit
+	targetProfit := netFundingRate.Abs().Mul(decimal.NewFromInt(3))
+
+	// Minimum 1% take profit
+	if targetProfit.LessThan(decimal.NewFromFloat(0.01)) {
+		targetProfit = decimal.NewFromFloat(0.01)
+	}
+
+	if side == "long" {
+		// For long: take profit is above entry
+		return entryPrice.Mul(decimal.NewFromInt(1).Add(targetProfit))
+	}
+
+	// For short: take profit is below entry
+	return entryPrice.Mul(decimal.NewFromInt(1).Sub(targetProfit))
+}
+
+func (calc *FuturesArbitrageCalculator) calculateFees(positionSize decimal.Decimal) decimal.Decimal {
+	// Typical taker fee 0.05% * 2 (entry + exit)
+	return positionSize.Mul(decimal.NewFromFloat(0.001))
+}
+
+func (calc *FuturesArbitrageCalculator) generateExecutionOrder(
+	long models.PositionDetails,
+	short models.PositionDetails,
+) []string {
+	return []string{
+		fmt.Sprintf("1. Deposit $%s margin to %s", long.MarginRequired.StringFixed(2), long.Exchange),
+		fmt.Sprintf("2. Deposit $%s margin to %s", short.MarginRequired.StringFixed(2), short.Exchange),
+		fmt.Sprintf("3. Open LONG %s on %s at $%s (%.1fx leverage)",
+			long.Symbol, long.Exchange, long.EntryPrice.StringFixed(2), long.Leverage.InexactFloat64()),
+		fmt.Sprintf("4. Open SHORT %s on %s at $%s (%.1fx leverage)",
+			short.Symbol, short.Exchange, short.EntryPrice.StringFixed(2), short.Leverage.InexactFloat64()),
+		"5. Set stop loss orders on both exchanges",
+		"6. Set take profit orders on both exchanges",
+		"7. Monitor funding payments every 8 hours",
+		"8. Close positions if funding rate flips or target profit reached",
+	}
+}

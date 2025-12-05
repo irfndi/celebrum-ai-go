@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-# Celebrum AI - 4-Phase Sequential Startup Orchestrator
+# Celebrum AI - Startup Orchestrator
 # This script manages the sequential startup of Docker services
-# and controls when external connections (like Telegram webhooks) are enabled
 
 set -euo pipefail
 
 # Configuration
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.dev.yml}"
 LOG_FILE="/tmp/celebrum-startup.log"
 MAX_WAIT_TIME=600  # 10 minutes max wait
 HEALTH_CHECK_INTERVAL=10
@@ -78,40 +77,6 @@ wait_for_service() {
     return 1
 }
 
-# Check if migration completed successfully
-check_migration_completed() {
-    if docker ps -a --filter "name=celebrum-migrate" --filter "exited=0" --format "table {{.Names}}" | grep -q "celebrum-migrate"; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Wait for migration to complete
-wait_for_migration() {
-    local max_wait="${1:-300}"  # 5 minutes for migration
-    local waited=0
-    
-    log_info "Waiting for database migration to complete..."
-    
-    while [ $waited -lt $max_wait ]; do
-        if check_migration_completed; then
-            log_success "Database migration completed successfully"
-            return 0
-        fi
-        
-        sleep $HEALTH_CHECK_INTERVAL
-        waited=$((waited + HEALTH_CHECK_INTERVAL))
-        
-        if [ $((waited % 30)) -eq 0 ]; then
-            log_info "Still waiting for migration... (${waited}s elapsed)"
-        fi
-    done
-    
-    log_error "Migration failed to complete within ${max_wait} seconds"
-    return 1
-}
-
 # Enable external connections
 enable_external_connections() {
     log_info "Enabling external connections..."
@@ -127,17 +92,12 @@ enable_external_connections() {
         docker exec celebrum-app sh -c 'echo "TELEGRAM_WEBHOOK_ENABLED=true" >> /tmp/runtime.env'
     fi
     
-    if docker ps --filter "name=celebrum-nginx" --format "table {{.Names}}" | grep -q "celebrum-nginx"; then
-        log_info "Updating nginx container environment for external connections..."
-        docker exec celebrum-nginx sh -c 'echo "EXTERNAL_CONNECTIONS_ENABLED=true" >> /tmp/runtime.env'
-    fi
-    
     log_success "External connections enabled"
 }
 
 # Main startup orchestration
 main() {
-    log_info "Starting Celebrum AI 4-Phase Sequential Startup"
+    log_info "Starting Celebrum AI 3-Phase Sequential Startup"
     log_info "Using compose file: $COMPOSE_FILE"
     
     # Ensure external connections are disabled initially
@@ -148,42 +108,23 @@ main() {
     log_info "=== PHASE 1: Starting Database Services ==="
     
     log_info "Starting PostgreSQL..."
-    docker-compose -f "$COMPOSE_FILE" up -d postgres
+    docker compose -f "$COMPOSE_FILE" up -d postgres
     wait_for_service "postgres" 180
-    
-    log_info "Starting Redis..."
-    docker-compose -f "$COMPOSE_FILE" up -d redis
-    wait_for_service "redis" 120
-    
-    log_info "Running database migrations..."
-    docker-compose -f "$COMPOSE_FILE" up migrate
-    wait_for_migration 300
     
     log_success "Phase 1 completed: Database services are ready"
     
-    # PHASE 2: Start gateway (Nginx will wait for app services)
-    log_info "=== PHASE 2: Preparing Gateway ==="
-    log_info "Gateway (Nginx) will start automatically after app services are ready"
+    # PHASE 2: Start application services
+    log_info "=== PHASE 2: Starting Application Services ==="
     
-    # PHASE 3: Start application services for warm-up
-    log_info "=== PHASE 3: Starting Application Services (Warm-up) ==="
+    log_info "Starting main application (Unified Container)..."
+    # Application will auto-run migrations on startup if RUN_MIGRATIONS=true
+    docker compose -f "$COMPOSE_FILE" up -d celebrum
+    wait_for_service "app" 300  # Increased wait time to account for migrations
     
-    log_info "Starting CCXT service..."
-    docker-compose -f "$COMPOSE_FILE" up -d ccxt-service
-    wait_for_service "ccxt" 180
+    log_success "Phase 2 completed: Application services are running"
     
-    log_info "Starting main application..."
-    docker-compose -f "$COMPOSE_FILE" up -d app
-    wait_for_service "app" 240
-    
-    log_info "Starting Nginx gateway..."
-    docker-compose -f "$COMPOSE_FILE" up -d nginx
-    wait_for_service "nginx" 120
-    
-    log_success "Phase 3 completed: Application services are warmed up"
-    
-    # PHASE 4: Enable external connections
-    log_info "=== PHASE 4: Enabling External Connections ==="
+    # PHASE 3: Enable external connections
+    log_info "=== PHASE 3: Enabling External Connections ==="
     
     # Wait a bit more for services to fully stabilize
     log_info "Allowing services to stabilize for 30 seconds..."
@@ -191,21 +132,19 @@ main() {
     
     # Final health check
     log_info "Performing final health checks..."
-    if check_service_health "postgres" && check_service_health "redis" && \
-       check_service_health "ccxt" && check_service_health "app" && \
-       check_service_health "nginx"; then
+    if check_service_health "postgres" && check_service_health "app"; then
         
         enable_external_connections
         
         log_success "=== ALL PHASES COMPLETED SUCCESSFULLY ==="
         log_success "Celebrum AI is ready to accept external connections"
         log_info "Services status:"
-        docker-compose -f "$COMPOSE_FILE" ps
+        docker compose -f "$COMPOSE_FILE" ps
         
     else
         log_error "Some services are not healthy. External connections will remain disabled."
         log_info "Current service status:"
-        docker-compose -f "$COMPOSE_FILE" ps
+        docker compose -f "$COMPOSE_FILE" ps
         exit 1
     fi
 }
@@ -213,7 +152,7 @@ main() {
 # Cleanup function
 cleanup() {
     log_info "Startup orchestrator interrupted. Current status:"
-    docker-compose -f "$COMPOSE_FILE" ps
+    docker compose -f "$COMPOSE_FILE" ps
 }
 
 # Set trap for cleanup
