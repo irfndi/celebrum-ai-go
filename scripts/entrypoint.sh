@@ -49,6 +49,16 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         export DATABASE_URL="${DATABASE_HOST}"
     fi
 
+    # Coolify/Docker DNS Fix:
+    # If DATABASE_URL uses generic 'postgres' hostname but we have a specific DATABASE_HOST,
+    # we patch the URL to use the correct hostname.
+    if [ -n "$DATABASE_URL" ] && [ -n "$DATABASE_HOST" ]; then
+        if [[ "$DATABASE_URL" == *"@postgres:"* ]] && [ "$DATABASE_HOST" != "postgres" ]; then
+            log "Patching DATABASE_URL: Replacing generic 'postgres' host with '${DATABASE_HOST}'..."
+            export DATABASE_URL="${DATABASE_URL/@postgres:/@$DATABASE_HOST:}"
+        fi
+    fi
+
     # Auto-recovery: If DATABASE_URL is set but unreachable, and DATABASE_HOST works, prefer DATABASE_HOST
     # This fixes common issues where Coolify/Platform provides a broken DATABASE_URL but correct component vars
     if [ -n "$DATABASE_URL" ]; then
