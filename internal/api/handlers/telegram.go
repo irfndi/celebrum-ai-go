@@ -38,10 +38,10 @@ type TelegramHandler struct {
 
 // NewTelegramHandler creates a new Telegram handler
 func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler, signalAggregator *services.SignalAggregator, redisClient *redis.Client) *TelegramHandler {
-	log.Printf("[DEBUG] NewTelegramHandler called")
+	log.Printf("[TELEGRAM] NewTelegramHandler called")
 	// Return handler with nil bot if config is not provided
 	if cfg == nil {
-		log.Printf("[DEBUG] Telegram config is nil, returning handler with nil bot")
+		log.Printf("[TELEGRAM] WARNING: Telegram config is nil, returning handler with nil bot")
 		return &TelegramHandler{
 			db:               db,
 			config:           nil,
@@ -58,7 +58,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 	} else if len(cfg.BotToken) > 0 {
 		botTokenDisplay = cfg.BotToken + "..."
 	}
-	log.Printf("[DEBUG] Telegram config: BotToken=%s, UsePolling=%t", botTokenDisplay, cfg.UsePolling)
+	log.Printf("[TELEGRAM] Config: BotToken=%s, UsePolling=%t, WebhookURL=%s", botTokenDisplay, cfg.UsePolling, cfg.WebhookURL)
 
 	// Create handler first
 	handler := &TelegramHandler{
@@ -73,28 +73,33 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 	}
 
 	// Initialize the bot with handler reference
+	log.Printf("[TELEGRAM] Creating bot instance...")
 	b, err := bot.New(cfg.BotToken, bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		// Process updates in polling mode
+		log.Printf("[TELEGRAM] Received update in default handler")
 		if err := handler.processUpdate(ctx, update); err != nil {
-			log.Printf("Failed to process update: %v", err)
+			log.Printf("[TELEGRAM] ERROR: Failed to process update: %v", err)
 		}
 	}))
 	if err != nil {
-		log.Printf("Failed to create Telegram bot: %v", err)
-		log.Printf("Telegram bot functionality will be disabled")
+		log.Printf("[TELEGRAM] ERROR: Failed to create Telegram bot: %v", err)
+		log.Printf("[TELEGRAM] WARNING: Telegram bot functionality will be disabled")
 		// Return handler with nil bot - webhook will handle gracefully
 		return handler
 	}
 
+	log.Printf("[TELEGRAM] Bot instance created successfully")
+	
 	// Set the bot in the handler
 	handler.bot = b
 
 	// Start polling mode if configured
 	if cfg.UsePolling {
-		log.Printf("Starting Telegram bot in polling mode")
+		log.Printf("[TELEGRAM] Starting Telegram bot in polling mode")
 		go handler.StartPolling()
 	} else {
-		log.Printf("Telegram bot configured for webhook mode")
+		log.Printf("[TELEGRAM] Telegram bot configured for webhook mode")
+		log.Printf("[TELEGRAM] Webhook should be set to: %s", cfg.WebhookURL)
 	}
 
 	return handler
@@ -104,8 +109,10 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 
 // HandleWebhook processes incoming Telegram webhook requests
 func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
+	log.Printf("[TELEGRAM] HandleWebhook called from %s", c.ClientIP())
+	
 	if h.bot == nil {
-		log.Printf("Telegram bot is not initialized, ignoring webhook")
+		log.Printf("[TELEGRAM] ERROR: Telegram bot is not initialized, ignoring webhook")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Telegram bot not available"})
 		return
 	}
@@ -113,41 +120,54 @@ func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
 	// Parse the update
 	var update models.Update
 	if err := c.ShouldBindJSON(&update); err != nil {
-		log.Printf("Failed to parse Telegram update: %v", err)
+		log.Printf("[TELEGRAM] ERROR: Failed to parse Telegram update: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
+
+	log.Printf("[TELEGRAM] Webhook update received: update_id=%d", update.ID)
 
 	// Process the update using the bot framework
 	go func() {
 		ctx := context.Background()
 		if err := h.processUpdate(ctx, &update); err != nil {
-			log.Printf("Failed to process Telegram update: %v", err)
+			log.Printf("[TELEGRAM] ERROR: Failed to process Telegram update: %v", err)
 		}
 	}()
 
 	// Always return 200 OK to acknowledge receipt
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+	log.Printf("[TELEGRAM] Webhook acknowledged")
 }
 
 // processUpdate processes a Telegram update
 func (h *TelegramHandler) processUpdate(ctx context.Context, update *models.Update) error {
+	log.Printf("[TELEGRAM] processUpdate called")
+	
 	if update.Message == nil {
+		log.Printf("[TELEGRAM] Update has no message, ignoring")
 		return nil // Ignore non-message updates for now
 	}
 
 	message := update.Message
+	
 	if message.From == nil || message.Chat.ID == 0 {
+		log.Printf("[TELEGRAM] ERROR: Invalid message: missing from or chat")
 		return fmt.Errorf("invalid message: missing from or chat")
 	}
+	
+	// Security: Log message metadata without exposing user content
+	log.Printf("[TELEGRAM] Message received from user %d in chat %d (length: %d)", message.From.ID, message.Chat.ID, len(message.Text))
 
 	// Handle different commands
 	text := strings.TrimSpace(message.Text)
 	if strings.HasPrefix(text, "/") {
+		log.Printf("[TELEGRAM] Processing command: %s", text)
 		return h.handleCommand(ctx, message, text)
 	}
 
 	// Handle regular text messages
+	log.Printf("[TELEGRAM] Processing text message from user %d (length: %d)", message.From.ID, len(text))
 	return h.handleTextMessage(ctx, message, text)
 }
 
@@ -180,34 +200,46 @@ func (h *TelegramHandler) handleCommand(ctx context.Context, message *models.Mes
 
 // handleStartCommand handles the /start command
 func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID int64, from *models.User) error {
+	log.Printf("[TELEGRAM] handleStartCommand called for user %d, chat %d", userID, chatID)
+	
 	// Check if user already exists
 	chatIDStr := strconv.FormatInt(chatID, 10)
 	var existingUser userModels.User
+	
+	log.Printf("[TELEGRAM] Checking if user exists with telegram_chat_id=%s", chatIDStr)
 	err := h.db.Pool.QueryRow(ctx, "SELECT id, email, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE telegram_chat_id = $1", chatIDStr).Scan(
 		&existingUser.ID, &existingUser.Email, &existingUser.TelegramChatID, &existingUser.SubscriptionTier, &existingUser.CreatedAt, &existingUser.UpdatedAt)
 	if err == nil {
 		// User already exists, send welcome back message
+		log.Printf("[TELEGRAM] User already exists: %s", existingUser.ID)
 		return h.sendMessage(ctx, chatID, "Welcome back! 🎉\n\nYou're already registered and receiving alerts.\n\nUse /opportunities to see current arbitrage opportunities.")
 	}
 
 	if err != pgx.ErrNoRows {
+		log.Printf("[TELEGRAM] ERROR: Database error checking user: %v", err)
 		return fmt.Errorf("database error: %w", err)
 	}
 
+	log.Printf("[TELEGRAM] User not found, creating new user")
+	
 	// Create new user - let database generate UUID automatically
 	email := fmt.Sprintf("telegram_%d@celebrum.ai", userID)
 	telegramChatID := &chatIDStr
 	subscriptionTier := "free"
 	now := time.Now()
 
+	log.Printf("[TELEGRAM] Inserting new user with email=%s, telegram_chat_id=%s", email, chatIDStr)
 	_, err = h.db.Pool.Exec(ctx, `
 		INSERT INTO users (email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at) 
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		email, "telegram_user", telegramChatID, subscriptionTier, now, now)
 	if err != nil {
+		log.Printf("[TELEGRAM] ERROR: Failed to create user: %v", err)
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
+	log.Printf("[TELEGRAM] User created successfully, sending welcome message")
+	
 	// Send welcome message
 	welcomeMsg := `🚀 Welcome to Celebrum AI!
 
@@ -363,16 +395,16 @@ To upgrade, please contact our support team or visit our website (coming soon).`
 // StartPolling starts the Telegram bot in polling mode
 func (h *TelegramHandler) StartPolling() {
 	if h.bot == nil {
-		log.Printf("Cannot start polling: Telegram bot is not initialized")
+		log.Printf("[TELEGRAM] ERROR: Cannot start polling: Telegram bot is not initialized")
 		return
 	}
 
 	if h.pollingActive {
-		log.Printf("Polling is already active")
+		log.Printf("[TELEGRAM] Polling is already active, skipping")
 		return
 	}
 
-	log.Printf("Starting Telegram bot polling...")
+	log.Printf("[TELEGRAM] Starting Telegram bot polling...")
 	h.pollingActive = true
 
 	// Create a context that can be cancelled
@@ -383,12 +415,15 @@ func (h *TelegramHandler) StartPolling() {
 	go func() {
 		defer func() {
 			h.pollingActive = false
-			log.Printf("Polling stopped")
+			log.Printf("[TELEGRAM] Polling stopped")
 		}()
 
+		log.Printf("[TELEGRAM] Bot polling started, listening for updates...")
 		// The bot.Start method handles polling internally
 		h.bot.Start(ctx)
 	}()
+	
+	log.Printf("[TELEGRAM] Polling goroutine launched")
 }
 
 // StopPolling stops the Telegram bot polling
@@ -469,19 +504,30 @@ func (h *TelegramHandler) handleTextMessage(ctx context.Context, message *models
 
 // sendMessage sends a message to a Telegram chat using the bot framework
 func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text string) error {
+	log.Printf("[TELEGRAM] sendMessage called for chat %d", chatID)
+	
 	if h.bot == nil {
-		log.Printf("Telegram bot is not initialized, cannot send message to chat %d", chatID)
+		log.Printf("[TELEGRAM] ERROR: Telegram bot is not initialized, cannot send message to chat %d", chatID)
 		return fmt.Errorf("telegram bot not available")
 	}
 
+	// Truncate message preview for logging
+	messagePreview := text
+	if len(text) > 50 {
+		messagePreview = text[:50] + "..."
+	}
+	log.Printf("[TELEGRAM] Sending message to chat %d: %s", chatID, messagePreview)
+	
 	_, err := h.bot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   text,
 	})
 	if err != nil {
-		log.Printf("Failed to send message to chat %d: %v", chatID, err)
+		log.Printf("[TELEGRAM] ERROR: Failed to send message to chat %d: %v", chatID, err)
 		return err
 	}
+	
+	log.Printf("[TELEGRAM] Message sent successfully to chat %d", chatID)
 	return nil
 }
 
