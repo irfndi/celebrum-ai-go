@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -52,9 +53,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
 	// Initialize telegram handler with debug logging
-	fmt.Printf("DEBUG: About to initialize Telegram handler with config: %+v\n", telegramConfig)
+	log.Printf("DEBUG: About to initialize Telegram handler with config: %+v", telegramConfig)
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
-	fmt.Printf("DEBUG: Telegram handler initialized: %+v\n", telegramHandler != nil)
+	log.Printf("DEBUG: Telegram handler initialized: %+v", telegramHandler != nil)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
@@ -68,9 +69,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		// Note: NewFuturesArbitrageHandler doesn't return an error in its current signature,
 		// but we check for db.Pool to prevent panics inside it.
 		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
-		fmt.Println("Futures arbitrage handler initialized successfully")
+		log.Printf("Futures arbitrage handler initialized successfully")
 	} else {
-		fmt.Println("Database not available for futures arbitrage handler initialization")
+		log.Printf("Database not available for futures arbitrage handler initialization")
 	}
 
 	// API v1 routes with telemetry
@@ -107,9 +108,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 				futuresArbitrage.GET("/market-summary", futuresArbitrageHandler.GetFuturesMarketSummary)
 				futuresArbitrage.POST("/position-sizing", futuresArbitrageHandler.GetPositionSizingRecommendation)
 			}
-			fmt.Println("Futures arbitrage routes registered successfully")
+			log.Printf("Futures arbitrage routes registered successfully")
 		} else {
-			fmt.Println("Skipping futures arbitrage routes due to handler initialization failure")
+			log.Printf("Skipping futures arbitrage routes due to handler initialization failure")
 		}
 
 		// Technical analysis routes

@@ -21,7 +21,9 @@ if (sentryDsn) {
     tracesSampleRate: Number.isFinite(tracesSampleRate)
       ? tracesSampleRate
       : 0,
-    // @ts-ignore - profilesSampleRate might be missing in BunOptions type definition
+    // @ts-ignore - profilesSampleRate is not present in @sentry/bun BunOptions type definition
+    // as of version 7.90.0. This field enables profiling for performance monitoring.
+    // See: https://docs.sentry.io/platforms/javascript/profiling/
     profilesSampleRate: Number.isFinite(profilesSampleRate)
       ? profilesSampleRate
       : 0,
