@@ -35,6 +35,15 @@ log_error() {
     echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1"
 }
 
+# run_psql executes psql with the appropriate connection parameters
+run_psql() {
+    if [ -n "$DATABASE_URL" ]; then
+        psql "$DATABASE_URL" "$@"
+    else
+        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$@"
+    fi
+}
+
 # migration_applied checks whether a given migration filename is recorded as applied in the database's schema_migrations table.
 # Takes the migration filename as the first argument.
 # Returns exit status 0 if the schema_migrations table exists and the filename is marked applied; returns non-zero otherwise.
@@ -42,14 +51,12 @@ migration_applied() {
     local migration_name="$1"
     
     # Check if schema_migrations table exists
-    if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "\dt" | grep -q schema_migrations; then
+    if ! run_psql -c "\dt" | grep -q schema_migrations; then
         return 1
     fi
     
     # Check if migration has been applied
-    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-        -c "SELECT 1 FROM schema_migrations WHERE filename = \$1 AND applied = true" \
-        "$migration_name" -t -A 2>/dev/null | grep -q 1
+    run_psql -c "SELECT 1 FROM schema_migrations WHERE filename = '$migration_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
 }
 
 # apply_migration applies a SQL migration file to the configured database, records the migration in the `schema_migrations` table, skips the file if it is already recorded as applied, and exits with a non-zero status on failure.
@@ -66,12 +73,11 @@ apply_migration() {
     log "Applying migration: $migration_name"
     
     # Apply the migration
-    if PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$migration_file"; then
+    if run_psql -f "$migration_file"; then
         log "Successfully applied migration: $migration_name"
         
         # Record migration in schema_migrations table
-        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-            -v migration_name="$migration_name" \
+        run_psql -v migration_name="$migration_name" \
             -c "INSERT INTO schema_migrations (filename, applied) VALUES (:'migration_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
     else
         log_error "Failed to apply migration: $migration_name"
@@ -82,7 +88,7 @@ apply_migration() {
 # create_migrations_table creates the schema_migrations table if it does not exist.
 # The table tracks applied migrations with columns: id (primary key), filename (unique, not null), applied (boolean), and applied_at (timestamp with time zone).
 create_migrations_table() {
-    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
+    run_psql -c "
         CREATE TABLE IF NOT EXISTS schema_migrations (
             id SERIAL PRIMARY KEY,
             filename VARCHAR(255) UNIQUE NOT NULL,

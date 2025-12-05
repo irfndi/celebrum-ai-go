@@ -44,19 +44,34 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         exit 1
     fi
 
-    # Export DB_ vars from DATABASE_ vars for migrate.sh
-    export DB_HOST="${DATABASE_HOST:-localhost}"
-    export DB_PORT="${DATABASE_PORT:-5432}"
-    export DB_NAME="${DATABASE_DBNAME:-celebrum_ai}"
-    export DB_USER="${DATABASE_USER:-postgres}"
-    export DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
+    # Check for connection string in DATABASE_HOST
+    if echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
+        export DATABASE_URL="${DATABASE_HOST}"
+    fi
 
-    # Wait for database to be ready
-    log "Waiting for database at ${DB_HOST}:${DB_PORT}..."
-    until PGPASSWORD="${DB_PASSWORD}" pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}"; do
-        log "Database not ready, waiting..."
-        sleep 2
-    done
+    if [ -n "$DATABASE_URL" ]; then
+        log "Using DATABASE_URL for connection..."
+        export DATABASE_URL
+        # Wait for database to be ready using URL
+        until pg_isready -d "$DATABASE_URL"; do
+            log "Database not ready, waiting..."
+            sleep 2
+        done
+    else
+        # Export DB_ vars from DATABASE_ vars for migrate.sh
+        export DB_HOST="${DATABASE_HOST:-localhost}"
+        export DB_PORT="${DATABASE_PORT:-5432}"
+        export DB_NAME="${DATABASE_DBNAME:-celebrum_ai}"
+        export DB_USER="${DATABASE_USER:-postgres}"
+        export DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
+
+        # Wait for database to be ready
+        log "Waiting for database at ${DB_HOST}:${DB_PORT}..."
+        until PGPASSWORD="${DB_PASSWORD}" pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}"; do
+            log "Database not ready, waiting..."
+            sleep 2
+        done
+    fi
     log "Database is ready."
 
     if "$MIGRATE_SCRIPT"; then
