@@ -61,7 +61,8 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
             # If the hostnames differ, patch DATABASE_URL with DATABASE_HOST
             if [ -n "$CURRENT_HOST" ] && [ "$CURRENT_HOST" != "$DATABASE_HOST" ]; then
                 log "Patching DATABASE_URL: Replacing host '$CURRENT_HOST' with '${DATABASE_HOST}'..."
-                export DATABASE_URL=$(echo "$DATABASE_URL" | sed "s|@${CURRENT_HOST}:|@${DATABASE_HOST}:|")
+                DATABASE_URL=$(echo "$DATABASE_URL" | sed "s|@${CURRENT_HOST}:|@${DATABASE_HOST}:|")
+                export DATABASE_URL
                 log "Updated DATABASE_URL host to: ${DATABASE_HOST}"
             fi
         fi
