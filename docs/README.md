@@ -9,11 +9,11 @@ This folder contains all project documentation organized by category.
 Guides for deploying and managing the application in various environments.
 
 - [VPS Systemd Guide](./deployment/vps-systemd-guide.md) - Comprehensive guide for VPS deployment using systemd
-- [Deployment Guide](./deployment/deployment-guide.md) - Basic deployment instructions
-- [Deployment Best Practices](./deployment/DEPLOYMENT_BEST_PRACTICES.md) - Recommended practices for production deployments
-- [Deployment Improvements Summary](./deployment/DEPLOYMENT_IMPROVEMENTS_SUMMARY.md) - Summary of deployment improvements
-- [Environment Sync](./deployment/environment-sync.md) - Managing environment configurations
-- [Legacy Deployment](./deployment/DEPLOYMENT.md) - Legacy deployment reference (for migration)
+- [Production Deployment Guide](./deployment/DEPLOYMENT.md) - Production deployment reference
+- [Docker Deployment (Archived)](./old/MANUAL_DOCKER_DEPLOYMENT.md) - Archived Docker deployment guide
+- [Deployment Best Practices](./old/DEPLOYMENT_BEST_PRACTICES.md) - Recommended practices for production deployments
+- [Deployment Improvements Summary](./old/DEPLOYMENT_IMPROVEMENTS_SUMMARY.md) - Summary of deployment improvements
+- [Environment Sync](./old/environment-sync.md) - Managing environment configurations
 
 ### [Architecture](./architecture/)
 
@@ -28,7 +28,8 @@ System design and architectural documentation.
 
 Security-related documentation and best practices.
 
-- [Security Overview](./security/SECURITY.md) - General security guidelines
+- [Security Configuration](./security/SECURITY_CONFIGURATION.md) - Security configuration guide
+- [Security Policy](./security/SECURITY_POLICY.md) - Security reporting policy
 - [Security Credentials](./security/SECURITY_CREDENTIALS.md) - Managing credentials securely
 - [Secrets Management](./security/SECRETS_MANAGEMENT.md) - Handling secrets and sensitive data
 - [Redis Security](./security/REDIS_SECURITY.md) - Redis-specific security configurations
@@ -39,6 +40,7 @@ Developer guides and setup documentation.
 
 - [Cross-Platform Setup](./development/CROSS_PLATFORM_SETUP.md) - Setting up development environment across platforms
 - [Local Debugging Guide](./development/LOCAL_DEBUGGING_GUIDE.md) - Debugging the application locally
+- [Configuration Guide](./development/CONFIGURATION.md) - Application configuration guide
 
 ### [Troubleshooting](./troubleshooting/)
 
@@ -46,11 +48,12 @@ Guides for diagnosing and resolving issues.
 
 - [Error Recovery](./troubleshooting/ERROR_RECOVERY.md) - Recovering from common errors
 - [Telegram Bot Troubleshooting](./troubleshooting/TELEGRAM_BOT_TROUBLESHOOTING.md) - Telegram bot specific issues
-- [Fix Notes](./troubleshooting/fix.txt) - Miscellaneous fix notes
+- [CI Troubleshooting](./troubleshooting/CI_TROUBLESHOOTING.md) - Troubleshooting CI/CD issues
+- [Fix Notes (Archived)](./old/fix.txt) - Miscellaneous fix notes
 
 ## Quick Links
 
 - [Main README](../README.md) - Project overview and quick start
 - [Contributing](../CONTRIBUTING.md) - Contribution guidelines
 - [Code of Conduct](../CODE_OF_CONDUCT.md) - Community guidelines
-- [Security Policy](../SECURITY.md) - Security reporting
+- [Security Policy](./security/SECURITY_POLICY.md) - Security reporting

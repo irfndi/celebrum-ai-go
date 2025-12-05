@@ -4,7 +4,7 @@
 - `cmd/server/main.go` is the HTTP entrypoint; runtime wiring lives under `internal/` (API handlers, services, config, telemetry, cache, CCXT integration).
 - Shared packages live in `pkg/`; prefer `internal/` for app-specific logic and keep reusable abstractions in `pkg/`.
 - The Bun-based exchange service resides in `ccxt-service/`; treat it as a sibling project with its own tests and Docker build.
-- Configuration templates are in `configs/`; copy `.env.template` or `configs/config.template.yml` when bootstrapping environments.
+- Configuration templates are in the root directory (`config.yml`); copy `.env.example` when bootstrapping environments.
 - Tests live beside source as `*_test.go`; integration suites and mocks live in `test/`.
 
 ## Build, Test, and Development Commands

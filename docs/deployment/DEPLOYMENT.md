@@ -1,140 +1,87 @@
-# Deployment Guide for Celebrum AI (VPS)
+# Deployment Guide (Coolify)
 
-## Overview
+This project is designed to be deployed on a VPS managed by [Coolify](https://coolify.io/).
+We use a single Docker container architecture that unifies the Go backend and Bun (CCXT) service, while relying on Coolify-managed PostgreSQL and Redis services.
 
-**User:** `root` (for deployment ops), `celebrum` (runtime user)
-**App Directory:** `/root/apps/celebrum-ai/`
-**Service Name:** `celebrum-ai.service`
+## Architecture
 
-## Prerequisites
-
-- SSH access to your VPS server
-- Local installation of `rsync`
-- Go 1.24+ installed locally
-- Local project with `Makefile`
+- **Application Container**: A single Docker container running both the Go application (port 8080) and the CCXT service (port 3000).
+- **Database**: Managed PostgreSQL service (provisioned via Coolify).
+- **Cache**: Managed Redis service (provisioned via Coolify).
+- **Routing**: Handled automatically by Coolify's built-in Traefik proxy.
 
 ## Deployment Steps
 
-### 1. Build Binary Locally
+### 1. Prepare Coolify Resources
 
-Build the Go binary before deployment:
+1.  **Create a Project** in Coolify.
+2.  **Add a PostgreSQL Service**:
+    - Note the connection details (Host, Port, User, Password, Database).
+    - Allow external access if you need to run migrations from your local machine (optional, as migrations run automatically on startup).
+3.  **Add a Redis Service**:
+    - Note the connection details (Host, Port, Password).
 
-```bash
-make build
-```
+### 2. Configure Application Resource
 
-### 2. Sync Code
+1.  **Add New Resource** -> **GitHub/GitLab Repository**.
+2.  Select this repository and branch (e.g., `main`).
+3.  **Build Pack**: Select **Docker Compose**.
+4.  **Docker Compose File**: Coolify should automatically detect `docker-compose.yml`.
+    - Ensure it uses the `docker-compose.yml` (which defines only the `celebrum` service), NOT `docker-compose.dev.yml`.
 
-Use `rsync` to upload the code. **Important:** Exclude local config files (`.env`) and development artifacts.
+### 3. Environment Variables
 
-```bash
-rsync -avz \
-  --exclude '.git' \
-  --exclude 'bin/' \
-  --exclude '.cache' \
-  --exclude 'coverage.out' \
-  --exclude 'coverage.html' \
-  --exclude '.env' \
-  --exclude 'node_modules' \
-  . root@YOUR_SERVER:/root/apps/celebrum-ai/code/
-```
+Configure the following environment variables in Coolify for the application resource:
 
-### 3. Fix Permissions
+| Variable | Description | Example / Value |
+|----------|-------------|-----------------|
+| `DATABASE_HOST` | PostgreSQL Host | `uuid-of-postgres-service` (internal DNS) |
+| `DATABASE_PORT` | PostgreSQL Port | `5432` |
+| `DATABASE_USER` | PostgreSQL User | `postgres` |
+| `DATABASE_PASSWORD` | PostgreSQL Password | `your-db-password` |
+| `DATABASE_DBNAME` | PostgreSQL Database Name | `celebrum_ai` |
+| `REDIS_HOST` | Redis Host | `uuid-of-redis-service` (internal DNS) |
+| `REDIS_PORT` | Redis Port | `6379` |
+| `JWT_SECRET` | Secret for JWT tokens | `generate-secure-random-string` |
+| `CCXT_SERVICE_URL` | Internal URL for CCXT | `http://localhost:3000` (Internal loopback) |
+| `RUN_MIGRATIONS` | Auto-run DB migrations | `true` |
+| `EXTERNAL_CONNECTIONS_ENABLED` | Enable external APIs | `true` |
+| `TELEGRAM_WEBHOOK_ENABLED` | Enable Telegram bot | `true` |
 
-Ensure the runtime user owns the files.
+**Note:** Use the *internal* network names (usually the container name or UUID provided by Coolify) for `DATABASE_HOST` and `REDIS_HOST` to ensure low latency and security.
 
-```bash
-ssh root@YOUR_SERVER "chown -R celebrum:celebrum /root/apps/celebrum-ai"
-```
+### 4. Deploy
 
-### 4. Run Migrations
+1.  Click **Deploy**.
+2.  Coolify will:
+    - Pull the code.
+    - Build the Docker image (using the multi-stage `Dockerfile`).
+    - Start the container.
+    - The `entrypoint.sh` script will automatically run database migrations.
+    - Traefik will automatically route traffic to the exposed ports.
 
-Apply database changes using the migration script.
+### 5. Domain Configuration
 
-```bash
-ssh root@YOUR_SERVER "cd /root/apps/celebrum-ai/code && make migrate"
-```
+1.  In Coolify, go to the Application settings.
+2.  Set the **Domains** (e.g., `https://api.celebrum.ai`).
+3.  Coolify/Traefik will handle SSL termination automatically.
 
-### 5. Restart Service
+## Local Development
 
-Restart the systemd service to pick up changes.
-
-```bash
-ssh root@YOUR_SERVER "systemctl restart celebrum-ai.service"
-```
-
-### 6. Verify Deployment
-
-Check the service status and logs.
-
-```bash
-ssh root@YOUR_SERVER "systemctl status celebrum-ai.service"
-ssh root@YOUR_SERVER "journalctl -u celebrum-ai.service -f"
-```
-
-## Environment Variables
-
-The `.env` file is located at `/root/apps/celebrum-ai/code/.env` on the server.
-**DO NOT** overwrite it with your local `.env`.
-If you need to add variables, edit it manually on the server:
+For local development, we use `docker-compose.dev.yml` which includes local PostgreSQL and Redis containers.
 
 ```bash
-ssh root@YOUR_SERVER "nano /root/apps/celebrum-ai/code/.env"
-# Then restart the service
-ssh root@YOUR_SERVER "systemctl restart celebrum-ai.service"
+# Start development environment (App + DB + Redis)
+make dev-up-orchestrated
+
+# Stop development environment
+make dev-down
+
+# Run migrations locally
+make db-migrate
 ```
 
 ## Troubleshooting
 
-- **Database logs:** `journalctl -u celebrum-ai-postgres.service`
-- **Redis logs:** `journalctl -u celebrum-ai-redis.service`
-- **App logs:** `journalctl -u celebrum-ai.service`
-
-## Backup & Recovery
-
-Backups are configured to run daily at 03:00 AM.
-
-- **Script Location:** `/root/apps/celebrum-ai/scripts/backup.sh`
-- **Backup Location:** `/root/apps/celebrum-ai/backups/`
-- **Retention:** 7 days
-- **Log File:** `/var/log/celebrum-ai-backup.log`
-
-### Manual Backup
-
-To trigger a backup manually:
-
-```bash
-ssh root@YOUR_SERVER "/root/apps/celebrum-ai/scripts/backup.sh"
-```
-
-### Restore
-
-To restore from a backup:
-
-```bash
-# 1. Stop the application
-ssh root@YOUR_SERVER "systemctl stop celebrum-ai.service"
-
-# 2. Drop and recreate database (caution!)
-# ssh root@YOUR_SERVER "dropdb -h localhost -p 5433 -U celebrum celebrum_db && createdb -h localhost -p 5433 -U celebrum celebrum_db"
-
-# 3. Import the backup
-# ssh root@YOUR_SERVER "gunzip -c /root/apps/celebrum-ai/backups/celebrum_db_YYYYMMDD_HHMMSS.sql.gz | psql -h localhost -p 5433 -U celebrum celebrum_db"
-
-# 4. Restart application
-ssh root@YOUR_SERVER "systemctl start celebrum-ai.service"
-```
-
-## Logging
-
-Logging is handled by systemd journal.
-
-- **View real-time logs:** `journalctl -u celebrum-ai.service -f`
-- **View logs since boot:** `journalctl -u celebrum-ai.service -b`
-- **View specific time range:** `journalctl -u celebrum-ai.service --since "1 hour ago"`
-
-## See Also
-
-- [VPS Systemd Guide](./vps-systemd-guide.md) - Comprehensive systemd setup guide
-- [Deployment Best Practices](./DEPLOYMENT_BEST_PRACTICES.md) - Best practices for deployment
-
+- **Migration Failures**: Check the deployment logs. Ensure `DATABASE_` env vars are correct.
+- **Service Communication**: The Go app communicates with the CCXT service via `localhost:3000` inside the container. Ensure `CCXT_SERVICE_URL` is set to `http://localhost:3000`.

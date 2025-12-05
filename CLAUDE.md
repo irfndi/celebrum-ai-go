@@ -43,19 +43,6 @@ make deploy                   # Deploy to production (containers)
 make deploy-staging           # Deploy to staging (containers)
 make health-prod              # Check production health
 
-# Hybrid deployment (NEW)
-make docker-build-hybrid      # Build multi-stage Docker with artifact extraction
-make deploy-binary            # Deploy binary artifacts to staging
-make setup-staging            # Setup staging environment for hybrid deployment
-make artifact-manager         # Manage deployment artifacts
-make benchmark-deployment     # Benchmark deployment performance
-```
-
-### CCXT Service Commands
-```bash
-make ccxt-setup               # Setup CCXT Bun service
-make ccxt-dev                 # Run CCXT service in development
-make ccxt-build               # Build CCXT service
 ```
 
 ## Architecture Overview
@@ -99,7 +86,6 @@ make ccxt-build               # Build CCXT service
 - **Clean Architecture**: Separation of concerns with clear layers
 - **Microservices**: Go backend + TypeScript CCXT service
 - **Caching Strategy**: Redis for performance optimization
-- **Observability**: OpenTelemetry integration with SigNoz
 - **Circuit Breaker**: Fault tolerance for external services
 - **Background Processing**: Workers for data collection and analysis
 
@@ -109,9 +95,8 @@ make ccxt-build               # Build CCXT service
 - **Database**: PostgreSQL 15+ with Redis 7+ for caching
 - **Market Data**: CCXT via Bun service for exchange integration
 - **Testing**: testify, pgxmock, miniredis
-- **Monitoring**: OpenTelemetry with SigNoz observability stack
-- **Deployment**: Docker containers on Digital Ocean
-- **CI/CD**: GitHub Actions with automated deployment
+- **Deployment**: Docker containers on Coolify
+- **CI/CD**: GitHub Actions with automated deployment via Coolify
 
 ## Development Environment Setup
 
@@ -172,104 +157,22 @@ go test -race ./...
 - External service configurations
 
 ### Configuration Files
-- `configs/config.yaml`: Default configuration
+- `config.yml`: Default configuration
 - `.env`: Environment-specific overrides
-- Docker Compose files for different environments
+- `docker-compose.yml`: Single Docker configuration
 
 ## Deployment Architecture
 
-### Hybrid Deployment Approach
+### Coolify + Docker
 
-The project uses a hybrid deployment strategy that combines the reproducibility of Docker builds with the efficiency of binary deployment:
+The project uses Coolify for deployment management:
 
-#### Benefits of Hybrid Deployment
-- **Reproducible Builds**: Docker ensures consistent build environments
-- **Efficient Deployment**: Binary deployment reduces container overhead
-- **Fast Rollbacks**: Artifact versioning enables quick rollbacks
-- **Flexible Deployment**: Support for both container and binary deployment methods
-- **Reduced Resource Usage**: Binaries use fewer resources than containers
+1. **Automated Deployment**: Pushing to the repository triggers deployment via Coolify webhooks.
+2. **Single Dockerfile**: The root `Dockerfile` builds both the Go backend and CCXT service.
+3. **Environment Management**: Managed through Coolify's UI.
 
-#### Deployment Methods
-
-**1. Container Deployment (Traditional)**
-```bash
-# Build and deploy containers
-make docker-build
-make deploy-staging
-make deploy
-```
-
-**2. Binary Deployment (Hybrid Approach)**
-```bash
-# Build Docker images and extract binaries
-make docker-build-hybrid
-
-# Deploy binaries to staging
-make deploy-binary
-
-# Manage artifacts
-./scripts/artifact-manager.sh store deployment.tar.gz 1.0.0 staging
-./scripts/artifact-manager.sh list
-./scripts/artifact-manager.sh get go-backend latest
-```
-
-#### Artifact Management
-
-The hybrid approach includes comprehensive artifact management:
-
-- **Storage**: Artifacts stored in `/opt/celebrum-ai/artifacts/`
-- **Versioning**: Semantic versioning with environment tracking
-- **Cleanup**: Automatic cleanup of old artifacts (configurable retention)
-- **Metadata**: Comprehensive metadata including checksums and build information
-
-#### Multi-Stage Docker Builds
-
-Both services use multi-stage Docker builds:
-
-1. **Builder Stage**: Full build environment with all dependencies
-2. **Production Stage**: Optimized runtime with minimal dependencies
-3. **Binary Stage**: Extracts binaries for artifact deployment
-
-#### CI/CD Pipeline Enhancements
-
-The updated CI/CD pipeline supports both deployment methods:
-
-- **Parallel Builds**: Container and artifact builds run simultaneously
-- **Environment-Specific Deployment**: Staging tests both approaches
-- **Artifact Upload**: Automatic artifact storage and versioning
-- **Rollback Support**: Quick rollback to previous artifact versions
-
-### Production Deployment
-- Zero-downtime deployments with automatic rollback
-- Health monitoring for all services
-- Automated recovery for failed services
-- Comprehensive logging and alerting
-- Backup automation before deployments
-
-### CI/CD Pipeline
-- Automatic testing on push/PR
-- Docker image building and pushing
-- Automated deployment to production
-- Health checks and rollback on failure
-
-### Environment Setup
-- Development: `docker-compose.yml`
-- Production: `docker-compose.single-droplet.yml`
-- CI: `docker-compose.ci.yml`
-- Staging: `setup-staging.sh` (hybrid deployment testing)
 
 ## Observability and Monitoring
-
-### OpenTelemetry Integration
-- Traces: Request tracing across services
-- Metrics: Performance and business metrics
-- Logs: Structured logging with correlation IDs
-
-### SigNoz Stack
-- Query service for traces and metrics
-- ClickHouse for data storage
-- OpenTelemetry collector
-- Web UI for visualization
 
 ### Health Checks
 - `/health` endpoint for service monitoring
@@ -332,21 +235,12 @@ The updated CI/CD pipeline supports both deployment methods:
 - Database connection issues: Check PostgreSQL and Redis status
 - CCXT service problems: Verify Bun installation and dependencies
 - Performance issues: Monitor resource usage and query performance
-- Deployment failures: Check GitHub Actions logs and server configuration
+- Deployment failures: Check Coolify logs and server configuration
 
 ### Debug Commands
 ```bash
-# Check service status
-make status
-make status-prod
-
-# View logs
+# Check logs
 make logs
-make logs-ccxt
-
-# Health checks
-make health
-make health-prod
 
 # Database operations
 make migrate-status

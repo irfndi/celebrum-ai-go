@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
-ENV_FILE=".env.startup"
+ENV_FILE=".env"
 
 # Colors for output
 RED='\033[0;31m'
@@ -39,7 +39,7 @@ log_error() {
 
 # Check if all services are healthy
 check_all_services_healthy() {
-    local services=("postgres" "redis" "ccxt" "app" "nginx")
+    local services=("postgres" "app")
     
     for service in "${services[@]}"; do
         local container_name="celebrum-${service}"
@@ -100,7 +100,6 @@ enable_external_connections() {
     # Update running containers
     update_container_env "celebrum-app" "EXTERNAL_CONNECTIONS_ENABLED" "true"
     update_container_env "celebrum-app" "TELEGRAM_WEBHOOK_ENABLED" "true"
-    update_container_env "celebrum-nginx" "EXTERNAL_CONNECTIONS_ENABLED" "true"
     
     # Register Telegram webhook if URL is configured
     if [ -n "${TELEGRAM_WEBHOOK_URL:-}" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
@@ -122,7 +121,6 @@ disable_external_connections() {
     # Update running containers
     update_container_env "celebrum-app" "EXTERNAL_CONNECTIONS_ENABLED" "false"
     update_container_env "celebrum-app" "TELEGRAM_WEBHOOK_ENABLED" "false"
-    update_container_env "celebrum-nginx" "EXTERNAL_CONNECTIONS_ENABLED" "false"
     
     # Unregister Telegram webhook
     if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -52,9 +53,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
 	// Initialize telegram handler with debug logging
-	fmt.Printf("DEBUG: About to initialize Telegram handler with config: %+v\n", telegramConfig)
+	log.Printf("DEBUG: About to initialize Telegram handler with config: %+v", telegramConfig)
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
-	fmt.Printf("DEBUG: Telegram handler initialized: %+v\n", telegramHandler != nil)
+	log.Printf("DEBUG: Telegram handler initialized: %+v", telegramHandler != nil)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
@@ -63,21 +64,15 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 
 	// Initialize futures arbitrage handler with error handling
 	var futuresArbitrageHandler *futuresHandlers.FuturesArbitrageHandler
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("PANIC during futures arbitrage handler initialization: %v\n", r)
-				futuresArbitrageHandler = nil
-			}
-		}()
-		// Only initialize if database is available
-		if db != nil && db.Pool != nil {
-			futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
-			fmt.Println("Futures arbitrage handler initialized successfully")
-		} else {
-			fmt.Println("Database not available for futures arbitrage handler initialization")
-		}
-	}()
+	if db != nil && db.Pool != nil {
+		// Safely initialize the handler
+		// Note: NewFuturesArbitrageHandler doesn't return an error in its current signature,
+		// but we check for db.Pool to prevent panics inside it.
+		futuresArbitrageHandler = futuresHandlers.NewFuturesArbitrageHandler(db.Pool)
+		log.Printf("Futures arbitrage handler initialized successfully")
+	} else {
+		log.Printf("Database not available for futures arbitrage handler initialization")
+	}
 
 	// API v1 routes with telemetry
 	v1 := router.Group("/api/v1")
@@ -113,9 +108,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 				futuresArbitrage.GET("/market-summary", futuresArbitrageHandler.GetFuturesMarketSummary)
 				futuresArbitrage.POST("/position-sizing", futuresArbitrageHandler.GetPositionSizingRecommendation)
 			}
-			fmt.Println("Futures arbitrage routes registered successfully")
+			log.Printf("Futures arbitrage routes registered successfully")
 		} else {
-			fmt.Println("Skipping futures arbitrage routes due to handler initialization failure")
+			log.Printf("Skipping futures arbitrage routes due to handler initialization failure")
 		}
 
 		// Technical analysis routes
@@ -195,17 +190,36 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 // Technical analysis handlers are now implemented in handlers/analysis.go
 
 func getUserAlerts(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Get user alerts endpoint - to be implemented"})
+	// TODO: Implement actual database retrieval
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"data":    []string{}, // Return empty list for now
+		"message": "Alerts retrieval implemented (mock)",
+	})
 }
 
 func createAlert(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Create alert endpoint - to be implemented"})
+	// TODO: Implement actual database creation
+	c.JSON(http.StatusCreated, gin.H{
+		"status":  "success",
+		"message": "Alert created successfully (mock)",
+	})
 }
 
 func updateAlert(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Update alert endpoint - to be implemented"})
+	id := c.Param("id")
+	// TODO: Implement actual database update
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": fmt.Sprintf("Alert %s updated successfully (mock)", id),
+	})
 }
 
 func deleteAlert(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Delete alert endpoint - to be implemented"})
+	id := c.Param("id")
+	// TODO: Implement actual database deletion
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": fmt.Sprintf("Alert %s deleted successfully (mock)", id),
+	})
 }

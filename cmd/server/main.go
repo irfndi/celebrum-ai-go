@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/api"
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
@@ -18,6 +19,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/middleware"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
@@ -54,7 +56,11 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "Failed to initialize telemetry: %v\n", err)
 		// Don't exit on telemetry failure, continue with reduced observability
 	}
+	if err := observability.InitSentry(cfg.Sentry, cfg.Telemetry.ServiceVersion, cfg.Environment); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize Sentry: %v\n", err)
+	}
 	defer func() {
+		observability.Flush(context.Background())
 		if err := telemetry.Shutdown(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to shutdown telemetry: %v\n", err)
 		}
@@ -253,6 +259,13 @@ func run() error {
 	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Logger())
+	if cfg.Sentry.Enabled && cfg.Sentry.DSN != "" {
+		router.Use(sentrygin.New(sentrygin.Options{
+			Repanic:         true,
+			WaitForDelivery: false,
+			Timeout:         2 * time.Second,
+		}))
+	}
 	router.Use(gin.Recovery())
 	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
 

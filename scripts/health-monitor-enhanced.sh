@@ -17,15 +17,13 @@ RESTART_COOLDOWN=60
 ALERT_THRESHOLD=3
 
 # Service configuration
-SERVICES=("postgres" "redis" "app" "ccxt" "nginx")
-CRITICAL_SERVICES=("postgres" "redis" "app")
-OPTIONAL_SERVICES=("ccxt" "nginx")
+SERVICES=("postgres" "celebrum")
+CRITICAL_SERVICES=("postgres" "celebrum")
+OPTIONAL_SERVICES=()
 
 # Health check endpoints
 declare -A HEALTH_ENDPOINTS=(
-    ["app"]="http://localhost:8080/health"
-    ["ccxt"]="http://localhost:3000/health"
-    ["nginx"]="http://localhost:80/health"
+    ["celebrum"]="http://localhost:8080/health"
 )
 
 # Colors for output
@@ -159,18 +157,6 @@ check_database_health() {
     fi
 }
 
-# Check Redis connectivity
-check_redis_health() {
-    local service="redis"
-    
-    # Check if Redis responds to ping
-    if docker-compose exec -T "$service" redis-cli ping 2>/dev/null | grep -q PONG; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Comprehensive service health check
 check_service_health() {
     local service="$1"
@@ -187,14 +173,7 @@ check_service_health() {
                         return 1
                     fi
                     ;;
-                "redis")
-                    if check_redis_health; then
-                        return 0
-                    else
-                        return 1
-                    fi
-                    ;;
-                "app"|"ccxt")
+                "celebrum")
                     if check_http_endpoint "$service"; then
                         return 0
                     else
@@ -212,10 +191,7 @@ check_service_health() {
                 "postgres")
                     check_database_health
                     ;;
-                "redis")
-                    check_redis_health
-                    ;;
-                "app"|"ccxt")
+                "celebrum")
                     check_http_endpoint "$service"
                     ;;
                 *)
@@ -558,6 +534,9 @@ main() {
         "help")
             show_help
             ;;
+        "")
+            show_status
+            ;;
         *)
             log_error "Unknown command: $command"
             show_help
@@ -585,10 +564,7 @@ Commands:
 Targets:
   all        - All services (default)
   postgres   - PostgreSQL database
-  redis      - Redis cache
-  app        - Main application
-  ccxt       - CCXT service
-  nginx      - Nginx proxy
+  celebrum   - Main application (Unified)
 
 Duration (for monitor command):
   0          - Infinite monitoring (default)

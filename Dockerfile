@@ -1,78 +1,84 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# ==========================================
+# Stage 1: Go Builder
+# ==========================================
+FROM golang:1.25-alpine AS go-builder
 
-# Install git and ca-certificates (needed for go mod download)
+# Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates tzdata
 
-# Set working directory
 WORKDIR /app
 
 # Copy go mod files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
 # Copy source code
 COPY . .
 
-# Build the application with optimizations
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server && \
     chmod +x main
 
-# Production stage
-FROM alpine:3.21 AS production
+# ==========================================
+# Stage 2: CCXT Service Builder (Bun)
+# ==========================================
+FROM oven/bun:1-alpine AS ccxt-builder
+WORKDIR /app
 
-# Install only essential runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata wget curl
+# Copy ccxt-service files
+COPY services/ccxt/package.json services/ccxt/bun.lock ./
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+# Copy source code
+COPY services/ccxt/ .
+
+# Build
+RUN bun run build
+
+# Prune dev dependencies
+RUN bun install --frozen-lockfile --production
+
+# ==========================================
+# Stage 3: Unified Runtime (Go + Bun)
+# ==========================================
+FROM oven/bun:1-alpine AS production
+
+RUN apk --no-cache add ca-certificates tzdata wget curl bash postgresql-client
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
-# Set working directory
-WORKDIR /root/
+WORKDIR /app
 
-# Copy the binary from builder stage
-COPY --from=builder /app/main .
+# Copy Go binary and configs
+COPY --from=go-builder /app/main .
+COPY --from=go-builder /app/config.yml .
+COPY --from=go-builder /app/scripts ./scripts
+COPY --from=go-builder /app/database ./database
 
-# Copy configuration files
-COPY --from=builder /app/configs ./configs
+# Copy CCXT service
+WORKDIR /app/ccxt
+COPY --from=ccxt-builder /app/node_modules ./node_modules
+COPY --from=ccxt-builder /app/dist ./dist
+COPY --from=ccxt-builder /app/package.json .
+COPY --from=ccxt-builder /app/tracing-utils.js ./dist/tracing.js
 
-# Copy scripts directory
-COPY --from=builder /app/scripts ./scripts
+WORKDIR /app
 
-# Change ownership to non-root user
-RUN chown -R appuser:appgroup /root
+# Permissions
+RUN chown -R appuser:appgroup /app && \
+    chmod +x scripts/entrypoint.sh
 
-# Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8080
+# Expose ports (Go: 8080, Bun: 3000)
+EXPOSE 8080 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Healthcheck (checks Go app)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["./main"]
-
-# Binary extraction stage - for artifact deployment
-FROM scratch AS binary
-
-# Copy only the essential files for deployment
-COPY --from=builder /app/main .
-COPY --from=builder /app/configs ./configs/
-
-# Debug stage (includes debugging tools)
-FROM production AS debug
-
-# Switch to root to install debugging tools
-USER root
-
-# Install debugging and monitoring tools for development/debugging
-RUN apk --no-cache add procps htop strace lsof tcpdump
-
-# Switch back to non-root user for debug stage
-USER appuser
+CMD ["./scripts/entrypoint.sh"]

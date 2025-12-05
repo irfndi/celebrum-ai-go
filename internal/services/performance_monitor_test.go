@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ import (
 
 func TestNewPerformanceMonitor(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -32,7 +33,7 @@ func TestNewPerformanceMonitor(t *testing.T) {
 
 func TestPerformanceMonitor_Start(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -53,7 +54,7 @@ func TestPerformanceMonitor_Start(t *testing.T) {
 
 func TestPerformanceMonitor_Stop(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -78,7 +79,7 @@ func TestPerformanceMonitor_Stop(t *testing.T) {
 
 func TestPerformanceMonitor_GetSystemMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -104,7 +105,7 @@ func TestPerformanceMonitor_GetSystemMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_GetApplicationMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -123,7 +124,7 @@ func TestPerformanceMonitor_GetApplicationMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_UpdateCollectorMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -153,7 +154,7 @@ func TestPerformanceMonitor_UpdateCollectorMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_UpdateAPIMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -177,7 +178,7 @@ func TestPerformanceMonitor_UpdateAPIMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_UpdateTelegramMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -201,7 +202,7 @@ func TestPerformanceMonitor_UpdateTelegramMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_RecordWorkerHealth(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -224,7 +225,7 @@ func TestPerformanceMonitor_RecordWorkerHealth(t *testing.T) {
 
 func TestPerformanceMonitor_GetPerformanceReport(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -249,7 +250,7 @@ func TestPerformanceMonitor_GetPerformanceReport(t *testing.T) {
 
 func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -305,7 +306,7 @@ func TestPerformanceMonitor_CalculateHealthScore(t *testing.T) {
 
 func TestPerformanceMonitor_ConcurrentAccess(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -348,7 +349,7 @@ func TestPerformanceMonitor_ConcurrentAccess(t *testing.T) {
 
 func TestPerformanceMonitor_CacheMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -380,7 +381,7 @@ func TestPerformanceMonitor_CacheMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_CollectSystemMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -411,7 +412,7 @@ func TestPerformanceMonitor_CollectSystemMetrics(t *testing.T) {
 
 func TestPerformanceMonitor_CollectRedisMetrics(t *testing.T) {
 	logger := logrus.New()
-	redisClient := getTestRedisClient()
+	redisClient := getTestRedisClient(t)
 	ctx := context.Background()
 
 	pm := NewPerformanceMonitor(logger, redisClient, ctx)
@@ -449,11 +450,18 @@ func TestPerformanceMonitor_WithNilRedis(t *testing.T) {
 }
 
 // Helper function to get test Redis client
-func getTestRedisClient() *redis.Client {
+func getTestRedisClient(t *testing.T) *redis.Client {
 	mr, err := miniredis.Run()
 	if err != nil {
-		panic(err)
+		// If we cannot bind due to "operation not permitted", skip the test.
+		// All other errors are considered fatal and should fail the test.
+		if strings.Contains(err.Error(), "operation not permitted") {
+			t.Skip("miniredis cannot bind in this environment; skipping Redis-backed performance monitor tests")
+		}
+		t.Fatalf("failed to start miniredis (not 'operation not permitted'): %v", err)
 	}
+	t.Cleanup(mr.Close)
+
 	return redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})

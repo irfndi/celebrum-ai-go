@@ -15,14 +15,10 @@ A network security scan identified that Redis was exposed on port 6379 and acces
 
 ### 2. Redis Configuration Files
 
-**For Local Development (`configs/redis/redis.conf`):**
-- Binds Redis only to localhost (127.0.0.1)
-- Disables external network access
-- Implements basic security hardening
-
-**For Docker Deployments (`configs/redis/redis-docker.conf`):**
+**Unified Configuration (`redis.conf`):**
+- Configured for Docker container environment
 - Uses Docker's internal networking for container communication
-- Blocks external internet access
+- Blocks external internet access via Docker network isolation
 - Maintains security within containerized environments
 
 ### 3. Production Deployment Security

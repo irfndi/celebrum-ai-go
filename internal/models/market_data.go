@@ -36,7 +36,11 @@ type MarketPrice struct {
 	ExchangeID   int             `json:"exchange_id"`
 	ExchangeName string          `json:"exchange_name"`
 	Symbol       string          `json:"symbol"`
-	Price        decimal.Decimal `json:"price"`
+	Bid          decimal.Decimal `json:"bid"`
+	BidVolume    decimal.Decimal `json:"bid_volume"`
+	Ask          decimal.Decimal `json:"ask"`
+	AskVolume    decimal.Decimal `json:"ask_volume"`
+	Price        decimal.Decimal `json:"price"` // Last traded price
 	Volume       decimal.Decimal `json:"volume"`
 	Timestamp    time.Time       `json:"timestamp"`
 }

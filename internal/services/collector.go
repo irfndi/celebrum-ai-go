@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/redis/go-redis/v9"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
@@ -1154,11 +1155,22 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 		return nil // Don't save invalid data, but don't fail the collection
 	}
 
-	// Save market data to database with proper column mapping
+	// Save market data to database with proper column mapping (including bid/ask for arbitrage)
+	// NOTE: BidVolume and AskVolume are currently set to zero because CCXT ticker endpoint
+	// does not provide these values. To get actual bid/ask volumes, the order book would need
+	// to be fetched separately, which would significantly increase API calls and rate limits.
+	// These fields are reserved for future implementation when order book data is integrated.
 	_, err = c.db.Pool.Exec(c.ctx,
-		`INSERT INTO market_data (exchange_id, trading_pair_id, last_price, volume_24h, timestamp, created_at) 
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		exchangeID, tradingPairID, ticker.Price, ticker.Volume, ticker.Timestamp, time.Now())
+		`INSERT INTO market_data (
+			exchange_id, trading_pair_id, 
+			bid, bid_volume, ask, ask_volume,
+			last_price, volume_24h, 
+			timestamp, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		exchangeID, tradingPairID,
+		ticker.Bid, ticker.BidVolume, ticker.Ask, ticker.AskVolume,
+		ticker.Price, ticker.Volume,
+		ticker.Timestamp, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to save market data: %w", err)
 	}

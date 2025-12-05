@@ -117,7 +117,7 @@ func TestGetUserAlerts(t *testing.T) {
 
 	// Assertions
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "Get user alerts endpoint - to be implemented")
+	assert.Contains(t, w.Body.String(), "Alerts retrieval implemented (mock)")
 }
 
 func TestCreateAlert(t *testing.T) {
@@ -134,8 +134,8 @@ func TestCreateAlert(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// Assertions
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "Create alert endpoint - to be implemented")
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Contains(t, w.Body.String(), "Alert created successfully")
 }
 
 func TestUpdateAlert(t *testing.T) {
@@ -153,7 +153,7 @@ func TestUpdateAlert(t *testing.T) {
 
 	// Assertions
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "Update alert endpoint - to be implemented")
+	assert.Contains(t, w.Body.String(), "updated successfully")
 }
 
 func TestDeleteAlert(t *testing.T) {
@@ -171,7 +171,7 @@ func TestDeleteAlert(t *testing.T) {
 
 	// Assertions
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "Delete alert endpoint - to be implemented")
+	assert.Contains(t, w.Body.String(), "deleted successfully")
 }
 
 // Test time operations in health response
@@ -358,8 +358,12 @@ func TestPlaceholderHandlers_StatusCodes(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code, "Handler %s should return 200 OK", name)
-		assert.Contains(t, w.Body.String(), "to be implemented", "Handler %s should contain placeholder message", name)
+		expectedCode := http.StatusOK
+		if name == "createAlert" {
+			expectedCode = http.StatusCreated
+		}
+		assert.Equal(t, expectedCode, w.Code, "Handler %s should return expected status", name)
+		assert.Contains(t, w.Body.String(), "success", "Handler %s should return success payload", name)
 	}
 }
 
