@@ -62,21 +62,13 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
                  export CHECK_DB_USER="${DATABASE_USER:-postgres}"
                  export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
                  
-                 # Check connectivity to DATABASE_HOST
-                 # We capture the exit code: 0=Ready, 1=Rejecting(Up), 2=NoResponse(Down), 3=Error
-                 set +e # Temporarily disable exit-on-error
-                 PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1
-                 RET=$?
-                 set -e # Re-enable exit-on-error
-
-                 # If return code is 0 (Ready) or 1 (Rejecting connections - meaning host is UP), we switch
-                 if [ $RET -eq 0 ] || [ $RET -eq 1 ]; then
-                      log "WARNING: DATABASE_URL is unreachable (Resolution Error) but DATABASE_HOST is reachable (Status: $RET)."
-                      log "Auto-recovery: Ignoring broken DATABASE_URL and switching to component-based config."
-                      unset DATABASE_URL
-                 else
-                      log "Fallback check to DATABASE_HOST failed with status $RET. Sticking with DATABASE_URL."
-                 fi
+                 # Check connectivity to DATABASE_HOST for logging purposes
+                 log "Testing connection to DATABASE_HOST ($DATABASE_HOST)..."
+                 # We run this just to print the error to logs (remove -q/silence)
+                 PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 || true
+                 
+                 log "WARNING: DATABASE_URL is unreachable. Forcing switch to DATABASE_HOST configuration to retry connection loop there."
+                 unset DATABASE_URL
             fi
         fi
     fi
