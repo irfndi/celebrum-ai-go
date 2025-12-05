@@ -77,8 +77,7 @@ apply_migration() {
         log "Successfully applied migration: $migration_name"
         
         # Record migration in schema_migrations table
-        run_psql -v migration_name="$migration_name" \
-            -c "INSERT INTO schema_migrations (filename, applied) VALUES (:'migration_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
+        run_psql -c "INSERT INTO schema_migrations (filename, applied) VALUES ('$migration_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
     else
         log_error "Failed to apply migration: $migration_name"
         exit 1

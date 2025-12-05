@@ -101,7 +101,7 @@ log "Starting CCXT Service..."
 if [ -z "$ADMIN_API_KEY" ]; then
     log "WARNING: ADMIN_API_KEY is not set. generating a secure default for internal use..."
     # Generate a random 32-character hex string
-    export ADMIN_API_KEY=$(hexdump -n 16 -e '4/4 "%08x" 1 "\n"' /dev/urandom)
+    export ADMIN_API_KEY=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
     log "Generated ADMIN_API_KEY (first 8 chars): ${ADMIN_API_KEY:0:8}..."
 fi
 
