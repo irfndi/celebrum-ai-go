@@ -28,9 +28,8 @@ func InitSentry(cfg config.SentryConfig, fallbackRelease string, fallbackEnv str
 		Dsn:                cfg.DSN,
 		Environment:        environment,
 		Release:            release,
-		EnableTracing:      cfg.TracesSampleRate > 0 || cfg.ProfilesSampleRate > 0,
+		EnableTracing:      cfg.TracesSampleRate > 0,
 		TracesSampleRate:   cfg.TracesSampleRate,
-		ProfilesSampleRate: cfg.ProfilesSampleRate,
 		AttachStacktrace:   true,
 	})
 }

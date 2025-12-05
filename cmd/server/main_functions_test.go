@@ -69,7 +69,6 @@ func TestMainFunctionBasic(t *testing.T) {
 		"REDIS_PASSWORD":               "",
 		"REDIS_DB":                     "0",
 		"TELEMETRY_ENABLED":            "false",
-		"TELEMETRY_OTLP_ENDPOINT":      "http://localhost:4318",
 		"TELEMETRY_SERVICE_NAME":       "test-service",
 		"TELEMETRY_SERVICE_VERSION":    "test-version",
 		"TELEMETRY_LOG_LEVEL":          "error",

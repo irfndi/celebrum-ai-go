@@ -79,7 +79,6 @@ type TelegramConfig struct {
 
 type TelemetryConfig struct {
 	Enabled        bool   `mapstructure:"enabled"`
-	OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
 	ServiceName    string `mapstructure:"service_name"`
 	ServiceVersion string `mapstructure:"service_version"`
 	LogLevel       string `mapstructure:"log_level"`
@@ -238,7 +237,6 @@ func setDefaults() {
 
 	// Telemetry
 	viper.SetDefault("telemetry.enabled", true)
-	viper.SetDefault("telemetry.otlp_endpoint", "http://localhost:4318")
 	viper.SetDefault("telemetry.service_name", "github.com/irfandi/celebrum-ai-go")
 	viper.SetDefault("telemetry.service_version", "1.0.0")
 	viper.SetDefault("telemetry.log_level", "info")

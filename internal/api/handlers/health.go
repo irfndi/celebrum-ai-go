@@ -8,10 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 )
 
 // DatabaseHealthChecker interface for database health checks
@@ -56,115 +54,116 @@ func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtUR
 }
 
 func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	tracer := otel.Tracer("celebrum-ai-app")
-
 	// Create context with timeout for health checks
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	ctx, span := tracer.Start(ctx, "health_check")
-	defer span.End()
+	span := sentry.StartSpan(ctx, "health_check")
+	defer span.Finish()
+	// Update context to include the span for downstream calls
+	ctx = span.Context()
 
-	span.SetAttributes(
-		attribute.String("http.method", r.Method),
-		attribute.String("http.url", r.URL.String()),
-		attribute.String("handler.name", "HealthCheck"),
-	)
+	span.SetTag("http.method", r.Method)
+	span.SetTag("http.url", r.URL.String())
+	span.SetTag("handler.name", "HealthCheck")
 
-	services := make(map[string]string)
+	servicesStatus := make(map[string]string)
 
 	// Check database
-	span.AddEvent("checking database health")
 	if h.db != nil {
 		if err := h.db.HealthCheck(ctx); err != nil {
-			services["database"] = "unhealthy: " + err.Error()
-			span.SetAttributes(attribute.String("database.status", "unhealthy"))
-			span.RecordError(err)
+			servicesStatus["database"] = "unhealthy: " + err.Error()
+			span.SetTag("database.status", "unhealthy")
+			sentry.CaptureException(err)
 		} else {
-			services["database"] = "healthy"
-			span.SetAttributes(attribute.String("database.status", "healthy"))
+			servicesStatus["database"] = "healthy"
+			span.SetTag("database.status", "healthy")
 		}
 	} else {
-		services["database"] = "unhealthy: not configured"
-		span.SetAttributes(attribute.String("database.status", "not_configured"))
+		servicesStatus["database"] = "unhealthy: not configured"
+		span.SetTag("database.status", "not_configured")
 	}
 
 	// Check Redis
-	span.AddEvent("checking redis health")
 	if h.redis != nil {
 		if err := h.redis.HealthCheck(ctx); err != nil {
-			services["redis"] = "unhealthy: " + err.Error()
-			span.SetAttributes(attribute.String("redis.status", "unhealthy"))
-			span.RecordError(err)
+			servicesStatus["redis"] = "unhealthy: " + err.Error()
+			span.SetTag("redis.status", "unhealthy")
+			sentry.CaptureException(err)
 		} else {
-			services["redis"] = "healthy"
-			span.SetAttributes(attribute.String("redis.status", "healthy"))
+			servicesStatus["redis"] = "healthy"
+			span.SetTag("redis.status", "healthy")
 		}
 	} else {
-		services["redis"] = "unhealthy: not configured"
-		span.SetAttributes(attribute.String("redis.status", "not_configured"))
+		servicesStatus["redis"] = "unhealthy: not configured"
+		span.SetTag("redis.status", "not_configured")
 	}
 
-	// Check CCXT service
-	span.AddEvent("checking ccxt service health")
-	if err := h.checkCCXTService(); err != nil {
-		services["ccxt"] = "unhealthy: " + err.Error()
-		span.SetAttributes(attribute.String("ccxt.status", "unhealthy"))
-		span.RecordError(err)
+	// Check CCXT Service
+	ccxtStatus := "unknown"
+	if h.checkCCXTService() != nil {
+		err := h.checkCCXTService()
+		ccxtStatus = "unhealthy: " + err.Error()
+		span.SetTag("ccxt.status", "unhealthy")
+		sentry.CaptureException(err)
 	} else {
-		services["ccxt"] = "healthy"
-		span.SetAttributes(attribute.String("ccxt.status", "healthy"))
+		ccxtStatus = "healthy"
+		span.SetTag("ccxt.status", "healthy")
 	}
+	servicesStatus["ccxt"] = ccxtStatus
 
 	// Check Telegram bot configuration
-	span.AddEvent("checking telegram configuration")
 	if os.Getenv("TELEGRAM_BOT_TOKEN") == "" {
-		services["telegram"] = "unhealthy: TELEGRAM_BOT_TOKEN not set"
-		span.SetAttributes(attribute.String("telegram.status", "not_configured"))
+		servicesStatus["telegram"] = "unhealthy: TELEGRAM_BOT_TOKEN not set"
+		span.SetTag("telegram.status", "not_configured")
 	} else {
-		services["telegram"] = "healthy"
-		span.SetAttributes(attribute.String("telegram.status", "healthy"))
+		servicesStatus["telegram"] = "healthy"
+		span.SetTag("telegram.status", "healthy")
 	}
 
 	// Determine overall status
-	span.AddEvent("determining overall status")
-	overallStatus := "healthy"
-	for _, status := range services {
-		if status != "healthy" {
-			overallStatus = "unhealthy"
+	status := "healthy"
+	for _, s := range servicesStatus {
+		if s != "healthy" && s != "not configured" {
+			status = "degraded"
 			break
 		}
 	}
-	span.SetAttributes(attribute.String("overall.status", overallStatus))
+	span.SetTag("overall.status", status)
 
-	response := HealthResponse{
-		Status:    overallStatus,
-		Timestamp: time.Now(),
-		Services:  services,
-		Version:   os.Getenv("APP_VERSION"),
-		Uptime:    time.Since(startTime).String(),
-	}
+	var cacheMetrics *services.CacheMetrics
+	var cacheStats map[string]services.CacheStats
 
 	// Add cache metrics if cache analytics service is available
 	if h.cacheAnalytics != nil {
-		if cacheMetrics, err := h.cacheAnalytics.GetMetrics(r.Context()); err == nil {
-			response.CacheMetrics = cacheMetrics
+		if metrics, err := h.cacheAnalytics.GetMetrics(ctx); err == nil {
+			cacheMetrics = metrics
 		}
-		response.CacheStats = h.cacheAnalytics.GetAllStats()
+		cacheStats = h.cacheAnalytics.GetAllStats()
+	}
+
+	response := HealthResponse{
+		Status:       status,
+		Timestamp:    time.Now(),
+		Services:     servicesStatus,
+		Version:      os.Getenv("APP_VERSION"),
+		Uptime:       time.Since(startTime).String(),
+		CacheMetrics: cacheMetrics,
+		CacheStats:   cacheStats,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if overallStatus == "healthy" {
-		w.WriteHeader(http.StatusOK)
-		span.SetStatus(codes.Ok, "Health check completed successfully")
-	} else {
+	if status != "healthy" {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		span.SetStatus(codes.Error, "Some services are unhealthy")
+		span.Status = sentry.SpanStatusUnavailable
+	} else {
+		w.WriteHeader(http.StatusOK)
+		span.Status = sentry.SpanStatusOK
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to encode response")
+		sentry.CaptureException(err)
+		span.Status = sentry.SpanStatusInternalError
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
@@ -192,38 +191,35 @@ func (h *HealthHandler) checkCCXTService() error {
 // Global start time for uptime calculation
 var startTime = time.Now()
 
-// Readiness check for Kubernetes-style deployments
+// ReadinessCheck checks if the service is ready to accept traffic
 func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
-	tracer := otel.Tracer("celebrum-ai-app")
-	ctx, span := tracer.Start(r.Context(), "readiness_check")
-	defer span.End()
+	span := sentry.StartSpan(r.Context(), "readiness_check")
+	defer span.Finish()
+	ctx := span.Context()
 
-	span.SetAttributes(
-		attribute.String("http.method", r.Method),
-		attribute.String("http.url", r.URL.String()),
-		attribute.String("handler.name", "ReadinessCheck"),
-	)
+	span.SetTag("http.method", r.Method)
+	span.SetTag("http.url", r.URL.String())
+	span.SetTag("handler.name", "ReadinessCheck")
 
 	// Similar to HealthCheck but more strict
-	services := make(map[string]string)
+	servicesStatus := make(map[string]string)
 
 	// All services must be healthy for readiness
-	span.AddEvent("checking database readiness")
 	if h.db != nil {
 		if err := h.db.HealthCheck(ctx); err == nil {
-			services["database"] = "ready"
-			span.SetAttributes(attribute.String("database.readiness", "ready"))
+			servicesStatus["database"] = "ready"
+			span.SetTag("database.readiness", "ready")
 		} else {
-			services["database"] = "not ready"
-			span.SetAttributes(attribute.String("database.readiness", "not_ready"))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "Database not ready")
+			servicesStatus["database"] = "not ready"
+			span.SetTag("database.readiness", "not_ready")
+			sentry.CaptureException(err)
+			span.Status = sentry.SpanStatusInternalError
 			w.WriteHeader(http.StatusServiceUnavailable)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"ready":    false,
-				"services": services,
+				"services": servicesStatus,
 			}); err != nil {
-				span.RecordError(err)
+				sentry.CaptureException(err)
 				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 			}
 			return
@@ -231,41 +227,36 @@ func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// All checks passed
-	span.AddEvent("all readiness checks passed")
-	span.SetStatus(codes.Ok, "Service is ready")
+	span.Status = sentry.SpanStatusOK
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"ready":    true,
-		"services": services,
+		"services": servicesStatus,
 	}); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to encode response")
+		sentry.CaptureException(err)
+		span.Status = sentry.SpanStatusInternalError
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 
-// Liveness check for container restarts
+// LivenessCheck checks if the service is alive
 func (h *HealthHandler) LivenessCheck(w http.ResponseWriter, r *http.Request) {
-	tracer := otel.Tracer("celebrum-ai-app")
-	_, span := tracer.Start(r.Context(), "liveness_check")
-	defer span.End()
+	span := sentry.StartSpan(r.Context(), "liveness_check")
+	defer span.Finish()
 
-	span.SetAttributes(
-		attribute.String("http.method", r.Method),
-		attribute.String("http.url", r.URL.String()),
-		attribute.String("handler.name", "LivenessCheck"),
-	)
+	span.SetTag("http.method", r.Method)
+	span.SetTag("http.url", r.URL.String())
+	span.SetTag("handler.name", "LivenessCheck")
 
 	// Simple liveness check - just ensure the app is responsive
-	span.AddEvent("performing liveness check")
-	span.SetStatus(codes.Ok, "Service is alive")
+	span.Status = sentry.SpanStatusOK
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":    "alive",
 		"timestamp": time.Now().Format(time.RFC3339),
 	}); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to encode response")
+		sentry.CaptureException(err)
+		span.Status = sentry.SpanStatusInternalError
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }

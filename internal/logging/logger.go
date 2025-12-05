@@ -9,7 +9,6 @@ import (
 )
 
 // Logger interface defines the common logging methods
-// This interface is implemented by both the legacy logrus-based logger and the new OTLP logger
 type Logger interface {
 	WithService(serviceName string) *slog.Logger
 	WithComponent(componentName string) *slog.Logger
@@ -38,8 +37,7 @@ type StandardLogger struct {
 
 // NewStandardLogger creates a new standardized logger based on configuration
 func NewStandardLogger(logLevel string, environment string) *StandardLogger {
-	// For now, return a basic logger - we'll integrate with OTLP in the main initialization
-	// This maintains backward compatibility until the telemetry system is initialized
+	// For now, return a basic logger - we'll integrate with Sentry in the main initialization
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: getSlogLevel(logLevel),
 	}))
@@ -47,19 +45,6 @@ func NewStandardLogger(logLevel string, environment string) *StandardLogger {
 	return &StandardLogger{
 		logger: &fallbackLogger{logger: logger},
 	}
-}
-
-// NewStandardOTLPLogger creates a new standardized logger with OTLP support
-func NewStandardOTLPLogger(config OTLPConfig) *StandardLogger {
-	otlpLogger, err := NewOTLPLogger(config)
-	if err != nil {
-		// Fallback to basic logger if OTLP setup fails
-		basic := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: getSlogLevel(config.LogLevel),
-		}))
-		return &StandardLogger{logger: &fallbackLogger{logger: basic}}
-	}
-	return &StandardLogger{logger: &otlpWrapper{logger: otlpLogger}}
 }
 
 // SetLogger sets the underlying logger implementation
@@ -185,125 +170,8 @@ func ParseLogrusLevel(level string) logrus.Level {
 	}
 }
 
-// otlpWrapper wraps OTLPLogger to implement Logger interface
-type otlpWrapper struct {
-	logger *OTLPLogger
-}
-
-func (o *otlpWrapper) WithService(serviceName string) *slog.Logger {
-	return o.logger.logger.With("service", serviceName)
-}
-
-func (o *otlpWrapper) WithComponent(componentName string) *slog.Logger {
-	return o.logger.logger.With("component", componentName)
-}
-
-func (o *otlpWrapper) WithOperation(operationName string) *slog.Logger {
-	return o.logger.logger.With("operation", operationName)
-}
-
-func (o *otlpWrapper) WithRequestID(requestID string) *slog.Logger {
-	return o.logger.logger.With("request_id", requestID)
-}
-
-func (o *otlpWrapper) WithUserID(userID string) *slog.Logger {
-	return o.logger.logger.With("user_id", userID)
-}
-
-func (o *otlpWrapper) WithExchange(exchange string) *slog.Logger {
-	return o.logger.logger.With("exchange", exchange)
-}
-
-func (o *otlpWrapper) WithSymbol(symbol string) *slog.Logger {
-	return o.logger.logger.With("symbol", symbol)
-}
-
-func (o *otlpWrapper) WithError(err error) *slog.Logger {
-	return o.logger.logger.With("error", err.Error())
-}
-
-func (o *otlpWrapper) WithMetrics(metrics map[string]interface{}) *slog.Logger {
-	return o.logger.logger.With("metrics", metrics)
-}
-
-func (o *otlpWrapper) LogStartup(serviceName string, version string, port int) {
-	o.logger.logger.Info("Application startup",
-		"service", serviceName,
-		"version", version,
-		"port", port,
-		"event", "startup",
-	)
-}
-
-func (o *otlpWrapper) LogShutdown(serviceName string, reason string) {
-	o.logger.logger.Info("Application shutdown",
-		"service", serviceName,
-		"reason", reason,
-		"event", "shutdown",
-	)
-}
-
-func (o *otlpWrapper) LogPerformanceMetrics(serviceName string, metrics map[string]interface{}) {
-	o.logger.logger.Info("Performance metrics",
-		"service", serviceName,
-		"metrics", metrics,
-		"event", "performance",
-	)
-}
-
-func (o *otlpWrapper) LogResourceStats(serviceName string, stats map[string]interface{}) {
-	o.logger.logger.Info("Resource statistics",
-		"service", serviceName,
-		"stats", stats,
-		"event", "resource",
-	)
-}
-
-func (o *otlpWrapper) LogCacheOperation(operation string, key string, hit bool, duration int64) {
-	o.logger.logger.Info("Cache operation",
-		"operation", operation,
-		"key", key,
-		"hit", hit,
-		"duration_ms", duration,
-		"event", "cache",
-	)
-}
-
-func (o *otlpWrapper) LogDatabaseOperation(operation string, table string, duration int64, rowsAffected int64) {
-	o.logger.logger.Info("Database operation",
-		"operation", operation,
-		"table", table,
-		"duration_ms", duration,
-		"rows_affected", rowsAffected,
-		"event", "database",
-	)
-}
-
-func (o *otlpWrapper) LogAPIRequest(method string, path string, statusCode int, duration int64, userID string) {
-	o.logger.logger.Info("API request",
-		"method", method,
-		"path", path,
-		"status", statusCode,
-		"duration_ms", duration,
-		"user_id", userID,
-		"event", "api",
-	)
-}
-
-func (o *otlpWrapper) LogBusinessEvent(eventType string, details map[string]interface{}) {
-	o.logger.logger.Info("Business event",
-		"event_type", eventType,
-		"details", details,
-		"event", "business",
-	)
-}
-
-func (o *otlpWrapper) Logger() *slog.Logger {
-	return o.logger.logger
-}
-
 // fallbackLogger is a simple implementation that uses slog directly
-// This is used as a fallback when OTLP is not configured
+// This is used as a fallback when telemetry is not configured
 type fallbackLogger struct {
 	logger *slog.Logger
 }

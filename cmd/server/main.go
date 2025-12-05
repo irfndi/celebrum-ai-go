@@ -21,10 +21,8 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/middleware"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // main runs the application startup via run and, on error, prints the error to standard error and exits with status 1.
@@ -45,45 +43,16 @@ func run() error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	// Initialize telemetry first
-	if err := telemetry.InitTelemetry(telemetry.TelemetryConfig{
-		Enabled:        cfg.Telemetry.Enabled,
-		OTLPEndpoint:   cfg.Telemetry.OTLPEndpoint,
-		ServiceName:    cfg.Telemetry.ServiceName,
-		ServiceVersion: cfg.Telemetry.ServiceVersion,
-		LogLevel:       cfg.Telemetry.LogLevel,
-	}); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize telemetry: %v\n", err)
-		// Don't exit on telemetry failure, continue with reduced observability
-	}
+	// Initialize Sentry for observability
 	if err := observability.InitSentry(cfg.Sentry, cfg.Telemetry.ServiceVersion, cfg.Environment); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize Sentry: %v\n", err)
 	}
-	defer func() {
-		observability.Flush(context.Background())
-		if err := telemetry.Shutdown(); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to shutdown telemetry: %v\n", err)
-		}
-	}()
+	defer observability.Flush(context.Background())
 
-	// Initialize services with OTLP logger
-	var logger *logging.OTLPLogger
-	if cfg.Telemetry.Enabled {
-		logger = telemetry.GetLogger()
-		if logger == nil {
-			// Fallback to standard logger if OTLP logger is not available
-			otlpLogger, _ := logging.NewOTLPLogger(logging.OTLPConfig{
-				Enabled: false, // Use disabled OTLP logger that falls back to stdout
-			})
-			logger = otlpLogger
-		}
-	} else {
-		// Use standard logger when telemetry is disabled
-		otlpLogger, _ := logging.NewOTLPLogger(logging.OTLPConfig{
-			Enabled: false, // Use disabled OTLP logger that falls back to stdout
-		})
-		logger = otlpLogger
-	}
+	// Initialize standard logger
+	stdLogger := logging.NewStandardLogger(cfg.Telemetry.LogLevel, cfg.Environment)
+	logger := stdLogger.Logger()
+	slog.SetDefault(logger)
 
 	// Create logrus logger for services that require it (backward compatibility)
 	logrusLogger := logrus.New()
@@ -267,7 +236,7 @@ func run() error {
 		}))
 	}
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
+	// REMOVED: router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
 
 	// Setup routes
 	api.SetupRoutes(router, db, redisClient, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram, authMiddleware)
@@ -284,7 +253,7 @@ func run() error {
 
 	// Start server in a goroutine
 	go func() {
-		logger.Logger().Info("Application startup",
+		logger.Info("Application startup",
 			"service", "github.com/irfandi/celebrum-ai-go",
 			"version", "1.0.0",
 			"port", cfg.Server.Port,
@@ -299,7 +268,7 @@ func run() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	logger.Logger().Info("Application shutdown",
+	logger.Info("Application shutdown",
 		"service", "github.com/irfandi/celebrum-ai-go",
 		"event", "shutdown",
 		"reason", "signal received",

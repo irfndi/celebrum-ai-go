@@ -87,7 +87,6 @@ type TelegramConfig struct {
 
 type TelemetryConfig struct {
 	Enabled        bool   `mapstructure:"enabled"`
-	OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
 	ServiceName    string `mapstructure:"service_name"`
 	ServiceVersion string `mapstructure:"service_version"`
 	LogLevel       string `mapstructure:"log_level"`

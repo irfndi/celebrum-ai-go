@@ -39,12 +39,9 @@ func TestMain(m *testing.M) {
 	logger.SetLevel(logrus.ErrorLevel)
 
 	// Initialize telemetry with disabled export to prevent nil pointer dereference
-	// This is needed because ExchangeCapabilityCache tries to log via telemetry.GetLogger()
+	// This is needed because ExchangeCapabilityCache tries to log via telemetry.Logger()
 	telemetryConfig := telemetry.TelemetryConfig{
-		Enabled:      false, // Disable actual telemetry export for tests
-		OTLPEndpoint: "http://localhost:4318",
-		ServiceName:  "test-collector-service",
-		LogLevel:     "error",
+		Enabled: false, // Disable actual telemetry export for tests
 	}
 
 	// This will initialize the global logger in telemetry package

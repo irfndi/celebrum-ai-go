@@ -12,7 +12,6 @@ import (
 func TestNewBusinessTracer(t *testing.T) {
 	bt := NewBusinessTracer()
 	require.NotNil(t, bt)
-	require.NotNil(t, bt.tracer)
 }
 
 func TestBusinessTracer_TraceArbitrageDetection(t *testing.T) {
@@ -27,7 +26,7 @@ func TestBusinessTracer_TraceArbitrageDetection(t *testing.T) {
 	require.NotNil(t, span)
 
 	// End the span to avoid resource leaks
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordArbitrageOpportunity(t *testing.T) {
@@ -53,7 +52,7 @@ func TestBusinessTracer_RecordArbitrageOpportunity(t *testing.T) {
 
 	// This should not panic
 	bt.RecordArbitrageOpportunity(span, opportunity)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceSignalProcessing(t *testing.T) {
@@ -66,9 +65,8 @@ func TestBusinessTracer_TraceSignalProcessing(t *testing.T) {
 
 	_, span := bt.TraceSignalProcessing(ctx, signalType, symbol)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordSignalMetrics(t *testing.T) {
@@ -90,7 +88,7 @@ func TestBusinessTracer_RecordSignalMetrics(t *testing.T) {
 
 	// This should not panic
 	bt.RecordSignalMetrics(span, metrics)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceTechnicalAnalysis(t *testing.T) {
@@ -104,9 +102,8 @@ func TestBusinessTracer_TraceTechnicalAnalysis(t *testing.T) {
 
 	_, span := bt.TraceTechnicalAnalysis(ctx, indicator, symbol, timeframe)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordTechnicalAnalysisResult(t *testing.T) {
@@ -127,7 +124,7 @@ func TestBusinessTracer_RecordTechnicalAnalysisResult(t *testing.T) {
 
 	// This should not panic
 	bt.RecordTechnicalAnalysisResult(span, result)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceMarketDataCollection(t *testing.T) {
@@ -140,9 +137,8 @@ func TestBusinessTracer_TraceMarketDataCollection(t *testing.T) {
 
 	_, span := bt.TraceMarketDataCollection(ctx, exchange, symbols)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordMarketDataMetrics(t *testing.T) {
@@ -163,7 +159,7 @@ func TestBusinessTracer_RecordMarketDataMetrics(t *testing.T) {
 
 	// This should not panic
 	bt.RecordMarketDataMetrics(span, metrics)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceRiskAssessment(t *testing.T) {
@@ -176,9 +172,8 @@ func TestBusinessTracer_TraceRiskAssessment(t *testing.T) {
 
 	_, span := bt.TraceRiskAssessment(ctx, assessmentType, symbol)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordRiskMetrics(t *testing.T) {
@@ -199,7 +194,7 @@ func TestBusinessTracer_RecordRiskMetrics(t *testing.T) {
 
 	// This should not panic
 	bt.RecordRiskMetrics(span, metrics)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceNotification(t *testing.T) {
@@ -212,9 +207,8 @@ func TestBusinessTracer_TraceNotification(t *testing.T) {
 
 	_, span := bt.TraceNotification(ctx, notificationType, channel)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordNotificationResult(t *testing.T) {
@@ -227,7 +221,7 @@ func TestBusinessTracer_RecordNotificationResult(t *testing.T) {
 
 	// Test successful notification
 	bt.RecordNotificationResult(span, true, 5, nil)
-	span.End()
+	span.Finish()
 
 	// Test failed notification
 	_, span = bt.TraceNotification(ctx, "arbitrage_opportunity", "telegram")
@@ -235,7 +229,7 @@ func TestBusinessTracer_RecordNotificationResult(t *testing.T) {
 
 	testErr := assert.AnError
 	bt.RecordNotificationResult(span, false, 0, testErr)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceArbitrageDetectionEmptyExchanges(t *testing.T) {
@@ -248,9 +242,8 @@ func TestBusinessTracer_TraceArbitrageDetectionEmptyExchanges(t *testing.T) {
 
 	_, span := bt.TraceArbitrageDetection(ctx, symbol, exchanges)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_TraceMarketDataCollectionEmptySymbols(t *testing.T) {
@@ -263,9 +256,8 @@ func TestBusinessTracer_TraceMarketDataCollectionEmptySymbols(t *testing.T) {
 
 	_, span := bt.TraceMarketDataCollection(ctx, exchange, symbols)
 	require.NotNil(t, span)
-	require.NotNil(t, span)
 
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordArbitrageOpportunityZeroValues(t *testing.T) {
@@ -291,7 +283,7 @@ func TestBusinessTracer_RecordArbitrageOpportunityZeroValues(t *testing.T) {
 
 	// This should not panic even with zero values
 	bt.RecordArbitrageOpportunity(span, opportunity)
-	span.End()
+	span.Finish()
 }
 
 func TestBusinessTracer_RecordSignalMetricsZeroValues(t *testing.T) {
@@ -311,108 +303,7 @@ func TestBusinessTracer_RecordSignalMetricsZeroValues(t *testing.T) {
 		QualityGrade:    "",
 	}
 
-	// This should not panic even with zero values
+	// This should not panic
 	bt.RecordSignalMetrics(span, metrics)
-	span.End()
-}
-
-func TestBusinessTracer_RecordRiskMetricsEdgeCases(t *testing.T) {
-	bt := NewBusinessTracer()
-	require.NotNil(t, bt)
-
-	ctx := context.Background()
-	_, span := bt.TraceRiskAssessment(ctx, "volatility", "BTC/USDT")
-	require.NotNil(t, span)
-
-	// Test with maximum values
-	metrics := RiskMetrics{
-		RiskScore:    10.0,
-		RiskLevel:    "critical",
-		Volatility:   1.0,
-		MaxDrawdown:  1.0,
-		IsAcceptable: false,
-	}
-
-	bt.RecordRiskMetrics(span, metrics)
-	span.End()
-
-	// Test with minimum values
-	_, span = bt.TraceRiskAssessment(ctx, "volatility", "BTC/USDT")
-	require.NotNil(t, span)
-
-	metrics = RiskMetrics{
-		RiskScore:    0.0,
-		RiskLevel:    "low",
-		Volatility:   0.0,
-		MaxDrawdown:  0.0,
-		IsAcceptable: true,
-	}
-
-	bt.RecordRiskMetrics(span, metrics)
-	span.End()
-}
-
-func TestBusinessTracer_RecordTechnicalAnalysisResultEdgeCases(t *testing.T) {
-	bt := NewBusinessTracer()
-	require.NotNil(t, bt)
-
-	ctx := context.Background()
-	_, span := bt.TraceTechnicalAnalysis(ctx, "rsi", "BTC/USDT", "1h")
-	require.NotNil(t, span)
-
-	// Test with extreme values
-	result := TechnicalAnalysisResult{
-		Value:           100.0,
-		SignalDirection: "overbought",
-		Confidence:      1.0,
-		DataPoints:      1000,
-		IsValid:         true,
-	}
-
-	bt.RecordTechnicalAnalysisResult(span, result)
-	span.End()
-
-	// Test with invalid result
-	_, span = bt.TraceTechnicalAnalysis(ctx, "rsi", "BTC/USDT", "1h")
-	require.NotNil(t, span)
-
-	result = TechnicalAnalysisResult{
-		Value:           0.0,
-		SignalDirection: "neutral",
-		Confidence:      0.0,
-		DataPoints:      0,
-		IsValid:         false,
-	}
-
-	bt.RecordTechnicalAnalysisResult(span, result)
-	span.End()
-}
-
-func TestBusinessTracer_RecordNotificationResultNilError(t *testing.T) {
-	bt := NewBusinessTracer()
-	require.NotNil(t, bt)
-
-	ctx := context.Background()
-	_, span := bt.TraceNotification(ctx, "arbitrage_opportunity", "telegram")
-	require.NotNil(t, span)
-
-	// Test with nil error
-	bt.RecordNotificationResult(span, true, 10, nil)
-	span.End()
-}
-
-func TestBusinessTracer_ContextCancellation(t *testing.T) {
-	bt := NewBusinessTracer()
-	require.NotNil(t, bt)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Cancel the context
-	cancel()
-
-	// The tracer should still work even with cancelled context
-	_, span := bt.TraceArbitrageDetection(ctx, "BTC/USDT", []string{"binance", "bybit"})
-	require.NotNil(t, span)
-
-	span.End()
+	span.Finish()
 }

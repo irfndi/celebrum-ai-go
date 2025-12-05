@@ -129,7 +129,7 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	entry, exists := sc.cache[exchangeID]
 	if !exists {
 		sc.stats.Misses++
-		telemetry.GetLogger().Logger().Debug("Cache MISS", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+		telemetry.GetLogger().Debug("Cache MISS", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 		return nil, false
 	}
 
@@ -137,12 +137,12 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	if time.Now().After(entry.ExpiresAt) {
 		// Entry expired, treat as cache miss
 		sc.stats.Misses++
-		telemetry.GetLogger().Logger().Debug("Cache MISS (expired)", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+		telemetry.GetLogger().Debug("Cache MISS (expired)", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 		return nil, false
 	}
 
 	sc.stats.Hits++
-	telemetry.GetLogger().Logger().Debug("Cache HIT", "exchange", exchangeID, "symbols", len(entry.Symbols), "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+	telemetry.GetLogger().Debug("Cache HIT", "exchange", exchangeID, "symbols", len(entry.Symbols), "hits", sc.stats.Hits, "misses", sc.stats.Misses)
 
 	return entry.Symbols, true
 }
@@ -157,7 +157,7 @@ func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 		Symbols:   symbols,
 		ExpiresAt: time.Now().Add(sc.ttl),
 	}
-	telemetry.GetLogger().Logger().Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols), "sets", sc.stats.Sets)
+	telemetry.GetLogger().Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols), "sets", sc.stats.Sets)
 }
 
 // GetStats returns current cache statistics
@@ -182,7 +182,7 @@ func (sc *SymbolCache) LogStats() {
 		hitRate = float64(sc.stats.Hits) / float64(total) * 100
 	}
 
-	telemetry.GetLogger().Logger().Info("Symbol Cache Stats",
+	telemetry.GetLogger().Info("Symbol Cache Stats",
 		"hits", sc.stats.Hits,
 		"misses", sc.stats.Misses,
 		"sets", sc.stats.Sets,
@@ -225,7 +225,7 @@ func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, suppo
 		LastChecked:          time.Now(),
 		ExpiresAt:            time.Now().Add(ecc.ttl),
 	}
-	telemetry.GetLogger().Logger().Debug("Exchange capability cached", "exchange", exchange, "supports_funding_rates", supports)
+	telemetry.GetLogger().Debug("Exchange capability cached", "exchange", exchange, "supports_funding_rates", supports)
 }
 
 // isBlacklistableError checks if an error indicates a symbol should be blacklisted
@@ -347,11 +347,7 @@ type Worker struct {
 func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
-	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
-		logger = telemetryLogger.Logger()
-	} else {
-		logger = slog.Default()
-	}
+	logger = telemetry.Logger()
 
 	if redisClient != nil {
 		logger.Info("Initializing Redis-based symbol cache")
@@ -448,11 +444,7 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
-	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
-		logger = telemetryLogger.Logger()
-	} else {
-		logger = slog.Default()
-	}
+	logger = telemetry.Logger()
 
 	return &CollectorService{
 		db:              db,

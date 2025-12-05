@@ -20,7 +20,6 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Test server configuration
@@ -108,7 +107,6 @@ func TestMiddlewareSetup(t *testing.T) {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go-test"))
 
 	assert.NotNil(t, router)
 }
@@ -295,7 +293,6 @@ func TestMiddlewareChain(t *testing.T) {
 	// Add middleware in order
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("test-service"))
 
 	assert.NotNil(t, router)
 }

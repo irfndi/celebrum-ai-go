@@ -2,16 +2,13 @@ package logging
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	otellog "go.opentelemetry.io/otel/log"
 )
 
 // testLogger implements the Logger interface for testing
@@ -408,140 +405,7 @@ func TestStandardLogger_LogBusinessEvent(t *testing.T) {
 	assert.Contains(t, logOutput, "Business event")
 }
 
-// Test OTLP Logger functionality
-func TestNewOTLPLogger_Disabled(t *testing.T) {
-	config := OTLPConfig{
-		Enabled:     false,
-		Endpoint:    "http://localhost:4318",
-		ServiceName: "test-service",
-	}
-
-	logger, err := NewOTLPLogger(config)
-	assert.NoError(t, err)
-	assert.NotNil(t, logger)
-	assert.NotNil(t, logger.Logger())
-}
-
-func TestNewOTLPLogger_Enabled(t *testing.T) {
-	config := OTLPConfig{
-		Enabled:        true,
-		Endpoint:       "http://localhost:4318",
-		ServiceName:    "test-service",
-		ServiceVersion: "1.0.0",
-		Environment:    "test",
-		LogLevel:       "info",
-	}
-
-	// This will likely fail in test environment due to no OTLP endpoint
-	// but we want to test the error handling
-	logger, err := NewOTLPLogger(config)
-	if err != nil {
-		assert.ErrorContains(t, err, "failed to create OTLP log exporter")
-	} else {
-		assert.NotNil(t, logger)
-		assert.NotNil(t, logger.Logger())
-	}
-}
-
-func TestOTLPLogger_Shutdown(t *testing.T) {
-	config := OTLPConfig{
-		Enabled:     false,
-		ServiceName: "test-service",
-	}
-
-	logger, err := NewOTLPLogger(config)
-	assert.NoError(t, err)
-	assert.NotNil(t, logger)
-
-	ctx := context.Background()
-	err = logger.Shutdown(ctx)
-	assert.NoError(t, err)
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err = logger.Shutdown(shutdownCtx)
-	assert.NoError(t, err)
-}
-
-// Test OTLP handler functionality with a simpler approach
-func TestOTLPHandler_Simple(t *testing.T) {
-	// Since we can't easily mock the OTLP logger interface due to unexported methods,
-	// we'll test the convertSlogLevelToSeverity function which is used internally
-	assert.Equal(t, otellog.SeverityDebug, convertSlogLevelToSeverity(slog.LevelDebug))
-	assert.Equal(t, otellog.SeverityInfo, convertSlogLevelToSeverity(slog.LevelInfo))
-	assert.Equal(t, otellog.SeverityWarn, convertSlogLevelToSeverity(slog.LevelWarn))
-	assert.Equal(t, otellog.SeverityError, convertSlogLevelToSeverity(slog.LevelError))
-	assert.Equal(t, otellog.SeverityInfo, convertSlogLevelToSeverity(slog.Level(10))) // Default case
-}
-
-// Test removed as it's now covered by TestOTLPHandler_Simple
-
-func TestNewStandardOTLPLogger(t *testing.T) {
-	config := OTLPConfig{
-		Enabled:     false,
-		ServiceName: "test-service",
-		LogLevel:    "info",
-	}
-
-	logger := NewStandardOTLPLogger(config)
-	assert.NotNil(t, logger)
-	assert.NotNil(t, logger.Logger())
-}
-
-func TestStandardOTLPLogger_InterfaceImplementation(t *testing.T) {
-	config := OTLPConfig{
-		Enabled:     false,
-		ServiceName: "test-service",
-	}
-
-	logger := NewStandardOTLPLogger(config)
-	assert.NotNil(t, logger)
-
-	// Test all interface methods
-	serviceLogger := logger.WithService("test-service")
-	assert.NotNil(t, serviceLogger)
-
-	componentLogger := logger.WithComponent("test-component")
-	assert.NotNil(t, componentLogger)
-
-	operationLogger := logger.WithOperation("test-operation")
-	assert.NotNil(t, operationLogger)
-
-	requestIDLogger := logger.WithRequestID("test-request-id")
-	assert.NotNil(t, requestIDLogger)
-
-	userIDLogger := logger.WithUserID("test-user-id")
-	assert.NotNil(t, userIDLogger)
-
-	exchangeLogger := logger.WithExchange("test-exchange")
-	assert.NotNil(t, exchangeLogger)
-
-	symbolLogger := logger.WithSymbol("test-symbol")
-	assert.NotNil(t, symbolLogger)
-
-	testErr := fmt.Errorf("test error")
-	errorLogger := logger.WithError(testErr)
-	assert.NotNil(t, errorLogger)
-
-	metrics := map[string]interface{}{"test": "value"}
-	metricsLogger := logger.WithMetrics(metrics)
-	assert.NotNil(t, metricsLogger)
-
-	// Test that logger implements Logger interface
-	var loggerInterface Logger = logger
-	assert.NotNil(t, loggerInterface)
-
-	// Test logging methods
-	loggerInterface.LogStartup("test-service", "1.0.0", 8080)
-	loggerInterface.LogShutdown("test-service", "test")
-	loggerInterface.LogPerformanceMetrics("test-service", metrics)
-	loggerInterface.LogResourceStats("test-service", metrics)
-	loggerInterface.LogCacheOperation("get", "test-key", true, 100)
-	loggerInterface.LogDatabaseOperation("select", "test-table", 100, 1)
-	loggerInterface.LogAPIRequest("GET", "/test", 200, 100, "test-user")
-	loggerInterface.LogBusinessEvent("test-event", metrics)
-}
-
+// TestStandardLogger_SetLogger
 func TestStandardLogger_SetLogger(t *testing.T) {
 	logger := NewStandardLogger("info", "development")
 	assert.NotNil(t, logger)
@@ -787,90 +651,4 @@ func TestFallbackLogger_Logger(t *testing.T) {
 	result := logger.Logger()
 	assert.NotNil(t, result)
 	assert.Equal(t, logger.logger, result)
-}
-
-// Mock OTLP Logger for testing
-type mockOTLPLogger struct {
-	otellog.Logger // Embed the Logger interface
-	enabled        bool
-}
-
-func (m *mockOTLPLogger) Enabled(ctx context.Context, params otellog.EnabledParameters) bool {
-	return m.enabled
-}
-
-func (m *mockOTLPLogger) Emit(ctx context.Context, record otellog.Record) {
-	// No-op for testing
-}
-
-// Tests for OTLPHandler methods
-func TestNewOTLPHandler(t *testing.T) {
-	// Create a mock OTLP logger
-	mockLogger := &mockOTLPLogger{enabled: true}
-
-	handler := NewOTLPHandler(mockLogger)
-	assert.NotNil(t, handler)
-	assert.Equal(t, mockLogger, handler.logger)
-}
-
-func TestOTLPHandler_Enabled(t *testing.T) {
-	mockLogger := &mockOTLPLogger{enabled: true}
-	handler := NewOTLPHandler(mockLogger)
-
-	ctx := context.Background()
-
-	// Test with different levels - should always return true in our implementation
-	assert.True(t, handler.Enabled(ctx, slog.LevelDebug))
-	assert.True(t, handler.Enabled(ctx, slog.LevelInfo))
-	assert.True(t, handler.Enabled(ctx, slog.LevelWarn))
-	assert.True(t, handler.Enabled(ctx, slog.LevelError))
-}
-
-func TestOTLPHandler_Handle(t *testing.T) {
-	mockLogger := &mockOTLPLogger{enabled: true}
-	handler := NewOTLPHandler(mockLogger)
-
-	ctx := context.Background()
-
-	// Create a test record
-	now := time.Now()
-	record := slog.Record{
-		Time:    now,
-		Level:   slog.LevelInfo,
-		Message: "Test message",
-	}
-
-	// Add some attributes
-	record.AddAttrs(slog.String("service", "test-service"))
-	record.AddAttrs(slog.Int("user_id", 123))
-
-	// Test that Handle doesn't panic
-	err := handler.Handle(ctx, record)
-	assert.NoError(t, err)
-}
-
-func TestOTLPHandler_WithAttrs(t *testing.T) {
-	mockLogger := &mockOTLPLogger{enabled: true}
-	handler := NewOTLPHandler(mockLogger)
-
-	attrs := []slog.Attr{
-		slog.String("component", "test-component"),
-		slog.Int("version", 1),
-	}
-
-	newHandler := handler.WithAttrs(attrs)
-
-	// Should return the same handler instance (current implementation)
-	assert.NotNil(t, newHandler)
-}
-
-func TestOTLPHandler_WithGroup(t *testing.T) {
-	mockLogger := &mockOTLPLogger{enabled: true}
-	handler := NewOTLPHandler(mockLogger)
-
-	groupName := "test-group"
-	newHandler := handler.WithGroup(groupName)
-
-	// Should return the same handler instance (current implementation)
-	assert.NotNil(t, newHandler)
 }

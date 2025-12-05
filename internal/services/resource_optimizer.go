@@ -89,11 +89,7 @@ func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
 
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
-	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
-		logger = telemetryLogger.Logger()
-	} else {
-		logger = slog.Default()
-	}
+	logger = telemetry.Logger()
 
 	ro := &ResourceOptimizer{
 		cpuCores:             runtime.NumCPU(),

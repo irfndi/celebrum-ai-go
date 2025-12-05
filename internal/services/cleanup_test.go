@@ -18,7 +18,7 @@ import (
 func TestNewCleanupService(t *testing.T) {
 	// Initialize telemetry for testing to avoid nil logger
 	config := telemetry.DefaultConfig()
-	config.Enabled = false // Disable OTLP for tests to avoid connection issues
+	config.Enabled = false // Disable telemetry for tests
 	err := telemetry.InitTelemetry(*config)
 	assert.NoError(t, err)
 

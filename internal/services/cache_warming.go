@@ -25,11 +25,7 @@ type CacheWarmingService struct {
 func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTService, db *database.PostgresDB) *CacheWarmingService {
 	// Initialize logger with fallback for tests
 	var logger *slog.Logger
-	if telemetryLogger := telemetry.GetLogger(); telemetryLogger != nil {
-		logger = telemetryLogger.Logger()
-	} else {
-		logger = slog.Default()
-	}
+	logger = telemetry.Logger()
 
 	return &CacheWarmingService{
 		redisClient: redisClient,
