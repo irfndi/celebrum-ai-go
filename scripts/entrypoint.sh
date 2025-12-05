@@ -20,6 +20,7 @@ trap cleanup INT TERM
 
 # Start CCXT Service (Bun) in background
 log "Starting CCXT Service..."
+# Use absolute path for directory change to ensure we know where we are
 cd /app/ccxt
 bun run dist/index.js &
 PID_BUN=$!
@@ -31,8 +32,17 @@ sleep 2
 # Auto-Run Migrations if enabled
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
     log "Running database migrations..."
+    
+    # Use absolute path for migrate script
+    MIGRATE_SCRIPT="/app/database/migrate.sh"
+    
     # Ensure migrate.sh is executable
-    chmod +x database/migrate.sh
+    if [ -f "$MIGRATE_SCRIPT" ]; then
+        chmod +x "$MIGRATE_SCRIPT"
+    else
+        log "Error: Migration script not found at $MIGRATE_SCRIPT"
+        exit 1
+    fi
 
     # Export DB_ vars from DATABASE_ vars for migrate.sh
     export DB_HOST="${DATABASE_HOST:-localhost}"
@@ -49,7 +59,7 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     done
     log "Database is ready."
 
-    if ./database/migrate.sh; then
+    if "$MIGRATE_SCRIPT"; then
         log "Migrations completed successfully."
     else
         log "Migration failed. Exiting."

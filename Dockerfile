@@ -35,7 +35,7 @@ RUN bun install --frozen-lockfile
 COPY services/ccxt/ .
 
 # Build
-RUN bun run build
+RUN bun run build:bun
 
 # Prune dev dependencies
 RUN bun install --frozen-lockfile --production
