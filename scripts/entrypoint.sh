@@ -96,6 +96,15 @@ trap cleanup INT TERM
 
 # Start CCXT Service (Bun) in background
 log "Starting CCXT Service..."
+
+# Ensure ADMIN_API_KEY is set (required for CCXT service)
+if [ -z "$ADMIN_API_KEY" ]; then
+    log "WARNING: ADMIN_API_KEY is not set. generating a secure default for internal use..."
+    # Generate a random 32-character hex string
+    export ADMIN_API_KEY=$(hexdump -n 16 -e '4/4 "%08x" 1 "\n"' /dev/urandom)
+    log "Generated ADMIN_API_KEY (first 8 chars): ${ADMIN_API_KEY:0:8}..."
+fi
+
 # Use absolute path for directory change to ensure we know where we are
 cd /app/ccxt
 bun run dist/index.js &
@@ -126,6 +135,20 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     # Check for connection string in DATABASE_HOST
     if echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
         export DATABASE_URL="${DATABASE_HOST}"
+    fi
+
+    # Credential Sync:
+    # If we have explicit DATABASE_HOST and DATABASE_PASSWORD, we prefer using them
+    # to reconstruct the connection, as DATABASE_URL might contain stale/generated credentials
+    # from the platform that don't match the actual container environment.
+    if [ -n "$DATABASE_HOST" ] && [ -n "$DATABASE_PASSWORD" ] && [ -n "$DATABASE_USER" ]; then
+        if [ -n "$DATABASE_URL" ]; then
+             # Only unset if DATABASE_HOST is NOT a URL itself
+             if ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
+                 log "Detected explicit DATABASE components with PASSWORD. Ignoring DATABASE_URL to ensure fresh credentials..."
+                 unset DATABASE_URL
+             fi
+        fi
     fi
 
     # Coolify/Docker DNS Fix:
