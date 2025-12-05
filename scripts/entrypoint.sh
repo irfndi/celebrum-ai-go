@@ -51,14 +51,15 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     fi
     
     # Debug: Log ALL environment variables to diagnose the issue
-    log "=== Database Environment Variables ==="
-    log "DATABASE_URL=${DATABASE_URL:-<NOT SET>}"
-    log "DATABASE_HOST=${DATABASE_HOST:-<NOT SET>}"
-    log "DATABASE_PORT=${DATABASE_PORT:-<NOT SET>}"
-    log "DATABASE_USER=${DATABASE_USER:-<NOT SET>}"
-    log "DATABASE_DBNAME=${DATABASE_DBNAME:-<NOT SET>}"
-    log "DATABASE_PASSWORD=${DATABASE_PASSWORD:+<REDACTED>}"
-    log "======================================"
+    # Use echo directly instead of log function to avoid issues with special characters
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] === Database Environment Variables ==="
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_URL=${DATABASE_URL:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_HOST=${DATABASE_HOST:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PORT=${DATABASE_PORT:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_USER=${DATABASE_USER:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_DBNAME=${DATABASE_DBNAME:-<NOT SET>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] DATABASE_PASSWORD=${DATABASE_PASSWORD:+<REDACTED>}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ======================================"
 
     # Simple approach: If DATABASE_URL is set, use it directly
     if [ -n "$DATABASE_URL" ]; then
