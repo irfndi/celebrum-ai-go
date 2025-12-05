@@ -55,6 +55,8 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         # Wait for database to be ready using URL
         until pg_isready -d "$DATABASE_URL"; do
             log "Database not ready, waiting..."
+            # Try to print the actual error message using psql
+            psql "$DATABASE_URL" -c "SELECT 1" 2>&1 | head -n 1 || true
             sleep 2
         done
     else
