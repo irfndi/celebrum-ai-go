@@ -83,7 +83,7 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         log "Testing DATABASE_URL connectivity..."
         # Try a quick check on DATABASE_URL (timeout 3s)
         if ! pg_isready -d "$DATABASE_URL" -t 3 >/dev/null 2>&1; then
-            log "DATABASE_URL check failed. Checking fallback to DATABASE_HOST=${DATABASE_HOST}..."
+            log "DATABASE_URL check failed. Checking fallback options..."
             
             # If DATABASE_URL fails, check if we have a valid DATABASE_HOST component
             if [ -n "$DATABASE_HOST" ] && ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
@@ -98,6 +98,41 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
                  PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -d "${CHECK_DB_NAME}" -t 3 || true
                  
                  log "WARNING: DATABASE_URL is unreachable. Forcing switch to DATABASE_HOST configuration to retry connection loop there."
+                 unset DATABASE_URL
+            else
+                 # DATABASE_HOST is not set or empty - extract components from DATABASE_URL instead
+                 log "DATABASE_HOST not provided. Extracting connection details from DATABASE_URL..."
+                 
+                 # Extract hostname (handle IPv6)
+                 if echo "$DATABASE_URL" | grep -q '@\['; then
+                     EXTRACTED_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\(\[[^]]*\]\).*|\1|p')
+                 else
+                     EXTRACTED_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/@]*\)[:/].*|\1|p')
+                 fi
+                 
+                 # Extract port (defaults to 5432 if not found)
+                 EXTRACTED_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]\+\)/.*|\1|p')
+                 EXTRACTED_PORT="${EXTRACTED_PORT:-5432}"
+                 
+                 # Extract database name
+                 EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+                 
+                 # Extract username
+                 EXTRACTED_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+                 
+                 # Extract password
+                 EXTRACTED_PASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+                 
+                 log "Extracted: host=${EXTRACTED_HOST}, port=${EXTRACTED_PORT}, db=${EXTRACTED_DBNAME}, user=${EXTRACTED_USER}"
+                 
+                 # Override environment variables with extracted values
+                 export DATABASE_HOST="${EXTRACTED_HOST}"
+                 export DATABASE_PORT="${EXTRACTED_PORT}"
+                 export DATABASE_DBNAME="${EXTRACTED_DBNAME}"
+                 export DATABASE_USER="${EXTRACTED_USER}"
+                 export DATABASE_PASSWORD="${EXTRACTED_PASSWORD}"
+                 
+                 log "WARNING: DATABASE_URL hostname may not be resolvable. Will use extracted components for connection."
                  unset DATABASE_URL
             fi
         else
