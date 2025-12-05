@@ -305,7 +305,9 @@ func TestGetTestRedisOptions_MiniredisIntegration(t *testing.T) {
 		}
 		assert.NoError(t, err)
 	}
-	defer s.Close()
+	t.Cleanup(func() {
+		s.Close()
+	})
 
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
 	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
@@ -338,7 +340,9 @@ func TestGetTestRedisClient_MiniredisIntegration(t *testing.T) {
 		}
 		assert.NoError(t, err)
 	}
-	defer s.Close()
+	t.Cleanup(func() {
+		s.Close()
+	})
 
 	originalAddr := os.Getenv("REDIS_TEST_ADDR")
 	deferRestoreEnv(t, "REDIS_TEST_ADDR", originalAddr)
