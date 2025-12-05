@@ -33,6 +33,9 @@ func NewRedisConnectionWithRetry(cfg config.RedisConfig, errorRecoveryManager Er
 		DB:       cfg.DB,
 	})
 
+	// Add Sentry hook for error tracking
+	rdb.AddHook(&RedisSentryHook{})
+
 	// Test the connection with retry logic if available
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

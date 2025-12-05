@@ -30,7 +30,6 @@ if [ -n "$DATABASE_HOST" ]; then
     cat /etc/resolv.conf
     echo "Hosts File:"
     cat /etc/hosts
-    cat /etc/hosts
     ping -c 1 "$DATABASE_HOST" || echo "FAILED to ping $DATABASE_HOST"
 fi
 echo ""

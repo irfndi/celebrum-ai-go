@@ -210,6 +210,9 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 		poolConfig.ConnConfig.RuntimeParams["plan_cache_mode"] = "force_generic_plan"
 	}
 
+	// Add Sentry tracer for error tracking
+	poolConfig.ConnConfig.Tracer = &PostgresSentryTracer{}
+
 	return poolConfig, nil
 }
 

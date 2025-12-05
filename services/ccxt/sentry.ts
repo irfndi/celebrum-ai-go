@@ -1,7 +1,16 @@
 import type { MiddlewareHandler } from "hono";
-import * as Sentry from "@sentry/bun";
+// import * as Sentry from "@sentry/bun"; // Disabled due to Bun.serve Proxy error
 
 const sentryDsn = process.env.SENTRY_DSN;
+
+export const isSentryEnabled = false; // Force disabled
+
+export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
+  // Pass-through middleware
+  await next();
+};
+
+/*
 const sentryEnvironment =
   process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
 const sentryRelease = process.env.SENTRY_RELEASE;
@@ -18,7 +27,7 @@ if (sentryDsn) {
   // Currently, @sentry/bun causes a "TypeError: A Proxy's 'target' should be an Object"
   // when instrumenting Bun.serve with Hono's fetch.
   console.warn("Sentry initialization disabled temporarily to fix Bun.serve crash.");
-  /*
+  
   Sentry.init({
     dsn: sentryDsn,
     environment: sentryEnvironment,
@@ -34,7 +43,7 @@ if (sentryDsn) {
       : 0,
     attachStacktrace: true,
   });
-  */
+  
 }
 
 export const isSentryEnabled = !!sentryDsn;
@@ -65,3 +74,4 @@ export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
     }
   );
 };
+*/

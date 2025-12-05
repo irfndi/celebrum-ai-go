@@ -3,12 +3,57 @@ package database
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
+
+// RedisSentryHook implements redis.Hook for Sentry error tracking
+type RedisSentryHook struct{}
+
+func (h *RedisSentryHook) DialHook(next redis.DialHook) redis.DialHook {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return next(ctx, network, addr)
+	}
+}
+
+func (h *RedisSentryHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		err := next(ctx, cmd)
+		if err != nil && err != redis.Nil {
+			sentry.CaptureException(err)
+		}
+		return err
+	}
+}
+
+func (h *RedisSentryHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		err := next(ctx, cmds)
+		if err != nil && err != redis.Nil {
+			sentry.CaptureException(err)
+		}
+		return err
+	}
+}
+
+// PostgresSentryTracer implements pgx.QueryTracer for Sentry error tracking
+type PostgresSentryTracer struct{}
+
+func (t *PostgresSentryTracer) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	return ctx
+}
+
+func (t *PostgresSentryTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
+	if data.Err != nil && data.Err != pgx.ErrNoRows {
+		sentry.CaptureException(data.Err)
+	}
+}
 
 // TracedDB wraps a database connection (stub implementation)
 type TracedDB struct {
