@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 # ==========================================
 FROM alpine:3.19 AS bun-base
 RUN apk add --no-cache bash curl unzip ca-certificates && \
-    curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.3" && \
+    curl -fsSL https://bun.sh/install | bash -s "bun-v1.1.15" && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # ==========================================
