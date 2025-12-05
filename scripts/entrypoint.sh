@@ -56,12 +56,21 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         # Check if DATABASE_HOST is just a hostname (not a full URL)
         if ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
             # Extract current hostname from DATABASE_URL
-            CURRENT_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+            # Handle IPv6 addresses first (enclosed in brackets)
+            if echo "$DATABASE_URL" | grep -q '@\['; then
+                CURRENT_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\(\[[^]]*\]\).*|\1|p')
+            else
+                # Handle regular hostnames - extract up to : or /
+                CURRENT_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/@]*\)[:/].*|\1|p')
+            fi
             
             # If the hostnames differ, patch DATABASE_URL with DATABASE_HOST
             if [ -n "$CURRENT_HOST" ] && [ "$CURRENT_HOST" != "$DATABASE_HOST" ]; then
                 log "Patching DATABASE_URL: Replacing host '$CURRENT_HOST' with '${DATABASE_HOST}'..."
-                DATABASE_URL=$(echo "$DATABASE_URL" | sed "s|@${CURRENT_HOST}:|@${DATABASE_HOST}:|")
+                # Escape special regex characters in CURRENT_HOST for sed
+                ESCAPED_HOST=$(echo "$CURRENT_HOST" | sed 's/[.[\*^$()+?{|]/\\&/g')
+                # Replace hostname - handle both :port and /dbname cases
+                DATABASE_URL=$(echo "$DATABASE_URL" | sed "s|@${ESCAPED_HOST}\([:/]\)|@${DATABASE_HOST}\1|")
                 export DATABASE_URL
                 log "Updated DATABASE_URL host to: ${DATABASE_HOST}"
             fi
@@ -81,7 +90,7 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
                  export CHECK_DB_PORT="${DATABASE_PORT:-5432}"
                  export CHECK_DB_USER="${DATABASE_USER:-postgres}"
                  export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
-                 export CHECK_DB_NAME="${DATABASE_DBNAME:-postgres}"
+                 export CHECK_DB_NAME="${DATABASE_DBNAME:-celebrum_ai}"
                  
                  # Check connectivity to DATABASE_HOST for logging purposes
                  log "Testing connection to DATABASE_HOST ($DATABASE_HOST) with database '${CHECK_DB_NAME}'..."
@@ -110,7 +119,7 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         # Export DB_ vars from DATABASE_ vars for migrate.sh
         export DB_HOST="${DATABASE_HOST:-localhost}"
         export DB_PORT="${DATABASE_PORT:-5432}"
-        export DB_NAME="${DATABASE_DBNAME:-postgres}"
+        export DB_NAME="${DATABASE_DBNAME:-celebrum_ai}"
         export DB_USER="${DATABASE_USER:-postgres}"
         export DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
 
