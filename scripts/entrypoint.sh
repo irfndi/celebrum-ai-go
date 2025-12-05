@@ -54,17 +54,28 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
     if [ -n "$DATABASE_URL" ]; then
         # Try a quick check on DATABASE_URL (timeout 2s)
         if ! pg_isready -d "$DATABASE_URL" -t 2 >/dev/null 2>&1; then
+            log "DATABASE_URL check failed. Checking fallback to DATABASE_HOST=${DATABASE_HOST}..."
+            
             # If DATABASE_URL fails, check if we have a valid DATABASE_HOST component
             if [ -n "$DATABASE_HOST" ] && ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
                  export CHECK_DB_PORT="${DATABASE_PORT:-5432}"
                  export CHECK_DB_USER="${DATABASE_USER:-postgres}"
                  export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
                  
-                 # Try connecting with component vars
-                 if PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1; then
-                      log "WARNING: DATABASE_URL is unreachable but DATABASE_HOST is responding."
+                 # Check connectivity to DATABASE_HOST
+                 # We capture the exit code: 0=Ready, 1=Rejecting(Up), 2=NoResponse(Down), 3=Error
+                 set +e # Temporarily disable exit-on-error
+                 PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${DATABASE_HOST}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1
+                 RET=$?
+                 set -e # Re-enable exit-on-error
+
+                 # If return code is 0 (Ready) or 1 (Rejecting connections - meaning host is UP), we switch
+                 if [ $RET -eq 0 ] || [ $RET -eq 1 ]; then
+                      log "WARNING: DATABASE_URL is unreachable (Resolution Error) but DATABASE_HOST is reachable (Status: $RET)."
                       log "Auto-recovery: Ignoring broken DATABASE_URL and switching to component-based config."
                       unset DATABASE_URL
+                 else
+                      log "Fallback check to DATABASE_HOST failed with status $RET. Sticking with DATABASE_URL."
                  fi
             fi
         fi
