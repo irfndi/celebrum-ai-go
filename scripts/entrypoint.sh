@@ -6,6 +6,82 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Normalize database environment variables from common providers (Coolify, generic Postgres, psql)
+normalize_database_env() {
+    # Map provider-specific URL first
+    if [ -z "$DATABASE_URL" ]; then
+        if [ -n "$POSTGRESQL_URL" ]; then
+            export DATABASE_URL="$POSTGRESQL_URL"
+        elif [ -n "$POSTGRES_URL" ]; then
+            export DATABASE_URL="$POSTGRES_URL"
+        fi
+    fi
+
+    # Map host values
+    if [ -z "$DATABASE_HOST" ]; then
+        for candidate in "$POSTGRES_HOST" "$POSTGRESQL_HOST" "$PGHOST"; do
+            if [ -n "$candidate" ]; then
+                export DATABASE_HOST="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # Map port values
+    if [ -z "$DATABASE_PORT" ]; then
+        for candidate in "$POSTGRES_PORT" "$POSTGRESQL_PORT" "$PGPORT"; do
+            if [ -n "$candidate" ]; then
+                export DATABASE_PORT="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # Map user values
+    if [ -z "$DATABASE_USER" ]; then
+        for candidate in "$POSTGRES_USER" "$POSTGRESQL_USER" "$PGUSER"; do
+            if [ -n "$candidate" ]; then
+                export DATABASE_USER="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # Map password values
+    if [ -z "$DATABASE_PASSWORD" ]; then
+        for candidate in "$POSTGRES_PASSWORD" "$POSTGRESQL_PASSWORD" "$PGPASSWORD"; do
+            if [ -n "$candidate" ]; then
+                export DATABASE_PASSWORD="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # Map database name values
+    if [ -z "$DATABASE_DBNAME" ]; then
+        for candidate in "$POSTGRES_DB" "$POSTGRESQL_DATABASE" "$PGDATABASE"; do
+            if [ -n "$candidate" ]; then
+                export DATABASE_DBNAME="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # Debug printout (password redacted)
+    log "=== Database Environment Variables ==="
+    log "DATABASE_URL=${DATABASE_URL:-<NOT SET>}"
+    log "DATABASE_HOST=${DATABASE_HOST:-<NOT SET>}"
+    log "DATABASE_PORT=${DATABASE_PORT:-5432}"
+    log "DATABASE_USER=${DATABASE_USER:-<NOT SET>}"
+    log "DATABASE_DBNAME=${DATABASE_DBNAME:-<NOT SET>}"
+    if [ -n "$DATABASE_PASSWORD" ]; then
+        log "DATABASE_PASSWORD=<REDACTED>"
+    else
+        log "DATABASE_PASSWORD=<NOT SET>"
+    fi
+    log "======================================"
+}
+
 # Trap signals
 cleanup() {
     log "Received termination signal, shutting down..."
@@ -28,6 +104,9 @@ PID_BUN=$!
 # Wait for CCXT to be ready (optional, but good practice)
 # We can just wait a few seconds or use a health check loop
 sleep 2
+
+# Normalize env vars early so migrations and app boot see the correct values
+normalize_database_env
 
 # Auto-Run Migrations if enabled
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
@@ -66,12 +145,26 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
         if ! pg_isready -d "$DATABASE_URL" -t 2 >/dev/null 2>&1; then
             log "DATABASE_URL check failed. Checking fallback to DATABASE_HOST=${DATABASE_HOST}..."
             
+            # Define credentials for checks
+            export CHECK_DB_PORT="${DATABASE_PORT:-5432}"
+            export CHECK_DB_USER="${DATABASE_USER:-postgres}"
+            export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
+
+            # Check if DATABASE_HOST is reachable, if not try postgresql-develop
+            HOST_TO_CHECK="${DATABASE_HOST}"
+            if [ -n "$HOST_TO_CHECK" ] && ! echo "${HOST_TO_CHECK}" | grep -qE "^postgres(ql)?://"; then
+                 if ! PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "${HOST_TO_CHECK}" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1; then
+                     log "Host '${HOST_TO_CHECK}' unreachable. Checking 'postgresql-develop'..."
+                     if PGPASSWORD="${CHECK_DB_PASSWORD}" pg_isready -h "postgresql-develop" -p "${CHECK_DB_PORT}" -U "${CHECK_DB_USER}" -t 2 >/dev/null 2>&1; then
+                         log "Found reachable database at 'postgresql-develop'. Switching configuration..."
+                         export DATABASE_HOST="postgresql-develop"
+                         unset DATABASE_URL
+                     fi
+                 fi
+            fi
+
             # If DATABASE_URL fails, check if we have a valid DATABASE_HOST component
             if [ -n "$DATABASE_HOST" ] && ! echo "${DATABASE_HOST}" | grep -qE "^postgres(ql)?://"; then
-                 export CHECK_DB_PORT="${DATABASE_PORT:-5432}"
-                 export CHECK_DB_USER="${DATABASE_USER:-postgres}"
-                 export CHECK_DB_PASSWORD="${DATABASE_PASSWORD:-postgres}"
-                 
                  # Check connectivity to DATABASE_HOST for logging purposes
                  log "Testing connection to DATABASE_HOST ($DATABASE_HOST)..."
                  # We run this just to print the error to logs (remove -q/silence)
