@@ -111,23 +111,26 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
                  fi
                  
                  # Extract port (defaults to 5432 if not found)
-                 # Match :port/ or :port$ patterns
-                 EXTRACTED_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]\+\)\(/\|$\).*|\1|p')
+                 # Match :port/ or :port at end of string
+                 EXTRACTED_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]\+\)\(/.*\|$\)|\1|p')
                  EXTRACTED_PORT="${EXTRACTED_PORT:-5432}"
                  
                  # Extract database name (may be empty)
-                 # Only extract if there's a / after the port/host
-                 if echo "$DATABASE_URL" | grep -q ':[0-9]\+/'; then
-                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*:[0-9]\+/\([^?]*\).*|\1|p')
-                 elif echo "$DATABASE_URL" | grep -q '@[^:@]\+:[0-9]\+$'; then
-                     EXTRACTED_DBNAME=""
+                 # Check if URL has a / after the hostname/port
+                 if echo "$DATABASE_URL" | grep -q '@[^/]*:[0-9]\+/'; then
+                     # Has port and database
+                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*:[0-9]\+/\([^/?]*\).*|\1|p')
+                 elif echo "$DATABASE_URL" | grep -q '@[^/]*/'; then
+                     # Has database but maybe no port
+                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^/?]*\).*|\1|p')
                  else
-                     EXTRACTED_DBNAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^/?]\+\)$|\1|p')
+                     # No database in URL
+                     EXTRACTED_DBNAME=""
                  fi
                  EXTRACTED_DBNAME="${EXTRACTED_DBNAME:-postgres}"
                  
-                 # Extract username (required)
-                 EXTRACTED_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:@]*\)[:@].*|\1|p')
+                 # Extract username (may be empty)
+                 EXTRACTED_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:@]*\).*|\1|p')
                  EXTRACTED_USER="${EXTRACTED_USER:-postgres}"
                  
                  # Extract password (may be empty for trust auth)
