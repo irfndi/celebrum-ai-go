@@ -7,7 +7,6 @@ Worker utilities note (Bun >= 1.2.21):
 - If you need metadata, consider sending a small metadata message separately, or keep the large payload
   as a top-level string field to preserve fast-path benefits.
 */
-import { serve } from "@hono/node-server";
 import * as Sentry from "@sentry/bun";
 
 import { Hono } from "hono";
@@ -1089,7 +1088,7 @@ export default app;
 if (import.meta.main) {
   console.log(`🚀 CCXT Service starting on port ${PORT}`);
   console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(", ")}`);
-  serve({
+  Bun.serve({
     fetch: app.fetch,
     port: Number(PORT),
   });

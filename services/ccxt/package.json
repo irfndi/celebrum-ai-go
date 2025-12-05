@@ -9,11 +9,10 @@
     "dev": "npm run build && node --watch ./dist/index.js",
     "dev:bun": "bun --watch index.ts",
     "build": "tsc && mkdir -p dist/",
-    "build:bun": "bun build index.ts --outdir ./dist --target node",
+    "build:bun": "bun build index.ts --outdir ./dist --target bun",
     "test": "bun test"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.6",
     "@sentry/bun": "^8.29.0",
     "ccxt": "^4.5.24",
     "hono": "^4.10.7",
