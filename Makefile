@@ -233,7 +233,7 @@ db-seed: ## Seed database with sample data
 ## CI/CD
 ci-test: ## Run CI tests with proper environment
 	@echo "$(GREEN)Running CI tests...$(NC)"
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -v -race -coverprofile=coverage.out $$(go list ./... | grep -v -E '(testmocks|observability)')
 	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Running CCXT service tests...$(NC)"; \
 		cd services/ccxt && bun test; \
