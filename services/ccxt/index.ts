@@ -1092,10 +1092,20 @@ if (shouldAutoServe) {
   console.log(`🚀 CCXT Service starting on port ${PORT}`);
   console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(", ")}`);
   console.log(`Starting Bun server with app.fetch type: ${typeof app.fetch}`);
-  Bun.serve({
-    fetch: app.fetch,
-    port: Number(PORT),
-  });
+  try {
+    Bun.serve({
+      fetch: app.fetch,
+      port: Number(PORT),
+    });
+  } catch (error: any) {
+    if (error?.code === "EADDRINUSE") {
+      console.warn(
+        `Bun.serve skipped: port ${PORT} already in use (likely auto-served by Bun). Set CCXT_AUTO_SERVE=false to disable this call.`,
+      );
+    } else {
+      throw error;
+    }
+  }
 } else if (import.meta.main) {
   console.log(
     "CCXT auto-serve disabled (BUN_NO_SERVER=true or CCXT_AUTO_SERVE=false); server not started",
