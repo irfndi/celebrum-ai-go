@@ -233,7 +233,8 @@ db-seed: ## Seed database with sample data
 ## CI/CD
 ci-test: ## Run CI tests with proper environment
 	@echo "$(GREEN)Running CI tests...$(NC)"
-	go test -v -race -coverprofile=coverage.out ./...
+	@# Exclude only internal/api/handlers/testmocks and internal/observability packages (no tests, trigger Go 1.25 covdata bug)
+	go test -v -race -coverprofile=coverage.out $$(go list ./... | grep -v -E '(internal/api/handlers/testmocks|internal/observability)')
 	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Running CCXT service tests...$(NC)"; \
 		cd services/ccxt && bun test; \
