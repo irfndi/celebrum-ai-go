@@ -241,7 +241,7 @@ ci-test: ## Run CI tests with proper environment
 
 ci-lint: ## Run linter for CI
 	@echo "$(GREEN)Running CI linter...$(NC)"
-	golangci-lint run --timeout=5m
+	./bin/golangci-lint run --timeout=5m
 
 ci-build: ## Build for CI across all languages
 	@echo "$(GREEN)Building for CI...$(NC)"
