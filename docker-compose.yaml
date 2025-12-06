@@ -6,7 +6,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: celebrum-app
     restart: always
     environment:
       - DATABASE_HOST=${DATABASE_HOST}
@@ -21,6 +20,11 @@ services:
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
-    # ports:
-    #   - "8080:8080"
-    #   - "3000:3000"
+    networks:
+      - default
+      - coolify
+
+networks:
+  coolify:
+    external: true
+    name: ${COOLIFY_SHARED_NETWORK:-coolify}

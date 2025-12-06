@@ -1083,7 +1083,12 @@ app.notFound((c) => {
 // Export app for tests; only start server when run directly
 export default app;
 
-if (import.meta.main) {
+const shouldAutoServe =
+  import.meta.main &&
+  process.env.BUN_NO_SERVER !== "true" &&
+  process.env.CCXT_AUTO_SERVE !== "false";
+
+if (shouldAutoServe) {
   console.log(`🚀 CCXT Service starting on port ${PORT}`);
   console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(", ")}`);
   console.log(`Starting Bun server with app.fetch type: ${typeof app.fetch}`);
@@ -1091,4 +1096,8 @@ if (import.meta.main) {
     fetch: app.fetch,
     port: Number(PORT),
   });
+} else if (import.meta.main) {
+  console.log(
+    "CCXT auto-serve disabled (BUN_NO_SERVER=true or CCXT_AUTO_SERVE=false); server not started",
+  );
 }
