@@ -59,18 +59,18 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	} else {
 		tokenLen := len(telegramConfig.BotToken)
 		// Security: Only log token length, not any part of the actual token
-		log.Printf("[TELEGRAM] Config provided: BotToken length=%d, UsePolling=%t, WebhookURL=%s", 
+		log.Printf("[TELEGRAM] Config provided: BotToken length=%d, UsePolling=%t, WebhookURL=%s",
 			tokenLen, telegramConfig.UsePolling, telegramConfig.WebhookURL)
 	}
-	
+
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
-	
+
 	if telegramHandler == nil {
 		log.Printf("[TELEGRAM] ERROR: Telegram handler is nil after initialization")
 	} else {
 		log.Printf("[TELEGRAM] Telegram handler initialized successfully")
 	}
-	
+
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)

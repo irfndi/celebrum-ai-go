@@ -409,9 +409,7 @@ app.get("/api/ticker/:exchange/*", async (c) => {
         lastError = error;
 
         if (i < retries - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * (i + 1)),
-          ); // Exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
         }
       }
     }

@@ -89,7 +89,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 	}
 
 	log.Printf("[TELEGRAM] Bot instance created successfully")
-	
+
 	// Set the bot in the handler
 	handler.bot = b
 
@@ -110,7 +110,7 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 // HandleWebhook processes incoming Telegram webhook requests
 func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
 	log.Printf("[TELEGRAM] HandleWebhook called from %s", c.ClientIP())
-	
+
 	if h.bot == nil {
 		log.Printf("[TELEGRAM] ERROR: Telegram bot is not initialized, ignoring webhook")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Telegram bot not available"})
@@ -143,19 +143,19 @@ func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
 // processUpdate processes a Telegram update
 func (h *TelegramHandler) processUpdate(ctx context.Context, update *models.Update) error {
 	log.Printf("[TELEGRAM] processUpdate called")
-	
+
 	if update.Message == nil {
 		log.Printf("[TELEGRAM] Update has no message, ignoring")
 		return nil // Ignore non-message updates for now
 	}
 
 	message := update.Message
-	
+
 	if message.From == nil || message.Chat.ID == 0 {
 		log.Printf("[TELEGRAM] ERROR: Invalid message: missing from or chat")
 		return fmt.Errorf("invalid message: missing from or chat")
 	}
-	
+
 	// Security: Log message metadata without exposing user content
 	log.Printf("[TELEGRAM] Message received from user %d in chat %d (length: %d)", message.From.ID, message.Chat.ID, len(message.Text))
 
@@ -201,11 +201,11 @@ func (h *TelegramHandler) handleCommand(ctx context.Context, message *models.Mes
 // handleStartCommand handles the /start command
 func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID int64, from *models.User) error {
 	log.Printf("[TELEGRAM] handleStartCommand called for user %d, chat %d", userID, chatID)
-	
+
 	// Check if user already exists
 	chatIDStr := strconv.FormatInt(chatID, 10)
 	var existingUser userModels.User
-	
+
 	log.Printf("[TELEGRAM] Checking if user exists with telegram_chat_id=%s", chatIDStr)
 	err := h.db.Pool.QueryRow(ctx, "SELECT id, email, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE telegram_chat_id = $1", chatIDStr).Scan(
 		&existingUser.ID, &existingUser.Email, &existingUser.TelegramChatID, &existingUser.SubscriptionTier, &existingUser.CreatedAt, &existingUser.UpdatedAt)
@@ -221,7 +221,7 @@ func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID
 	}
 
 	log.Printf("[TELEGRAM] User not found, creating new user")
-	
+
 	// Create new user - let database generate UUID automatically
 	email := fmt.Sprintf("telegram_%d@celebrum.ai", userID)
 	telegramChatID := &chatIDStr
@@ -239,7 +239,7 @@ func (h *TelegramHandler) handleStartCommand(ctx context.Context, chatID, userID
 	}
 
 	log.Printf("[TELEGRAM] User created successfully, sending welcome message")
-	
+
 	// Send welcome message
 	welcomeMsg := `🚀 Welcome to Celebrum AI!
 
@@ -422,7 +422,7 @@ func (h *TelegramHandler) StartPolling() {
 		// The bot.Start method handles polling internally
 		h.bot.Start(ctx)
 	}()
-	
+
 	log.Printf("[TELEGRAM] Polling goroutine launched")
 }
 
@@ -505,7 +505,7 @@ func (h *TelegramHandler) handleTextMessage(ctx context.Context, message *models
 // sendMessage sends a message to a Telegram chat using the bot framework
 func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text string) error {
 	log.Printf("[TELEGRAM] sendMessage called for chat %d", chatID)
-	
+
 	if h.bot == nil {
 		log.Printf("[TELEGRAM] ERROR: Telegram bot is not initialized, cannot send message to chat %d", chatID)
 		return fmt.Errorf("telegram bot not available")
@@ -517,7 +517,7 @@ func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text st
 		messagePreview = text[:50] + "..."
 	}
 	log.Printf("[TELEGRAM] Sending message to chat %d: %s", chatID, messagePreview)
-	
+
 	_, err := h.bot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   text,
@@ -526,7 +526,7 @@ func (h *TelegramHandler) sendMessage(ctx context.Context, chatID int64, text st
 		log.Printf("[TELEGRAM] ERROR: Failed to send message to chat %d: %v", chatID, err)
 		return err
 	}
-	
+
 	log.Printf("[TELEGRAM] Message sent successfully to chat %d", chatID)
 	return nil
 }

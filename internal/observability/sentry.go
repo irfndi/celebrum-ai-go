@@ -25,12 +25,12 @@ func InitSentry(cfg config.SentryConfig, fallbackRelease string, fallbackEnv str
 	}
 
 	return sentry.Init(sentry.ClientOptions{
-		Dsn:                cfg.DSN,
-		Environment:        environment,
-		Release:            release,
-		EnableTracing:      cfg.TracesSampleRate > 0,
-		TracesSampleRate:   cfg.TracesSampleRate,
-		AttachStacktrace:   true,
+		Dsn:              cfg.DSN,
+		Environment:      environment,
+		Release:          release,
+		EnableTracing:    cfg.TracesSampleRate > 0,
+		TracesSampleRate: cfg.TracesSampleRate,
+		AttachStacktrace: true,
 	})
 }
 

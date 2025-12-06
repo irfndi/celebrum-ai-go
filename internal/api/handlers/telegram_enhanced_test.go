@@ -39,7 +39,7 @@ func TestTelegramHandlerWithMockDB(t *testing.T) {
 
 	t.Run("handleStartCommand_new_user_logic", func(t *testing.T) {
 		t.Skip("Mock setup demonstration only - actual handler requires real pgxpool.Pool")
-		
+
 		// Test the logic without actual DB call
 		// This test validates error handling when user doesn't exist
 
@@ -59,7 +59,7 @@ func TestTelegramHandlerWithMockDB(t *testing.T) {
 
 	t.Run("handleStartCommand_existing_user_logic", func(t *testing.T) {
 		t.Skip("Mock setup demonstration only - actual handler requires real pgxpool.Pool")
-		
+
 		// Test the logic for existing user
 		rows := pgxmock.NewRows([]string{"id", "email", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 			AddRow("user-123", "test@example.com", "123456", "free", time.Now(), time.Now())
@@ -73,7 +73,7 @@ func TestTelegramHandlerWithMockDB(t *testing.T) {
 
 	t.Run("handleStartCommand_database_error_logic", func(t *testing.T) {
 		t.Skip("Mock setup demonstration only - actual handler requires real pgxpool.Pool")
-		
+
 		// Test database error handling
 		mockPool.ExpectQuery("SELECT id, email, telegram_chat_id").
 			WithArgs("123456").
@@ -202,7 +202,7 @@ func TestTelegramHandlerRedisOperations(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		
+
 		// Set notification to disabled
 		err := redisClient.Set(ctx, "telegram:user:789:notifications_enabled", "false", 0).Err()
 		require.NoError(t, err)
@@ -302,7 +302,7 @@ func TestTelegramHandlerCommandRouting(t *testing.T) {
 		wantErr bool
 		skipDB  bool // Skip if command requires database
 	}{
-		{"start command", "/start", true, true},  // Skipped - requires DB
+		{"start command", "/start", true, true}, // Skipped - requires DB
 		{"help command", "/help", true, false},
 		{"opportunities command", "/opportunities", true, false},
 		{"settings command", "/settings", true, false},
@@ -319,7 +319,7 @@ func TestTelegramHandlerCommandRouting(t *testing.T) {
 				t.Skip("Skipping test that requires database access")
 				return
 			}
-			
+
 			err := handler.handleCommand(ctx, message, tt.command)
 			if tt.wantErr {
 				assert.Error(t, err)

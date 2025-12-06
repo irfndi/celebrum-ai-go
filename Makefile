@@ -130,7 +130,7 @@ fmt: ## Format code across all languages
 
 fmt-check: ## Check code formatting
 	@echo "$(GREEN)Checking code formatting...$(NC)"
-	@UNFORMATTED="$$(gofmt -s -l .)"; \
+	@UNFORMATTED="$$(find . -name "*.go" -not -path "./.cache/*" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -s -l)"; \
 	if [ -n "$$UNFORMATTED" ]; then \
 		echo "$(RED)The following files are not formatted:$(NC)"; \
 		echo "$$UNFORMATTED"; \
