@@ -85,3 +85,7 @@ make db-migrate
 
 - **Migration Failures**: Check the deployment logs. Ensure `DATABASE_` env vars are correct.
 - **Service Communication**: The Go app communicates with the CCXT service via `localhost:3000` inside the container. Ensure `CCXT_SERVICE_URL` is set to `http://localhost:3000`.
+- **Health check stuck as unhealthy**: The Docker health check hits `http://localhost:8080/health` from inside the container. A 503 is usually caused by missing critical env vars (e.g., `TELEGRAM_BOT_TOKEN`), a down CCXT service, or stale env after manual edits.
+- **Coolify DNS / host-name issues**: If you see `could not translate host name` for Postgres/Redis, make sure the app service is attached to the Coolify network and that `DATABASE_HOST` / `REDIS_HOST` use the internal service names Coolify provides (often UUID-like container names).
+- **Applying env changes**: After editing `.env` or Coolify env vars, recreate the container so the new values are loaded: `docker compose up -d --force-recreate celebrum` in the application directory. Avoid leaving files immutable (`chattr +i`) unless you are intentionally freezing them; unlock with `chattr -i .env docker-compose.yaml` before updates and relock if needed.
+- **CCXT service port**: The Bun CCXT server listens on `PORT` (default 3000) inside the container. Keep `CCXT_SERVICE_URL` aligned (e.g., `http://127.0.0.1:3000` or the port you override) to avoid connection refused errors during startup or cache warming.
