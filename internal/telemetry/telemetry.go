@@ -63,7 +63,6 @@ func Flush(timeout time.Duration) {
 // Provider holds the telemetry provider
 type Provider struct {
 	Shutdown func(context.Context) error
-	logger   *slog.Logger
 }
 
 // Shutdown shuts down the global telemetry provider

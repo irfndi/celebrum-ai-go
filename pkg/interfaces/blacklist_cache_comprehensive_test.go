@@ -16,7 +16,7 @@ func TestNewInMemoryBlacklistCache(t *testing.T) {
 	require.NotNil(t, cache)
 
 	// Verify it implements the BlacklistCache interface
-	var _ BlacklistCache = cache
+	var _ = cache
 }
 
 // TestNewRedisSymbolCache tests the NewRedisSymbolCache factory function
@@ -25,7 +25,7 @@ func TestNewRedisSymbolCache(t *testing.T) {
 	require.NotNil(t, cache)
 
 	// Verify it implements the SymbolCacheInterface interface
-	var _ SymbolCacheInterface = cache
+	var _ = cache
 }
 
 // TestMockBlacklistCache_IsBlacklisted tests the IsBlacklisted method

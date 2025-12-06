@@ -46,7 +46,13 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	}
 
 	// Initialize notification service with Redis caching
-	notificationService := services.NewNotificationService(db, redis, telegramConfig.BotToken)
+	var notificationService *services.NotificationService
+	if telegramConfig != nil {
+		notificationService = services.NewNotificationService(db, redis, telegramConfig.BotToken)
+	} else {
+		log.Printf("[TELEGRAM] WARNING: telegramConfig is nil, notification service will run with empty token")
+		notificationService = services.NewNotificationService(db, redis, "")
+	}
 
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)

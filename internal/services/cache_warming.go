@@ -24,8 +24,7 @@ type CacheWarmingService struct {
 // NewCacheWarmingService creates a new cache warming service
 func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTService, db *database.PostgresDB) *CacheWarmingService {
 	// Initialize logger with fallback for tests
-	var logger *slog.Logger
-	logger = telemetry.Logger()
+	logger := telemetry.Logger()
 
 	return &CacheWarmingService{
 		redisClient: redisClient,

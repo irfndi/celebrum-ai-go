@@ -35,7 +35,9 @@ func TestTelegramHandlerWithMockDB(t *testing.T) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	t.Run("handleStartCommand_new_user_logic", func(t *testing.T) {
 		t.Skip("Mock setup demonstration only - actual handler requires real pgxpool.Pool")
@@ -93,7 +95,9 @@ func TestTelegramHandlerConfigInitialization(t *testing.T) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	t.Run("nil_config", func(t *testing.T) {
 		handler := NewTelegramHandler(nil, nil, nil, nil, redisClient)
@@ -154,7 +158,9 @@ func TestTelegramHandlerRedisOperations(t *testing.T) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	t.Run("handleStopCommand_with_redis", func(t *testing.T) {
 		handler := &TelegramHandler{

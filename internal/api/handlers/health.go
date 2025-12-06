@@ -100,9 +100,8 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check CCXT Service
-	ccxtStatus := "unknown"
-	if h.checkCCXTService() != nil {
-		err := h.checkCCXTService()
+	var ccxtStatus string
+	if err := h.checkCCXTService(); err != nil {
 		ccxtStatus = "unhealthy: " + err.Error()
 		span.SetTag("ccxt.status", "unhealthy")
 		sentry.CaptureException(err)

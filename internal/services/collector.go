@@ -346,8 +346,7 @@ type Worker struct {
 // initializeSymbolCache creates either Redis-based or in-memory symbol cache
 func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
 	// Initialize logger with fallback for tests
-	var logger *slog.Logger
-	logger = telemetry.Logger()
+	logger := telemetry.Logger()
 
 	if redisClient != nil {
 		logger.Info("Initializing Redis-based symbol cache")
@@ -443,8 +442,7 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	circuitBreakerManager.GetOrCreate("redis", redisConfig)
 
 	// Initialize logger with fallback for tests
-	var logger *slog.Logger
-	logger = telemetry.Logger()
+	logger := telemetry.Logger()
 
 	return &CollectorService{
 		db:              db,
