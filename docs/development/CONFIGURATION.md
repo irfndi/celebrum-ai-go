@@ -59,7 +59,8 @@ docker-compose up -d
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_PORT` | `8080` | Application port |
-| `CCXT_SERVICE_URL` | `http://localhost:3000` | CCXT service URL |
+| `PORT` | `3001` | CCXT service port |
+| `CCXT_SERVICE_URL` | `http://localhost:3001` | CCXT service URL |
 | `TELEGRAM_BOT_TOKEN` | - | Telegram bot token |
 | `REDIS_PASSWORD` | - | Redis password |
 
@@ -108,7 +109,7 @@ curl http://localhost:8080/health
 curl http://localhost:9090/metrics
 
 # CCXT service health
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 ```
 
 ## 🔍 Troubleshooting
@@ -120,12 +121,12 @@ curl http://localhost:3000/health
 ```bash
 # Check port usage
 lsof -i :8080
-lsof -i :3000
+lsof -i :3001
 lsof -i :5432
 
 # Change ports in .env
 SERVER_PORT=8081
-CCXT_SERVICE_PORT=3002
+PORT=3002
 POSTGRES_PORT=5433
 ```
 

@@ -46,7 +46,7 @@ type DatabaseConfig struct {
 	ApplicationName       string `mapstructure:"application_name"`
 	ConnectTimeout        int    `mapstructure:"connect_timeout"`
 	StatementTimeout      int    `mapstructure:"statement_timeout"`
-	QueryTimeout          int    `mapstructure:"query_timeout"`
+	QueryTimeout          int    `mapstructure:"query_timeout"` // Alias for StatementTimeout for compatibility
 	PoolTimeout           int    `mapstructure:"pool_timeout"`
 	PoolHealthCheckPeriod int    `mapstructure:"pool_health_check_period"`
 	PoolMaxLifetime       int    `mapstructure:"pool_max_lifetime"`
@@ -232,7 +232,7 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://localhost:3000")
+	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram
