@@ -10,38 +10,64 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// ExchangeBlacklistEntry represents a blacklisted exchange in the database
+// ExchangeBlacklistEntry represents a blacklisted exchange in the database.
 type ExchangeBlacklistEntry struct {
+	// ID is the unique identifier.
 	ID           int64      `json:"id" db:"id"`
+	// ExchangeName is the name of the exchange.
 	ExchangeName string     `json:"exchange_name" db:"exchange_name"`
+	// Reason describes why the exchange was blacklisted.
 	Reason       string     `json:"reason" db:"reason"`
+	// CreatedAt is when the entry was created.
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	// UpdatedAt is when the entry was last updated.
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	// ExpiresAt is when the blacklist expires (nil for never).
 	ExpiresAt    *time.Time `json:"expires_at,omitempty" db:"expires_at"`
+	// IsActive indicates if the blacklist entry is currently active.
 	IsActive     bool       `json:"is_active" db:"is_active"`
 }
 
-// DatabasePool defines the interface for database pool operations
-// This interface allows for both real pool and mock pool implementations
+// DatabasePool defines the interface for database pool operations.
+// This interface allows for both real pool and mock pool implementations.
 type DatabasePool interface {
+	// QueryRow executes a query that is expected to return at most one row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	// Exec executes a query without returning any rows.
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	// Query executes a query that returns rows.
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 }
 
-// BlacklistRepository handles database operations for exchange blacklist
+// BlacklistRepository handles database operations for exchange blacklist.
 type BlacklistRepository struct {
 	pool DatabasePool
 }
 
-// NewBlacklistRepository creates a new blacklist repository
+// NewBlacklistRepository creates a new blacklist repository.
+//
+// Parameters:
+//   pool: The database connection pool.
+//
+// Returns:
+//   *BlacklistRepository: The initialized repository.
 func NewBlacklistRepository(pool DatabasePool) *BlacklistRepository {
 	return &BlacklistRepository{
 		pool: pool,
 	}
 }
 
-// AddExchange adds an exchange to the blacklist
+// AddExchange adds an exchange to the blacklist.
+//
+// Parameters:
+//   ctx: Context.
+//   exchangeName: Exchange name.
+//   reason: Reason for blacklisting.
+//   expiresAt: Expiration time.
+//
+// Returns:
+//   *ExchangeBlacklistEntry: The created entry.
+//   error: Error if operation fails.
 func (r *BlacklistRepository) AddExchange(ctx context.Context, exchangeName, reason string, expiresAt *time.Time) (*ExchangeBlacklistEntry, error) {
 	query := `
 		INSERT INTO exchange_blacklist (exchange_name, reason, expires_at, is_active)
@@ -71,7 +97,14 @@ func (r *BlacklistRepository) AddExchange(ctx context.Context, exchangeName, rea
 	return &entry, nil
 }
 
-// RemoveExchange removes an exchange from the blacklist
+// RemoveExchange removes an exchange from the blacklist.
+//
+// Parameters:
+//   ctx: Context.
+//   exchangeName: Exchange name.
+//
+// Returns:
+//   error: Error if operation fails.
 func (r *BlacklistRepository) RemoveExchange(ctx context.Context, exchangeName string) error {
 	query := `
 		UPDATE exchange_blacklist 
@@ -91,7 +124,16 @@ func (r *BlacklistRepository) RemoveExchange(ctx context.Context, exchangeName s
 	return nil
 }
 
-// IsBlacklisted checks if an exchange is currently blacklisted
+// IsBlacklisted checks if an exchange is currently blacklisted.
+//
+// Parameters:
+//   ctx: Context.
+//   exchangeName: Exchange name.
+//
+// Returns:
+//   bool: True if blacklisted.
+//   string: Reason for blacklisting.
+//   error: Error if check fails.
 func (r *BlacklistRepository) IsBlacklisted(ctx context.Context, exchangeName string) (bool, string, error) {
 	query := `
 		SELECT reason, expires_at
@@ -113,7 +155,14 @@ func (r *BlacklistRepository) IsBlacklisted(ctx context.Context, exchangeName st
 	return true, reason, nil
 }
 
-// GetAllBlacklisted returns all currently blacklisted exchanges
+// GetAllBlacklisted returns all currently blacklisted exchanges.
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   []ExchangeBlacklistEntry: List of blacklist entries.
+//   error: Error if retrieval fails.
 func (r *BlacklistRepository) GetAllBlacklisted(ctx context.Context) ([]ExchangeBlacklistEntry, error) {
 	query := `
 		SELECT id, exchange_name, reason, created_at, updated_at, expires_at, is_active
@@ -154,7 +203,14 @@ func (r *BlacklistRepository) GetAllBlacklisted(ctx context.Context) ([]Exchange
 	return entries, nil
 }
 
-// CleanupExpired removes expired blacklist entries
+// CleanupExpired removes expired blacklist entries.
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   int64: Number of entries deactivated.
+//   error: Error if cleanup fails.
 func (r *BlacklistRepository) CleanupExpired(ctx context.Context) (int64, error) {
 	query := `
 		UPDATE exchange_blacklist 
@@ -172,7 +228,15 @@ func (r *BlacklistRepository) CleanupExpired(ctx context.Context) (int64, error)
 	return result.RowsAffected(), nil
 }
 
-// GetBlacklistHistory returns the history of blacklist changes
+// GetBlacklistHistory returns the history of blacklist changes.
+//
+// Parameters:
+//   ctx: Context.
+//   limit: Maximum number of entries.
+//
+// Returns:
+//   []ExchangeBlacklistEntry: History entries.
+//   error: Error if retrieval fails.
 func (r *BlacklistRepository) GetBlacklistHistory(ctx context.Context, limit int) ([]ExchangeBlacklistEntry, error) {
 	query := `
 		SELECT id, exchange_name, reason, created_at, updated_at, expires_at, is_active
@@ -212,7 +276,14 @@ func (r *BlacklistRepository) GetBlacklistHistory(ctx context.Context, limit int
 	return entries, nil
 }
 
-// ClearAll deactivates all blacklist entries
+// ClearAll deactivates all blacklist entries.
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   int64: Number of entries deactivated.
+//   error: Error if operation fails.
 func (r *BlacklistRepository) ClearAll(ctx context.Context) (int64, error) {
 	query := `
 		UPDATE exchange_blacklist 

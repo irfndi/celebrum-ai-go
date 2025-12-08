@@ -18,16 +18,34 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// PostgresDB wraps a PostgreSQL connection pool.
 type PostgresDB struct {
 	Pool *pgxpool.Pool
 }
 
 const maxAllowedPoolConns int32 = 10000
 
+// NewPostgresConnection creates a new PostgreSQL connection with the default context.
+//
+// Parameters:
+//   cfg: Database configuration.
+//
+// Returns:
+//   *PostgresDB: The initialized connection.
+//   error: Error if connection fails.
 func NewPostgresConnection(cfg *config.DatabaseConfig) (*PostgresDB, error) {
 	return NewPostgresConnectionWithContext(context.Background(), cfg)
 }
 
+// NewPostgresConnectionWithContext creates a new PostgreSQL connection with a specified context.
+//
+// Parameters:
+//   ctx: Context for the connection establishment.
+//   cfg: Database configuration.
+//
+// Returns:
+//   *PostgresDB: The initialized connection.
+//   error: Error if connection fails.
 func NewPostgresConnectionWithContext(ctx context.Context, cfg *config.DatabaseConfig) (*PostgresDB, error) {
 	poolConfig, err := buildPGXPoolConfig(cfg)
 	if err != nil {
@@ -108,6 +126,7 @@ func createTestDatabaseConnection(poolConfig *pgxpool.Config) (*PostgresDB, erro
 	return &PostgresDB{Pool: pool}, nil
 }
 
+// Close closes the database connection pool.
 func (db *PostgresDB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()
@@ -115,18 +134,54 @@ func (db *PostgresDB) Close() {
 	}
 }
 
+// HealthCheck verifies the database connection.
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   error: Error if ping fails.
 func (db *PostgresDB) HealthCheck(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
 }
 
+// Query executes a query that returns rows.
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Query arguments.
+//
+// Returns:
+//   pgx.Rows: Result rows.
+//   error: Error if query fails.
 func (db *PostgresDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	return db.Pool.Query(ctx, sql, args...)
 }
 
+// QueryRow executes a query that returns a single row.
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Query arguments.
+//
+// Returns:
+//   pgx.Row: Result row.
 func (db *PostgresDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	return db.Pool.QueryRow(ctx, sql, args...)
 }
 
+// Exec executes a query without returning rows.
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Query arguments.
+//
+// Returns:
+//   pgconn.CommandTag: Command tag.
+//   error: Error if execution fails.
 func (db *PostgresDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return db.Pool.Exec(ctx, sql, args...)
 }

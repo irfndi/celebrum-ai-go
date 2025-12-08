@@ -12,12 +12,16 @@ import (
 // Package middleware provides HTTP middleware components for authentication,
 // authorization, telemetry, and other cross-cutting concerns.
 
-// AdminMiddleware provides admin authentication middleware
+// AdminMiddleware provides admin authentication middleware.
 type AdminMiddleware struct {
 	apiKey string
 }
 
-// NewAdminMiddleware creates a new admin authentication middleware
+// NewAdminMiddleware creates a new admin authentication middleware.
+// It retrieves the API key from the environment.
+//
+// Returns:
+//   *AdminMiddleware: Initialized middleware.
 func NewAdminMiddleware() *AdminMiddleware {
 	// Get admin API key from environment variable
 	apiKey := os.Getenv("ADMIN_API_KEY")
@@ -42,7 +46,11 @@ func NewAdminMiddleware() *AdminMiddleware {
 	}
 }
 
-// RequireAdminAuth middleware validates admin API keys
+// RequireAdminAuth middleware validates admin API keys.
+// It checks Authorization and X-API-Key headers.
+//
+// Returns:
+//   gin.HandlerFunc: Gin handler.
 func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check for API key in Authorization header (Bearer token)
@@ -76,7 +84,13 @@ func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 	}
 }
 
-// ValidateAdminKey validates an admin API key
+// ValidateAdminKey validates an admin API key.
+//
+// Parameters:
+//   key: API key to check.
+//
+// Returns:
+//   bool: True if valid.
 func (am *AdminMiddleware) ValidateAdminKey(key string) bool {
 	return key == am.apiKey
 }

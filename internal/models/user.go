@@ -7,7 +7,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// User represents a platform user
+// User represents a registered user of the platform.
+// It stores authentication and profile information.
 type User struct {
 	ID               string    `json:"id" db:"id"`
 	Email            string    `json:"email" db:"email"`
@@ -18,7 +19,8 @@ type User struct {
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// UserAlert represents user-configured alerts
+// UserAlert represents a custom alert configured by a user.
+// Alerts can be triggered by various market conditions.
 type UserAlert struct {
 	ID         string          `json:"id" db:"id"`
 	UserID     string          `json:"user_id" db:"user_id"`
@@ -29,7 +31,7 @@ type UserAlert struct {
 	User       *User           `json:"user,omitempty"`
 }
 
-// Portfolio represents user portfolio holdings
+// Portfolio represents an asset holding within a user's portfolio.
 type Portfolio struct {
 	ID        string          `json:"id" db:"id"`
 	UserID    string          `json:"user_id" db:"user_id"`
@@ -40,7 +42,7 @@ type Portfolio struct {
 	User      *User           `json:"user,omitempty"`
 }
 
-// UserRequest represents user registration/update request
+// UserRequest represents the payload for user registration or profile updates.
 type UserRequest struct {
 	Email            string `json:"email" binding:"required,email"`
 	Password         string `json:"password" binding:"required,min=8"`
@@ -48,7 +50,7 @@ type UserRequest struct {
 	SubscriptionTier string `json:"subscription_tier"`
 }
 
-// UserResponse represents user information for API responses
+// UserResponse represents the public user information returned by the API.
 type UserResponse struct {
 	ID               string    `json:"id"`
 	Email            string    `json:"email"`
@@ -57,7 +59,7 @@ type UserResponse struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
-// AlertConditions represents different types of alert conditions
+// AlertConditions defines the specific criteria that trigger a user alert.
 type AlertConditions struct {
 	PriceThreshold  *decimal.Decimal `json:"price_threshold,omitempty"`
 	ProfitThreshold *decimal.Decimal `json:"profit_threshold,omitempty"`

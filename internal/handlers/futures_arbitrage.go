@@ -18,21 +18,30 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// DBQuerier interface for database operations
+// DBQuerier interface for database operations.
 type DBQuerier interface {
+	// Query executes a query that returns rows.
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	// QueryRow executes a query that returns a single row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	// Exec executes a command.
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
-// FuturesArbitrageHandler handles futures arbitrage related endpoints
+// FuturesArbitrageHandler handles futures arbitrage related endpoints.
 type FuturesArbitrageHandler struct {
 	db         DBQuerier
 	calculator *services.FuturesArbitrageCalculator
 	metrics    *metrics.MetricsCollector
 }
 
-// NewFuturesArbitrageHandler creates a new futures arbitrage handler
+// NewFuturesArbitrageHandler creates a new futures arbitrage handler.
+//
+// Parameters:
+//   db: Database pool.
+//
+// Returns:
+//   *FuturesArbitrageHandler: Initialized handler.
 func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
 	// Initialize logger and metrics collector
 	logger := logging.NewStandardLogger("info", "production")
@@ -45,7 +54,14 @@ func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
 	}
 }
 
-// NewFuturesArbitrageHandlerWithQuerier creates a new futures arbitrage handler with custom querier
+// NewFuturesArbitrageHandlerWithQuerier creates a new futures arbitrage handler with custom querier.
+// This is useful for testing.
+//
+// Parameters:
+//   db: Database querier.
+//
+// Returns:
+//   *FuturesArbitrageHandler: Initialized handler.
 func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandler {
 	// Initialize logger and metrics collector
 	logger := logging.NewStandardLogger("info", "production")
@@ -58,7 +74,11 @@ func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandle
 	}
 }
 
-// GetFuturesArbitrageOpportunities handles GET /api/futures-arbitrage/opportunities
+// GetFuturesArbitrageOpportunities handles GET /api/futures-arbitrage/opportunities.
+// It retrieves available opportunities based on filters.
+//
+// Parameters:
+//   c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesArbitrageOpportunities(c *gin.Context) {
 	// Parse query parameters
 	req := h.parseArbitrageRequest(c)
@@ -95,7 +115,11 @@ func (h *FuturesArbitrageHandler) GetFuturesArbitrageOpportunities(c *gin.Contex
 	c.JSON(http.StatusOK, response)
 }
 
-// CalculateFuturesArbitrage handles POST /api/futures-arbitrage/calculate
+// CalculateFuturesArbitrage handles POST /api/futures-arbitrage/calculate.
+// It calculates arbitrage potential for a specific scenario.
+//
+// Parameters:
+//   c: Gin context.
 func (h *FuturesArbitrageHandler) CalculateFuturesArbitrage(c *gin.Context) {
 	var input models.FuturesArbitrageCalculationInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -141,7 +165,11 @@ func (h *FuturesArbitrageHandler) CalculateFuturesArbitrage(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetFuturesArbitrageStrategy handles GET /api/futures-arbitrage/strategy/{id}
+// GetFuturesArbitrageStrategy handles GET /api/futures-arbitrage/strategy/{id}.
+// It retrieves a specific strategy by ID.
+//
+// Parameters:
+//   c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesArbitrageStrategy(c *gin.Context) {
 	strategyID := c.Param("id")
 
@@ -158,7 +186,11 @@ func (h *FuturesArbitrageHandler) GetFuturesArbitrageStrategy(c *gin.Context) {
 	c.JSON(http.StatusOK, strategy)
 }
 
-// GetFuturesMarketSummary handles GET /api/futures-arbitrage/market-summary
+// GetFuturesMarketSummary handles GET /api/futures-arbitrage/market-summary.
+// It provides a summary of market conditions and opportunities.
+//
+// Parameters:
+//   c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesMarketSummary(c *gin.Context) {
 	// Get all active opportunities
 	opportunities, _, err := h.getFuturesOpportunitiesFromDB(models.FuturesArbitrageRequest{
@@ -183,7 +215,11 @@ func (h *FuturesArbitrageHandler) GetFuturesMarketSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetPositionSizingRecommendation handles POST /api/futures-arbitrage/position-sizing
+// GetPositionSizingRecommendation handles POST /api/futures-arbitrage/position-sizing.
+// It calculates recommended position sizes based on risk parameters.
+//
+// Parameters:
+//   c: Gin context.
 func (h *FuturesArbitrageHandler) GetPositionSizingRecommendation(c *gin.Context) {
 	var input models.FuturesArbitrageCalculationInput
 	if err := c.ShouldBindJSON(&input); err != nil {

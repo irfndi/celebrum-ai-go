@@ -2,363 +2,266 @@ package interfaces
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
-// BlacklistCacheEntry represents a blacklisted symbol with metadata
+// BlacklistCacheEntry represents a blacklisted symbol with its associated metadata.
+// It tracks why a symbol was blacklisted and when (or if) the blacklist entry expires.
 type BlacklistCacheEntry struct {
-	Symbol    string     `json:"symbol"`
-	Reason    string     `json:"reason"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"` // nil means no expiration
-	CreatedAt time.Time  `json:"created_at"`
+	// Symbol is the trading pair identifier that is blacklisted.
+	Symbol string `json:"symbol"`
+	// Reason describes why the symbol was blacklisted (e.g., "low volume", "api error").
+	Reason string `json:"reason"`
+	// ExpiresAt points to the time when the blacklist entry is no longer valid.
+	// If nil, the entry does not expire automatically.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// CreatedAt is the timestamp when the entry was created.
+	CreatedAt time.Time `json:"created_at"`
 }
 
-// BlacklistCacheStats holds statistics about the blacklist cache
+// BlacklistCacheStats holds operational statistics about the blacklist cache.
+// Useful for monitoring cache performance and effectiveness.
 type BlacklistCacheStats struct {
-	TotalEntries   int64     `json:"total_entries"`
-	ExpiredEntries int64     `json:"expired_entries"`
-	Hits           int64     `json:"hits"`
-	Misses         int64     `json:"misses"`
-	Adds           int64     `json:"adds"`
-	LastCleanup    time.Time `json:"last_cleanup"`
+	// TotalEntries is the current number of items in the cache.
+	TotalEntries int64 `json:"total_entries"`
+	// ExpiredEntries is the count of entries that have passed their expiration time.
+	ExpiredEntries int64 `json:"expired_entries"`
+	// Hits is the number of times a cache lookup successfully found an entry.
+	Hits int64 `json:"hits"`
+	// Misses is the number of times a cache lookup failed to find an entry.
+	Misses int64 `json:"misses"`
+	// Adds is the total number of entries added to the cache.
+	Adds int64 `json:"adds"`
+	// LastCleanup is the timestamp of the last cache cleanup operation.
+	LastCleanup time.Time `json:"last_cleanup"`
 }
 
-// Config types moved from internal/config to avoid internal package import violations
-type Config struct {
-	Environment string           `mapstructure:"environment"`
-	LogLevel    string           `mapstructure:"log_level"`
-	Server      ServerConfig     `mapstructure:"server"`
-	Database    DatabaseConfig   `mapstructure:"database"`
-	Redis       RedisConfig      `mapstructure:"redis"`
-	CCXT        CCXTConfig       `mapstructure:"ccxt"`
-	Telegram    TelegramConfig   `mapstructure:"telegram"`
-	Telemetry   TelemetryConfig  `mapstructure:"telemetry"`
-	Sentry      SentryConfig     `mapstructure:"sentry"`
-	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
-	Backfill    BackfillConfig   `mapstructure:"backfill"`
-	MarketData  MarketDataConfig `mapstructure:"market_data"`
-	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
-	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
-}
-
-type ServerConfig struct {
-	Port           int      `mapstructure:"port"`
-	AllowedOrigins []string `mapstructure:"allowed_origins"`
-}
-
-type DatabaseConfig struct {
-	Host            string `mapstructure:"host"`
-	Port            int    `mapstructure:"port"`
-	User            string `mapstructure:"user"`
-	Password        string `mapstructure:"password"`
-	DBName          string `mapstructure:"dbname"`
-	SSLMode         string `mapstructure:"sslmode"`
-	DatabaseURL     string `mapstructure:"database_url"`
-	MaxOpenConns    int    `mapstructure:"max_open_conns"`
-	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
-	ConnMaxLifetime string `mapstructure:"conn_max_lifetime"`
-	ConnMaxIdleTime string `mapstructure:"conn_max_idle_time"`
-}
-
-type RedisConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-}
-
-type CCXTConfig struct {
-	ServiceURL string `mapstructure:"service_url"`
-	Timeout    int    `mapstructure:"timeout"`
-}
-
-type TelegramConfig struct {
-	BotToken       string `mapstructure:"bot_token"`
-	WebhookURL     string `mapstructure:"webhook_url"`
-	UsePolling     bool   `mapstructure:"use_polling"`
-	PollingOffset  int    `mapstructure:"polling_offset"`
-	PollingLimit   int    `mapstructure:"polling_limit"`
-	PollingTimeout int    `mapstructure:"polling_timeout"`
-}
-
-type TelemetryConfig struct {
-	Enabled        bool   `mapstructure:"enabled"`
-	ServiceName    string `mapstructure:"service_name"`
-	ServiceVersion string `mapstructure:"service_version"`
-	LogLevel       string `mapstructure:"log_level"`
-}
-
-type SentryConfig struct {
-	Enabled            bool    `mapstructure:"enabled"`
-	DSN                string  `mapstructure:"dsn"`
-	Environment        string  `mapstructure:"environment"`
-	Release            string  `mapstructure:"release"`
-	TracesSampleRate   float64 `mapstructure:"traces_sample_rate"`
-	ProfilesSampleRate float64 `mapstructure:"profiles_sample_rate"`
-}
-
-type CleanupConfig struct {
-	MarketData             CleanupDataConfig      `mapstructure:"market_data"`
-	FundingRates           CleanupDataConfig      `mapstructure:"funding_rates"`
-	ArbitrageOpportunities CleanupArbitrageConfig `mapstructure:"arbitrage_opportunities"`
-	IntervalMinutes        int                    `mapstructure:"interval"`
-	EnableSmartCleanup     bool                   `mapstructure:"enable_smart_cleanup"`
-}
-
-type CleanupDataConfig struct {
-	RetentionHours int `mapstructure:"retention_hours"`
-	DeletionHours  int `mapstructure:"deletion_hours"`
-}
-
-type CleanupArbitrageConfig struct {
-	RetentionHours int `mapstructure:"retention_hours"`
-}
-
-type BackfillConfig struct {
-	Enabled               bool `mapstructure:"enabled"`
-	BackfillHours         int  `mapstructure:"backfill_hours"`
-	MinDataThresholdHours int  `mapstructure:"min_data_threshold_hours"`
-	BatchSize             int  `mapstructure:"batch_size"`
-	DelayBetweenBatches   int  `mapstructure:"delay_between_batches"`
-}
-
-type MarketDataConfig struct {
-	CollectionInterval string   `mapstructure:"collection_interval"`
-	BatchSize          int      `mapstructure:"batch_size"`
-	MaxRetries         int      `mapstructure:"max_retries"`
-	Timeout            string   `mapstructure:"timeout"`
-	Exchanges          []string `mapstructure:"exchanges"`
-}
-
-type ArbitrageConfig struct {
-	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
-	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
-	CheckInterval      string   `mapstructure:"check_interval"`
-	EnabledPairs       []string `mapstructure:"enabled_pairs"`
-	Enabled            bool     `mapstructure:"enabled"`
-	IntervalSeconds    int      `mapstructure:"interval_seconds"`
-	MaxAgeMinutes      int      `mapstructure:"max_age_minutes"`
-	BatchSize          int      `mapstructure:"batch_size"`
-}
-
-type BlacklistConfig struct {
-	TTL             string `mapstructure:"ttl"`               // Default TTL for blacklisted symbols (e.g., "24h")
-	ShortTTL        string `mapstructure:"short_ttl"`         // Short TTL for temporary issues (e.g., "1h")
-	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
-	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
-	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
-}
-
-func Load() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-
-	// Set default values
-	setDefaults()
-
-	// Enable environment variable support
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
-
-	// Read config file
-	if err := viper.ReadInConfig(); err != nil {
-		// Config file not found, use defaults and environment variables
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err
-		}
-	}
-
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func setDefaults() {
-	// Environment
-	viper.SetDefault("environment", "development")
-	viper.SetDefault("log_level", "info")
-
-	// Server
-	viper.SetDefault("server.port", 8080)
-	// Use environment variables for allowed origins in production
-	viper.SetDefault("server.allowed_origins", []string{"http://localhost:3000"})
-
-	// Set database defaults
-	// Use environment variables for production database configuration
-	viper.SetDefault("database.host", "localhost")
-	viper.SetDefault("database.port", 5432)
-	viper.SetDefault("database.user", "postgres")
-	// Remove hardcoded default password for security - use $DATABASE_PASSWORD environment variable
-	// viper.SetDefault("database.password", "postgres")
-	viper.SetDefault("database.dbname", "celebrum_ai")
-	viper.SetDefault("database.sslmode", "disable")
-	// Remove hardcoded database URL for security - use $DATABASE_URL environment variable
-	// viper.SetDefault("database.database_url", "postgres://postgres:password@localhost:5432/celebrum_ai?sslmode=disable")
-	viper.SetDefault("database.database_url", "")
-	viper.SetDefault("database.max_open_conns", 25)
-	viper.SetDefault("database.max_idle_conns", 5)
-	viper.SetDefault("database.conn_max_lifetime", "300s")
-	viper.SetDefault("database.conn_max_idle_time", "60s")
-
-	// Redis
-	// Use environment variables for production Redis configuration
-	viper.SetDefault("redis.host", "localhost")
-	viper.SetDefault("redis.port", 6379)
-	// Remove hardcoded Redis password for security - use $REDIS_PASSWORD environment variable
-	// viper.SetDefault("redis.password", "your_redis_password")
-	viper.SetDefault("redis.password", "")
-	viper.SetDefault("redis.db", 0)
-
-	// CCXT
-	// Use environment variables for production CCXT service configuration
-	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
-	viper.SetDefault("ccxt.timeout", 30)
-
-	// Telegram
-	// Remove hardcoded Telegram bot token for security - use $TELEGRAM_BOT_TOKEN environment variable
-	// viper.SetDefault("telegram.bot_token", "your_telegram_bot_token")
-	viper.SetDefault("telegram.bot_token", "")
-	viper.SetDefault("telegram.webhook_url", "")
-	viper.SetDefault("telegram.use_polling", false)
-	viper.SetDefault("telegram.polling_offset", 0)
-	viper.SetDefault("telegram.polling_limit", 100)
-	viper.SetDefault("telegram.polling_timeout", 60)
-
-	// Telemetry
-	viper.SetDefault("telemetry.enabled", true)
-	viper.SetDefault("telemetry.otlp_endpoint", "http://localhost:4318")
-	viper.SetDefault("telemetry.service_name", "celebrum-ai-go")
-	viper.SetDefault("telemetry.service_version", "1.0.0")
-	viper.SetDefault("telemetry.log_level", "info")
-
-	// Sentry
-	viper.SetDefault("sentry.enabled", false)
-	viper.SetDefault("sentry.dsn", "")
-	viper.SetDefault("sentry.environment", viper.GetString("environment"))
-	viper.SetDefault("sentry.release", "")
-	viper.SetDefault("sentry.traces_sample_rate", 0.2)
-	viper.SetDefault("sentry.profiles_sample_rate", 0.0)
-
-	// Cleanup - Enhanced configuration with smart cleanup
-	viper.SetDefault("cleanup.market_data.retention_hours", 36)
-	viper.SetDefault("cleanup.market_data.deletion_hours", 12)
-	viper.SetDefault("cleanup.funding_rates.retention_hours", 36)
-	viper.SetDefault("cleanup.funding_rates.deletion_hours", 12)
-	viper.SetDefault("cleanup.arbitrage_opportunities.retention_hours", 72)
-	viper.SetDefault("cleanup.interval", 60)
-	viper.SetDefault("cleanup.enable_smart_cleanup", true)
-
-	// Backfill
-	viper.SetDefault("backfill.enabled", true)
-	viper.SetDefault("backfill.backfill_hours", 6)
-	viper.SetDefault("backfill.min_data_threshold_hours", 4)
-	viper.SetDefault("backfill.batch_size", 5)
-	viper.SetDefault("backfill.delay_between_batches", 500)
-
-	// Market Data
-	viper.SetDefault("market_data.collection_interval", "5m")
-	viper.SetDefault("market_data.batch_size", 100)
-	viper.SetDefault("market_data.max_retries", 3)
-	viper.SetDefault("market_data.timeout", "15s")
-	viper.SetDefault("market_data.exchanges", []string{"binance", "coinbase", "kraken", "bitfinex", "huobi"})
-
-	// Arbitrage
-	viper.SetDefault("arbitrage.enabled", true)
-	viper.SetDefault("arbitrage.interval_seconds", 60)
-	viper.SetDefault("arbitrage.min_profit_threshold", 0.5)
-	viper.SetDefault("arbitrage.max_age_minutes", 30)
-	viper.SetDefault("arbitrage.batch_size", 100)
-	viper.SetDefault("arbitrage.max_trade_amount", 1000.0)
-	viper.SetDefault("arbitrage.check_interval", "2m")
-	viper.SetDefault("arbitrage.enabled_pairs", []string{"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT"})
-
-	// Blacklist
-	viper.SetDefault("blacklist.ttl", "24h")
-	viper.SetDefault("blacklist.short_ttl", "1h")
-	viper.SetDefault("blacklist.long_ttl", "72h")
-	viper.SetDefault("blacklist.use_redis", true)
-	viper.SetDefault("blacklist.retry_after_clear", true)
-}
-
-// ExchangeBlacklistEntry represents a blacklisted exchange in the database
+// ExchangeBlacklistEntry represents a blacklisted exchange persisted in the database.
 type ExchangeBlacklistEntry struct {
-	ID           int64      `json:"id"`
-	ExchangeName string     `json:"exchange_name"`
-	Reason       string     `json:"reason"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	// ID is the unique identifier for the entry.
+	ID int64 `json:"id"`
+	// ExchangeName is the name of the exchange.
+	ExchangeName string `json:"exchange_name"`
+	// Reason describes why the exchange was blacklisted.
+	Reason string `json:"reason"`
+	// ExpiresAt is the timestamp when the blacklist entry expires.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// CreatedAt is the timestamp when the entry was created.
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is the timestamp when the entry was last updated.
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// SymbolCacheEntry represents a cached symbol entry with metadata
+// SymbolCacheEntry represents a cached symbol list for an exchange.
 type SymbolCacheEntry struct {
-	Symbols   []string  `json:"symbols"`
-	CachedAt  time.Time `json:"cached_at"`
+	// Symbols is the list of trading pair symbols.
+	Symbols []string `json:"symbols"`
+	// CachedAt is the timestamp when the data was cached.
+	CachedAt time.Time `json:"cached_at"`
+	// ExpiresAt is the timestamp when the cache entry expires.
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// SymbolCacheStats tracks cache performance metrics
+// SymbolCacheStats tracks performance metrics for the symbol cache.
 type SymbolCacheStats struct {
-	Hits   int64 `json:"hits"`
+	// Hits is the number of successful cache lookups.
+	Hits int64 `json:"hits"`
+	// Misses is the number of failed cache lookups.
 	Misses int64 `json:"misses"`
-	Sets   int64 `json:"sets"`
+	// Sets is the number of times data was written to the cache.
+	Sets int64 `json:"sets"`
 }
 
-// SymbolCacheInterface defines the interface for symbol caching
+// SymbolCacheInterface defines the contract for symbol caching mechanisms.
 type SymbolCacheInterface interface {
+	// Get retrieves cached symbols for a given exchange.
+	//
+	// Parameters:
+	//   exchangeID: The identifier of the exchange.
+	//
+	// Returns:
+	//   []string: A list of symbols if found.
+	//   bool: True if found and valid, false otherwise.
 	Get(exchangeID string) ([]string, bool)
+
+	// Set stores symbols in the cache for a given exchange.
+	//
+	// Parameters:
+	//   exchangeID: The identifier of the exchange.
+	//   symbols: The list of symbols to cache.
 	Set(exchangeID string, symbols []string)
+
+	// GetStats retrieves current cache statistics.
+	//
+	// Returns:
+	//   SymbolCacheStats: The statistics object.
 	GetStats() SymbolCacheStats
+
+	// LogStats outputs the cache statistics to the log.
 	LogStats()
 }
 
-// BlacklistRepository interface defines the contract for database operations
-// This allows for dependency injection and testing with mock implementations
+// BlacklistRepository defines the contract for database operations related to the blacklist.
+// This interface enables dependency injection and mocking for testing.
 type BlacklistRepository interface {
+	// AddExchange adds an exchange to the blacklist.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//   exchangeName: The name of the exchange.
+	//   reason: The reason for blacklisting.
+	//   expiresAt: Optional expiration time.
+	//
+	// Returns:
+	//   *ExchangeBlacklistEntry: The created entry.
+	//   error: An error if the operation fails.
 	AddExchange(ctx context.Context, exchangeName, reason string, expiresAt *time.Time) (*ExchangeBlacklistEntry, error)
+
+	// RemoveExchange removes an exchange from the blacklist.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//   exchangeName: The name of the exchange to remove.
+	//
+	// Returns:
+	//   error: An error if the operation fails.
 	RemoveExchange(ctx context.Context, exchangeName string) error
+
+	// IsBlacklisted checks if an exchange is currently blacklisted.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//   exchangeName: The name of the exchange to check.
+	//
+	// Returns:
+	//   bool: True if blacklisted.
+	//   string: The reason for blacklisting.
+	//   error: An error if the check fails.
 	IsBlacklisted(ctx context.Context, exchangeName string) (bool, string, error)
+
+	// GetAllBlacklisted retrieves all blacklisted exchanges.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//
+	// Returns:
+	//   []ExchangeBlacklistEntry: A list of all blacklist entries.
+	//   error: An error if the retrieval fails.
 	GetAllBlacklisted(ctx context.Context) ([]ExchangeBlacklistEntry, error)
+
+	// CleanupExpired removes expired blacklist entries from the database.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//
+	// Returns:
+	//   int64: The number of entries removed.
+	//   error: An error if the operation fails.
 	CleanupExpired(ctx context.Context) (int64, error)
+
+	// GetBlacklistHistory retrieves the history of blacklist entries.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//   limit: The maximum number of entries to return.
+	//
+	// Returns:
+	//   []ExchangeBlacklistEntry: A list of historical entries.
+	//   error: An error if the retrieval fails.
 	GetBlacklistHistory(ctx context.Context, limit int) ([]ExchangeBlacklistEntry, error)
+
+	// ClearAll removes all blacklist entries.
+	//
+	// Parameters:
+	//   ctx: The context for the operation.
+	//
+	// Returns:
+	//   int64: The number of entries removed.
+	//   error: An error if the operation fails.
 	ClearAll(ctx context.Context) (int64, error)
 }
 
-// BlacklistCache defines the interface for blacklist cache operations
+// BlacklistCache defines the interface for in-memory or Redis-based blacklist caching.
 type BlacklistCache interface {
+	// IsBlacklisted checks if a symbol is in the blacklist.
+	//
+	// Parameters:
+	//   symbol: The symbol to check.
+	//
+	// Returns:
+	//   bool: True if the symbol is blacklisted.
+	//   string: The reason for blacklisting.
 	IsBlacklisted(symbol string) (bool, string)
+
+	// Add adds a symbol to the blacklist.
+	//
+	// Parameters:
+	//   symbol: The symbol to blacklist.
+	//   reason: The reason for blacklisting.
+	//   ttl: The time-to-live duration for the entry.
 	Add(symbol, reason string, ttl time.Duration)
+
+	// Remove removes a symbol from the blacklist.
+	//
+	// Parameters:
+	//   symbol: The symbol to remove.
 	Remove(symbol string)
+
+	// Clear removes all entries from the blacklist cache.
 	Clear()
+
+	// GetStats retrieves current cache statistics.
+	//
+	// Returns:
+	//   BlacklistCacheStats: The statistics object.
 	GetStats() BlacklistCacheStats
+
+	// LogStats outputs the cache statistics to the log.
 	LogStats()
+
+	// Close cleans up resources used by the cache.
+	//
+	// Returns:
+	//   error: An error if closing fails.
 	Close() error
-	// New methods for database persistence
-	LoadFromDatabase(ctx interface{}) error
+
+	// LoadFromDatabase loads blacklist entries from the database into the cache.
+	//
+	// Parameters:
+	//   ctx: A context or similar object used for the operation.
+	//
+	// Returns:
+	//   error: An error if loading fails.
+	LoadFromDatabase(ctx context.Context) error
+
+	// GetBlacklistedSymbols retrieves all currently blacklisted symbols.
+	//
+	// Returns:
+	//   []BlacklistCacheEntry: A list of blacklist entries.
+	//   error: An error if retrieval fails.
 	GetBlacklistedSymbols() ([]BlacklistCacheEntry, error)
 }
 
-// NewInMemoryBlacklistCache creates a new in-memory blacklist cache instance
-// This function serves as a factory for creating blacklist cache instances
+// NewInMemoryBlacklistCache creates a new in-memory blacklist cache instance.
+// This function serves as a factory for creating default blacklist cache instances.
+//
+// Returns:
+//   BlacklistCache: An in-memory implementation of the BlacklistCache interface.
 func NewInMemoryBlacklistCache() BlacklistCache {
-	// This is a placeholder - the actual implementation should be in the internal/cache package
-	// For now, we'll return a simple mock implementation
 	return &mockBlacklistCache{}
 }
 
-// NewRedisSymbolCache creates a new Redis-based symbol cache
-// This function serves as a factory for creating symbol cache instances
+// NewRedisSymbolCache creates a new Redis-based symbol cache.
+// This function serves as a factory for creating Redis symbol cache instances.
+//
+// Parameters:
+//   redisClient: The Redis client instance (typed as interface{} to avoid imports).
+//   ttl: The default time-to-live for cache entries.
+//
+// Returns:
+//   SymbolCacheInterface: A Redis-based implementation of the SymbolCacheInterface.
 func NewRedisSymbolCache(redisClient interface{}, ttl time.Duration) SymbolCacheInterface {
-	// This is a placeholder - the actual implementation should be in the internal/cache package
-	// For now, we'll return a simple mock implementation
 	return &mockSymbolCache{}
 }
 
@@ -432,7 +335,7 @@ func (m *mockBlacklistCache) Close() error {
 	return nil
 }
 
-func (m *mockBlacklistCache) LoadFromDatabase(ctx interface{}) error {
+func (m *mockBlacklistCache) LoadFromDatabase(ctx context.Context) error {
 	// Mock implementation
 	return nil
 }

@@ -20,7 +20,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// TechnicalAnalysisService provides technical analysis capabilities
+// TechnicalAnalysisService provides technical analysis capabilities, calculating various indicators
+// and interpreting them to generate trading signals.
 type TechnicalAnalysisService struct {
 	config               *config.Config
 	db                   *database.PostgresDB
@@ -30,7 +31,7 @@ type TechnicalAnalysisService struct {
 	performanceMonitor   *PerformanceMonitor
 }
 
-// IndicatorResult represents the result of a technical indicator calculation
+// IndicatorResult represents the result of a single technical indicator calculation.
 type IndicatorResult struct {
 	Name      string            `json:"name"`
 	Values    []decimal.Decimal `json:"values"`
@@ -39,7 +40,7 @@ type IndicatorResult struct {
 	Timestamp time.Time         `json:"timestamp"`
 }
 
-// TechnicalAnalysisResult contains all calculated indicators for a symbol
+// TechnicalAnalysisResult aggregates all calculated indicators and the overall signal for a symbol.
 type TechnicalAnalysisResult struct {
 	Symbol        string             `json:"symbol"`
 	Exchange      string             `json:"exchange"`
@@ -50,7 +51,7 @@ type TechnicalAnalysisResult struct {
 	CalculatedAt  time.Time          `json:"calculated_at"`
 }
 
-// PriceData represents historical price data for analysis
+// PriceData holds the historical price and volume data used for analysis.
 type PriceData struct {
 	Symbol     string            `json:"symbol"`
 	Exchange   string            `json:"exchange"`
@@ -62,7 +63,7 @@ type PriceData struct {
 	Timestamps []time.Time       `json:"timestamps"`
 }
 
-// IndicatorConfig holds configuration for technical indicators
+// IndicatorConfig allows configuration of parameters for various technical indicators.
 type IndicatorConfig struct {
 	// Moving Averages
 	SMAPeriods []int `json:"sma_periods"`
@@ -88,7 +89,18 @@ type IndicatorConfig struct {
 	VWAPEnabled bool `json:"vwap_enabled"`
 }
 
-// NewTechnicalAnalysisService creates a new technical analysis service
+// NewTechnicalAnalysisService creates a new instance of TechnicalAnalysisService.
+//
+// Parameters:
+//   - cfg: Application configuration.
+//   - db: Database connection.
+//   - logger: Logger instance.
+//   - errorRecoveryManager: Service for error recovery.
+//   - resourceManager: Service for resource management.
+//   - performanceMonitor: Service for performance monitoring.
+//
+// Returns:
+//   - A pointer to the initialized TechnicalAnalysisService.
 func NewTechnicalAnalysisService(
 	cfg *config.Config,
 	db *database.PostgresDB,
@@ -107,7 +119,7 @@ func NewTechnicalAnalysisService(
 	}
 }
 
-// GetDefaultIndicatorConfig returns default configuration for indicators
+// GetDefaultIndicatorConfig returns a standard configuration for technical indicators.
 func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfig {
 	return &IndicatorConfig{
 		SMAPeriods:   []int{10, 20, 50},
@@ -126,7 +138,17 @@ func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfi
 	}
 }
 
-// AnalyzeSymbol performs comprehensive technical analysis on a symbol
+// AnalyzeSymbol performs a comprehensive technical analysis on a specific symbol and exchange.
+// It fetches historical data, calculates indicators, and determines an overall trading signal.
+//
+// Parameters:
+//   - ctx: Context for the operation.
+//   - symbol: The trading symbol to analyze.
+//   - exchange: The exchange where the symbol is traded.
+//   - config: Configuration for the indicators.
+//
+// Returns:
+//   - A TechnicalAnalysisResult containing all calculated data, or an error if analysis fails.
 func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, exchange string, config *IndicatorConfig) (*TechnicalAnalysisResult, error) {
 	// Log analysis start with structured logging
 	tas.logger.WithFields(logrus.Fields{
@@ -231,7 +253,7 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 	}, nil
 }
 
-// calculateAllIndicators computes all configured technical indicators
+// calculateAllIndicators orchestrates the calculation of all enabled technical indicators.
 func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.Snapshot, config *IndicatorConfig) []*IndicatorResult {
 	// Log indicator calculation start with structured logging
 	tas.logger.WithFields(logrus.Fields{
@@ -306,7 +328,7 @@ func (tas *TechnicalAnalysisService) calculateAllIndicators(snapshots []*asset.S
 	return indicators
 }
 
-// calculateSMA calculates Simple Moving Average
+// calculateSMA computes the Simple Moving Average and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateSMA(prices []float64, period int) *IndicatorResult {
 	if len(prices) < period {
 		return nil
@@ -333,7 +355,7 @@ func (tas *TechnicalAnalysisService) calculateSMA(prices []float64, period int) 
 	}
 }
 
-// calculateEMA calculates Exponential Moving Average
+// calculateEMA computes the Exponential Moving Average and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateEMA(prices []float64, period int) *IndicatorResult {
 	if len(prices) < period {
 		return nil
@@ -359,7 +381,7 @@ func (tas *TechnicalAnalysisService) calculateEMA(prices []float64, period int) 
 	}
 }
 
-// calculateRSI calculates Relative Strength Index
+// calculateRSI computes the Relative Strength Index and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateRSI(prices []float64, period int) *IndicatorResult {
 	if len(prices) < period+1 {
 		return nil
@@ -385,7 +407,7 @@ func (tas *TechnicalAnalysisService) calculateRSI(prices []float64, period int) 
 	}
 }
 
-// calculateMACD calculates Moving Average Convergence Divergence
+// calculateMACD computes the Moving Average Convergence Divergence and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateMACD(prices []float64, fastPeriod, slowPeriod, signalPeriod int) *IndicatorResult {
 	if len(prices) < slowPeriod+signalPeriod {
 		return nil
@@ -421,7 +443,7 @@ func (tas *TechnicalAnalysisService) calculateMACD(prices []float64, fastPeriod,
 	}
 }
 
-// calculateBollingerBands calculates Bollinger Bands
+// calculateBollingerBands computes Bollinger Bands and interprets them for signals.
 func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, period int, stdDev float64) *IndicatorResult {
 	if len(prices) < period {
 		return nil
@@ -464,7 +486,7 @@ func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, p
 	}
 }
 
-// calculateStandardDeviation calculates standard deviation for a price window
+// calculateStandardDeviation computes the standard deviation for a given slice of prices.
 func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64, mean float64) float64 {
 	if len(window) == 0 {
 		return 0
@@ -482,7 +504,7 @@ func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64
 	return math.Sqrt(variance)
 }
 
-// calculateATR calculates Average True Range
+// calculateATR computes the Average True Range for volatility measurement.
 func (tas *TechnicalAnalysisService) calculateATR(high, low, close []float64, period int) *IndicatorResult {
 	if len(high) < period || len(low) < period || len(close) < period {
 		return nil
@@ -519,7 +541,7 @@ func (tas *TechnicalAnalysisService) calculateATR(high, low, close []float64, pe
 	}
 }
 
-// calculateStochastic calculates Stochastic Oscillator
+// calculateStochastic computes the Stochastic Oscillator and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []float64, kPeriod, dPeriod int) *IndicatorResult {
 	if len(high) < kPeriod || len(low) < kPeriod || len(close) < kPeriod {
 		return nil
@@ -581,7 +603,7 @@ func (tas *TechnicalAnalysisService) calculateStochastic(high, low, close []floa
 	}
 }
 
-// calculateOBV calculates On-Balance Volume
+// calculateOBV computes On-Balance Volume and interprets it for signals.
 func (tas *TechnicalAnalysisService) calculateOBV(prices, volumes []float64) *IndicatorResult {
 	if len(prices) != len(volumes) || len(prices) < 2 {
 		return nil
@@ -613,7 +635,7 @@ func (tas *TechnicalAnalysisService) calculateOBV(prices, volumes []float64) *In
 
 // Signal analysis functions
 
-// analyzeSMASignal analyzes SMA signals with period-based adjustments
+// analyzeSMASignal determines the signal based on SMA crossovers and price position.
 func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, period int) (string, decimal.Decimal) {
 	if len(prices) < 2 || len(sma) < 2 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -655,7 +677,7 @@ func (tas *TechnicalAnalysisService) analyzeSMASignal(prices, sma []float64, per
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
-// analyzeEMASignal analyzes EMA signals with period-based adjustments
+// analyzeEMASignal determines the signal based on EMA crossovers and price position.
 func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, period int) (string, decimal.Decimal) {
 	// Similar logic to SMA but with higher sensitivity
 	if len(prices) < 2 || len(ema) < 2 {
@@ -698,6 +720,7 @@ func (tas *TechnicalAnalysisService) analyzeEMASignal(prices, ema []float64, per
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
+// analyzeRSISignal determines the signal based on RSI levels (overbought/oversold).
 func (tas *TechnicalAnalysisService) analyzeRSISignal(rsi []float64) (string, decimal.Decimal) {
 	if len(rsi) == 0 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -721,6 +744,7 @@ func (tas *TechnicalAnalysisService) analyzeRSISignal(rsi []float64) (string, de
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
+// analyzeMACDSignal determines the signal based on MACD crossovers and position.
 func (tas *TechnicalAnalysisService) analyzeMACDSignal(macd []float64) (string, decimal.Decimal) {
 	if len(macd) < 2 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -749,7 +773,7 @@ func (tas *TechnicalAnalysisService) analyzeMACDSignal(macd []float64) (string, 
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
-// analyzeBollingerBandsSignal analyzes Bollinger Bands signals with period-based adjustments
+// analyzeBollingerBandsSignal determines the signal based on price position relative to Bollinger Bands.
 func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValues, upperBand, lowerBand []float64, period int) (string, decimal.Decimal) {
 	// Implement actual Bollinger Bands signal analysis
 	if len(prices) == 0 || len(smaValues) == 0 || len(upperBand) == 0 || len(lowerBand) == 0 {
@@ -801,6 +825,7 @@ func (tas *TechnicalAnalysisService) analyzeBollingerBandsSignal(prices, smaValu
 	}
 }
 
+// analyzeStochasticSignal determines the signal based on Stochastic Oscillator levels.
 func (tas *TechnicalAnalysisService) analyzeStochasticSignal(stoch []float64) (string, decimal.Decimal) {
 	if len(stoch) == 0 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -818,6 +843,7 @@ func (tas *TechnicalAnalysisService) analyzeStochasticSignal(stoch []float64) (s
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
+// analyzeOBVSignal determines the signal based on OBV trend confirmation.
 func (tas *TechnicalAnalysisService) analyzeOBVSignal(obv, prices []float64) (string, decimal.Decimal) {
 	if len(obv) < 2 || len(prices) < 2 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -839,7 +865,7 @@ func (tas *TechnicalAnalysisService) analyzeOBVSignal(obv, prices []float64) (st
 	return "hold", decimal.NewFromFloat(0.5)
 }
 
-// determineOverallSignal analyzes all indicators to determine overall signal
+// determineOverallSignal aggregates signals from all indicators to form a consensus.
 func (tas *TechnicalAnalysisService) determineOverallSignal(indicators []*IndicatorResult) (string, decimal.Decimal) {
 	if len(indicators) == 0 {
 		return "hold", decimal.NewFromFloat(0.5)
@@ -881,6 +907,7 @@ func (tas *TechnicalAnalysisService) determineOverallSignal(indicators []*Indica
 
 // Helper functions
 
+// fetchPriceData retrieves historical price and volume data for a symbol from the database.
 func (tas *TechnicalAnalysisService) fetchPriceData(ctx context.Context, symbol, exchange string) (*PriceData, error) {
 	// Fetch market data from database
 	var marketData []models.MarketData
@@ -940,6 +967,7 @@ func (tas *TechnicalAnalysisService) fetchPriceData(ctx context.Context, symbol,
 	return priceData, nil
 }
 
+// convertToSnapshots adapts the internal PriceData format to the format required by the indicator library.
 func (tas *TechnicalAnalysisService) convertToSnapshots(priceData *PriceData) []*asset.Snapshot {
 	snapshots := make([]*asset.Snapshot, len(priceData.Close))
 

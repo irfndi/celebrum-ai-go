@@ -11,22 +11,28 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// SymbolCacheEntry represents a cached symbol entry with metadata
+// SymbolCacheEntry represents a cached symbol entry with metadata.
 type SymbolCacheEntry struct {
+	// Symbols is the list of trading pair symbols.
 	Symbols   []string  `json:"symbols"`
+	// CachedAt is the timestamp when the data was cached.
 	CachedAt  time.Time `json:"cached_at"`
+	// ExpiresAt is the timestamp when the cache entry expires.
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// SymbolCacheStats tracks cache performance metrics
+// SymbolCacheStats tracks cache performance metrics.
 type SymbolCacheStats struct {
+	// Hits is the number of successful cache lookups.
 	Hits   int64 `json:"hits"`
+	// Misses is the number of failed cache lookups.
 	Misses int64 `json:"misses"`
+	// Sets is the number of times data was written to the cache.
 	Sets   int64 `json:"sets"`
 	mu     sync.RWMutex
 }
 
-// RedisSymbolCache implements symbol caching using Redis
+// RedisSymbolCache implements symbol caching using Redis.
 type RedisSymbolCache struct {
 	redis  *redis.Client
 	ttl    time.Duration
@@ -34,7 +40,14 @@ type RedisSymbolCache struct {
 	prefix string
 }
 
-// NewRedisSymbolCache creates a new Redis-based symbol cache
+// NewRedisSymbolCache creates a new Redis-based symbol cache.
+//
+// Parameters:
+//   redisClient: The Redis client.
+//   ttl: The time-to-live for cache entries.
+//
+// Returns:
+//   *RedisSymbolCache: The initialized cache.
 func NewRedisSymbolCache(redisClient *redis.Client, ttl time.Duration) *RedisSymbolCache {
 	return &RedisSymbolCache{
 		redis:  redisClient,
@@ -44,7 +57,14 @@ func NewRedisSymbolCache(redisClient *redis.Client, ttl time.Duration) *RedisSym
 	}
 }
 
-// Get retrieves symbols for an exchange from Redis cache
+// Get retrieves symbols for an exchange from Redis cache.
+//
+// Parameters:
+//   exchangeID: The exchange identifier.
+//
+// Returns:
+//   []string: The list of symbols.
+//   bool: True if found and valid.
 func (c *RedisSymbolCache) Get(exchangeID string) ([]string, bool) {
 	ctx := context.Background()
 	cacheKey := c.prefix + exchangeID
@@ -91,7 +111,11 @@ func (c *RedisSymbolCache) Get(exchangeID string) ([]string, bool) {
 	return entry.Symbols, true
 }
 
-// Set stores symbols for an exchange in Redis cache
+// Set stores symbols for an exchange in Redis cache.
+//
+// Parameters:
+//   exchangeID: The exchange identifier.
+//   symbols: The list of symbols to cache.
 func (c *RedisSymbolCache) Set(exchangeID string, symbols []string) {
 	ctx := context.Background()
 	cacheKey := c.prefix + exchangeID
@@ -126,7 +150,10 @@ func (c *RedisSymbolCache) Set(exchangeID string, symbols []string) {
 	log.Printf("Cached %d symbols for %s (TTL: %v)", len(symbols), exchangeID, c.ttl)
 }
 
-// GetStats returns current cache statistics
+// GetStats returns current cache statistics.
+//
+// Returns:
+//   SymbolCacheStats: The statistics.
 func (c *RedisSymbolCache) GetStats() SymbolCacheStats {
 	c.stats.mu.RLock()
 	defer c.stats.mu.RUnlock()
@@ -137,7 +164,7 @@ func (c *RedisSymbolCache) GetStats() SymbolCacheStats {
 	}
 }
 
-// LogStats logs current cache performance statistics
+// LogStats logs current cache performance statistics.
 func (c *RedisSymbolCache) LogStats() {
 	stats := c.GetStats()
 	total := stats.Hits + stats.Misses
@@ -150,7 +177,10 @@ func (c *RedisSymbolCache) LogStats() {
 		stats.Hits, stats.Misses, stats.Sets, hitRate)
 }
 
-// Clear removes all cached symbols (useful for testing or cache invalidation)
+// Clear removes all cached symbols (useful for testing or cache invalidation).
+//
+// Returns:
+//   error: An error if clearing fails.
 func (c *RedisSymbolCache) Clear() error {
 	ctx := context.Background()
 	pattern := c.prefix + "*"
@@ -178,7 +208,11 @@ func (c *RedisSymbolCache) Clear() error {
 	return nil
 }
 
-// GetCachedExchanges returns a list of exchanges that have cached symbols
+// GetCachedExchanges returns a list of exchanges that have cached symbols.
+//
+// Returns:
+//   []string: List of exchange IDs.
+//   error: An error if scanning fails.
 func (c *RedisSymbolCache) GetCachedExchanges() ([]string, error) {
 	ctx := context.Background()
 	pattern := c.prefix + "*"
@@ -206,7 +240,14 @@ func (c *RedisSymbolCache) GetCachedExchanges() ([]string, error) {
 	return exchanges, nil
 }
 
-// WarmCache pre-loads symbols for specified exchanges
+// WarmCache pre-loads symbols for specified exchanges.
+//
+// Parameters:
+//   exchanges: List of exchanges to warm.
+//   symbolFetcher: Function to fetch symbols if not cached.
+//
+// Returns:
+//   error: An error if warming fails.
 func (c *RedisSymbolCache) WarmCache(exchanges []string, symbolFetcher func(string) ([]string, error)) error {
 	log.Printf("Warming symbol cache for %d exchanges...", len(exchanges))
 

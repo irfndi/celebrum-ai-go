@@ -6,14 +6,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// PriceRange represents a price range from multiple exchanges
+// PriceRange represents a price range from multiple exchanges.
+// It tracks the minimum, maximum, and average price observed across different markets.
 type PriceRange struct {
 	Min decimal.Decimal `json:"min"`
 	Max decimal.Decimal `json:"max"`
 	Avg decimal.Decimal `json:"avg"`
 }
 
-// ProfitRange represents profit range based on best/worst price combinations
+// ProfitRange represents profit range based on best/worst price combinations.
+// It includes percentage and absolute amount ranges for potential profit.
 type ProfitRange struct {
 	MinPercentage decimal.Decimal `json:"min_percentage"`
 	MaxPercentage decimal.Decimal `json:"max_percentage"`
@@ -22,7 +24,8 @@ type ProfitRange struct {
 	BaseAmount    decimal.Decimal `json:"base_amount"` // Amount used for calculation (e.g., $20,000)
 }
 
-// ArbitrageOpportunity represents a detected arbitrage opportunity
+// ArbitrageOpportunity represents a detected arbitrage opportunity between two exchanges.
+// It contains details about the prices, exchanges involved, potential profit, and validity.
 type ArbitrageOpportunity struct {
 	ID               string          `json:"id" db:"id"`
 	TradingPairID    int             `json:"trading_pair_id" db:"trading_pair_id"`
@@ -47,14 +50,14 @@ type ArbitrageOpportunity struct {
 	EstimatedVolume decimal.Decimal `json:"estimated_volume,omitempty"`
 }
 
-// ArbitrageOpportunityRequest represents request parameters for arbitrage opportunities
+// ArbitrageOpportunityRequest represents request parameters for filtering arbitrage opportunities.
 type ArbitrageOpportunityRequest struct {
 	MinProfit decimal.Decimal `json:"min_profit" form:"min_profit"`
 	Symbol    string          `json:"symbol" form:"symbol"`
 	Limit     int             `json:"limit" form:"limit"`
 }
 
-// ArbitrageOpportunityResponse represents arbitrage opportunity for API responses
+// ArbitrageOpportunityResponse represents arbitrage opportunity data formatted for API responses.
 type ArbitrageOpportunityResponse struct {
 	ID               string          `json:"id"`
 	Symbol           string          `json:"symbol"`
@@ -76,47 +79,47 @@ type ArbitrageOpportunityResponse struct {
 	ValidForMinutes int             `json:"valid_for_minutes,omitempty"`
 }
 
-// GetSymbol returns the symbol
+// GetSymbol returns the symbol associated with the opportunity.
 func (ao *ArbitrageOpportunityResponse) GetSymbol() string {
 	return ao.Symbol
 }
 
-// GetBuyExchange returns the buy exchange
+// GetBuyExchange returns the name of the exchange to buy from.
 func (ao *ArbitrageOpportunityResponse) GetBuyExchange() string {
 	return ao.BuyExchange
 }
 
-// GetSellExchange returns the sell exchange
+// GetSellExchange returns the name of the exchange to sell on.
 func (ao *ArbitrageOpportunityResponse) GetSellExchange() string {
 	return ao.SellExchange
 }
 
-// GetBuyPrice returns the buy price
+// GetBuyPrice returns the buy price.
 func (ao *ArbitrageOpportunityResponse) GetBuyPrice() decimal.Decimal {
 	return ao.BuyPrice
 }
 
-// GetSellPrice returns the sell price
+// GetSellPrice returns the sell price.
 func (ao *ArbitrageOpportunityResponse) GetSellPrice() decimal.Decimal {
 	return ao.SellPrice
 }
 
-// GetProfitPercentage returns the profit percentage
+// GetProfitPercentage returns the calculated profit percentage.
 func (ao *ArbitrageOpportunityResponse) GetProfitPercentage() decimal.Decimal {
 	return ao.ProfitPercentage
 }
 
-// GetDetectedAt returns the detection time
+// GetDetectedAt returns the timestamp when the opportunity was detected.
 func (ao *ArbitrageOpportunityResponse) GetDetectedAt() time.Time {
 	return ao.DetectedAt
 }
 
-// GetExpiresAt returns the expiration time
+// GetExpiresAt returns the timestamp when the opportunity expires.
 func (ao *ArbitrageOpportunityResponse) GetExpiresAt() time.Time {
 	return ao.ExpiresAt
 }
 
-// ArbitrageOpportunitiesResponse represents the response for arbitrage opportunities list
+// ArbitrageOpportunitiesResponse represents a paginated or listed response of arbitrage opportunities.
 type ArbitrageOpportunitiesResponse struct {
 	Opportunities []ArbitrageOpportunityResponse `json:"opportunities"`
 	Count         int                            `json:"count"`

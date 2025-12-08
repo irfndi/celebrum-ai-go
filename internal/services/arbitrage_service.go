@@ -16,20 +16,33 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
-// ArbitrageCalculator defines the interface for calculating arbitrage opportunities
+// ArbitrageCalculator defines the interface for calculating arbitrage opportunities.
 type ArbitrageCalculator interface {
+	// CalculateArbitrageOpportunities finds opportunities from market data.
 	CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error)
 }
 
-// SpotArbitrageCalculator implements arbitrage calculations for spot markets
+// SpotArbitrageCalculator implements arbitrage calculations for spot markets.
 type SpotArbitrageCalculator struct{}
 
-// NewSpotArbitrageCalculator creates a new spot arbitrage calculator
+// NewSpotArbitrageCalculator creates a new spot arbitrage calculator.
+//
+// Returns:
+//   *SpotArbitrageCalculator: Initialized calculator.
 func NewSpotArbitrageCalculator() *SpotArbitrageCalculator {
 	return &SpotArbitrageCalculator{}
 }
 
-// CalculateArbitrageOpportunities calculates arbitrage opportunities from market data
+// CalculateArbitrageOpportunities calculates arbitrage opportunities from market data.
+// It compares prices across exchanges to find profitable trades.
+//
+// Parameters:
+//   ctx: Context.
+//   marketData: Market data map.
+//
+// Returns:
+//   []models.ArbitrageOpportunity: List of opportunities.
+//   error: Error if calculation fails.
 func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context.Context, marketData map[string][]models.MarketData) ([]models.ArbitrageOpportunity, error) {
 	var opportunities []models.ArbitrageOpportunity
 
@@ -90,16 +103,21 @@ func (calc *SpotArbitrageCalculator) CalculateArbitrageOpportunities(ctx context
 	return opportunities, nil
 }
 
-// ArbitrageServiceConfig holds configuration for the arbitrage service
+// ArbitrageServiceConfig holds configuration for the arbitrage service.
 type ArbitrageServiceConfig struct {
+	// IntervalSeconds is the interval between checks.
 	IntervalSeconds int     `mapstructure:"interval_seconds"`
+	// MinProfit is the minimum profit threshold.
 	MinProfit       float64 `mapstructure:"min_profit"`
+	// MaxAgeMinutes is the max age of data.
 	MaxAgeMinutes   int     `mapstructure:"max_age_minutes"`
+	// BatchSize is the batch processing size.
 	BatchSize       int     `mapstructure:"batch_size"`
+	// Enabled indicates if the service is enabled.
 	Enabled         bool    `mapstructure:"enabled"`
 }
 
-// ArbitrageService handles periodic calculation and storage of arbitrage opportunities
+// ArbitrageService handles periodic calculation and storage of arbitrage opportunities.
 type ArbitrageService struct {
 	db                 *database.PostgresDB
 	config             *config.Config
@@ -115,7 +133,15 @@ type ArbitrageService struct {
 	opportunitiesFound int
 }
 
-// NewArbitrageService creates a new arbitrage service instance
+// NewArbitrageService creates a new arbitrage service instance.
+//
+// Parameters:
+//   db: Database connection.
+//   cfg: Configuration.
+//   calculator: Arbitrage calculator.
+//
+// Returns:
+//   *ArbitrageService: Initialized service.
 func NewArbitrageService(db *database.PostgresDB, cfg *config.Config, calculator ArbitrageCalculator) *ArbitrageService {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -157,7 +183,10 @@ func NewArbitrageService(db *database.PostgresDB, cfg *config.Config, calculator
 	}
 }
 
-// Start begins the periodic arbitrage calculation
+// Start begins the periodic arbitrage calculation.
+//
+// Returns:
+//   error: Error if service fails to start.
 func (s *ArbitrageService) Start() error {
 	if !s.arbitrageConfig.Enabled {
 		s.logger.Info("Arbitrage service is disabled in configuration")
@@ -185,7 +214,7 @@ func (s *ArbitrageService) Start() error {
 	return nil
 }
 
-// Stop gracefully shuts down the arbitrage service
+// Stop gracefully shuts down the arbitrage service.
 func (s *ArbitrageService) Stop() {
 	s.mu.Lock()
 	if !s.isRunning {
@@ -201,14 +230,22 @@ func (s *ArbitrageService) Stop() {
 	s.logger.Info("Arbitrage service stopped")
 }
 
-// IsRunning returns true if the service is currently running
+// IsRunning returns true if the service is currently running.
+//
+// Returns:
+//   bool: True if running.
 func (s *ArbitrageService) IsRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.isRunning
 }
 
-// GetStatus returns the current status of the arbitrage service
+// GetStatus returns the current status of the arbitrage service.
+//
+// Returns:
+//   bool: Running status.
+//   time.Time: Last calculation time.
+//   int: Number of opportunities found.
 func (s *ArbitrageService) GetStatus() (bool, time.Time, int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

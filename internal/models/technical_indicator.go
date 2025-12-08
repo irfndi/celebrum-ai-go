@@ -7,7 +7,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// TechnicalIndicator represents calculated technical analysis indicators
+// TechnicalIndicator represents a computed technical analysis indicator stored in the database.
 type TechnicalIndicator struct {
 	ID            string          `json:"id" db:"id"`
 	TradingPairID int             `json:"trading_pair_id" db:"trading_pair_id"`
@@ -18,7 +18,7 @@ type TechnicalIndicator struct {
 	TradingPair   *TradingPair    `json:"trading_pair,omitempty"`
 }
 
-// IndicatorData represents structured indicator calculation results
+// IndicatorData represents the structured result of indicator calculations for API responses.
 type IndicatorData struct {
 	Symbol     string                 `json:"symbol"`
 	Timeframe  string                 `json:"timeframe"`
@@ -26,14 +26,14 @@ type IndicatorData struct {
 	Timestamp  time.Time              `json:"timestamp"`
 }
 
-// RSIData represents RSI indicator values
+// RSIData holds the value and signal interpretation for the Relative Strength Index indicator.
 type RSIData struct {
 	Value     decimal.Decimal `json:"value"`
 	Signal    string          `json:"signal"` // "oversold", "overbought", "neutral"
 	Timestamp time.Time       `json:"timestamp"`
 }
 
-// MACDData represents MACD indicator values
+// MACDData holds the MACD line, signal line, histogram, and trend interpretation.
 type MACDData struct {
 	MACD      decimal.Decimal `json:"macd"`
 	Signal    decimal.Decimal `json:"signal"`
@@ -42,7 +42,7 @@ type MACDData struct {
 	Timestamp time.Time       `json:"timestamp"`
 }
 
-// SMAData represents Simple Moving Average values
+// SMAData holds the value and trend for a Simple Moving Average of a specific period.
 type SMAData struct {
 	Period    int             `json:"period"`
 	Value     decimal.Decimal `json:"value"`
@@ -50,7 +50,7 @@ type SMAData struct {
 	Timestamp time.Time       `json:"timestamp"`
 }
 
-// Signal represents a trading signal generated from technical analysis
+// Signal represents an actionable trading signal derived from technical indicators.
 type Signal struct {
 	Type       string          `json:"type"`     // "buy", "sell", "hold"
 	Strength   string          `json:"strength"` // "strong", "weak", "neutral"
@@ -60,7 +60,7 @@ type Signal struct {
 	Timestamp  time.Time       `json:"timestamp"`
 }
 
-// TechnicalAnalysisRequest represents request for technical analysis
+// TechnicalAnalysisRequest represents the parameters for a technical analysis API request.
 type TechnicalAnalysisRequest struct {
 	Symbol     string   `json:"symbol" binding:"required"`
 	Timeframe  string   `json:"timeframe" binding:"required"`
@@ -68,7 +68,7 @@ type TechnicalAnalysisRequest struct {
 	Period     int      `json:"period"`
 }
 
-// TechnicalAnalysisResponse represents technical analysis results
+// TechnicalAnalysisResponse encapsulates the results of a technical analysis request, including raw data and generated signals.
 type TechnicalAnalysisResponse struct {
 	Data      IndicatorData `json:"data"`
 	Signals   []Signal      `json:"signals"`

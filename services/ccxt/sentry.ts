@@ -5,6 +5,10 @@ const sentryDsn = process.env.SENTRY_DSN;
 
 export const isSentryEnabled = false; // Force disabled
 
+/**
+ * Middleware for Sentry error tracking.
+ * Currently a pass-through due to Bun.serve instrumentation issues.
+ */
 export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
   // Pass-through middleware
   await next();

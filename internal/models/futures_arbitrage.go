@@ -6,7 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FuturesArbitrageOpportunity represents a futures arbitrage opportunity based on funding rate differentials
+// FuturesArbitrageOpportunity represents a detected opportunity for arbitrage using futures contracts.
+// It leverages funding rate differences between exchanges to generate profit.
 type FuturesArbitrageOpportunity struct {
 	ID              string `json:"id" db:"id"`
 	Symbol          string `json:"symbol"`
@@ -66,14 +67,14 @@ type FuturesArbitrageOpportunity struct {
 	FundingRateHistory []FundingRateHistoryPoint `json:"funding_rate_history,omitempty"`
 }
 
-// FundingRateHistoryPoint represents historical funding rate data
+// FundingRateHistoryPoint captures a snapshot of the funding rate at a specific time.
 type FundingRateHistoryPoint struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	FundingRate decimal.Decimal `json:"funding_rate"`
 	MarkPrice   decimal.Decimal `json:"mark_price"`
 }
 
-// FuturesArbitrageCalculationInput represents input parameters for futures arbitrage calculations
+// FuturesArbitrageCalculationInput defines the parameters required to calculate potential futures arbitrage profits and risks.
 type FuturesArbitrageCalculationInput struct {
 	Symbol             string          `json:"symbol"`
 	LongExchange       string          `json:"long_exchange"`
@@ -89,7 +90,7 @@ type FuturesArbitrageCalculationInput struct {
 	FundingInterval    int             `json:"funding_interval"` // Hours
 }
 
-// FuturesArbitrageRiskMetrics represents comprehensive risk assessment
+// FuturesArbitrageRiskMetrics encapsulates various risk factors associated with a futures arbitrage opportunity.
 type FuturesArbitrageRiskMetrics struct {
 	// Price Risk
 	PriceCorrelation decimal.Decimal `json:"price_correlation"`
@@ -115,7 +116,7 @@ type FuturesArbitrageRiskMetrics struct {
 	Recommendation   string          `json:"recommendation"`
 }
 
-// FuturesPositionSizing represents position sizing recommendations
+// FuturesPositionSizing provides recommendations for position sizes and leverage based on risk analysis.
 type FuturesPositionSizing struct {
 	// Kelly Criterion based sizing
 	KellyPercentage   decimal.Decimal `json:"kelly_percentage"`
@@ -137,7 +138,8 @@ type FuturesPositionSizing struct {
 	MaxLossPercentage decimal.Decimal `json:"max_loss_percentage"`
 }
 
-// FuturesArbitrageStrategy represents a complete arbitrage strategy
+// FuturesArbitrageStrategy defines a complete strategy for executing a futures arbitrage trade.
+// It includes the opportunity details, risk assessment, position sizing, and execution plan.
 type FuturesArbitrageStrategy struct {
 	ID             string                      `json:"id"`
 	Name           string                      `json:"name"`
@@ -162,7 +164,7 @@ type FuturesArbitrageStrategy struct {
 	IsActive  bool      `json:"is_active"`
 }
 
-// PositionDetails represents details for a specific position
+// PositionDetails describes the parameters for a single side (long or short) of an arbitrage trade.
 type PositionDetails struct {
 	Exchange       string          `json:"exchange"`
 	Symbol         string          `json:"symbol"`
@@ -176,7 +178,7 @@ type PositionDetails struct {
 	EstimatedFees  decimal.Decimal `json:"estimated_fees"`
 }
 
-// FuturesArbitrageRequest represents API request for futures arbitrage opportunities
+// FuturesArbitrageRequest represents the parameters for querying or calculating futures arbitrage opportunities.
 type FuturesArbitrageRequest struct {
 	Symbols               []string        `json:"symbols,omitempty"`
 	Exchanges             []string        `json:"exchanges,omitempty"`
@@ -192,7 +194,7 @@ type FuturesArbitrageRequest struct {
 	Page                  int             `json:"page,omitempty"`
 }
 
-// FuturesArbitrageResponse represents API response for futures arbitrage opportunities
+// FuturesArbitrageResponse contains the list of found opportunities and strategies, along with pagination and summary data.
 type FuturesArbitrageResponse struct {
 	Opportunities []FuturesArbitrageOpportunity `json:"opportunities"`
 	Strategies    []FuturesArbitrageStrategy    `json:"strategies,omitempty"`
@@ -204,7 +206,7 @@ type FuturesArbitrageResponse struct {
 	MarketSummary FuturesMarketSummary          `json:"market_summary"`
 }
 
-// FuturesMarketSummary provides overall market context
+// FuturesMarketSummary provides a high-level overview of the current futures market conditions.
 type FuturesMarketSummary struct {
 	TotalOpportunities  int             `json:"total_opportunities"`
 	AverageAPY          decimal.Decimal `json:"average_apy"`

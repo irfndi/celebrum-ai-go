@@ -6,7 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// MarketData represents real-time market data from exchanges
+// MarketData contains real-time trading data for a specific trading pair on an exchange.
+// It includes price, volume, and 24-hour statistics.
 type MarketData struct {
 	ID                  string          `json:"id" db:"id"`
 	ExchangeID          int             `json:"exchange_id" db:"exchange_id"`
@@ -31,7 +32,7 @@ type MarketData struct {
 	TradingPair         *TradingPair    `json:"trading_pair,omitempty"`
 }
 
-// MarketPrice represents current market price for API responses
+// MarketPrice represents a simplified view of the current market price for API responses.
 type MarketPrice struct {
 	ExchangeID   int             `json:"exchange_id"`
 	ExchangeName string          `json:"exchange_name"`
@@ -45,32 +46,32 @@ type MarketPrice struct {
 	Timestamp    time.Time       `json:"timestamp"`
 }
 
-// GetPrice returns the price as float64
+// GetPrice returns the last traded price as a float64.
 func (mp *MarketPrice) GetPrice() float64 {
 	return mp.Price.InexactFloat64()
 }
 
-// GetVolume returns the volume as float64
+// GetVolume returns the trading volume as a float64.
 func (mp *MarketPrice) GetVolume() float64 {
 	return mp.Volume.InexactFloat64()
 }
 
-// GetTimestamp returns the timestamp
+// GetTimestamp returns the time when the price data was recorded.
 func (mp *MarketPrice) GetTimestamp() time.Time {
 	return mp.Timestamp
 }
 
-// GetExchangeName returns the exchange name
+// GetExchangeName returns the name of the exchange where the price originates.
 func (mp *MarketPrice) GetExchangeName() string {
 	return mp.ExchangeName
 }
 
-// GetSymbol returns the symbol
+// GetSymbol returns the trading pair symbol.
 func (mp *MarketPrice) GetSymbol() string {
 	return mp.Symbol
 }
 
-// TickerData represents real-time ticker information from CCXT
+// TickerData represents real-time ticker information retrieved from the CCXT library.
 type TickerData struct {
 	Symbol    string          `json:"symbol"`
 	Bid       decimal.Decimal `json:"bid"`
@@ -82,7 +83,7 @@ type TickerData struct {
 	Timestamp time.Time       `json:"timestamp"`
 }
 
-// OrderBookData represents order book information from CCXT
+// OrderBookData represents the order book structure (bids and asks) from CCXT.
 type OrderBookData struct {
 	Symbol    string              `json:"symbol"`
 	Bids      [][]decimal.Decimal `json:"bids"`
@@ -90,7 +91,7 @@ type OrderBookData struct {
 	Timestamp time.Time           `json:"timestamp"`
 }
 
-// MarketDataRequest represents request parameters for market data
+// MarketDataRequest represents the query parameters for fetching market data via API.
 type MarketDataRequest struct {
 	Symbols  []string `json:"symbols" form:"symbols"`
 	Exchange string   `json:"exchange" form:"exchange"`

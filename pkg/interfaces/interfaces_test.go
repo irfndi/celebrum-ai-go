@@ -7,18 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConfigDefaults(t *testing.T) {
-	// Test that configuration loading works without panicking
-	config, err := Load()
-	assert.NoError(t, err)
-	assert.NotNil(t, config)
-
-	// Test some default values
-	assert.Equal(t, "development", config.Environment)
-	assert.Equal(t, "info", config.LogLevel)
-	assert.Equal(t, 8080, config.Server.Port)
-}
-
 func TestBlacklistCacheEntry(t *testing.T) {
 	// Test BlacklistCacheEntry struct
 	entry := BlacklistCacheEntry{

@@ -24,7 +24,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// TelegramHandler handles Telegram webhook requests
+// TelegramHandler handles Telegram webhook requests and bot interactions.
 type TelegramHandler struct {
 	db               *database.PostgresDB
 	config           *config.TelegramConfig
@@ -36,7 +36,18 @@ type TelegramHandler struct {
 	pollingCancel    context.CancelFunc
 }
 
-// NewTelegramHandler creates a new Telegram handler
+// NewTelegramHandler creates a new Telegram handler.
+// It initializes the Telegram bot and sets up either webhook or polling mode based on configuration.
+//
+// Parameters:
+//   db: Database connection.
+//   cfg: Telegram configuration.
+//   arbitrageHandler: Handler for arbitrage operations.
+//   signalAggregator: Service for signal aggregation.
+//   redisClient: Redis client.
+//
+// Returns:
+//   *TelegramHandler: Initialized handler.
 func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler, signalAggregator *services.SignalAggregator, redisClient *redis.Client) *TelegramHandler {
 	log.Printf("[TELEGRAM] NewTelegramHandler called")
 	// Return handler with nil bot if config is not provided
@@ -107,7 +118,11 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 
 // Using models from go-telegram/bot package instead of custom structs
 
-// HandleWebhook processes incoming Telegram webhook requests
+// HandleWebhook processes incoming Telegram webhook requests.
+// It parses the update and delegates processing to the bot framework.
+//
+// Parameters:
+//   c: Gin context.
 func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
 	log.Printf("[TELEGRAM] HandleWebhook called from %s", c.ClientIP())
 
@@ -392,7 +407,8 @@ To upgrade, please contact our support team or visit our website (coming soon).`
 	return h.sendMessage(ctx, chatID, msg)
 }
 
-// StartPolling starts the Telegram bot in polling mode
+// StartPolling starts the Telegram bot in polling mode.
+// It launches a goroutine to continuously fetch updates.
 func (h *TelegramHandler) StartPolling() {
 	if h.bot == nil {
 		log.Printf("[TELEGRAM] ERROR: Cannot start polling: Telegram bot is not initialized")
@@ -426,7 +442,8 @@ func (h *TelegramHandler) StartPolling() {
 	log.Printf("[TELEGRAM] Polling goroutine launched")
 }
 
-// StopPolling stops the Telegram bot polling
+// StopPolling stops the Telegram bot polling.
+// It cancels the context used by the polling loop.
 func (h *TelegramHandler) StopPolling() {
 	if !h.pollingActive {
 		log.Printf("Polling is not active")

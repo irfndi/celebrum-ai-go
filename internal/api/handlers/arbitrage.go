@@ -20,6 +20,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// ArbitrageHandler handles arbitrage-related API endpoints.
 type ArbitrageHandler struct {
 	db                  *database.PostgresDB
 	ccxtService         ccxt.CCXTService
@@ -27,43 +28,82 @@ type ArbitrageHandler struct {
 	redisClient         *redis.Client
 }
 
+// ArbitrageOpportunity represents a detected arbitrage opportunity.
 type ArbitrageOpportunity struct {
+	// Symbol is the trading pair.
 	Symbol          string    `json:"symbol"`
+	// BuyExchange is the exchange name to buy from.
 	BuyExchange     string    `json:"buy_exchange"`
+	// SellExchange is the exchange name to sell to.
 	SellExchange    string    `json:"sell_exchange"`
+	// BuyPrice is the price to buy.
 	BuyPrice        float64   `json:"buy_price"`
+	// SellPrice is the price to sell.
 	SellPrice       float64   `json:"sell_price"`
+	// ProfitPercent is the profit percentage.
 	ProfitPercent   float64   `json:"profit_percent"`
+	// ProfitAmount is the estimated profit amount.
 	ProfitAmount    float64   `json:"profit_amount"`
+	// Volume is the volume available for the trade.
 	Volume          float64   `json:"volume"`
+	// Timestamp is the detection time.
 	Timestamp       time.Time `json:"timestamp"`
+	// OpportunityType classifies the opportunity (e.g., "arbitrage", "technical").
 	OpportunityType string    `json:"opportunity_type"` // "arbitrage", "technical", "ai_generated"
 }
 
+// ArbitrageResponse is the response structure for arbitrage opportunities endpoint.
 type ArbitrageResponse struct {
+	// Opportunities is the list of opportunities found.
 	Opportunities []ArbitrageOpportunity `json:"opportunities"`
+	// Count is the number of opportunities.
 	Count         int                    `json:"count"`
+	// Timestamp is the response generation time.
 	Timestamp     time.Time              `json:"timestamp"`
 }
 
+// ArbitrageHistoryItem represents a historical arbitrage record.
 type ArbitrageHistoryItem struct {
+	// ID is the unique identifier.
 	ID            int       `json:"id"`
+	// Symbol is the trading pair.
 	Symbol        string    `json:"symbol"`
+	// BuyExchange is the buying exchange.
 	BuyExchange   string    `json:"buy_exchange"`
+	// SellExchange is the selling exchange.
 	SellExchange  string    `json:"sell_exchange"`
+	// BuyPrice is the historical buy price.
 	BuyPrice      float64   `json:"buy_price"`
+	// SellPrice is the historical sell price.
 	SellPrice     float64   `json:"sell_price"`
+	// ProfitPercent is the historical profit percentage.
 	ProfitPercent float64   `json:"profit_percent"`
+	// DetectedAt is when the opportunity was recorded.
 	DetectedAt    time.Time `json:"detected_at"`
 }
 
+// ArbitrageHistoryResponse is the response structure for arbitrage history endpoint.
 type ArbitrageHistoryResponse struct {
+	// History is the list of historical items.
 	History []ArbitrageHistoryItem `json:"history"`
+	// Count is the number of items in this page.
 	Count   int                    `json:"count"`
+	// Page is the current page number.
 	Page    int                    `json:"page"`
+	// Limit is the items per page limit.
 	Limit   int                    `json:"limit"`
 }
 
+// NewArbitrageHandler creates a new instance of ArbitrageHandler.
+//
+// Parameters:
+//   db: Database connection.
+//   ccxtService: CCXT service.
+//   notificationService: Notification service.
+//   redisClient: Redis client.
+//
+// Returns:
+//   *ArbitrageHandler: Initialized handler.
 func NewArbitrageHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, notificationService *services.NotificationService, redisClient *redis.Client) *ArbitrageHandler {
 	return &ArbitrageHandler{
 		db:                  db,
@@ -73,7 +113,11 @@ func NewArbitrageHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	}
 }
 
-// GetArbitrageOpportunities finds real-time arbitrage opportunities
+// GetArbitrageOpportunities finds and returns real-time arbitrage opportunities.
+// It supports filtering by profit threshold, symbol, and limit.
+//
+// Parameters:
+//   c: Gin context.
 func (h *ArbitrageHandler) GetArbitrageOpportunities(c *gin.Context) {
 	// Parse query parameters
 	minProfitStr := c.DefaultQuery("min_profit", "0.5") // Default 0.5% minimum profit
@@ -149,7 +193,10 @@ func (h *ArbitrageHandler) sendArbitrageNotifications(opportunities []ArbitrageO
 	}
 }
 
-// GetArbitrageHistory returns historical arbitrage opportunities
+// GetArbitrageHistory returns historical arbitrage opportunities with pagination.
+//
+// Parameters:
+//   c: Gin context.
 func (h *ArbitrageHandler) GetArbitrageHistory(c *gin.Context) {
 	// Parse pagination parameters
 	pageStr := c.DefaultQuery("page", "1")
@@ -187,7 +234,11 @@ func (h *ArbitrageHandler) GetArbitrageHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetFundingRateArbitrage retrieves funding rate arbitrage opportunities
+// GetFundingRateArbitrage retrieves funding rate arbitrage opportunities.
+// It calculates potential profit from funding rate differences across exchanges.
+//
+// Parameters:
+//   c: Gin context.
 func (h *ArbitrageHandler) GetFundingRateArbitrage(c *gin.Context) {
 	minProfitStr := c.DefaultQuery("min_profit", "0.01") // Default 1% daily
 	maxRiskStr := c.DefaultQuery("max_risk", "3.0")      // Default max risk 3.0
@@ -260,7 +311,11 @@ func (h *ArbitrageHandler) GetFundingRateArbitrage(c *gin.Context) {
 	})
 }
 
-// GetFundingRates retrieves current funding rates for specified exchanges and symbols
+// GetFundingRates retrieves current funding rates for specified exchanges and symbols.
+// It supports caching to reduce API calls.
+//
+// Parameters:
+//   c: Gin context.
 func (h *ArbitrageHandler) GetFundingRates(c *gin.Context) {
 	exchange := c.Param("exchange")
 	if exchange == "" {
@@ -330,8 +385,18 @@ func (h *ArbitrageHandler) GetFundingRates(c *gin.Context) {
 	})
 }
 
-// FindArbitrageOpportunities analyzes market data to find arbitrage opportunities
-// Uses multiple strategies: price differences, technical analysis, and volatility patterns
+// FindArbitrageOpportunities analyzes market data to find arbitrage opportunities.
+// It employs multiple strategies: price differences, technical analysis, volatility, and spreads.
+//
+// Parameters:
+//   ctx: Context for cancellation.
+//   minProfit: Minimum profit percentage to consider.
+//   limit: Maximum number of results to return.
+//   symbolFilter: Optional symbol to filter by.
+//
+// Returns:
+//   []ArbitrageOpportunity: List of found opportunities.
+//   error: Error if analysis fails.
 func (h *ArbitrageHandler) FindArbitrageOpportunities(ctx context.Context, minProfit float64, limit int, symbolFilter string) ([]ArbitrageOpportunity, error) {
 	// Return empty slice if database is not available (for testing)
 	if h.db == nil {

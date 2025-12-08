@@ -13,15 +13,17 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisSentryHook implements redis.Hook for Sentry error tracking
+// RedisSentryHook implements redis.Hook for Sentry error tracking.
 type RedisSentryHook struct{}
 
+// DialHook is called when a new connection is established.
 func (h *RedisSentryHook) DialHook(next redis.DialHook) redis.DialHook {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return next(ctx, network, addr)
 	}
 }
 
+// ProcessHook is called before processing a command.
 func (h *RedisSentryHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	return func(ctx context.Context, cmd redis.Cmder) error {
 		err := next(ctx, cmd)
@@ -32,6 +34,7 @@ func (h *RedisSentryHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook 
 	}
 }
 
+// ProcessPipelineHook is called before processing a pipeline.
 func (h *RedisSentryHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
 	return func(ctx context.Context, cmds []redis.Cmder) error {
 		err := next(ctx, cmds)
@@ -42,32 +45,49 @@ func (h *RedisSentryHook) ProcessPipelineHook(next redis.ProcessPipelineHook) re
 	}
 }
 
-// PostgresSentryTracer implements pgx.QueryTracer for Sentry error tracking
+// PostgresSentryTracer implements pgx.QueryTracer for Sentry error tracking.
 type PostgresSentryTracer struct{}
 
+// TraceQueryStart is called at the beginning of a query execution.
 func (t *PostgresSentryTracer) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	return ctx
 }
 
+// TraceQueryEnd is called after a query execution.
 func (t *PostgresSentryTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
 	if data.Err != nil && data.Err != pgx.ErrNoRows {
 		sentry.CaptureException(data.Err)
 	}
 }
 
-// TracedDB wraps a database connection (stub implementation)
+// TracedDB wraps a database connection with tracing capabilities (stub implementation).
 type TracedDB struct {
 	Pool *pgxpool.Pool
 }
 
-// NewTracedDB creates a new traced database connection
+// NewTracedDB creates a new traced database connection.
+//
+// Parameters:
+//   pool: Database pool.
+//
+// Returns:
+//   *TracedDB: Traced database wrapper.
 func NewTracedDB(pool *pgxpool.Pool) *TracedDB {
 	return &TracedDB{
 		Pool: pool,
 	}
 }
 
-// Query executes a query (stub implementation)
+// Query executes a query (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Arguments.
+//
+// Returns:
+//   pgx.Rows: Rows.
+//   error: Error.
 func (db *TracedDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	start := time.Now()
 	rows, err := db.Pool.Query(ctx, sql, args...)
@@ -78,7 +98,15 @@ func (db *TracedDB) Query(ctx context.Context, sql string, args ...interface{}) 
 	return rows, err
 }
 
-// QueryRow executes a query that returns a single row (stub implementation)
+// QueryRow executes a query that returns a single row (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Arguments.
+//
+// Returns:
+//   pgx.Row: Row.
 func (db *TracedDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	start := time.Now()
 	row := db.Pool.QueryRow(ctx, sql, args...)
@@ -89,7 +117,16 @@ func (db *TracedDB) QueryRow(ctx context.Context, sql string, args ...interface{
 	return row
 }
 
-// Exec executes a query without returning rows (stub implementation)
+// Exec executes a query without returning rows (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   arguments: Arguments.
+//
+// Returns:
+//   pgconn.CommandTag: Command tag.
+//   error: Error.
 func (db *TracedDB) Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error) {
 	start := time.Now()
 	tag, err := db.Pool.Exec(ctx, sql, arguments...)
@@ -100,7 +137,14 @@ func (db *TracedDB) Exec(ctx context.Context, sql string, arguments ...interface
 	return tag, err
 }
 
-// Begin starts a transaction (stub implementation)
+// Begin starts a transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   pgx.Tx: Transaction.
+//   error: Error.
 func (db *TracedDB) Begin(ctx context.Context) (pgx.Tx, error) {
 	start := time.Now()
 	tx, err := db.Pool.Begin(ctx)
@@ -111,7 +155,15 @@ func (db *TracedDB) Begin(ctx context.Context) (pgx.Tx, error) {
 	return &TracedTx{Tx: tx}, err
 }
 
-// BeginTx starts a transaction with options (stub implementation)
+// BeginTx starts a transaction with options (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   txOptions: Transaction options.
+//
+// Returns:
+//   pgx.Tx: Transaction.
+//   error: Error.
 func (db *TracedDB) BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error) {
 	start := time.Now()
 	tx, err := db.Pool.BeginTx(ctx, txOptions)
@@ -122,7 +174,13 @@ func (db *TracedDB) BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.T
 	return &TracedTx{Tx: tx}, err
 }
 
-// Ping verifies the connection to the database (stub implementation)
+// Ping verifies the connection to the database (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   error: Error.
 func (db *TracedDB) Ping(ctx context.Context) error {
 	start := time.Now()
 	err := db.Pool.Ping(ctx)
@@ -133,17 +191,26 @@ func (db *TracedDB) Ping(ctx context.Context) error {
 	return err
 }
 
-// Close closes the database connection pool
+// Close closes the database connection pool.
 func (db *TracedDB) Close() {
 	db.Pool.Close()
 }
 
-// TracedTx wraps a database transaction (stub implementation)
+// TracedTx wraps a database transaction (stub implementation).
 type TracedTx struct {
 	Tx pgx.Tx
 }
 
-// Query executes a query within the transaction (stub implementation)
+// Query executes a query within the transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Arguments.
+//
+// Returns:
+//   pgx.Rows: Rows.
+//   error: Error.
 func (tx *TracedTx) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	start := time.Now()
 	rows, err := tx.Tx.Query(ctx, sql, args...)
@@ -154,7 +221,15 @@ func (tx *TracedTx) Query(ctx context.Context, sql string, args ...interface{}) 
 	return rows, err
 }
 
-// QueryRow executes a query that returns a single row within the transaction (stub implementation)
+// QueryRow executes a query that returns a single row within the transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Arguments.
+//
+// Returns:
+//   pgx.Row: Row.
 func (tx *TracedTx) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	start := time.Now()
 	row := tx.Tx.QueryRow(ctx, sql, args...)
@@ -165,7 +240,16 @@ func (tx *TracedTx) QueryRow(ctx context.Context, sql string, args ...interface{
 	return row
 }
 
-// Exec executes a query without returning rows within the transaction (stub implementation)
+// Exec executes a query without returning rows within the transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   sql: SQL query.
+//   args: Arguments.
+//
+// Returns:
+//   pgconn.CommandTag: Command tag.
+//   error: Error.
 func (tx *TracedTx) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	start := time.Now()
 	tag, err := tx.Tx.Exec(ctx, sql, args...)
@@ -176,7 +260,13 @@ func (tx *TracedTx) Exec(ctx context.Context, sql string, args ...interface{}) (
 	return tag, err
 }
 
-// Commit commits the transaction (stub implementation)
+// Commit commits the transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   error: Error.
 func (tx *TracedTx) Commit(ctx context.Context) error {
 	start := time.Now()
 	err := tx.Tx.Commit(ctx)
@@ -187,7 +277,13 @@ func (tx *TracedTx) Commit(ctx context.Context) error {
 	return err
 }
 
-// Rollback rolls back the transaction (stub implementation)
+// Rollback rolls back the transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   error: Error.
 func (tx *TracedTx) Rollback(ctx context.Context) error {
 	start := time.Now()
 	err := tx.Tx.Rollback(ctx)
@@ -198,7 +294,14 @@ func (tx *TracedTx) Rollback(ctx context.Context) error {
 	return err
 }
 
-// Begin starts a nested transaction (stub implementation)
+// Begin starts a nested transaction (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//
+// Returns:
+//   pgx.Tx: Nested transaction.
+//   error: Error.
 func (tx *TracedTx) Begin(ctx context.Context) (pgx.Tx, error) {
 	start := time.Now()
 	nestedTx, err := tx.Tx.Begin(ctx)
@@ -209,12 +312,25 @@ func (tx *TracedTx) Begin(ctx context.Context) (pgx.Tx, error) {
 	return &TracedTx{Tx: nestedTx}, err
 }
 
-// Conn returns the underlying connection (stub implementation)
+// Conn returns the underlying connection (stub implementation).
+//
+// Returns:
+//   *pgx.Conn: Connection.
 func (tx *TracedTx) Conn() *pgx.Conn {
 	return tx.Tx.Conn()
 }
 
-// CopyFrom copies data from a source to a destination table (stub implementation)
+// CopyFrom copies data from a source to a destination table (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   tableName: Table name.
+//   columnNames: Column names.
+//   rowSrc: Source.
+//
+// Returns:
+//   int64: Rows copied.
+//   error: Error.
 func (tx *TracedTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
 	start := time.Now()
 	rowsAffected, err := tx.Tx.CopyFrom(ctx, tableName, columnNames, rowSrc)
@@ -225,12 +341,24 @@ func (tx *TracedTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, colu
 	return rowsAffected, err
 }
 
-// LargeObjects returns the large object manager (stub implementation)
+// LargeObjects returns the large object manager (stub implementation).
+//
+// Returns:
+//   pgx.LargeObjects: Manager.
 func (tx *TracedTx) LargeObjects() pgx.LargeObjects {
 	return tx.Tx.LargeObjects()
 }
 
-// Prepare prepares a statement (stub implementation)
+// Prepare prepares a statement (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   name: Statement name.
+//   sql: SQL.
+//
+// Returns:
+//   *pgconn.StatementDescription: Description.
+//   error: Error.
 func (tx *TracedTx) Prepare(ctx context.Context, name, sql string) (*pgconn.StatementDescription, error) {
 	start := time.Now()
 	stmt, err := tx.Tx.Prepare(ctx, name, sql)
@@ -241,7 +369,14 @@ func (tx *TracedTx) Prepare(ctx context.Context, name, sql string) (*pgconn.Stat
 	return stmt, err
 }
 
-// SendBatch sends a batch of queries (stub implementation)
+// SendBatch sends a batch of queries (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   b: Batch.
+//
+// Returns:
+//   pgx.BatchResults: Results.
 func (tx *TracedTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
 	start := time.Now()
 	results := tx.Tx.SendBatch(ctx, b)
@@ -252,14 +387,24 @@ func (tx *TracedTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResult
 	return results
 }
 
-// RecordDatabaseError records a database error (stub implementation)
+// RecordDatabaseError records a database error (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   err: Error.
+//   operation: Operation name.
 func RecordDatabaseError(ctx context.Context, err error, operation string) {
 	// Stub implementation - could log error information
 	_ = err
 	_ = operation
 }
 
-// AddDatabaseSpanAttributes adds database-specific attributes (stub implementation)
+// AddDatabaseSpanAttributes adds database-specific attributes (stub implementation).
+//
+// Parameters:
+//   ctx: Context.
+//   table: Table name.
+//   rowsAffected: Rows affected.
 func AddDatabaseSpanAttributes(ctx context.Context, table string, rowsAffected int64) {
 	// Stub implementation - could log attribute information
 	_ = table

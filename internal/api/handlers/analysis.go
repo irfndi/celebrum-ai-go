@@ -13,44 +13,71 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
 
+// AnalysisHandler manages technical analysis and signal generation endpoints.
 type AnalysisHandler struct {
 	db          *database.PostgresDB
 	ccxtService ccxt.CCXTService
 }
 
+// TechnicalIndicator represents a set of calculated indicators for a trading pair.
 type TechnicalIndicator struct {
+	// Symbol is the trading pair identifier.
 	Symbol     string                 `json:"symbol"`
+	// Exchange is the exchange name.
 	Exchange   string                 `json:"exchange"`
+	// Timeframe is the candle timeframe used (e.g., "1h").
 	Timeframe  string                 `json:"timeframe"`
+	// Timestamp is the calculation time.
 	Timestamp  time.Time              `json:"timestamp"`
+	// Price is the current asset price.
 	Price      float64                `json:"current_price"`
+	// Indicators contains key-value pairs of indicator names and their values.
 	Indicators map[string]interface{} `json:"indicators"`
 }
 
+// TradingSignal represents a generated buy/sell/hold signal.
 type TradingSignal struct {
+	// Symbol is the trading pair identifier.
 	Symbol     string    `json:"symbol"`
+	// Exchange is the exchange name.
 	Exchange   string    `json:"exchange"`
-	SignalType string    `json:"signal_type"` // "BUY", "SELL", "HOLD"
-	Strength   string    `json:"strength"`    // "WEAK", "MODERATE", "STRONG"
+	// SignalType indicates the action: "BUY", "SELL", or "HOLD".
+	SignalType string    `json:"signal_type"`
+	// Strength indicates the signal strength: "WEAK", "MODERATE", "STRONG".
+	Strength   string    `json:"strength"`
+	// Price is the price at signal generation.
 	Price      float64   `json:"price"`
+	// Reason describes the rationale behind the signal.
 	Reason     string    `json:"reason"`
+	// Confidence is a score from 0.0 to 1.0 indicating algorithm confidence.
 	Confidence float64   `json:"confidence"`
+	// Timestamp is when the signal was generated.
 	Timestamp  time.Time `json:"timestamp"`
+	// Indicators lists the technical indicators used to generate the signal.
 	Indicators []string  `json:"indicators_used"`
 }
 
+// IndicatorsResponse is the API response structure for technical indicators.
 type IndicatorsResponse struct {
+	// Indicators is the list of calculated indicators.
 	Indicators []TechnicalIndicator `json:"indicators"`
+	// Count is the number of items returned.
 	Count      int                  `json:"count"`
+	// Timestamp is the response generation time.
 	Timestamp  time.Time            `json:"timestamp"`
 }
 
+// SignalsResponse is the API response structure for trading signals.
 type SignalsResponse struct {
+	// Signals is the list of generated signals.
 	Signals   []TradingSignal `json:"signals"`
+	// Count is the number of signals returned.
 	Count     int             `json:"count"`
+	// Timestamp is the response generation time.
 	Timestamp time.Time       `json:"timestamp"`
 }
 
+// OHLCV represents a single candlestick data point.
 type OHLCV struct {
 	Timestamp time.Time
 	Open      float64
@@ -60,6 +87,14 @@ type OHLCV struct {
 	Volume    float64
 }
 
+// NewAnalysisHandler creates a new instance of AnalysisHandler.
+//
+// Parameters:
+//   db: The database connection.
+//   ccxtService: The CCXT service for market data.
+//
+// Returns:
+//   *AnalysisHandler: The initialized handler.
 func NewAnalysisHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService) *AnalysisHandler {
 	return &AnalysisHandler{
 		db:          db,
@@ -67,7 +102,11 @@ func NewAnalysisHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService) *
 	}
 }
 
-// GetTechnicalIndicators calculates and returns technical indicators
+// GetTechnicalIndicators calculates and returns technical indicators for a specific symbol.
+// It supports query parameters: symbol, exchange, timeframe (default "1h").
+//
+// Parameters:
+//   c: The Gin context.
 func (h *AnalysisHandler) GetTechnicalIndicators(c *gin.Context) {
 	symbol := c.Query("symbol")
 	exchange := c.Query("exchange")
@@ -117,7 +156,11 @@ func (h *AnalysisHandler) GetTechnicalIndicators(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetTradingSignals generates trading signals based on technical analysis
+// GetTradingSignals generates trading signals based on technical analysis.
+// It supports query parameters: symbol (optional), exchange (optional), timeframe (default "1h"), min_confidence (default "0.6").
+//
+// Parameters:
+//   c: The Gin context.
 func (h *AnalysisHandler) GetTradingSignals(c *gin.Context) {
 	symbol := c.Query("symbol")
 	exchange := c.Query("exchange")

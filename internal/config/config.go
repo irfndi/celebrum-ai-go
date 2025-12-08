@@ -7,40 +7,71 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Config aggregates all configuration settings for the application.
 type Config struct {
+	// Environment indicates the running environment (e.g., "development", "production").
 	Environment string           `mapstructure:"environment"`
+	// LogLevel sets the global logging verbosity.
 	LogLevel    string           `mapstructure:"log_level"`
+	// Server holds configuration for the HTTP server.
 	Server      ServerConfig     `mapstructure:"server"`
+	// Database holds configuration for the database connection.
 	Database    DatabaseConfig   `mapstructure:"database"`
+	// Redis holds configuration for the Redis connection.
 	Redis       RedisConfig      `mapstructure:"redis"`
+	// CCXT holds configuration for the CCXT service integration.
 	CCXT        CCXTConfig       `mapstructure:"ccxt"`
+	// Telegram holds configuration for Telegram bot notifications.
 	Telegram    TelegramConfig   `mapstructure:"telegram"`
+	// Telemetry holds configuration for OpenTelemetry integration.
 	Telemetry   TelemetryConfig  `mapstructure:"telemetry"`
+	// Sentry holds configuration for Sentry error tracking.
 	Sentry      SentryConfig     `mapstructure:"sentry"`
+	// Cleanup holds configuration for data retention and cleanup tasks.
 	Cleanup     CleanupConfig    `mapstructure:"cleanup"`
+	// Backfill holds configuration for historical data backfilling.
 	Backfill    BackfillConfig   `mapstructure:"backfill"`
+	// MarketData holds configuration for market data collection.
 	MarketData  MarketDataConfig `mapstructure:"market_data"`
+	// Arbitrage holds configuration for arbitrage detection logic.
 	Arbitrage   ArbitrageConfig  `mapstructure:"arbitrage"`
+	// Blacklist holds configuration for the symbol blacklist mechanism.
 	Blacklist   BlacklistConfig  `mapstructure:"blacklist"`
+	// Auth holds configuration for authentication.
 	Auth        AuthConfig       `mapstructure:"auth"`
 }
 
+// ServerConfig defines the HTTP server settings.
 type ServerConfig struct {
+	// Port is the TCP port the server listens on.
 	Port           int      `mapstructure:"port"`
+	// AllowedOrigins is a list of CORS allowed origins.
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
+// DatabaseConfig defines the PostgreSQL database connection settings.
 type DatabaseConfig struct {
+	// Host is the database server hostname or IP.
 	Host            string `mapstructure:"host"`
+	// Port is the database server port.
 	Port            int    `mapstructure:"port"`
+	// User is the database username.
 	User            string `mapstructure:"user"`
+	// Password is the database password.
 	Password        string `mapstructure:"password"`
+	// DBName is the name of the database to connect to.
 	DBName          string `mapstructure:"dbname"`
+	// SSLMode defines the SSL connection mode.
 	SSLMode         string `mapstructure:"sslmode"`
+	// DatabaseURL is a connection string that can override individual fields.
 	DatabaseURL     string `mapstructure:"database_url"`
+	// MaxOpenConns is the maximum number of open connections.
 	MaxOpenConns    int    `mapstructure:"max_open_conns"`
+	// MaxIdleConns is the maximum number of idle connections.
 	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
+	// ConnMaxLifetime is the maximum connection lifetime.
 	ConnMaxLifetime string `mapstructure:"conn_max_lifetime"`
+	// ConnMaxIdleTime is the maximum idle connection lifetime.
 	ConnMaxIdleTime string `mapstructure:"conn_max_idle_time"`
 	// PostgreSQL 18 specific optimizations
 	ApplicationName       string `mapstructure:"application_name"`
@@ -56,99 +87,171 @@ type DatabaseConfig struct {
 	AsyncConcurrency      int    `mapstructure:"async_concurrency"`
 }
 
+// RedisConfig defines the Redis connection settings.
 type RedisConfig struct {
+	// Host is the Redis server hostname.
 	Host     string `mapstructure:"host"`
+	// Port is the Redis server port.
 	Port     int    `mapstructure:"port"`
+	// Password is the Redis authentication password.
 	Password string `mapstructure:"password"`
+	// DB is the Redis database index to use.
 	DB       int    `mapstructure:"db"`
 }
 
+// CCXTConfig defines settings for interacting with the CCXT microservice.
 type CCXTConfig struct {
+	// ServiceURL is the base URL of the CCXT service.
 	ServiceURL string `mapstructure:"service_url"`
+	// Timeout is the request timeout in seconds.
 	Timeout    int    `mapstructure:"timeout"`
 }
 
+// TelegramConfig defines settings for the Telegram notification bot.
 type TelegramConfig struct {
+	// BotToken is the authentication token for the Telegram bot.
 	BotToken       string `mapstructure:"bot_token"`
+	// WebhookURL is the URL where Telegram should send updates.
 	WebhookURL     string `mapstructure:"webhook_url"`
+	// UsePolling indicates whether to use long polling instead of webhooks.
 	UsePolling     bool   `mapstructure:"use_polling"`
+	// PollingOffset is the offset for the next update in polling mode.
 	PollingOffset  int    `mapstructure:"polling_offset"`
+	// PollingLimit is the maximum number of updates to retrieve per request.
 	PollingLimit   int    `mapstructure:"polling_limit"`
+	// PollingTimeout is the timeout in seconds for long polling.
 	PollingTimeout int    `mapstructure:"polling_timeout"`
 }
 
+// TelemetryConfig defines settings for OpenTelemetry.
 type TelemetryConfig struct {
+	// Enabled controls whether telemetry is active.
 	Enabled        bool   `mapstructure:"enabled"`
+	// ServiceName is the name of the service for tracing.
 	ServiceName    string `mapstructure:"service_name"`
+	// ServiceVersion is the version of the service.
 	ServiceVersion string `mapstructure:"service_version"`
+	// LogLevel sets the log level for telemetry components.
 	LogLevel       string `mapstructure:"log_level"`
 }
 
+// SentryConfig defines settings for Sentry error reporting.
 type SentryConfig struct {
+	// Enabled controls whether Sentry reporting is active.
 	Enabled            bool    `mapstructure:"enabled"`
+	// DSN is the Data Source Name for the Sentry project.
 	DSN                string  `mapstructure:"dsn"`
+	// Environment is the environment tag sent to Sentry.
 	Environment        string  `mapstructure:"environment"`
+	// Release is the release version tag.
 	Release            string  `mapstructure:"release"`
+	// TracesSampleRate is the percentage of transactions to trace.
 	TracesSampleRate   float64 `mapstructure:"traces_sample_rate"`
+	// ProfilesSampleRate is the percentage of profiles to capture.
 	ProfilesSampleRate float64 `mapstructure:"profiles_sample_rate"`
 }
 
+// CleanupConfig defines policies for data retention and cleanup.
 type CleanupConfig struct {
+	// MarketData configures retention for market data.
 	MarketData             CleanupDataConfig      `mapstructure:"market_data"`
+	// FundingRates configures retention for funding rate data.
 	FundingRates           CleanupDataConfig      `mapstructure:"funding_rates"`
+	// ArbitrageOpportunities configures retention for arbitrage opportunity records.
 	ArbitrageOpportunities CleanupArbitrageConfig `mapstructure:"arbitrage_opportunities"`
+	// IntervalMinutes is the frequency of cleanup job execution.
 	IntervalMinutes        int                    `mapstructure:"interval"`
+	// EnableSmartCleanup enables more intelligent cleanup strategies.
 	EnableSmartCleanup     bool                   `mapstructure:"enable_smart_cleanup"`
 }
 
+// CleanupDataConfig defines retention policies for general data.
 type CleanupDataConfig struct {
+	// RetentionHours is the number of hours to keep data.
 	RetentionHours int `mapstructure:"retention_hours"`
+	// DeletionHours defines a secondary deletion threshold.
 	DeletionHours  int `mapstructure:"deletion_hours"`
 }
 
+// CleanupArbitrageConfig defines retention policies for arbitrage data.
 type CleanupArbitrageConfig struct {
+	// RetentionHours is the number of hours to keep arbitrage records.
 	RetentionHours int `mapstructure:"retention_hours"`
 }
 
+// BackfillConfig defines settings for historical data backfilling.
 type BackfillConfig struct {
+	// Enabled controls whether backfilling is active.
 	Enabled               bool `mapstructure:"enabled"`
+	// BackfillHours is the duration of history to backfill.
 	BackfillHours         int  `mapstructure:"backfill_hours"`
+	// MinDataThresholdHours is the minimum amount of data required to skip backfill.
 	MinDataThresholdHours int  `mapstructure:"min_data_threshold_hours"`
+	// BatchSize is the number of items to process in one backfill batch.
 	BatchSize             int  `mapstructure:"batch_size"`
+	// DelayBetweenBatches is the pause time in milliseconds between batches.
 	DelayBetweenBatches   int  `mapstructure:"delay_between_batches"`
 }
 
+// MarketDataConfig defines settings for market data collection.
 type MarketDataConfig struct {
+	// CollectionInterval is the time string for how often to collect data.
 	CollectionInterval string   `mapstructure:"collection_interval"`
+	// BatchSize is the number of symbols/requests to process at once.
 	BatchSize          int      `mapstructure:"batch_size"`
+	// MaxRetries is the number of times to retry failed requests.
 	MaxRetries         int      `mapstructure:"max_retries"`
+	// Timeout is the request timeout string.
 	Timeout            string   `mapstructure:"timeout"`
+	// Exchanges is a list of exchange names to collect data from.
 	Exchanges          []string `mapstructure:"exchanges"`
 }
 
+// ArbitrageConfig defines settings for arbitrage detection.
 type ArbitrageConfig struct {
+	// MinProfitThreshold is the minimum profit percentage required.
 	MinProfitThreshold float64  `mapstructure:"min_profit_threshold"`
+	// MaxTradeAmount is the maximum capital to allocate for a trade.
 	MaxTradeAmount     float64  `mapstructure:"max_trade_amount"`
+	// CheckInterval is the string duration between checks.
 	CheckInterval      string   `mapstructure:"check_interval"`
+	// EnabledPairs is a list of trading pairs to monitor.
 	EnabledPairs       []string `mapstructure:"enabled_pairs"`
+	// Enabled controls whether the arbitrage service is running.
 	Enabled            bool     `mapstructure:"enabled"`
+	// IntervalSeconds is the interval in seconds between checks.
 	IntervalSeconds    int      `mapstructure:"interval_seconds"`
+	// MaxAgeMinutes is the maximum age of data to consider valid.
 	MaxAgeMinutes      int      `mapstructure:"max_age_minutes"`
+	// BatchSize is the processing batch size.
 	BatchSize          int      `mapstructure:"batch_size"`
 }
 
+// BlacklistConfig defines settings for the symbol blacklist.
 type BlacklistConfig struct {
-	TTL             string `mapstructure:"ttl"`               // Default TTL for blacklisted symbols (e.g., "24h")
-	ShortTTL        string `mapstructure:"short_ttl"`         // Short TTL for temporary issues (e.g., "1h")
-	LongTTL         string `mapstructure:"long_ttl"`          // Long TTL for persistent issues (e.g., "72h")
-	UseRedis        bool   `mapstructure:"use_redis"`         // Whether to use Redis for blacklist persistence
-	RetryAfterClear bool   `mapstructure:"retry_after_clear"` // Whether to retry symbols after blacklist expires
+	// TTL is the default Time To Live for blacklisted symbols.
+	TTL             string `mapstructure:"ttl"`
+	// ShortTTL is a shorter TTL for temporary issues.
+	ShortTTL        string `mapstructure:"short_ttl"`
+	// LongTTL is a longer TTL for persistent issues.
+	LongTTL         string `mapstructure:"long_ttl"`
+	// UseRedis controls whether to persist the blacklist in Redis.
+	UseRedis        bool   `mapstructure:"use_redis"`
+	// RetryAfterClear controls whether to immediately retry symbols after they expire.
+	RetryAfterClear bool   `mapstructure:"retry_after_clear"`
 }
 
+// AuthConfig defines authentication settings.
 type AuthConfig struct {
+	// JWTSecret is the secret key used for signing JWT tokens.
 	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
+// Load reads the configuration from the config file and environment variables.
+//
+// Returns:
+//   *Config: The loaded configuration structure.
+//   error: An error if the configuration could not be parsed.
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -202,6 +305,7 @@ func Load() (*Config, error) {
 	return &config, nil
 }
 
+// setDefaults initializes the default configuration values in Viper.
 func setDefaults() {
 	// Environment
 	viper.SetDefault("environment", "development")
@@ -301,17 +405,23 @@ func setDefaults() {
 	viper.SetDefault("auth.jwt_secret", "")
 }
 
-// GetServiceURL returns the CCXT service URL
+// GetServiceURL returns the CCXT service URL.
+//
+// Returns:
+//   string: The service URL.
 func (c *CCXTConfig) GetServiceURL() string {
 	return c.ServiceURL
 }
 
-// GetTimeout returns the CCXT service timeout in seconds
+// GetTimeout returns the CCXT service timeout in seconds.
+//
+// Returns:
+//   int: The timeout duration.
 func (c *CCXTConfig) GetTimeout() int {
 	return c.Timeout
 }
 
-// validateConfig validates critical security and operational settings
+// validateConfig validates critical security and operational settings.
 func validateConfig(config *Config) error {
 	// Validate JWT secret for production environments
 	if config.Environment == "production" || config.Environment == "staging" {

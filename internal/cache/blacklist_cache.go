@@ -12,51 +12,78 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// BlacklistCacheEntry represents a blacklisted symbol with metadata
+// BlacklistCacheEntry represents a blacklisted symbol with metadata.
 type BlacklistCacheEntry struct {
+	// Symbol is the trading pair identifier that is blacklisted.
 	Symbol    string     `json:"symbol"`
+	// Reason describes why the symbol was blacklisted.
 	Reason    string     `json:"reason"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"` // nil means no expiration
+	// ExpiresAt points to the time when the blacklist entry is no longer valid.
+	// If nil, the entry does not expire automatically.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// CreatedAt is the timestamp when the entry was created.
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-// BlacklistCacheStats holds statistics about the blacklist cache
+// BlacklistCacheStats holds statistics about the blacklist cache.
 type BlacklistCacheStats struct {
+	// TotalEntries is the current number of items in the cache.
 	TotalEntries   int64     `json:"total_entries"`
+	// ExpiredEntries is the count of entries that have passed their expiration time.
 	ExpiredEntries int64     `json:"expired_entries"`
+	// Hits is the number of successful cache lookups.
 	Hits           int64     `json:"hits"`
+	// Misses is the number of failed cache lookups.
 	Misses         int64     `json:"misses"`
+	// Adds is the total number of entries added to the cache.
 	Adds           int64     `json:"adds"`
+	// LastCleanup is the timestamp of the last cache cleanup operation.
 	LastCleanup    time.Time `json:"last_cleanup"`
 }
 
-// BlacklistCache interface defines the contract for blacklist caching
+// BlacklistCache interface defines the contract for blacklist caching mechanisms.
 type BlacklistCache interface {
+	// IsBlacklisted checks if a symbol is in the blacklist.
 	IsBlacklisted(symbol string) (bool, string)
+	// Add adds a symbol to the blacklist with a reason and time-to-live.
 	Add(symbol, reason string, ttl time.Duration)
+	// Remove removes a symbol from the blacklist.
 	Remove(symbol string)
+	// Clear removes all entries from the blacklist cache.
 	Clear()
+	// GetStats returns the current cache statistics.
 	GetStats() BlacklistCacheStats
+	// LogStats logs the current cache statistics.
 	LogStats()
+	// Close cleans up any resources associated with the cache.
 	Close() error
-	// New methods for database persistence
+	// LoadFromDatabase populates the cache from the persistent store.
 	LoadFromDatabase(ctx context.Context) error
+	// GetBlacklistedSymbols retrieves all blacklisted symbols from the cache.
 	GetBlacklistedSymbols() ([]BlacklistCacheEntry, error)
 }
 
-// BlacklistRepository interface defines the contract for database operations
-// This allows for dependency injection and testing with mock implementations
+// BlacklistRepository interface defines the contract for database operations.
+// This allows for dependency injection and testing with mock implementations.
 type BlacklistRepository interface {
+	// AddExchange adds an exchange to the database blacklist.
 	AddExchange(ctx context.Context, exchangeName, reason string, expiresAt *time.Time) (*database.ExchangeBlacklistEntry, error)
+	// RemoveExchange removes an exchange from the database blacklist.
 	RemoveExchange(ctx context.Context, exchangeName string) error
+	// IsBlacklisted checks if an exchange is blacklisted in the database.
 	IsBlacklisted(ctx context.Context, exchangeName string) (bool, string, error)
+	// GetAllBlacklisted retrieves all blacklisted exchanges from the database.
 	GetAllBlacklisted(ctx context.Context) ([]database.ExchangeBlacklistEntry, error)
+	// CleanupExpired removes expired entries from the database.
 	CleanupExpired(ctx context.Context) (int64, error)
+	// GetBlacklistHistory retrieves the blacklist history from the database.
 	GetBlacklistHistory(ctx context.Context, limit int) ([]database.ExchangeBlacklistEntry, error)
+	// ClearAll removes all entries from the database blacklist.
 	ClearAll(ctx context.Context) (int64, error)
 }
 
-// RedisBlacklistCache implements BlacklistCache using Redis with database persistence
+// RedisBlacklistCache implements BlacklistCache using Redis with database persistence.
+// It manages the synchronization between the Redis cache and the database repository.
 type RedisBlacklistCache struct {
 	client redis.Cmdable
 	ctx    context.Context
@@ -66,7 +93,14 @@ type RedisBlacklistCache struct {
 	repo   BlacklistRepository
 }
 
-// NewRedisBlacklistCache creates a new Redis-based blacklist cache with database persistence
+// NewRedisBlacklistCache creates a new Redis-based blacklist cache with database persistence.
+//
+// Parameters:
+//   client: The Redis client interface.
+//   repo: The database repository interface.
+//
+// Returns:
+//   *RedisBlacklistCache: A pointer to the initialized RedisBlacklistCache.
 func NewRedisBlacklistCache(client redis.Cmdable, repo BlacklistRepository) *RedisBlacklistCache {
 	return &RedisBlacklistCache{
 		client: client,
@@ -77,7 +111,15 @@ func NewRedisBlacklistCache(client redis.Cmdable, repo BlacklistRepository) *Red
 	}
 }
 
-// IsBlacklisted checks if a symbol is blacklisted
+// IsBlacklisted checks if a symbol is blacklisted.
+// It looks up the symbol in Redis and checks expiration.
+//
+// Parameters:
+//   symbol: The symbol to check.
+//
+// Returns:
+//   bool: True if blacklisted.
+//   string: The reason for blacklisting.
 func (rbc *RedisBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
 	rbc.mu.Lock()
 	defer rbc.mu.Unlock()
@@ -115,7 +157,13 @@ func (rbc *RedisBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
 	return true, entry.Reason
 }
 
-// Add adds a symbol to the blacklist with a TTL
+// Add adds a symbol to the blacklist with a TTL.
+// It persists the entry to the database and then updates the Redis cache.
+//
+// Parameters:
+//   symbol: The symbol to blacklist.
+//   reason: The reason for blacklisting.
+//   ttl: The time-to-live duration.
 func (rbc *RedisBlacklistCache) Add(symbol, reason string, ttl time.Duration) {
 	rbc.mu.Lock()
 	defer rbc.mu.Unlock()
@@ -160,7 +208,11 @@ func (rbc *RedisBlacklistCache) Add(symbol, reason string, ttl time.Duration) {
 	log.Printf("Blacklisted symbol %s for %s (TTL: %v)", symbol, reason, ttl)
 }
 
-// Remove removes a symbol from the blacklist
+// Remove removes a symbol from the blacklist.
+// It removes the entry from both the database and the Redis cache.
+//
+// Parameters:
+//   symbol: The symbol to remove.
 func (rbc *RedisBlacklistCache) Remove(symbol string) {
 	rbc.mu.Lock()
 	defer rbc.mu.Unlock()
@@ -188,14 +240,12 @@ func (rbc *RedisBlacklistCache) Remove(symbol string) {
 	}
 }
 
-// Clear removes all blacklisted symbols
+// Clear removes all blacklisted symbols from the Redis cache.
+// Note: It does not clear the database to prevent accidental data loss.
+// A safe clear operation for the repository should be implemented if needed.
 func (rbc *RedisBlacklistCache) Clear() {
 	rbc.mu.Lock()
 	defer rbc.mu.Unlock()
-
-	// Note: ClearAll is not implemented in repository as it's a dangerous operation
-	// For now, we'll only clear the Redis cache
-	// TODO: Implement a safe clear operation in repository if needed
 
 	pattern := rbc.prefix + "*"
 	var keys []string
@@ -219,7 +269,10 @@ func (rbc *RedisBlacklistCache) Clear() {
 	}
 }
 
-// GetStats returns current cache statistics
+// GetStats returns current cache statistics.
+//
+// Returns:
+//   BlacklistCacheStats: The current statistics.
 func (rbc *RedisBlacklistCache) GetStats() BlacklistCacheStats {
 	rbc.mu.RLock()
 	defer rbc.mu.RUnlock()
@@ -238,20 +291,31 @@ func (rbc *RedisBlacklistCache) GetStats() BlacklistCacheStats {
 	return rbc.stats
 }
 
-// LogStats logs current cache statistics
+// LogStats logs current cache statistics to the standard logger.
 func (rbc *RedisBlacklistCache) LogStats() {
 	stats := rbc.GetStats()
 	log.Printf("Blacklist Cache Stats - Total: %d, Hits: %d, Misses: %d, Adds: %d, Expired: %d",
 		stats.TotalEntries, stats.Hits, stats.Misses, stats.Adds, stats.ExpiredEntries)
 }
 
-// Close closes the Redis connection (if needed)
+// Close closes the Redis connection (if needed).
+// In this implementation, the Redis client is managed externally, so this is a no-op.
+//
+// Returns:
+//   error: Always nil.
 func (rbc *RedisBlacklistCache) Close() error {
 	// Redis client is managed externally, so we don't close it here
 	return nil
 }
 
-// LoadFromDatabase loads blacklist entries from the database into Redis cache
+// LoadFromDatabase loads blacklist entries from the database into Redis cache.
+// This is typically called on startup to populate the cache.
+//
+// Parameters:
+//   ctx: The context for the operation.
+//
+// Returns:
+//   error: An error if the database retrieval or cache update fails.
 func (rbc *RedisBlacklistCache) LoadFromDatabase(ctx context.Context) error {
 	if rbc.repo == nil {
 		return fmt.Errorf("database repository not configured")
@@ -308,7 +372,12 @@ func (rbc *RedisBlacklistCache) LoadFromDatabase(ctx context.Context) error {
 	return nil
 }
 
-// GetBlacklistedSymbols returns all currently blacklisted symbols
+// GetBlacklistedSymbols returns all currently blacklisted symbols.
+// It scans the Redis cache for all blacklist entries.
+//
+// Returns:
+//   []BlacklistCacheEntry: A list of all blacklisted symbols.
+//   error: An error if scanning fails.
 func (rbc *RedisBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntry, error) {
 	rbc.mu.RLock()
 	defer rbc.mu.RUnlock()
@@ -348,7 +417,11 @@ func (rbc *RedisBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntry, 
 	return entries, nil
 }
 
-// CleanupExpired removes all expired entries from the blacklist
+// CleanupExpired removes all expired entries from the blacklist.
+// It scans the cache and removes items where the expiration time has passed.
+//
+// Returns:
+//   int: The number of expired entries removed.
 func (rbc *RedisBlacklistCache) CleanupExpired() int {
 	rbc.mu.Lock()
 	defer rbc.mu.Unlock()
@@ -393,14 +466,18 @@ func (rbc *RedisBlacklistCache) CleanupExpired() int {
 	return expiredCount
 }
 
-// InMemoryBlacklistCache provides a fallback in-memory implementation
+// InMemoryBlacklistCache provides a fallback in-memory implementation of BlacklistCache.
+// It uses a Go map to store blacklist entries and is thread-safe.
 type InMemoryBlacklistCache struct {
 	cache map[string]*BlacklistCacheEntry
 	mu    sync.RWMutex
 	stats BlacklistCacheStats
 }
 
-// NewInMemoryBlacklistCache creates a new in-memory blacklist cache
+// NewInMemoryBlacklistCache creates a new in-memory blacklist cache.
+//
+// Returns:
+//   *InMemoryBlacklistCache: A pointer to the initialized in-memory cache.
 func NewInMemoryBlacklistCache() *InMemoryBlacklistCache {
 	return &InMemoryBlacklistCache{
 		cache: make(map[string]*BlacklistCacheEntry),
@@ -408,7 +485,14 @@ func NewInMemoryBlacklistCache() *InMemoryBlacklistCache {
 	}
 }
 
-// IsBlacklisted checks if a symbol is blacklisted (in-memory implementation)
+// IsBlacklisted checks if a symbol is blacklisted (in-memory implementation).
+//
+// Parameters:
+//   symbol: The symbol to check.
+//
+// Returns:
+//   bool: True if blacklisted.
+//   string: The reason for blacklisting.
 func (ibc *InMemoryBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
 	// First, try with read lock for the common case
 	ibc.mu.RLock()
@@ -446,7 +530,12 @@ func (ibc *InMemoryBlacklistCache) IsBlacklisted(symbol string) (bool, string) {
 	return true, entry.Reason
 }
 
-// Add adds a symbol to the blacklist (in-memory implementation)
+// Add adds a symbol to the blacklist (in-memory implementation).
+//
+// Parameters:
+//   symbol: The symbol to blacklist.
+//   reason: The reason.
+//   ttl: The time-to-live.
 func (ibc *InMemoryBlacklistCache) Add(symbol, reason string, ttl time.Duration) {
 	ibc.mu.Lock()
 	defer ibc.mu.Unlock()
@@ -470,7 +559,10 @@ func (ibc *InMemoryBlacklistCache) Add(symbol, reason string, ttl time.Duration)
 	log.Printf("Blacklisted symbol %s for %s (TTL: %v)", symbol, reason, ttl)
 }
 
-// Remove removes a symbol from the blacklist (in-memory implementation)
+// Remove removes a symbol from the blacklist (in-memory implementation).
+//
+// Parameters:
+//   symbol: The symbol to remove.
 func (ibc *InMemoryBlacklistCache) Remove(symbol string) {
 	ibc.mu.Lock()
 	defer ibc.mu.Unlock()
@@ -482,7 +574,7 @@ func (ibc *InMemoryBlacklistCache) Remove(symbol string) {
 	}
 }
 
-// Clear removes all blacklisted symbols (in-memory implementation)
+// Clear removes all blacklisted symbols (in-memory implementation).
 func (ibc *InMemoryBlacklistCache) Clear() {
 	ibc.mu.Lock()
 	defer ibc.mu.Unlock()
@@ -493,32 +585,48 @@ func (ibc *InMemoryBlacklistCache) Clear() {
 	log.Printf("Cleared %d blacklisted symbols", count)
 }
 
-// GetStats returns current cache statistics (in-memory implementation)
+// GetStats returns current cache statistics (in-memory implementation).
+//
+// Returns:
+//   BlacklistCacheStats: The statistics.
 func (ibc *InMemoryBlacklistCache) GetStats() BlacklistCacheStats {
 	ibc.mu.RLock()
 	defer ibc.mu.RUnlock()
 	return ibc.stats
 }
 
-// LogStats logs current cache statistics (in-memory implementation)
+// LogStats logs current cache statistics (in-memory implementation).
 func (ibc *InMemoryBlacklistCache) LogStats() {
 	stats := ibc.GetStats()
 	log.Printf("Blacklist Cache Stats - Total: %d, Hits: %d, Misses: %d, Adds: %d, Expired: %d",
 		stats.TotalEntries, stats.Hits, stats.Misses, stats.Adds, stats.ExpiredEntries)
 }
 
-// Close closes the cache (in-memory implementation)
+// Close closes the cache (in-memory implementation).
+//
+// Returns:
+//   error: Always nil.
 func (ibc *InMemoryBlacklistCache) Close() error {
 	return nil
 }
 
-// LoadFromDatabase loads blacklist entries from the database (in-memory implementation)
+// LoadFromDatabase loads blacklist entries from the database (in-memory implementation).
+//
+// Parameters:
+//   ctx: The context.
+//
+// Returns:
+//   error: Always returns error as database persistence is not supported.
 func (ibc *InMemoryBlacklistCache) LoadFromDatabase(ctx context.Context) error {
 	// In-memory cache doesn't support database persistence
 	return fmt.Errorf("database persistence not supported for in-memory cache")
 }
 
-// GetBlacklistedSymbols returns all blacklisted symbols (in-memory implementation)
+// GetBlacklistedSymbols returns all blacklisted symbols (in-memory implementation).
+//
+// Returns:
+//   []BlacklistCacheEntry: List of entries.
+//   error: Always nil.
 func (ibc *InMemoryBlacklistCache) GetBlacklistedSymbols() ([]BlacklistCacheEntry, error) {
 	ibc.mu.RLock()
 	defer ibc.mu.RUnlock()

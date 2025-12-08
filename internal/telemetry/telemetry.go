@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	// Service information
-	ServiceName    = "github.com/irfandi/celebrum-ai-go"
+	// ServiceName is the identifier for the application service.
+	ServiceName = "github.com/irfandi/celebrum-ai-go"
+	// ServiceVersion indicates the current version of the service.
 	ServiceVersion = "1.0.0"
 )
 
-// TelemetryConfig holds configuration for telemetry
+// TelemetryConfig holds configuration settings for the telemetry system (Sentry).
 type TelemetryConfig struct {
 	Enabled     bool
 	DSN         string
@@ -24,7 +25,7 @@ type TelemetryConfig struct {
 	SampleRate  float64
 }
 
-// DefaultConfig returns default telemetry configuration
+// DefaultConfig returns a TelemetryConfig with default settings.
 func DefaultConfig() *TelemetryConfig {
 	return &TelemetryConfig{
 		Enabled:     true,
@@ -35,7 +36,13 @@ func DefaultConfig() *TelemetryConfig {
 	}
 }
 
-// InitTelemetry initializes Sentry
+// InitTelemetry initializes the Sentry client with the provided configuration.
+//
+// Parameters:
+//   - config: The configuration for telemetry.
+//
+// Returns:
+//   - An error if initialization fails.
 func InitTelemetry(config TelemetryConfig) error {
 	if !config.Enabled {
 		return nil
@@ -55,28 +62,34 @@ func InitTelemetry(config TelemetryConfig) error {
 	return nil
 }
 
-// Flush flushes buffered events
+// Flush sends any buffered events to the telemetry backend, blocking up to the timeout duration.
+//
+// Parameters:
+//   - timeout: The maximum time to wait for events to be sent.
 func Flush(timeout time.Duration) {
 	sentry.Flush(timeout)
 }
 
-// Provider holds the telemetry provider
+// Provider represents a telemetry service provider interface.
 type Provider struct {
 	Shutdown func(context.Context) error
 }
 
-// Shutdown shuts down the global telemetry provider
+// Shutdown safely shuts down the global telemetry provider, flushing remaining events.
+//
+// Returns:
+//   - An error (currently always nil).
 func Shutdown() error {
 	sentry.Flush(2 * time.Second)
 	return nil
 }
 
-// Logger returns the global slog.Logger instance for application logging
+// Logger returns the global slog.Logger instance for structured logging in the application.
 func Logger() *slog.Logger {
 	return slog.Default()
 }
 
-// GetLogger is an alias for Logger, kept for compatibility
+// GetLogger is an alias for Logger, maintained for backward compatibility.
 func GetLogger() *slog.Logger {
 	return Logger()
 }

@@ -25,7 +25,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// main runs the application startup via run and, on error, prints the error to standard error and exits with status 1.
+// main serves as the entry point for the application.
+// It delegates execution to the run function and handles exit codes based on success or failure.
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Application failed: %v\n", err)
@@ -33,9 +34,12 @@ func main() {
 	}
 }
 
-// run initializes configuration, telemetry, application services, and the HTTP server,
-// blocks until an OS interrupt or terminate signal is received, then performs a graceful shutdown.
-// It returns an error when initial startup fails (for example, configuration load or database connection failures).
+// run orchestrates the startup sequence of the server.
+// It loads configuration, initializes telemetry, databases, services, and the HTTP server.
+// It also manages graceful shutdown upon receiving termination signals.
+//
+// Returns:
+//   - An error if initialization fails at any critical step.
 func run() error {
 	// Load configuration
 	cfg, err := config.Load()
