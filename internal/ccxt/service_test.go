@@ -15,7 +15,7 @@ import (
 
 func TestNewService(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -32,7 +32,7 @@ func TestService_Initialize(t *testing.T) {
 	t.Skip("Skipping integration test - requires running CCXT service")
 
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -51,7 +51,7 @@ func TestService_Initialize(t *testing.T) {
 
 func TestService_GetSupportedExchanges(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -69,7 +69,7 @@ func TestService_FetchSingleTicker(t *testing.T) {
 	t.Skip("Skipping integration test - requires running CCXT service")
 
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -100,7 +100,7 @@ func TestService_FetchMarketData(t *testing.T) {
 	t.Skip("Skipping integration test - requires running CCXT service")
 
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -135,7 +135,7 @@ func TestService_FetchMarketData(t *testing.T) {
 // Test FetchMarketData with empty parameters
 func TestService_FetchMarketData_EmptyExchanges(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -154,7 +154,7 @@ func TestService_FetchMarketData_EmptyExchanges(t *testing.T) {
 
 func TestService_FetchMarketData_EmptySymbols(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -174,7 +174,7 @@ func TestService_FetchMarketData_EmptySymbols(t *testing.T) {
 // Test GetExchangeInfo with existing exchange
 func TestService_GetExchangeInfo_Exists(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -204,7 +204,7 @@ func TestService_GetExchangeInfo_Exists(t *testing.T) {
 // Test GetExchangeInfo with non-existing exchange
 func TestService_GetExchangeInfo_NotExists(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -222,7 +222,7 @@ func TestService_GetExchangeInfo_NotExists(t *testing.T) {
 // Test Service mutex operations
 func TestService_ConcurrentAccess(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -262,7 +262,7 @@ func TestService_ConcurrentAccess(t *testing.T) {
 // Test Service lastUpdate field
 func TestService_LastUpdate(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -297,7 +297,7 @@ func TestService_DifferentConfigs(t *testing.T) {
 		{
 			name: "valid config",
 			config: &config.CCXTConfig{
-				ServiceURL: "http://localhost:3000",
+				ServiceURL: "http://localhost:3001",
 				Timeout:    30,
 			},
 			expected: true,
@@ -313,7 +313,7 @@ func TestService_DifferentConfigs(t *testing.T) {
 		{
 			name: "zero timeout",
 			config: &config.CCXTConfig{
-				ServiceURL: "http://localhost:3000",
+				ServiceURL: "http://localhost:3001",
 				Timeout:    0,
 			},
 			expected: true,
@@ -335,7 +335,7 @@ func TestService_DifferentConfigs(t *testing.T) {
 // Test Service supportedExchanges map operations
 func TestService_SupportedExchangesOperations(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -376,7 +376,7 @@ func TestService_SupportedExchangesOperations(t *testing.T) {
 // Test Service edge cases
 func TestService_EdgeCases(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -401,7 +401,7 @@ func TestService_EdgeCases(t *testing.T) {
 // Test Service initialization state
 func TestService_InitializationState(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -429,7 +429,7 @@ func TestService_InitializationState(t *testing.T) {
 // Test GetServiceURL method
 func TestService_GetServiceURL(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -449,7 +449,7 @@ func TestService_GetServiceURL(t *testing.T) {
 // Test Close method
 func TestService_Close(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
