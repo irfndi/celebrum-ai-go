@@ -19,11 +19,9 @@ linters:
   # TypeScript/JavaScript (CCXT service)
   - name: oxlint
     command: cd services/ccxt && bunx oxlint --fix .
-    working_directory: services/ccxt
     
   - name: prettier
     command: cd services/ccxt && bunx prettier --write .
-    working_directory: services/ccxt
 
   # Shell scripts
   - name: shfmt
@@ -31,7 +29,7 @@ linters:
 
   # YAML
   - name: prettier-yaml
-    command: cd services/ccxt && bunx prettier --write "**/*.{yml,yaml}"
+    command: bunx prettier --write "**/*.{yml,yaml}"
 
 # File patterns to include/exclude
 include:

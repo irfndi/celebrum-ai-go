@@ -72,8 +72,7 @@ jobs:
 
       - name: Format YAML files
         run: |
-          if [ -d "services/ccxt" ]; then
-            cd services/ccxt
+          if command -v bunx >/dev/null 2>&1; then
             bunx prettier --write "**/*.{yml,yaml}" || true
           fi
 

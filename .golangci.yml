@@ -52,11 +52,6 @@ linters:
     - misspell
     - copyloopvar  # replaces exportloopref
 
-formatters:
-  enable:
-    - gofmt
-    - goimports
-
 issues:
   exclude-rules:
     - path: _test\.go
