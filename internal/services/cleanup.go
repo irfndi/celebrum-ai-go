@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"log/slog"
+
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
-	"log/slog"
 )
 
 // CleanupService handles automatic cleanup of old data

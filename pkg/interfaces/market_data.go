@@ -1,8 +1,9 @@
 package interfaces
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // MarketPrice represents current market price for API responses

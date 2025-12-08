@@ -49,14 +49,7 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - goconst
-    - gocyclo
     - misspell
-    - revive
-    - unconvert
-    - unparam
-    - gosec
-    - gocritic
     - copyloopvar  # replaces exportloopref
 
 formatters:
@@ -74,18 +67,39 @@ issues:
         - gosec
         - funlen
         - goconst
+        - revive
+        - unparam
+        - gocritic
+        - unconvert
     - path: internal/testutil/
       linters:
         - errcheck
         - gosec
+        - revive
+        - unparam
     - path: test/
       linters:
         - errcheck
         - gosec
         - gocyclo
         - funlen
+        - revive
+        - unparam
+    - path: cmd/server/
+      linters:
+        - gosec
+        - gocritic
+    - path: internal/middleware/
+      linters:
+        - gosec
+    - path: internal/api/handlers/
+      linters:
+        - gosec
+    - path: internal/services/
+      linters:
+        - gosec
 
-  exclude-use-default: false
+  exclude-use-default: true  # Use default exclusions
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-dirs:

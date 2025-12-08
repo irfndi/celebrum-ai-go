@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
-	"log/slog"
 
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
