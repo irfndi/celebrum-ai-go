@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
 	"github.com/irfandi/celebrum-ai-go/internal/models"
@@ -37,10 +36,10 @@ type SignalProcessorConfig struct {
 // SignalProcessor orchestrates the entire signal processing pipeline
 type SignalProcessor struct {
 	config              *SignalProcessorConfig
-	db                  *pgxpool.Pool
+	db                  DBPool
 	logger              *slog.Logger
-	signalAggregator    *SignalAggregator
-	qualityScorer       *SignalQualityScorer
+	signalAggregator    SignalAggregatorInterface
+	qualityScorer       SignalQualityScorerInterface
 	technicalAnalysis   *TechnicalAnalysisService
 	notificationService *NotificationService
 	collectorService    *CollectorService
@@ -86,10 +85,10 @@ type ProcessingResult struct {
 
 // NewSignalProcessor creates a new signal processor instance
 func NewSignalProcessor(
-	db *pgxpool.Pool,
+	db DBPool,
 	logger *slog.Logger,
-	signalAggregator *SignalAggregator,
-	qualityScorer *SignalQualityScorer,
+	signalAggregator SignalAggregatorInterface,
+	qualityScorer SignalQualityScorerInterface,
 	technicalAnalysis *TechnicalAnalysisService,
 	notificationService *NotificationService,
 	collectorService *CollectorService,
