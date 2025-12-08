@@ -36,7 +36,7 @@ func TestConfig_Struct(t *testing.T) {
 			DB:       0,
 		},
 		CCXT: CCXTConfig{
-			ServiceURL: "http://localhost:3000",
+			ServiceURL: "http://localhost:3001",
 			Timeout:    30,
 		},
 		Telegram: TelegramConfig{
@@ -64,7 +64,7 @@ func TestConfig_Struct(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "redis_pass", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "test_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://example.com/webhook", config.Telegram.WebhookURL)
@@ -170,7 +170,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 	assert.Equal(t, 6379, config.Redis.Port)
 	assert.Equal(t, "", config.Redis.Password)
 	assert.Equal(t, 0, config.Redis.DB)
-	assert.Equal(t, "http://localhost:3000", config.CCXT.ServiceURL)
+	assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "", config.Telegram.BotToken)
 	assert.Equal(t, "", config.Telegram.WebhookURL)
@@ -227,16 +227,16 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 
 func TestCCXTConfig_GetServiceURL(t *testing.T) {
 	config := CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
-	assert.Equal(t, "http://localhost:3000", config.GetServiceURL())
+	assert.Equal(t, "http://localhost:3001", config.GetServiceURL())
 }
 
 func TestCCXTConfig_GetTimeout(t *testing.T) {
 	config := CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -254,7 +254,7 @@ func TestCCXTConfig_GetServiceURL_Empty(t *testing.T) {
 
 func TestCCXTConfig_GetTimeout_Zero(t *testing.T) {
 	config := CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    0,
 	}
 

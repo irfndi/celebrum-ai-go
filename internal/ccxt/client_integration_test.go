@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 
 func TestNewClient(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -514,7 +514,7 @@ func TestClient_GetFundingRates(t *testing.T) {
 
 	t.Run("empty symbols", func(t *testing.T) {
 		cfg := &config.CCXTConfig{
-			ServiceURL: "http://localhost:3000",
+			ServiceURL: "http://localhost:3001",
 			Timeout:    30,
 		}
 		client := ccxt.NewClient(cfg)
@@ -745,7 +745,7 @@ func TestClient_FormatSymbolForExchange(t *testing.T) {
 
 func TestClient_Close(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 	client := ccxt.NewClient(cfg)
