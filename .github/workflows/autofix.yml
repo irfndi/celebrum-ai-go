@@ -1,0 +1,85 @@
+name: Autofix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autofix:
+    name: Auto-fix code issues
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - name: Install Go dependencies
+        run: |
+          go mod download
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Install Bun dependencies
+        run: |
+          if [ -d "services/ccxt" ]; then
+            cd services/ccxt && bun install
+          fi
+
+      - name: Install golangci-lint
+        run: |
+          mkdir -p ./bin
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./bin v2.7.2
+
+      - name: Install shfmt
+        run: |
+          go install mvdan.cc/sh/v3/cmd/shfmt@latest
+
+      - name: Run Go formatters
+        run: |
+          gofmt -s -w .
+          goimports -w .
+          ./bin/golangci-lint run --fix || true
+
+      - name: Run TypeScript/JS formatters
+        run: |
+          if [ -d "services/ccxt" ]; then
+            cd services/ccxt
+            bunx prettier --write . || true
+            bunx oxlint --fix . || true
+          fi
+
+      - name: Format shell scripts
+        run: |
+          shfmt -w -i 2 -ci -bn $(find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*") || true
+
+      - name: Format YAML files
+        run: |
+          if command -v bunx >/dev/null 2>&1; then
+            bunx prettier --write "**/*.{yml,yaml}" || true
+          fi
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: autofix code formatting and linting"
+          commit_user_name: "autofix-ci[bot]"
+          commit_user_email: "autofix-ci[bot]@users.noreply.github.com"
+          commit_author: "autofix-ci[bot] <autofix-ci[bot]@users.noreply.github.com>"

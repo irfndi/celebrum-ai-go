@@ -1,0 +1,58 @@
+# Autofix CI configuration
+# See https://autofix.ci for more information
+
+# Enable autofix for pull requests
+enabled: true
+
+# Supported languages and tools
+linters:
+  # Go
+  - name: golangci-lint
+    command: golangci-lint run --fix
+    
+  - name: gofmt
+    command: gofmt -s -w .
+    
+  - name: goimports
+    command: goimports -w .
+
+  # TypeScript/JavaScript (CCXT service)
+  - name: oxlint
+    command: cd services/ccxt && bunx oxlint --fix .
+    
+  - name: prettier
+    command: cd services/ccxt && bunx prettier --write .
+
+  # Shell scripts
+  - name: shfmt
+    command: shfmt -w -i 2 -ci -bn $(find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*")
+
+  # YAML
+  - name: prettier-yaml
+    command: bunx prettier --write "**/*.{yml,yaml}"
+
+# File patterns to include/exclude
+include:
+  - "**/*.go"
+  - "**/*.ts"
+  - "**/*.js"
+  - "**/*.sh"
+  - "**/*.yml"
+  - "**/*.yaml"
+
+exclude:
+  - "vendor/**"
+  - "node_modules/**"
+  - ".git/**"
+  - "bin/**"
+  - "build/**"
+  - ".cache/**"
+  - "coverage.html"
+  - "go.sum"
+  - "*.lock"
+
+# Commit message template
+commit_message: "chore: autofix code formatting and linting"
+
+# Auto-merge settings (optional)
+auto_merge: false

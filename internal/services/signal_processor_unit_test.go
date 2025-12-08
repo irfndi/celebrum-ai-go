@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"log/slog"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSignalProcessor_Config tests the default configuration values

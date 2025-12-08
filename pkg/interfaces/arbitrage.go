@@ -1,8 +1,9 @@
 package interfaces
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // ArbitrageOpportunityResponse represents an arbitrage opportunity

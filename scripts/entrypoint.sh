@@ -105,14 +105,42 @@ if [ -z "$ADMIN_API_KEY" ]; then
     log "Generated ADMIN_API_KEY (first 8 chars): ${ADMIN_API_KEY:0:8}..."
 fi
 
+# Set default port for CCXT service if not set
+export PORT="${PORT:-3001}"
+export CCXT_SERVICE_PORT="${PORT}"
+
+# Check if port is already in use and kill stale process if found
+if command -v lsof > /dev/null 2>&1; then
+    EXISTING_PID=$(lsof -ti:${PORT} 2>/dev/null || true)
+    if [ -n "$EXISTING_PID" ]; then
+        log "WARNING: Port ${PORT} is already in use by PID ${EXISTING_PID}. Cleaning up stale process..."
+        kill -9 $EXISTING_PID 2>/dev/null || true
+        sleep 1
+    fi
+fi
+
 # Use absolute path for directory change to ensure we know where we are
 cd /app/ccxt
 bun run dist/index.js &
 PID_BUN=$!
 
-# Wait for CCXT to be ready (optional, but good practice)
-# We can just wait a few seconds or use a health check loop
-sleep 2
+# Wait for CCXT to be ready with health check
+log "Waiting for CCXT service to be ready..."
+MAX_WAIT=30
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    if curl -s -f http://localhost:${PORT}/health > /dev/null 2>&1; then
+        log "CCXT service is ready on port ${PORT}"
+        break
+    fi
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    sleep 1
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    log "WARNING: CCXT service health check timed out after ${MAX_WAIT} seconds"
+    log "Continuing with startup, but CCXT service may not be available"
+fi
 
 # Normalize env vars early so migrations and app boot see the correct values
 normalize_database_env

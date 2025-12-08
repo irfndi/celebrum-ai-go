@@ -36,7 +36,32 @@ import type {
 } from "./types";
 
 // Load environment variables
-const PORT = process.env.PORT || 3000;
+const resolvePort = () => {
+  const DEFAULT_PORT = 3001;
+  const envPorts = [
+    process.env.CCXT_SERVICE_PORT,
+    process.env.CCXT_PORT,
+    process.env.PORT,
+  ];
+
+  for (const value of envPorts) {
+    if (value) {
+      const numericPort = Number(value);
+      if (!Number.isNaN(numericPort) && numericPort > 0 && numericPort < 65536) {
+        return numericPort;
+      }
+      console.warn(
+        `Invalid port value provided (${value}). Falling back to default (${DEFAULT_PORT}).`,
+      );
+      break;
+    }
+  }
+
+  return DEFAULT_PORT;
+};
+
+const PORT = resolvePort();
+process.env.PORT = PORT.toString(); // Ensure consistency across Bun/Node
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
 // SECURITY: Validate ADMIN_API_KEY is set and not using default insecure value
@@ -1092,20 +1117,57 @@ if (shouldAutoServe) {
   console.log(`🚀 CCXT Service starting on port ${PORT}`);
   console.log(`📊 Supported exchanges: ${Object.keys(exchanges).join(", ")}`);
   console.log(`Starting Bun server with app.fetch type: ${typeof app.fetch}`);
-  try {
-    Bun.serve({
-      fetch: app.fetch,
-      port: Number(PORT),
-    });
-  } catch (error: any) {
-    if (error?.code === "EADDRINUSE") {
-      console.warn(
-        `Bun.serve skipped: port ${PORT} already in use (likely auto-served by Bun). Set CCXT_AUTO_SERVE=false to disable this call.`,
-      );
-    } else {
-      throw error;
+  
+  const startServer = async () => {
+    try {
+      const server = Bun.serve({
+        fetch: app.fetch,
+        port: Number(PORT),
+        reusePort: true, // Enable SO_REUSEPORT for graceful restarts
+      });
+      console.log(`✅ CCXT Service successfully started on port ${server.port}`);
+      
+      // Handle graceful shutdown
+      process.on("SIGTERM", () => {
+        console.log("SIGTERM received, shutting down gracefully...");
+        server.stop();
+        process.exit(0);
+      });
+      
+      process.on("SIGINT", () => {
+        console.log("SIGINT received, shutting down gracefully...");
+        server.stop();
+        process.exit(0);
+      });
+    } catch (error: any) {
+      if (error?.code === "EADDRINUSE") {
+        console.error(
+          `❌ ERROR: Port ${PORT} is already in use. Cannot start CCXT service.`
+        );
+        console.error(
+          `   This typically happens when a previous instance is still running.`
+        );
+        console.error(
+          `   Solutions:`
+        );
+        console.error(
+          `   1. Set a different PORT environment variable`
+        );
+        console.error(
+          `   2. Kill the process using port ${PORT}: lsof -ti:${PORT} | xargs kill -9`
+        );
+        console.error(
+          `   3. Set CCXT_AUTO_SERVE=false if you don't need the server`
+        );
+        process.exit(1);
+      } else {
+        console.error(`❌ Failed to start CCXT service:`, error);
+        throw error;
+      }
     }
-  }
+  };
+  
+  startServer();
 } else if (import.meta.main) {
   console.log(
     "CCXT auto-serve disabled (BUN_NO_SERVER=true or CCXT_AUTO_SERVE=false); server not started",

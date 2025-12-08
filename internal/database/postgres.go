@@ -196,12 +196,14 @@ func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	// Configure pgx config for PostgreSQL 18 async features
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
 
-	if cfg.StatementTimeout > 0 {
-		poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", cfg.StatementTimeout)
+	// Set statement_timeout (PostgreSQL standard parameter)
+	// Note: Use the larger of StatementTimeout or QueryTimeout since they serve similar purposes
+	timeout := cfg.StatementTimeout
+	if cfg.QueryTimeout > 0 && cfg.QueryTimeout > timeout {
+		timeout = cfg.QueryTimeout
 	}
-
-	if cfg.QueryTimeout > 0 {
-		poolConfig.ConnConfig.RuntimeParams["query_timeout"] = fmt.Sprintf("%d", cfg.QueryTimeout)
+	if timeout > 0 {
+		poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", timeout)
 	}
 
 	// Enable PostgreSQL 18 async features if requested

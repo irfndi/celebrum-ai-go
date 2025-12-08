@@ -219,7 +219,7 @@ func setDefaults() {
 
 	// CCXT
 	// Use environment variables for production CCXT service configuration
-	viper.SetDefault("ccxt.service_url", "http://localhost:3000")
+	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram

@@ -73,8 +73,8 @@ RUN chown -R appuser:appgroup /app && \
 
 USER appuser
 
-# Expose ports (Go: 8080, Bun: 3000)
-EXPOSE 8080 3000
+# Expose ports (Go: 8080, Bun: 3001)
+EXPOSE 8080 3001
 
 # Healthcheck (checks Go app)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

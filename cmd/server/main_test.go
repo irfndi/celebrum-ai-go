@@ -459,7 +459,7 @@ func TestMainFunction(t *testing.T) {
 		"CLEANUP_ENABLE_SMART_CLEANUP":    "false",
 		"BACKFILL_ENABLED":                "false",
 		"ARBITRAGE_ENABLED":               "false",
-		"CCXT_SERVICE_URL":                "http://localhost:3000",
+		"CCXT_SERVICE_URL":                "http://localhost:3001",
 		"CCXT_TIMEOUT":                    "5",
 		"TELEGRAM_BOT_TOKEN":              "",
 		"MARKET_DATA_COLLECTION_INTERVAL": "1m",
@@ -623,7 +623,7 @@ func TestRunFunctionServiceInit(t *testing.T) {
 		"BACKFILL_ENABLED":                "true",
 		"CLEANUP_INTERVAL":                "1",
 		"CLEANUP_ENABLE_SMART_CLEANUP":    "true",
-		"CCXT_SERVICE_URL":                "http://localhost:3000",
+		"CCXT_SERVICE_URL":                "http://localhost:3001",
 		"CCXT_TIMEOUT":                    "5",
 		"TELEGRAM_BOT_TOKEN":              "fake-token",
 		"MARKET_DATA_COLLECTION_INTERVAL": "1m",
@@ -1105,12 +1105,12 @@ func TestRunFunctionCCXTConfig(t *testing.T) {
 		},
 		{
 			name:    "ccxt_timeout",
-			url:     "http://localhost:3000",
+			url:     "http://localhost:3001",
 			timeout: "1",
 		},
 		{
 			name:    "valid_ccxt_config",
-			url:     "http://localhost:3000",
+			url:     "http://localhost:3001",
 			timeout: "30",
 		},
 	}
@@ -1419,7 +1419,7 @@ func TestRunFunctionServiceInitialization(t *testing.T) {
 				"BACKFILL_ENABLED":                "true",
 				"CLEANUP_ENABLED":                 "true",
 				"CLEANUP_INTERVAL":                "60",
-				"CCXT_SERVICE_URL":                "http://localhost:3000",
+				"CCXT_SERVICE_URL":                "http://localhost:3001",
 				"CCXT_TIMEOUT":                    "30",
 				"TELEGRAM_BOT_TOKEN":              "test-token",
 				"MARKET_DATA_COLLECTION_INTERVAL": "1m",
@@ -1440,7 +1440,7 @@ func TestRunFunctionServiceInitialization(t *testing.T) {
 				"ARBITRAGE_ENABLED": "false",
 				"BACKFILL_ENABLED":  "false",
 				"CLEANUP_ENABLED":   "false",
-				"CCXT_SERVICE_URL":  "http://localhost:3000",
+				"CCXT_SERVICE_URL":  "http://localhost:3001",
 				"CCXT_TIMEOUT":      "30",
 			},
 		},
@@ -1743,7 +1743,7 @@ func TestRunFunctionWithTestEnvironment(t *testing.T) {
 	t.Setenv("REDIS_DB", "0")
 
 	// Configure CCXT service
-	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3000")
+	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3001")
 	t.Setenv("CCXT_TIMEOUT", "5")
 
 	// Disable heavy services
@@ -1810,7 +1810,7 @@ func TestRunFunctionPartialInitialization(t *testing.T) {
 			// Set base environment
 			t.Setenv("LOG_LEVEL", "error")
 			t.Setenv("SERVER_PORT", "8082")
-			t.Setenv("CCXT_SERVICE_URL", "http://localhost:3000")
+			t.Setenv("CCXT_SERVICE_URL", "http://localhost:3001")
 			t.Setenv("CCXT_TIMEOUT", "5")
 
 			// Apply test-specific environment
@@ -1852,7 +1852,7 @@ func TestRunFunctionServiceLayer(t *testing.T) {
 	t.Setenv("REDIS_PORT", "6379")
 
 	// CCXT config
-	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3000")
+	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3001")
 	t.Setenv("CCXT_TIMEOUT", "5")
 
 	// Test different service configurations
@@ -1934,7 +1934,7 @@ func TestRunFunctionAdvancedPaths(t *testing.T) {
 	t.Setenv("REDIS_HOST", "localhost")
 	t.Setenv("REDIS_PORT", "6379")
 
-	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3000")
+	t.Setenv("CCXT_SERVICE_URL", "http://localhost:3001")
 	t.Setenv("CCXT_TIMEOUT", "5")
 
 	// Test advanced configurations

@@ -163,7 +163,7 @@ func (m *MockClient) BaseURL() string {
 	if m.BaseURLFunc != nil {
 		return m.BaseURLFunc()
 	}
-	return "http://localhost:3000"
+	return "http://localhost:3001"
 }
 
 // MockBlacklistCache implements the BlacklistCache interface for testing
@@ -241,7 +241,7 @@ func (m *MockBlacklistCache) GetBlacklistedSymbols() ([]cache.BlacklistCacheEntr
 // Test Service struct initialization
 func TestService_Struct(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -259,7 +259,7 @@ func TestService_Struct(t *testing.T) {
 // Test GetSupportedExchanges with empty exchanges
 func TestService_GetSupportedExchanges_Empty(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -275,7 +275,7 @@ func TestService_GetSupportedExchanges_Empty(t *testing.T) {
 // Test GetSupportedExchanges with populated exchanges
 func TestService_GetSupportedExchanges_Populated(t *testing.T) {
 	cfg := &config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}
 
@@ -396,7 +396,7 @@ func TestService_IsHealthy_Healthy(t *testing.T) {
 	}
 
 	service := NewService(&config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}, logger, blacklistCache)
 
@@ -419,7 +419,7 @@ func TestService_IsHealthy_Unhealthy(t *testing.T) {
 	}
 
 	service := NewService(&config.CCXTConfig{
-		ServiceURL: "http://localhost:3000",
+		ServiceURL: "http://localhost:3001",
 		Timeout:    30,
 	}, logger, blacklistCache)
 
