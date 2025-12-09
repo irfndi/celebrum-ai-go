@@ -10,33 +10,52 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// CacheStats represents cache statistics
+// CacheStats represents cache statistics.
 type CacheStats struct {
-	Hits        int64     `json:"hits"`
-	Misses      int64     `json:"misses"`
-	HitRate     float64   `json:"hit_rate"`
-	TotalOps    int64     `json:"total_ops"`
+	// Hits is the number of cache hits.
+	Hits int64 `json:"hits"`
+	// Misses is the number of cache misses.
+	Misses int64 `json:"misses"`
+	// HitRate is the ratio of hits to total operations.
+	HitRate float64 `json:"hit_rate"`
+	// TotalOps is the total number of cache operations.
+	TotalOps int64 `json:"total_ops"`
+	// LastUpdated is the time of the last update.
 	LastUpdated time.Time `json:"last_updated"`
 }
 
-// CacheMetrics represents detailed cache metrics by category
+// CacheMetrics represents detailed cache metrics by category.
 type CacheMetrics struct {
-	Overall          CacheStats            `json:"overall"`
-	ByCategory       map[string]CacheStats `json:"by_category"`
-	RedisInfo        map[string]string     `json:"redis_info"`
-	MemoryUsage      int64                 `json:"memory_usage_bytes"`
-	ConnectedClients int64                 `json:"connected_clients"`
-	KeyCount         int64                 `json:"key_count"`
+	// Overall contains aggregated stats.
+	Overall CacheStats `json:"overall"`
+	// ByCategory contains stats per category.
+	ByCategory map[string]CacheStats `json:"by_category"`
+	// RedisInfo contains raw Redis info.
+	RedisInfo map[string]string `json:"redis_info"`
+	// MemoryUsage is the memory used by Redis in bytes.
+	MemoryUsage int64 `json:"memory_usage_bytes"`
+	// ConnectedClients is the number of connected clients.
+	ConnectedClients int64 `json:"connected_clients"`
+	// KeyCount is the total number of keys.
+	KeyCount int64 `json:"key_count"`
 }
 
-// CacheAnalyticsService tracks cache performance metrics
+// CacheAnalyticsService tracks cache performance metrics.
 type CacheAnalyticsService struct {
 	redisClient *redis.Client
 	stats       map[string]*CacheStats
 	mu          sync.RWMutex
 }
 
-// NewCacheAnalyticsService creates a new cache analytics service
+// NewCacheAnalyticsService creates a new cache analytics service.
+//
+// Parameters:
+//
+//	redisClient: Redis client.
+//
+// Returns:
+//
+//	*CacheAnalyticsService: Initialized service.
 func NewCacheAnalyticsService(redisClient *redis.Client) *CacheAnalyticsService {
 	return &CacheAnalyticsService{
 		redisClient: redisClient,
@@ -44,7 +63,11 @@ func NewCacheAnalyticsService(redisClient *redis.Client) *CacheAnalyticsService 
 	}
 }
 
-// RecordHit records a cache hit for the given category
+// RecordHit records a cache hit for the given category.
+//
+// Parameters:
+//
+//	category: Cache category.
 func (c *CacheAnalyticsService) RecordHit(category string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -68,7 +91,11 @@ func (c *CacheAnalyticsService) RecordHit(category string) {
 	c.stats["overall"].LastUpdated = time.Now()
 }
 
-// RecordMiss records a cache miss for the given category
+// RecordMiss records a cache miss for the given category.
+//
+// Parameters:
+//
+//	category: Cache category.
 func (c *CacheAnalyticsService) RecordMiss(category string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -92,7 +119,15 @@ func (c *CacheAnalyticsService) RecordMiss(category string) {
 	c.stats["overall"].LastUpdated = time.Now()
 }
 
-// GetStats returns cache statistics for a specific category
+// GetStats returns cache statistics for a specific category.
+//
+// Parameters:
+//
+//	category: Cache category.
+//
+// Returns:
+//
+//	CacheStats: Stats for the category.
 func (c *CacheAnalyticsService) GetStats(category string) CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -103,7 +138,11 @@ func (c *CacheAnalyticsService) GetStats(category string) CacheStats {
 	return CacheStats{}
 }
 
-// GetAllStats returns all cache statistics
+// GetAllStats returns all cache statistics.
+//
+// Returns:
+//
+//	map[string]CacheStats: Map of category to stats.
 func (c *CacheAnalyticsService) GetAllStats() map[string]CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -115,7 +154,16 @@ func (c *CacheAnalyticsService) GetAllStats() map[string]CacheStats {
 	return result
 }
 
-// GetMetrics returns comprehensive cache metrics including Redis info
+// GetMetrics returns comprehensive cache metrics including Redis info.
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	*CacheMetrics: Detailed metrics.
+//	error: Error if retrieval fails.
 func (c *CacheAnalyticsService) GetMetrics(ctx context.Context) (*CacheMetrics, error) {
 	c.mu.RLock()
 	allStats := make(map[string]CacheStats)
@@ -198,14 +246,19 @@ func (c *CacheAnalyticsService) parseRedisInfo(info string) map[string]string {
 	return result
 }
 
-// ResetStats resets all cache statistics
+// ResetStats resets all cache statistics.
 func (c *CacheAnalyticsService) ResetStats() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.stats = make(map[string]*CacheStats)
 }
 
-// StartPeriodicReporting starts periodic reporting of cache stats to Redis
+// StartPeriodicReporting starts periodic reporting of cache stats to Redis.
+//
+// Parameters:
+//
+//	ctx: Context for cancellation.
+//	interval: Reporting interval.
 func (c *CacheAnalyticsService) StartPeriodicReporting(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {

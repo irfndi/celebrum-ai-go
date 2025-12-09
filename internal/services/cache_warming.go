@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// CacheWarmingService handles cache warming on application startup
+// CacheWarmingService handles cache warming on application startup.
 type CacheWarmingService struct {
 	redisClient *redis.Client
 	ccxtService ccxt.CCXTService
@@ -21,7 +21,17 @@ type CacheWarmingService struct {
 	logger      *slog.Logger
 }
 
-// NewCacheWarmingService creates a new cache warming service
+// NewCacheWarmingService creates a new cache warming service.
+//
+// Parameters:
+//
+//	redisClient: Redis client.
+//	ccxtService: CCXT service.
+//	db: Database connection.
+//
+// Returns:
+//
+//	*CacheWarmingService: Initialized service.
 func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTService, db *database.PostgresDB) *CacheWarmingService {
 	// Initialize logger with fallback for tests
 	logger := telemetry.Logger()
@@ -34,7 +44,16 @@ func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTServ
 	}
 }
 
-// WarmCache performs cache warming for frequently accessed data
+// WarmCache performs cache warming for frequently accessed data.
+// It populates exchange configs, supported exchanges, trading pairs, and funding rates.
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	error: Error if warming fails (partially or fully).
 func (c *CacheWarmingService) WarmCache(ctx context.Context) error {
 	c.logger.Info("Starting cache warming")
 	start := time.Now()

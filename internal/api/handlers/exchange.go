@@ -11,29 +11,46 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisInterface defines the interface for Redis operations used by ExchangeHandler
+// RedisInterface defines the contract for Redis operations used by ExchangeHandler.
 type RedisInterface interface {
+	// Get retrieves the value associated with the key.
 	Get(ctx context.Context, key string) *redis.StringCmd
+	// Set stores the key-value pair with an expiration.
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
 }
 
-// CollectorInterface defines the interface for collector service operations
+// CollectorInterface defines the contract for collector service operations.
 type CollectorInterface interface {
+	// Start initiates the collector service.
 	Start() error
+	// Stop terminates the collector service.
 	Stop()
+	// RestartWorker restarts the worker for a specific exchange.
 	RestartWorker(exchangeID string) error
+	// IsReady checks if the service is ready.
 	IsReady() bool
+	// IsInitialized checks if the service is initialized.
 	IsInitialized() bool
 }
 
-// ExchangeHandler handles exchange management API endpoints
+// ExchangeHandler manages exchange configuration and operations.
 type ExchangeHandler struct {
 	ccxtService      ccxt.CCXTService
 	collectorService CollectorInterface
 	redisClient      RedisInterface
 }
 
-// NewExchangeHandler creates a new exchange handler
+// NewExchangeHandler creates a new instance of ExchangeHandler.
+//
+// Parameters:
+//
+//	ccxtService: The CCXT service.
+//	collectorService: The collector service.
+//	redisClient: The Redis client.
+//
+// Returns:
+//
+//	*ExchangeHandler: The initialized handler.
 func NewExchangeHandler(ccxtService ccxt.CCXTService, collectorService CollectorInterface, redisClient RedisInterface) *ExchangeHandler {
 	return &ExchangeHandler{
 		ccxtService:      ccxtService,
@@ -42,7 +59,12 @@ func NewExchangeHandler(ccxtService ccxt.CCXTService, collectorService Collector
 	}
 }
 
-// GetExchangeConfig retrieves the current exchange configuration
+// GetExchangeConfig retrieves the current exchange configuration.
+// It utilizes caching to improve performance.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) GetExchangeConfig(c *gin.Context) {
 	cacheKey := "exchange:config"
 	ctx := context.Background()
@@ -78,7 +100,12 @@ func (h *ExchangeHandler) GetExchangeConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, config)
 }
 
-// AddExchangeToBlacklist adds an exchange to the blacklist
+// AddExchangeToBlacklist adds an exchange to the blacklist.
+// It also restarts the associated worker if necessary.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) AddExchangeToBlacklist(c *gin.Context) {
 	exchange := c.Param("exchange")
 	if exchange == "" {
@@ -109,7 +136,12 @@ func (h *ExchangeHandler) AddExchangeToBlacklist(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// RemoveExchangeFromBlacklist removes an exchange from the blacklist
+// RemoveExchangeFromBlacklist removes an exchange from the blacklist.
+// It triggers a worker restart to resume data collection.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) RemoveExchangeFromBlacklist(c *gin.Context) {
 	exchange := c.Param("exchange")
 	if exchange == "" {
@@ -139,7 +171,12 @@ func (h *ExchangeHandler) RemoveExchangeFromBlacklist(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// RefreshExchanges refreshes all non-blacklisted exchanges
+// RefreshExchanges refreshes the configuration for all non-blacklisted exchanges.
+// It restarts the collector service to apply changes.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) RefreshExchanges(c *gin.Context) {
 	response, err := h.ccxtService.RefreshExchanges(c.Request.Context())
 	if err != nil {
@@ -166,7 +203,12 @@ func (h *ExchangeHandler) RefreshExchanges(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// AddExchange dynamically adds and initializes a new exchange
+// AddExchange dynamically adds and initializes a new exchange.
+// It restarts the collector service to include the new exchange.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) AddExchange(c *gin.Context) {
 	exchange := c.Param("exchange")
 	if exchange == "" {
@@ -200,7 +242,12 @@ func (h *ExchangeHandler) AddExchange(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetSupportedExchanges returns the list of currently supported exchanges
+// GetSupportedExchanges returns the list of currently supported exchanges.
+// It caches the result for 30 minutes.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) GetSupportedExchanges(c *gin.Context) {
 	cacheKey := "exchange:supported"
 	ctx := context.Background()
@@ -235,7 +282,11 @@ func (h *ExchangeHandler) GetSupportedExchanges(c *gin.Context) {
 	})
 }
 
-// GetWorkerStatus returns the status of exchange workers
+// GetWorkerStatus returns the status of exchange workers.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) GetWorkerStatus(c *gin.Context) {
 	if h.collectorService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -251,7 +302,11 @@ func (h *ExchangeHandler) GetWorkerStatus(c *gin.Context) {
 	})
 }
 
-// RestartWorker restarts a specific exchange worker
+// RestartWorker restarts a specific exchange worker.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *ExchangeHandler) RestartWorker(c *gin.Context) {
 	exchange := c.Param("exchange")
 	if exchange == "" {

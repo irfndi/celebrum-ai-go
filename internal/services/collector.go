@@ -60,36 +60,49 @@ func (c *CollectorService) convertMarketPriceInterfaceToModel(interfaceData ccxt
 	}
 }
 
-// CollectorConfig holds configuration for the collector service
+// CollectorConfig holds configuration for the collector service.
 type CollectorConfig struct {
+	// IntervalSeconds is the data collection interval.
 	IntervalSeconds int `mapstructure:"interval_seconds"`
-	MaxErrors       int `mapstructure:"max_errors"`
+	// MaxErrors is the maximum number of errors before stopping a worker.
+	MaxErrors int `mapstructure:"max_errors"`
 }
 
-// BackfillConfig holds configuration for historical data backfill
+// BackfillConfig holds configuration for historical data backfill.
 type BackfillConfig struct {
-	Enabled               bool `yaml:"enabled" default:"true"`
-	BackfillHours         int  `yaml:"backfill_hours" default:"6"`
-	MinDataThresholdHours int  `yaml:"min_data_threshold_hours" default:"12"`
-	BatchSize             int  `yaml:"batch_size" default:"50"`
-	DelayBetweenBatches   int  `yaml:"delay_between_batches_ms" default:"100"`
+	// Enabled indicates if backfill is enabled.
+	Enabled bool `yaml:"enabled" default:"true"`
+	// BackfillHours is the number of hours to backfill.
+	BackfillHours int `yaml:"backfill_hours" default:"6"`
+	// MinDataThresholdHours is the minimum data required to skip backfill.
+	MinDataThresholdHours int `yaml:"min_data_threshold_hours" default:"12"`
+	// BatchSize is the number of items per batch.
+	BatchSize int `yaml:"batch_size" default:"50"`
+	// DelayBetweenBatches is the delay between batches in ms.
+	DelayBetweenBatches int `yaml:"delay_between_batches_ms" default:"100"`
 }
 
-// SymbolCacheEntry represents a cached entry for exchange symbols
+// SymbolCacheEntry represents a cached entry for exchange symbols.
 type SymbolCacheEntry struct {
-	Symbols   []string
+	// Symbols is the list of symbols.
+	Symbols []string
+	// ExpiresAt is the expiration time.
 	ExpiresAt time.Time
 }
 
-// SymbolCacheInterface defines the interface for symbol caching
+// SymbolCacheInterface defines the interface for symbol caching.
 type SymbolCacheInterface interface {
+	// Get retrieves cached symbols.
 	Get(exchangeID string) ([]string, bool)
+	// Set caches symbols.
 	Set(exchangeID string, symbols []string)
+	// GetStats retrieves cache statistics.
 	GetStats() cache.SymbolCacheStats
+	// LogStats logs cache statistics.
 	LogStats()
 }
 
-// SymbolCache manages cached active symbols for exchanges
+// SymbolCache manages cached active symbols for exchanges.
 type SymbolCache struct {
 	cache map[string]*SymbolCacheEntry
 	mu    sync.RWMutex
@@ -99,21 +112,32 @@ type SymbolCache struct {
 
 // BlacklistCacheEntry represents a cached entry for blacklisted symbols
 
-// ExchangeCapabilityEntry represents cached exchange capability information
+// ExchangeCapabilityEntry represents cached exchange capability information.
 type ExchangeCapabilityEntry struct {
+	// SupportsFundingRates indicates if the exchange supports funding rates.
 	SupportsFundingRates bool
-	LastChecked          time.Time
-	ExpiresAt            time.Time
+	// LastChecked is the time of the last check.
+	LastChecked time.Time
+	// ExpiresAt is the expiration time of this capability info.
+	ExpiresAt time.Time
 }
 
-// ExchangeCapabilityCache manages cached exchange capability information
+// ExchangeCapabilityCache manages cached exchange capability information.
 type ExchangeCapabilityCache struct {
 	cache map[string]*ExchangeCapabilityEntry // key: exchange name
 	mu    sync.RWMutex
 	ttl   time.Duration
 }
 
-// NewSymbolCache creates a new symbol cache with specified TTL
+// NewSymbolCache creates a new symbol cache with specified TTL.
+//
+// Parameters:
+//
+//	ttl: Time to live for cache entries.
+//
+// Returns:
+//
+//	*SymbolCache: Initialized cache.
 func NewSymbolCache(ttl time.Duration) *SymbolCache {
 	return &SymbolCache{
 		cache: make(map[string]*SymbolCacheEntry),
@@ -121,7 +145,16 @@ func NewSymbolCache(ttl time.Duration) *SymbolCache {
 	}
 }
 
-// Get retrieves symbols from cache if not expired
+// Get retrieves symbols from cache if not expired.
+//
+// Parameters:
+//
+//	exchangeID: Exchange identifier.
+//
+// Returns:
+//
+//	[]string: List of symbols.
+//	bool: True if found and valid.
 func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -147,7 +180,12 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	return entry.Symbols, true
 }
 
-// Set stores symbols in cache with TTL
+// Set stores symbols in cache with TTL.
+//
+// Parameters:
+//
+//	exchangeID: Exchange identifier.
+//	symbols: List of symbols to cache.
 func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -160,7 +198,11 @@ func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 	telemetry.GetLogger().Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols), "sets", sc.stats.Sets)
 }
 
-// GetStats returns current cache statistics
+// GetStats returns current cache statistics.
+//
+// Returns:
+//
+//	cache.SymbolCacheStats: Cache statistics.
 func (sc *SymbolCache) GetStats() cache.SymbolCacheStats {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
@@ -171,7 +213,7 @@ func (sc *SymbolCache) GetStats() cache.SymbolCacheStats {
 	}
 }
 
-// LogStats logs current cache performance statistics
+// LogStats logs current cache performance statistics.
 func (sc *SymbolCache) LogStats() {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
@@ -189,7 +231,15 @@ func (sc *SymbolCache) LogStats() {
 		"hit_rate_percent", hitRate)
 }
 
-// NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL
+// NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL.
+//
+// Parameters:
+//
+//	ttl: Time to live.
+//
+// Returns:
+//
+//	*ExchangeCapabilityCache: Initialized cache.
 func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
 	return &ExchangeCapabilityCache{
 		cache: make(map[string]*ExchangeCapabilityEntry),
@@ -197,7 +247,16 @@ func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
 	}
 }
 
-// SupportsFundingRates checks if an exchange supports funding rates
+// SupportsFundingRates checks if an exchange supports funding rates.
+//
+// Parameters:
+//
+//	exchange: Exchange name.
+//
+// Returns:
+//
+//	bool: True if supported.
+//	bool: True if info is found in cache.
 func (ecc *ExchangeCapabilityCache) SupportsFundingRates(exchange string) (bool, bool) {
 	ecc.mu.RLock()
 	defer ecc.mu.RUnlock()
@@ -215,7 +274,12 @@ func (ecc *ExchangeCapabilityCache) SupportsFundingRates(exchange string) (bool,
 	return entry.SupportsFundingRates, true // known capability
 }
 
-// SetFundingRateSupport sets the funding rate support capability for an exchange
+// SetFundingRateSupport sets the funding rate support capability for an exchange.
+//
+// Parameters:
+//
+//	exchange: Exchange name.
+//	supports: Whether funding rates are supported.
 func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, supports bool) {
 	ecc.mu.Lock()
 	defer ecc.mu.Unlock()
@@ -291,7 +355,7 @@ func isFundingRateUnsupportedError(err error) bool {
 		(strings.Contains(errorMsg, "ccxt service error (400)") && strings.Contains(errorMsg, "funding"))
 }
 
-// CollectorService handles market data collection from exchanges
+// CollectorService handles market data collection from exchanges.
 type CollectorService struct {
 	db              *database.PostgresDB
 	ccxtService     ccxt.CCXTService
@@ -332,15 +396,22 @@ type CollectorService struct {
 	logger *slog.Logger
 }
 
-// Worker represents a background worker for collecting data from a specific exchange
+// Worker represents a background worker for collecting data from a specific exchange.
 type Worker struct {
-	Exchange   string
-	Symbols    []string
-	Interval   time.Duration
+	// Exchange is the exchange name.
+	Exchange string
+	// Symbols is the list of symbols being monitored.
+	Symbols []string
+	// Interval is the collection interval.
+	Interval time.Duration
+	// LastUpdate is the time of the last update.
 	LastUpdate time.Time
-	IsRunning  bool
+	// IsRunning indicates if the worker is active.
+	IsRunning bool
+	// ErrorCount is the consecutive error count.
 	ErrorCount int
-	MaxErrors  int
+	// MaxErrors is the maximum allowed consecutive errors.
+	MaxErrors int
 }
 
 // initializeSymbolCache creates either Redis-based or in-memory symbol cache
@@ -356,7 +427,19 @@ func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
 	return NewSymbolCache(1 * time.Hour)
 }
 
-// NewCollectorService creates a new market data collector service
+// NewCollectorService creates a new market data collector service.
+//
+// Parameters:
+//
+//	db: Database connection.
+//	ccxtService: CCXT service.
+//	cfg: Configuration.
+//	redisClient: Redis client.
+//	blacklistCache: Blacklist cache.
+//
+// Returns:
+//
+//	*CollectorService: Initialized service.
 func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, cfg *config.Config, redisClient *redis.Client, blacklistCache cache.BlacklistCache) *CollectorService {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -477,7 +560,11 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	}
 }
 
-// Start initializes and starts all collection workers asynchronously
+// Start initializes and starts all collection workers asynchronously.
+//
+// Returns:
+//
+//	error: Error if initialization fails.
 func (c *CollectorService) Start() error {
 	c.logger.Info("Starting market data collector service...")
 
@@ -585,7 +672,7 @@ func (c *CollectorService) initializeWorkersAsync() {
 	c.logger.Info("Background initialization complete", "workers_started", len(c.workers))
 }
 
-// Stop gracefully stops all collection workers
+// Stop gracefully stops all collection workers.
 func (c *CollectorService) Stop() {
 	c.logger.Info("Stopping market data collector service...")
 	c.cancel()
@@ -593,21 +680,34 @@ func (c *CollectorService) Stop() {
 	c.logger.Info("Market data collector service stopped")
 }
 
-// IsInitialized returns true if the collector service has been initialized
+// IsInitialized returns true if the collector service has been initialized.
+//
+// Returns:
+//
+//	bool: True if initialized.
 func (c *CollectorService) IsInitialized() bool {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
 	return c.isInitialized
 }
 
-// IsReady returns true if the collector service is fully ready (workers created and running)
+// IsReady returns true if the collector service is fully ready (workers created and running).
+//
+// Returns:
+//
+//	bool: True if ready.
 func (c *CollectorService) IsReady() bool {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
 	return c.isReady
 }
 
-// GetReadinessStatus returns the current readiness status
+// GetReadinessStatus returns the current readiness status.
+//
+// Returns:
+//
+//	initialized: True if initialized.
+//	ready: True if ready.
 func (c *CollectorService) GetReadinessStatus() (initialized bool, ready bool) {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
@@ -1459,7 +1559,11 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 	return nil
 }
 
-// GetWorkerStatus returns the status of all workers
+// GetWorkerStatus returns the status of all workers.
+//
+// Returns:
+//
+//	map[string]*Worker: Map of exchange to worker status.
 func (c *CollectorService) GetWorkerStatus() map[string]*Worker {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1479,7 +1583,15 @@ func (c *CollectorService) GetWorkerStatus() map[string]*Worker {
 	return status
 }
 
-// RestartWorker restarts a specific worker
+// RestartWorker restarts a specific worker.
+//
+// Parameters:
+//
+//	exchangeID: Exchange identifier.
+//
+// Returns:
+//
+//	error: Error if worker not found.
 func (c *CollectorService) RestartWorker(exchangeID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1501,7 +1613,11 @@ func (c *CollectorService) RestartWorker(exchangeID string) error {
 	return nil
 }
 
-// IsHealthy checks if the collector service is healthy
+// IsHealthy checks if the collector service is healthy.
+//
+// Returns:
+//
+//	bool: True if healthy.
 func (c *CollectorService) IsHealthy() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

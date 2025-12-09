@@ -6,7 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FundingRate represents funding rate data from an exchange
+// FundingRate represents the funding rate data for a specific trading pair on an exchange.
+// It includes current rate, timestamp, predicted next rate, and reference prices.
 type FundingRate struct {
 	ID              int64            `json:"id" db:"id"`
 	ExchangeID      int              `json:"exchange_id" db:"exchange_id"`
@@ -26,7 +27,8 @@ type FundingRate struct {
 	QuoteCurrency string `json:"quote_currency,omitempty" db:"quote_currency"`
 }
 
-// FundingArbitrageOpportunity represents a funding rate arbitrage opportunity
+// FundingArbitrageOpportunity represents a detected opportunity to profit from funding rate differences.
+// It involves holding opposing positions on two different exchanges.
 type FundingArbitrageOpportunity struct {
 	ID                        int64            `json:"id" db:"id"`
 	TradingPairID             int              `json:"trading_pair_id" db:"trading_pair_id"`
@@ -56,7 +58,7 @@ type FundingArbitrageOpportunity struct {
 	ShortExchangeName string `json:"short_exchange_name,omitempty" db:"short_exchange_name"`
 }
 
-// FundingArbitrageOpportunityResponse represents the API response for funding arbitrage opportunities
+// FundingArbitrageOpportunityResponse represents the funding arbitrage opportunity formatted for API output.
 type FundingArbitrageOpportunityResponse struct {
 	ID                        int64    `json:"id"`
 	Symbol                    string   `json:"symbol"`
@@ -79,14 +81,14 @@ type FundingArbitrageOpportunityResponse struct {
 	ExpiresAt                 *string  `json:"expires_at"`
 }
 
-// FundingRateRequest represents the request for funding rate data
+// FundingRateRequest represents the query parameters for fetching funding rates via API.
 type FundingRateRequest struct {
 	Exchange string   `json:"exchange"`
 	Symbols  []string `json:"symbols,omitempty"`
 	Limit    int      `json:"limit,omitempty"`
 }
 
-// FundingRateResponse represents the API response for funding rate data
+// FundingRateResponse represents a single funding rate entry formatted for API output.
 type FundingRateResponse struct {
 	Exchange        string   `json:"exchange"`
 	Symbol          string   `json:"symbol"`
@@ -100,7 +102,7 @@ type FundingRateResponse struct {
 	Timestamp       string   `json:"timestamp"`
 }
 
-// FundingArbitrageRequest represents the request for funding arbitrage opportunities
+// FundingArbitrageRequest represents the query parameters for fetching funding arbitrage opportunities via API.
 type FundingArbitrageRequest struct {
 	Symbols   []string `json:"symbols,omitempty"`
 	Exchanges []string `json:"exchanges,omitempty"`

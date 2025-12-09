@@ -9,6 +9,16 @@ import (
 )
 
 // InitSentry configures the Sentry SDK using application config.
+//
+// Parameters:
+//
+//	cfg: Sentry configuration.
+//	fallbackRelease: Release version if not specified in config.
+//	fallbackEnv: Environment if not specified in config.
+//
+// Returns:
+//
+//	error: Error if initialization fails.
 func InitSentry(cfg config.SentryConfig, fallbackRelease string, fallbackEnv string) error {
 	if !cfg.Enabled || cfg.DSN == "" {
 		return nil
@@ -35,6 +45,10 @@ func InitSentry(cfg config.SentryConfig, fallbackRelease string, fallbackEnv str
 }
 
 // Flush drains buffered Sentry events within the provided context deadline.
+//
+// Parameters:
+//
+//	ctx: Context with optional deadline.
 func Flush(ctx context.Context) {
 	timeout := 2 * time.Second
 	if deadline, ok := ctx.Deadline(); ok {
@@ -46,7 +60,13 @@ func Flush(ctx context.Context) {
 	sentry.Flush(timeout)
 }
 
-// CaptureException sends an exception to Sentry, using the hub in context when available.
+// CaptureException sends an exception to Sentry.
+// It uses the hub from the context if available, otherwise uses the global hub.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	err: Error to capture.
 func CaptureException(ctx context.Context, err error) {
 	if err == nil {
 		return

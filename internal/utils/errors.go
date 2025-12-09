@@ -2,24 +2,37 @@ package utils
 
 import "fmt"
 
-// ValidationError represents a validation error
+// ValidationError represents an error occurring during data validation.
 type ValidationError struct {
 	Message string
 }
 
-// Error implements the error interface
+// Error returns the error message string.
 func (e *ValidationError) Error() string {
 	return e.Message
 }
 
-// NewValidationError creates a new validation error
+// NewValidationError creates a new ValidationError with a specific message.
+//
+// Parameters:
+//   - message: The validation error message.
+//
+// Returns:
+//   - An error interface wrapping the ValidationError.
 func NewValidationError(message string) error {
 	return &ValidationError{
 		Message: message,
 	}
 }
 
-// NewValidationErrorf creates a new validation error with formatting
+// NewValidationErrorf creates a new ValidationError with a formatted message.
+//
+// Parameters:
+//   - format: The format string.
+//   - args: Arguments for the format string.
+//
+// Returns:
+//   - An error interface wrapping the ValidationError.
 func NewValidationErrorf(format string, args ...interface{}) error {
 	return &ValidationError{
 		Message: fmt.Sprintf(format, args...),

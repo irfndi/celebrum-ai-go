@@ -12,7 +12,8 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
 
-// SignalQualityScorer provides signal quality assessment capabilities
+// SignalQualityScorer provides signal quality assessment capabilities, evaluating signals based on
+// exchange reliability, market conditions, and technical indicators.
 type SignalQualityScorer struct {
 	config *config.Config
 	db     *database.PostgresDB
@@ -23,7 +24,7 @@ type SignalQualityScorer struct {
 	cacheExpiry              time.Time
 }
 
-// ExchangeReliability represents reliability metrics for an exchange
+// ExchangeReliability represents reliability metrics for an exchange, used in scoring signals.
 type ExchangeReliability struct {
 	ExchangeName     string           `json:"exchange_name"`
 	ReliabilityScore decimal.Decimal  `json:"reliability_score"`  // 0.0 to 1.0
@@ -36,7 +37,7 @@ type ExchangeReliability struct {
 	Metrics          *ExchangeMetrics `json:"metrics"`
 }
 
-// ExchangeMetrics contains detailed metrics for exchange assessment
+// ExchangeMetrics contains detailed raw metrics collected for exchange assessment.
 type ExchangeMetrics struct {
 	TotalTrades      int64           `json:"total_trades"`
 	AvgDailyVolume   decimal.Decimal `json:"avg_daily_volume"`
@@ -50,7 +51,7 @@ type ExchangeMetrics struct {
 	ErrorRate        decimal.Decimal `json:"error_rate"`
 }
 
-// SignalQualityMetrics represents quality assessment for a signal
+// SignalQualityMetrics represents the comprehensive quality assessment scores for a signal.
 type SignalQualityMetrics struct {
 	OverallScore         decimal.Decimal `json:"overall_score"`          // 0.0 to 1.0
 	ExchangeScore        decimal.Decimal `json:"exchange_score"`         // 0.0 to 1.0
@@ -64,7 +65,7 @@ type SignalQualityMetrics struct {
 	MarketConditionScore decimal.Decimal `json:"market_condition_score"` // 0.0 to 1.0
 }
 
-// SignalQualityInput contains input data for quality assessment
+// SignalQualityInput contains all necessary input data for performing a quality assessment on a signal.
 type SignalQualityInput struct {
 	SignalType       string                 `json:"signal_type"` // "arbitrage" or "technical"
 	Symbol           string                 `json:"symbol"`
@@ -79,7 +80,7 @@ type SignalQualityInput struct {
 	SignalCount      int                    `json:"signal_count,omitempty"`      // Number of confirming signals
 }
 
-// MarketDataSnapshot represents current market conditions
+// MarketDataSnapshot represents a snapshot of market conditions at the time of signal generation.
 type MarketDataSnapshot struct {
 	Price          decimal.Decimal `json:"price"`
 	Volume24h      decimal.Decimal `json:"volume_24h"`
@@ -90,7 +91,7 @@ type MarketDataSnapshot struct {
 	LastTradeTime  time.Time       `json:"last_trade_time"`
 }
 
-// QualityThresholds defines minimum quality thresholds
+// QualityThresholds defines minimum acceptable scores for various quality metrics.
 type QualityThresholds struct {
 	MinOverallScore   decimal.Decimal `json:"min_overall_score"`
 	MinExchangeScore  decimal.Decimal `json:"min_exchange_score"`
@@ -100,7 +101,15 @@ type QualityThresholds struct {
 	MinDataFreshness  time.Duration   `json:"min_data_freshness"`
 }
 
-// NewSignalQualityScorer creates a new signal quality scorer
+// NewSignalQualityScorer creates a new instance of SignalQualityScorer.
+//
+// Parameters:
+//   - cfg: Application configuration.
+//   - db: Database connection.
+//   - logger: Logger instance.
+//
+// Returns:
+//   - A pointer to the initialized SignalQualityScorer.
 func NewSignalQualityScorer(cfg *config.Config, db *database.PostgresDB, logger *logrus.Logger) *SignalQualityScorer {
 	return &SignalQualityScorer{
 		config:                   cfg,
@@ -111,7 +120,7 @@ func NewSignalQualityScorer(cfg *config.Config, db *database.PostgresDB, logger 
 	}
 }
 
-// GetDefaultQualityThresholds returns default quality thresholds
+// GetDefaultQualityThresholds returns a default set of quality thresholds.
 func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds {
 	return &QualityThresholds{
 		MinOverallScore:   decimal.NewFromFloat(0.6),
@@ -123,7 +132,14 @@ func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds
 	}
 }
 
-// AssessSignalQuality performs comprehensive quality assessment
+// AssessSignalQuality calculates comprehensive quality metrics for a given signal input.
+//
+// Parameters:
+//   - ctx: Context for the operation.
+//   - input: Signal data to assess.
+//
+// Returns:
+//   - Calculated quality metrics, or an error if assessment fails.
 func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error) {
 	// Stub logging for telemetry
 	_ = fmt.Sprintf("Signal quality assessment: type=%s, symbol=%s, exchanges=%v, volume=%f, profit=%f, confidence=%f",
@@ -190,7 +206,14 @@ func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *
 	}, nil
 }
 
-// IsSignalQualityAcceptable checks if signal meets quality thresholds
+// IsSignalQualityAcceptable determines if signal quality metrics meet the provided thresholds.
+//
+// Parameters:
+//   - metrics: The calculated quality metrics.
+//   - thresholds: The criteria for acceptance.
+//
+// Returns:
+//   - True if acceptable, false otherwise.
 func (sqs *SignalQualityScorer) IsSignalQualityAcceptable(metrics *SignalQualityMetrics, thresholds *QualityThresholds) bool {
 	return metrics.OverallScore.GreaterThanOrEqual(thresholds.MinOverallScore) &&
 		metrics.ExchangeScore.GreaterThanOrEqual(thresholds.MinExchangeScore) &&
@@ -199,7 +222,7 @@ func (sqs *SignalQualityScorer) IsSignalQualityAcceptable(metrics *SignalQuality
 		metrics.RiskScore.LessThanOrEqual(thresholds.MaxRiskScore)
 }
 
-// calculateExchangeScore assesses exchange reliability
+// calculateExchangeScore computes a score based on the reliability of the exchanges involved.
 func (sqs *SignalQualityScorer) calculateExchangeScore(exchanges []string) decimal.Decimal {
 	if len(exchanges) == 0 {
 		return decimal.Zero
@@ -226,7 +249,7 @@ func (sqs *SignalQualityScorer) calculateExchangeScore(exchanges []string) decim
 	return totalScore.Div(decimal.NewFromInt(int64(validExchanges)))
 }
 
-// calculateVolumeScore assesses volume adequacy
+// calculateVolumeScore evaluates if the trading volume is sufficient for the signal.
 func (sqs *SignalQualityScorer) calculateVolumeScore(input *SignalQualityInput) decimal.Decimal {
 	if input.Volume.IsZero() {
 		return decimal.Zero
@@ -252,7 +275,7 @@ func (sqs *SignalQualityScorer) calculateVolumeScore(input *SignalQualityInput) 
 	}
 }
 
-// calculateLiquidityScore assesses market liquidity
+// calculateLiquidityScore assesses market liquidity based on order book depth and spread.
 func (sqs *SignalQualityScorer) calculateLiquidityScore(input *SignalQualityInput) decimal.Decimal {
 	if input.MarketData == nil {
 		return decimal.NewFromFloat(0.5) // Default score when no market data
@@ -266,7 +289,7 @@ func (sqs *SignalQualityScorer) calculateLiquidityScore(input *SignalQualityInpu
 	return depthScore.Mul(decimal.NewFromFloat(0.6)).Add(spreadScore.Mul(decimal.NewFromFloat(0.4)))
 }
 
-// calculateVolatilityScore assesses price volatility impact
+// calculateVolatilityScore evaluates if the volatility is within an optimal range for trading.
 func (sqs *SignalQualityScorer) calculateVolatilityScore(input *SignalQualityInput) decimal.Decimal {
 	if input.MarketData == nil {
 		return decimal.NewFromFloat(0.5)
@@ -297,7 +320,7 @@ func (sqs *SignalQualityScorer) calculateVolatilityScore(input *SignalQualityInp
 	}
 }
 
-// calculateTimingScore assesses signal timing quality
+// calculateTimingScore assesses how fresh the signal is relative to the current time.
 func (sqs *SignalQualityScorer) calculateTimingScore(input *SignalQualityInput) decimal.Decimal {
 	now := time.Now()
 	age := now.Sub(input.Timestamp)
@@ -318,7 +341,7 @@ func (sqs *SignalQualityScorer) calculateTimingScore(input *SignalQualityInput) 
 	}
 }
 
-// calculateRiskScore assesses signal risk level
+// calculateRiskScore estimates the risk associated with the signal based on various factors.
 func (sqs *SignalQualityScorer) calculateRiskScore(input *SignalQualityInput) decimal.Decimal {
 	riskFactors := []decimal.Decimal{}
 
@@ -349,7 +372,7 @@ func (sqs *SignalQualityScorer) calculateRiskScore(input *SignalQualityInput) de
 	return totalRisk.Div(decimal.NewFromInt(int64(len(riskFactors))))
 }
 
-// calculateDataFreshnessScore assesses data freshness
+// calculateDataFreshnessScore evaluates the recency of the market data used for the signal.
 func (sqs *SignalQualityScorer) calculateDataFreshnessScore(input *SignalQualityInput) decimal.Decimal {
 	if input.MarketData == nil {
 		return decimal.NewFromFloat(0.5)
@@ -371,7 +394,7 @@ func (sqs *SignalQualityScorer) calculateDataFreshnessScore(input *SignalQuality
 	}
 }
 
-// calculateMarketConditionScore assesses overall market conditions
+// calculateMarketConditionScore assesses the overall stability and favorability of market conditions.
 func (sqs *SignalQualityScorer) calculateMarketConditionScore(input *SignalQualityInput) decimal.Decimal {
 	if input.MarketData == nil {
 		return decimal.NewFromFloat(0.5)
@@ -394,7 +417,7 @@ func (sqs *SignalQualityScorer) calculateMarketConditionScore(input *SignalQuali
 	}
 }
 
-// calculateMultiSignalScore provides bonus scoring for multiple confirming signals
+// calculateMultiSignalScore provides a score boost for aggregated signals confirmed by multiple sources.
 func (sqs *SignalQualityScorer) calculateMultiSignalScore(input *SignalQualityInput) decimal.Decimal {
 	// Base score for single signals
 	baseScore := decimal.NewFromFloat(0.5)
@@ -442,6 +465,7 @@ func (sqs *SignalQualityScorer) calculateMultiSignalScore(input *SignalQualityIn
 
 // Helper functions
 
+// calculateOverallScore computes the weighted average of individual quality scores.
 func (sqs *SignalQualityScorer) calculateOverallScore(scores map[string]decimal.Decimal) decimal.Decimal {
 	// Define weights for different factors
 	weights := map[string]decimal.Decimal{
@@ -473,6 +497,7 @@ func (sqs *SignalQualityScorer) calculateOverallScore(scores map[string]decimal.
 	return weightedSum.Div(totalWeight)
 }
 
+// assessOrderBookDepth normalizes the order book depth into a score.
 func (sqs *SignalQualityScorer) assessOrderBookDepth(depth decimal.Decimal) decimal.Decimal {
 	// Define depth thresholds
 	minDepth := decimal.NewFromFloat(10000)         // $10,000
@@ -492,6 +517,7 @@ func (sqs *SignalQualityScorer) assessOrderBookDepth(depth decimal.Decimal) deci
 	}
 }
 
+// assessSpread normalizes the bid-ask spread into a score.
 func (sqs *SignalQualityScorer) assessSpread(spread, price decimal.Decimal) decimal.Decimal {
 	if price.IsZero() {
 		return decimal.Zero
@@ -519,6 +545,7 @@ func (sqs *SignalQualityScorer) assessSpread(spread, price decimal.Decimal) deci
 	}
 }
 
+// calculateExchangeRisk estimates risk based on exchange reliability.
 func (sqs *SignalQualityScorer) calculateExchangeRisk(exchanges []string) decimal.Decimal {
 	if len(exchanges) == 0 {
 		return decimal.NewFromFloat(1.0) // Maximum risk
@@ -539,6 +566,7 @@ func (sqs *SignalQualityScorer) calculateExchangeRisk(exchanges []string) decima
 	return totalRisk.Div(decimal.NewFromInt(int64(len(exchanges))))
 }
 
+// calculateVolatilityRisk estimates risk based on market volatility.
 func (sqs *SignalQualityScorer) calculateVolatilityRisk(volatility decimal.Decimal) decimal.Decimal {
 	// Define volatility risk thresholds
 	lowRisk := decimal.NewFromFloat(0.05)    // 5%
@@ -556,7 +584,7 @@ func (sqs *SignalQualityScorer) calculateVolatilityRisk(volatility decimal.Decim
 	}
 }
 
-// refreshExchangeReliabilityCache updates the exchange reliability cache
+// refreshExchangeReliabilityCache updates the internal cache of exchange reliability metrics.
 func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Context) error {
 	// Check if cache is still valid (refresh every hour)
 	if time.Now().Before(sqs.cacheExpiry) {
@@ -586,7 +614,7 @@ func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Cont
 	return nil
 }
 
-// fetchExchangeStatistics retrieves exchange statistics from database
+// fetchExchangeStatistics retrieves raw exchange statistics from the database (or mock data).
 func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (map[string]*ExchangeMetrics, error) {
 	// Query database for exchange statistics
 	stats := make(map[string]*ExchangeMetrics)
@@ -640,7 +668,7 @@ func (sqs *SignalQualityScorer) fetchExchangeStatistics(ctx context.Context) (ma
 	return stats, nil
 }
 
-// calculateExchangeReliability calculates reliability score for an exchange
+// calculateExchangeReliability calculates a normalized reliability score from raw exchange metrics.
 func (sqs *SignalQualityScorer) calculateExchangeReliability(metrics *ExchangeMetrics) *ExchangeReliability {
 	// Calculate individual scores
 	uptimeScore := metrics.UptimePercentage
@@ -677,6 +705,7 @@ func (sqs *SignalQualityScorer) calculateExchangeReliability(metrics *ExchangeMe
 	}
 }
 
+// normalizeVolumeScore normalizes trading volume to a 0-1 score.
 func (sqs *SignalQualityScorer) normalizeVolumeScore(volume decimal.Decimal) decimal.Decimal {
 	// Normalize volume to 0-1 scale
 	maxVolume := decimal.NewFromFloat(2000000000) // $2B as max reference
@@ -687,6 +716,7 @@ func (sqs *SignalQualityScorer) normalizeVolumeScore(volume decimal.Decimal) dec
 	return score
 }
 
+// normalizeLatencyScore normalizes latency to a 0-1 score (lower is better).
 func (sqs *SignalQualityScorer) normalizeLatencyScore(latency time.Duration) decimal.Decimal {
 	// Convert latency to score (lower is better)
 	latencyMs := float64(latency.Nanoseconds()) / 1000000 // Convert to milliseconds
@@ -699,6 +729,7 @@ func (sqs *SignalQualityScorer) normalizeLatencyScore(latency time.Duration) dec
 	return decimal.NewFromFloat(score)
 }
 
+// normalizeSpreadScore normalizes spread to a 0-1 score (lower is better).
 func (sqs *SignalQualityScorer) normalizeSpreadScore(spread decimal.Decimal) decimal.Decimal {
 	// Convert spread to score (lower is better)
 	maxSpread := decimal.NewFromFloat(0.01) // 1% as max acceptable
@@ -710,6 +741,7 @@ func (sqs *SignalQualityScorer) normalizeSpreadScore(spread decimal.Decimal) dec
 	return score
 }
 
+// calculateDataQualityScore computes a score based on data gaps, freshness, and error rates.
 func (sqs *SignalQualityScorer) calculateDataQualityScore(metrics *ExchangeMetrics) decimal.Decimal {
 	// Calculate data quality based on gaps, freshness, and error rate
 	gapScore := decimal.NewFromFloat(1.0)
@@ -746,13 +778,22 @@ func (sqs *SignalQualityScorer) calculateDataQualityScore(metrics *ExchangeMetri
 		Add(errorScore.Mul(decimal.NewFromFloat(0.2)))
 }
 
-// GetExchangeReliability returns cached reliability data for an exchange
+// GetExchangeReliability returns the cached reliability metrics for a specific exchange.
+//
+// Parameters:
+//   - exchangeName: The name of the exchange.
+//
+// Returns:
+//   - The reliability metrics, and a boolean indicating if the exchange was found.
 func (sqs *SignalQualityScorer) GetExchangeReliability(exchangeName string) (*ExchangeReliability, bool) {
 	reliability, exists := sqs.exchangeReliabilityCache[exchangeName]
 	return reliability, exists
 }
 
-// GetAllExchangeReliabilities returns all cached exchange reliabilities
+// GetAllExchangeReliabilities returns all cached exchange reliability metrics.
+//
+// Returns:
+//   - A map of exchange names to reliability metrics.
 func (sqs *SignalQualityScorer) GetAllExchangeReliabilities() map[string]*ExchangeReliability {
 	// Return a copy to prevent external modification
 	result := make(map[string]*ExchangeReliability)
@@ -762,7 +803,10 @@ func (sqs *SignalQualityScorer) GetAllExchangeReliabilities() map[string]*Exchan
 	return result
 }
 
-// ForceRefreshCache forces a refresh of the exchange reliability cache
+// ForceRefreshCache invalidates the current cache and triggers an immediate refresh.
+//
+// Returns:
+//   - An error if the refresh fails.
 func (sqs *SignalQualityScorer) ForceRefreshCache(ctx context.Context) error {
 	sqs.cacheExpiry = time.Now().Add(-time.Hour) // Force expiry
 	return sqs.refreshExchangeReliabilityCache(ctx)

@@ -14,7 +14,7 @@ import (
 )
 
 // ResourceOptimizer dynamically adjusts worker pool sizes and concurrency limits
-// based on system resources and performance metrics
+// based on system resources and performance metrics.
 type ResourceOptimizer struct {
 	mu                   sync.RWMutex
 	cpuCores             int
@@ -30,42 +30,73 @@ type ResourceOptimizer struct {
 	logger               *slog.Logger
 }
 
-// OptimalConcurrency holds dynamically calculated concurrency limits
+// OptimalConcurrency holds dynamically calculated concurrency limits.
 type OptimalConcurrency struct {
-	MaxWorkers             int     `json:"max_workers"`
-	MaxConcurrentSymbols   int     `json:"max_concurrent_symbols"`
-	MaxConcurrentBackfill  int     `json:"max_concurrent_backfill"`
-	MaxConcurrentWrites    int     `json:"max_concurrent_writes"`
-	MaxCircuitBreakerCalls int     `json:"max_circuit_breaker_calls"`
-	WorkerPoolUtilization  float64 `json:"worker_pool_utilization"`
-	MemoryThreshold        float64 `json:"memory_threshold"`
-	CPUThreshold           float64 `json:"cpu_threshold"`
+	// MaxWorkers is the optimal number of workers.
+	MaxWorkers int `json:"max_workers"`
+	// MaxConcurrentSymbols is the limit for symbol processing.
+	MaxConcurrentSymbols int `json:"max_concurrent_symbols"`
+	// MaxConcurrentBackfill is the limit for backfill operations.
+	MaxConcurrentBackfill int `json:"max_concurrent_backfill"`
+	// MaxConcurrentWrites is the limit for database writes.
+	MaxConcurrentWrites int `json:"max_concurrent_writes"`
+	// MaxCircuitBreakerCalls is the limit for circuit breaker requests.
+	MaxCircuitBreakerCalls int `json:"max_circuit_breaker_calls"`
+	// WorkerPoolUtilization is the target utilization rate.
+	WorkerPoolUtilization float64 `json:"worker_pool_utilization"`
+	// MemoryThreshold is the memory usage threshold for optimization.
+	MemoryThreshold float64 `json:"memory_threshold"`
+	// CPUThreshold is the CPU usage threshold for optimization.
+	CPUThreshold float64 `json:"cpu_threshold"`
 }
 
-// PerformanceSnapshot captures system performance at a point in time
+// PerformanceSnapshot captures system performance at a point in time.
 type PerformanceSnapshot struct {
-	Timestamp        time.Time `json:"timestamp"`
-	CPUUsage         float64   `json:"cpu_usage"`
-	MemoryUsage      float64   `json:"memory_usage"`
-	Goroutines       int       `json:"goroutines"`
-	ActiveOperations int       `json:"active_operations"`
-	Throughput       float64   `json:"throughput"`
-	ErrorRate        float64   `json:"error_rate"`
-	ResponseTime     float64   `json:"response_time_ms"`
+	// Timestamp is the snapshot time.
+	Timestamp time.Time `json:"timestamp"`
+	// CPUUsage is the CPU usage percentage.
+	CPUUsage float64 `json:"cpu_usage"`
+	// MemoryUsage is the memory usage percentage.
+	MemoryUsage float64 `json:"memory_usage"`
+	// Goroutines is the number of goroutines.
+	Goroutines int `json:"goroutines"`
+	// ActiveOperations is the number of active operations.
+	ActiveOperations int `json:"active_operations"`
+	// Throughput is the operations per second.
+	Throughput float64 `json:"throughput"`
+	// ErrorRate is the error percentage.
+	ErrorRate float64 `json:"error_rate"`
+	// ResponseTime is the average response time in ms.
+	ResponseTime float64 `json:"response_time_ms"`
 }
 
-// ResourceOptimizerConfig holds configuration for the resource optimizer
+// ResourceOptimizerConfig holds configuration for the resource optimizer.
 type ResourceOptimizerConfig struct {
+	// OptimizationInterval is the interval between optimizations.
 	OptimizationInterval time.Duration `yaml:"optimization_interval" default:"5m"`
-	AdaptiveMode         bool          `yaml:"adaptive_mode" default:"true"`
-	MaxHistorySize       int           `yaml:"max_history_size" default:"100"`
-	CPUThreshold         float64       `yaml:"cpu_threshold" default:"80.0"`
-	MemoryThreshold      float64       `yaml:"memory_threshold" default:"85.0"`
-	MinWorkers           int           `yaml:"min_workers" default:"2"`
-	MaxWorkers           int           `yaml:"max_workers" default:"20"`
+	// AdaptiveMode enables adaptive optimization.
+	AdaptiveMode bool `yaml:"adaptive_mode" default:"true"`
+	// MaxHistorySize is the maximum number of snapshots to keep.
+	MaxHistorySize int `yaml:"max_history_size" default:"100"`
+	// CPUThreshold is the CPU usage threshold.
+	CPUThreshold float64 `yaml:"cpu_threshold" default:"80.0"`
+	// MemoryThreshold is the memory usage threshold.
+	MemoryThreshold float64 `yaml:"memory_threshold" default:"85.0"`
+	// MinWorkers is the minimum number of workers.
+	MinWorkers int `yaml:"min_workers" default:"2"`
+	// MaxWorkers is the maximum number of workers.
+	MaxWorkers int `yaml:"max_workers" default:"20"`
 }
 
-// NewResourceOptimizer creates a new resource optimizer
+// NewResourceOptimizer creates a new resource optimizer.
+//
+// Parameters:
+//
+//	config: Optimizer configuration.
+//
+// Returns:
+//
+//	*ResourceOptimizer: Initialized optimizer.
 func NewResourceOptimizer(config ResourceOptimizerConfig) *ResourceOptimizer {
 	// Apply default values if not provided
 	if config.OptimizationInterval == 0 {
@@ -187,14 +218,26 @@ func (ro *ResourceOptimizer) calculateOptimalConcurrency(config ResourceOptimize
 		"max_circuit_breaker_calls", ro.optimalConcurrency.MaxCircuitBreakerCalls)
 }
 
-// GetOptimalConcurrency returns the current optimal concurrency settings
+// GetOptimalConcurrency returns the current optimal concurrency settings.
+//
+// Returns:
+//
+//	OptimalConcurrency: Concurrency settings.
 func (ro *ResourceOptimizer) GetOptimalConcurrency() OptimalConcurrency {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()
 	return ro.optimalConcurrency
 }
 
-// UpdateSystemMetrics updates current system resource usage
+// UpdateSystemMetrics updates current system resource usage.
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	error: Error if metrics update fails.
 func (ro *ResourceOptimizer) UpdateSystemMetrics(ctx context.Context) error {
 	// Get CPU usage
 	cpuPercent, err := cpu.PercentWithContext(ctx, time.Second, false)
@@ -219,7 +262,14 @@ func (ro *ResourceOptimizer) UpdateSystemMetrics(ctx context.Context) error {
 	return nil
 }
 
-// RecordPerformanceSnapshot records current performance metrics
+// RecordPerformanceSnapshot records current performance metrics.
+//
+// Parameters:
+//
+//	activeOps: Active operations count.
+//	throughput: Throughput rate.
+//	errorRate: Error rate.
+//	responseTime: Response time.
 func (ro *ResourceOptimizer) RecordPerformanceSnapshot(activeOps int, throughput, errorRate, responseTime float64) {
 	ro.mu.Lock()
 	defer ro.mu.Unlock()
@@ -244,7 +294,15 @@ func (ro *ResourceOptimizer) RecordPerformanceSnapshot(activeOps int, throughput
 	}
 }
 
-// OptimizeIfNeeded checks if optimization is needed and performs it
+// OptimizeIfNeeded checks if optimization is needed and performs it.
+//
+// Parameters:
+//
+//	config: Optimization configuration.
+//
+// Returns:
+//
+//	bool: True if optimization was performed.
 func (ro *ResourceOptimizer) OptimizeIfNeeded(config ResourceOptimizerConfig) bool {
 	ro.mu.RLock()
 	lastOpt := ro.lastOptimization
@@ -319,7 +377,15 @@ func (ro *ResourceOptimizer) shouldOptimize() bool {
 	return false
 }
 
-// GetPerformanceHistory returns recent performance history
+// GetPerformanceHistory returns recent performance history.
+//
+// Parameters:
+//
+//	limit: Number of snapshots to return.
+//
+// Returns:
+//
+//	[]PerformanceSnapshot: History.
 func (ro *ResourceOptimizer) GetPerformanceHistory(limit int) []PerformanceSnapshot {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()
@@ -332,7 +398,11 @@ func (ro *ResourceOptimizer) GetPerformanceHistory(limit int) []PerformanceSnaps
 	return ro.performanceHistory[start:]
 }
 
-// GetSystemInfo returns current system information
+// GetSystemInfo returns current system information.
+//
+// Returns:
+//
+//	map[string]interface{}: System info.
 func (ro *ResourceOptimizer) GetSystemInfo() map[string]interface{} {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()

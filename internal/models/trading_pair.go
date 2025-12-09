@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// TradingPair represents a trading pair in the system
+// TradingPair represents a specific trading pair (e.g., BTC/USD) on a specific exchange.
+// It links the base and quote currencies and tracks the active status of the pair.
 type TradingPair struct {
 	ID            int       `json:"id" gorm:"primaryKey;autoIncrement"`
 	ExchangeID    int       `json:"exchange_id" gorm:"not null;index"`
@@ -19,17 +20,17 @@ type TradingPair struct {
 	Exchange Exchange `json:"exchange" gorm:"foreignKey:ExchangeID;references:ID"`
 }
 
-// TableName returns the table name for TradingPair
+// TableName returns the database table name for the TradingPair model.
 func (TradingPair) TableName() string {
 	return "trading_pairs"
 }
 
-// String returns a string representation of the trading pair
+// String returns the string representation of the trading pair, typically its symbol.
 func (tp *TradingPair) String() string {
 	return tp.Symbol
 }
 
-// GetFullSymbol returns the full symbol representation
+// GetFullSymbol returns a standardized symbol string in the format "BASE/QUOTE".
 func (tp *TradingPair) GetFullSymbol() string {
 	return tp.BaseCurrency + "/" + tp.QuoteCurrency
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// NotificationService handles sending notifications to users.
 type NotificationService struct {
 	db     *database.PostgresDB
 	redis  *database.RedisClient
@@ -31,46 +32,88 @@ type NotificationService struct {
 	logger *slog.Logger
 }
 
+// ArbitrageOpportunity represents an arbitrage opportunity for notification.
+// Note: This struct might be duplicative of models.ArbitrageOpportunity, but used here for JSON marshaling.
 type ArbitrageOpportunity struct {
-	Symbol          string    `json:"symbol"`
-	BuyExchange     string    `json:"buy_exchange"`
-	SellExchange    string    `json:"sell_exchange"`
-	BuyPrice        float64   `json:"buy_price"`
-	SellPrice       float64   `json:"sell_price"`
-	ProfitPercent   float64   `json:"profit_percent"`
-	ProfitAmount    float64   `json:"profit_amount"`
-	Volume          float64   `json:"volume"`
-	Timestamp       time.Time `json:"timestamp"`
-	OpportunityType string    `json:"opportunity_type"` // "arbitrage", "technical", "ai_generated"
+	// Symbol is the trading pair.
+	Symbol string `json:"symbol"`
+	// BuyExchange is the buying exchange.
+	BuyExchange string `json:"buy_exchange"`
+	// SellExchange is the selling exchange.
+	SellExchange string `json:"sell_exchange"`
+	// BuyPrice is the buy price.
+	BuyPrice float64 `json:"buy_price"`
+	// SellPrice is the sell price.
+	SellPrice float64 `json:"sell_price"`
+	// ProfitPercent is the profit percentage.
+	ProfitPercent float64 `json:"profit_percent"`
+	// ProfitAmount is the profit amount.
+	ProfitAmount float64 `json:"profit_amount"`
+	// Volume is the volume.
+	Volume float64 `json:"volume"`
+	// Timestamp is the detection time.
+	Timestamp time.Time `json:"timestamp"`
+	// OpportunityType is the type (arbitrage, technical, etc).
+	OpportunityType string `json:"opportunity_type"` // "arbitrage", "technical", "ai_generated"
 }
 
-// TechnicalSignalNotification represents a technical analysis signal for notifications
+// TechnicalSignalNotification represents a technical analysis signal for notifications.
 type TechnicalSignalNotification struct {
-	Symbol       string    `json:"symbol"`
-	SignalType   string    `json:"signal_type"`
-	Action       string    `json:"action"`
-	SignalText   string    `json:"signal_text"`
-	CurrentPrice float64   `json:"current_price"`
-	EntryRange   string    `json:"entry_range"`
-	Targets      []Target  `json:"targets"`
-	StopLoss     StopLoss  `json:"stop_loss"`
-	RiskReward   string    `json:"risk_reward"`
-	Exchanges    []string  `json:"exchanges"`
-	Timeframe    string    `json:"timeframe"`
-	Confidence   float64   `json:"confidence"`
-	Timestamp    time.Time `json:"timestamp"`
+	// Symbol is the trading pair.
+	Symbol string `json:"symbol"`
+	// SignalType is the type of signal.
+	SignalType string `json:"signal_type"`
+	// Action is the recommended action (buy/sell).
+	Action string `json:"action"`
+	// SignalText is the description.
+	SignalText string `json:"signal_text"`
+	// CurrentPrice is the asset price.
+	CurrentPrice float64 `json:"current_price"`
+	// EntryRange is the recommended entry price range.
+	EntryRange string `json:"entry_range"`
+	// Targets are the profit targets.
+	Targets []Target `json:"targets"`
+	// StopLoss is the stop loss level.
+	StopLoss StopLoss `json:"stop_loss"`
+	// RiskReward is the R:R ratio.
+	RiskReward string `json:"risk_reward"`
+	// Exchanges is the list of applicable exchanges.
+	Exchanges []string `json:"exchanges"`
+	// Timeframe is the analysis timeframe.
+	Timeframe string `json:"timeframe"`
+	// Confidence is the signal confidence level.
+	Confidence float64 `json:"confidence"`
+	// Timestamp is the signal generation time.
+	Timestamp time.Time `json:"timestamp"`
 }
 
+// Target represents a profit target price.
 type Target struct {
-	Price  float64 `json:"price"`
+	// Price is the target price.
+	Price float64 `json:"price"`
+	// Profit is the projected profit percentage.
 	Profit float64 `json:"profit"`
 }
 
+// StopLoss represents a stop loss level.
 type StopLoss struct {
+	// Price is the stop loss price.
 	Price float64 `json:"price"`
-	Risk  float64 `json:"risk"`
+	// Risk is the projected loss percentage.
+	Risk float64 `json:"risk"`
 }
 
+// NewNotificationService creates a new notification service.
+//
+// Parameters:
+//
+//	db: Database connection.
+//	redis: Redis client.
+//	telegramBotToken: Telegram bot token.
+//
+// Returns:
+//
+//	*NotificationService: Initialized service.
 func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient, telegramBotToken string) *NotificationService {
 	// Initialize Telegram bot if token is provided
 	var telegramBot *bot.Bot
@@ -86,7 +129,12 @@ func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient
 	}
 }
 
-// PublishOpportunityUpdate publishes arbitrage opportunity updates via Redis pub/sub
+// PublishOpportunityUpdate publishes arbitrage opportunity updates via Redis pub/sub.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	opportunities: List of opportunities.
 func (ns *NotificationService) PublishOpportunityUpdate(ctx context.Context, opportunities []ArbitrageOpportunity) {
 	if ns.redis == nil || len(opportunities) == 0 {
 		return
@@ -99,7 +147,15 @@ func (ns *NotificationService) PublishOpportunityUpdate(ctx context.Context, opp
 	telemetry.Logger().Info("Would publish opportunities to Redis channel", "opportunity_count", len(opportunities), "channel", channel)
 }
 
-// GetCacheStats returns statistics about Redis cache usage
+// GetCacheStats returns statistics about Redis cache usage.
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	map[string]interface{}: Cache stats.
 func (ns *NotificationService) GetCacheStats(ctx context.Context) map[string]interface{} {
 	stats := make(map[string]interface{})
 
@@ -125,7 +181,16 @@ func (ns *NotificationService) GetCacheStats(ctx context.Context) map[string]int
 	return stats
 }
 
-// NotifyArbitrageOpportunities sends notifications about arbitrage opportunities to eligible users
+// NotifyArbitrageOpportunities sends notifications about arbitrage opportunities to eligible users.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	opportunities: List of opportunities.
+//
+// Returns:
+//
+//	error: Error if notification fails.
 func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context, opportunities []ArbitrageOpportunity) error {
 	// Cache opportunities for faster subsequent access
 	ns.cacheArbitrageOpportunities(ctx, opportunities)
@@ -204,7 +269,13 @@ func (ns *NotificationService) cacheArbitrageOpportunities(ctx context.Context, 
 	}
 }
 
-// CacheMarketData stores market data in Redis with 10-second TTL for API performance
+// CacheMarketData stores market data in Redis with 10-second TTL for API performance.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	exchange: Exchange name.
+//	data: Market data to cache.
 func (ns *NotificationService) CacheMarketData(ctx context.Context, exchange string, data interface{}) {
 	if ns.redis == nil {
 		return
@@ -224,7 +295,17 @@ func (ns *NotificationService) CacheMarketData(ctx context.Context, exchange str
 	}
 }
 
-// GetCachedMarketData retrieves cached market data from Redis
+// GetCachedMarketData retrieves cached market data from Redis.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	exchange: Exchange name.
+//	result: Pointer to struct to unmarshal data into.
+//
+// Returns:
+//
+//	error: Error if retrieval fails.
 func (ns *NotificationService) GetCachedMarketData(ctx context.Context, exchange string, result interface{}) error {
 	if ns.redis == nil {
 		return fmt.Errorf("redis not available")
@@ -244,7 +325,11 @@ func (ns *NotificationService) GetCachedMarketData(ctx context.Context, exchange
 	return nil
 }
 
-// InvalidateUserCache invalidates the eligible users cache when user settings change
+// InvalidateUserCache invalidates the eligible users cache when user settings change.
+//
+// Parameters:
+//
+//	ctx: Context.
 func (ns *NotificationService) InvalidateUserCache(ctx context.Context) {
 	if ns.redis == nil {
 		return
@@ -258,7 +343,11 @@ func (ns *NotificationService) InvalidateUserCache(ctx context.Context) {
 	}
 }
 
-// InvalidateOpportunityCache invalidates the arbitrage opportunities cache
+// InvalidateOpportunityCache invalidates the arbitrage opportunities cache.
+//
+// Parameters:
+//
+//	ctx: Context.
 func (ns *NotificationService) InvalidateOpportunityCache(ctx context.Context) {
 	if ns.redis == nil {
 		return
@@ -328,7 +417,15 @@ func (ns *NotificationService) formatTechnicalSignalMessage(signals []TechnicalS
 	return message
 }
 
-// ConvertAggregatedSignalToNotification converts an AggregatedSignal to TechnicalSignalNotification
+// ConvertAggregatedSignalToNotification converts an AggregatedSignal to TechnicalSignalNotification.
+//
+// Parameters:
+//
+//	signal: The aggregated signal.
+//
+// Returns:
+//
+//	*TechnicalSignalNotification: Notification struct.
 func (ns *NotificationService) ConvertAggregatedSignalToNotification(signal *AggregatedSignal) *TechnicalSignalNotification {
 	// Extract current price from metadata if available
 	currentPrice := 0.0
@@ -731,7 +828,16 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 	return nil
 }
 
-// NotifyEnhancedArbitrageSignals sends notifications about enhanced arbitrage signals to eligible users
+// NotifyEnhancedArbitrageSignals sends notifications about enhanced arbitrage signals to eligible users.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	signals: List of aggregated signals.
+//
+// Returns:
+//
+//	error: Error if notification fails.
 func (ns *NotificationService) NotifyEnhancedArbitrageSignals(ctx context.Context, signals []*AggregatedSignal) error {
 	// Get eligible users (those with Telegram chat IDs and arbitrage alerts enabled)
 	users, err := ns.getEligibleUsers(ctx)
@@ -923,7 +1029,17 @@ func (ns *NotificationService) logNotification(ctx context.Context, userID, noti
 	return nil
 }
 
-// CheckUserNotificationPreferences checks if a user wants to receive arbitrage notifications with Redis caching
+// CheckUserNotificationPreferences checks if a user wants to receive arbitrage notifications with Redis caching.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	userID: User ID.
+//
+// Returns:
+//
+//	bool: True if notifications are enabled.
+//	error: Error if check fails.
 func (ns *NotificationService) CheckUserNotificationPreferences(ctx context.Context, userID string) (bool, error) {
 	cacheKey := fmt.Sprintf("user_preferences:%s:arbitrage", userID)
 
@@ -974,7 +1090,16 @@ func (ns *NotificationService) CheckUserNotificationPreferences(ctx context.Cont
 	return result, nil
 }
 
-// NotifyAggregatedSignals sends notifications about aggregated signals to eligible users
+// NotifyAggregatedSignals sends notifications about aggregated signals to eligible users.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	signals: List of aggregated signals.
+//
+// Returns:
+//
+//	error: Error if notification fails.
 func (ns *NotificationService) NotifyAggregatedSignals(ctx context.Context, signals []*AggregatedSignal) error {
 	// Get eligible users (those with Telegram chat IDs and alerts enabled)
 	users, err := ns.getEligibleUsers(ctx)
@@ -1279,7 +1404,16 @@ func (ns *NotificationService) formatAggregatedTechnicalMessage(signals []*Aggre
 	return message.String()
 }
 
-// NotifyTechnicalSignals sends notifications about technical analysis signals to eligible users
+// NotifyTechnicalSignals sends notifications about technical analysis signals to eligible users.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	signals: List of technical signals.
+//
+// Returns:
+//
+//	error: Error if notification fails.
 func (ns *NotificationService) NotifyTechnicalSignals(ctx context.Context, signals []TechnicalSignalNotification) error {
 	// Get eligible users (those with Telegram chat IDs and technical alerts enabled)
 	users, err := ns.getEligibleUsers(ctx)

@@ -1,10 +1,14 @@
 import type { MiddlewareHandler } from "hono";
 // import * as Sentry from "@sentry/bun"; // Disabled due to Bun.serve Proxy error
 
-const sentryDsn = process.env.SENTRY_DSN;
+// const sentryDsn = process.env.SENTRY_DSN;
 
 export const isSentryEnabled = false; // Force disabled
 
+/**
+ * Middleware for Sentry error tracking.
+ * Currently a pass-through due to Bun.serve instrumentation issues.
+ */
 export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
   // Pass-through middleware
   await next();

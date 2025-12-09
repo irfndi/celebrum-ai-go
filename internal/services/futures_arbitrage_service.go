@@ -19,7 +19,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FuturesArbitrageService manages futures arbitrage opportunity calculation and storage
+// FuturesArbitrageService manages futures arbitrage opportunity calculation and storage.
 type FuturesArbitrageService struct {
 	db          *database.PostgresDB
 	redisClient *redis.Client
@@ -37,7 +37,20 @@ type FuturesArbitrageService struct {
 	performanceMonitor   *PerformanceMonitor
 }
 
-// NewFuturesArbitrageService creates a new futures arbitrage service
+// NewFuturesArbitrageService creates a new futures arbitrage service.
+//
+// Parameters:
+//
+//	db: Database connection.
+//	redisClient: Redis client.
+//	cfg: Configuration.
+//	errorRecoveryManager: Error recovery manager.
+//	resourceManager: Resource manager.
+//	performanceMonitor: Performance monitor.
+//
+// Returns:
+//
+//	*FuturesArbitrageService: Initialized service.
 func NewFuturesArbitrageService(
 	db *database.PostgresDB,
 	redisClient *redis.Client,
@@ -57,7 +70,11 @@ func NewFuturesArbitrageService(
 	}
 }
 
-// Start begins the futures arbitrage opportunity calculation service
+// Start begins the futures arbitrage opportunity calculation service.
+//
+// Returns:
+//
+//	error: Error if service is already running.
 func (s *FuturesArbitrageService) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -77,7 +94,7 @@ func (s *FuturesArbitrageService) Start() error {
 	return nil
 }
 
-// Stop gracefully stops the futures arbitrage service
+// Stop gracefully stops the futures arbitrage service.
 func (s *FuturesArbitrageService) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// Exchange represents a cryptocurrency exchange
+// Exchange represents a cryptocurrency exchange entity in the system.
+// It stores general information about the exchange.
 type Exchange struct {
 	ID        int        `json:"id" db:"id"`
 	Name      string     `json:"name" db:"name"`
@@ -15,7 +16,8 @@ type Exchange struct {
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 }
 
-// CCXTExchange represents CCXT-specific exchange configuration
+// CCXTExchange represents the configuration specific to CCXT integration for an exchange.
+// It links an internal exchange ID to its CCXT identifier and capabilities.
 type CCXTExchange struct {
 	ID               int        `json:"id" db:"id"`
 	ExchangeID       int        `json:"exchange_id" db:"exchange_id"`
@@ -30,7 +32,7 @@ type CCXTExchange struct {
 	Exchange         *Exchange  `json:"exchange,omitempty"`
 }
 
-// ExchangeInfo represents exchange information for API responses
+// ExchangeInfo represents a summary of exchange information used in API responses.
 type ExchangeInfo struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`

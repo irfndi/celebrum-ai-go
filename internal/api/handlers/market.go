@@ -16,6 +16,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// MarketHandler handles market data API endpoints.
 type MarketHandler struct {
 	db               *database.PostgresDB
 	ccxtService      ccxt.CCXTService
@@ -24,12 +25,25 @@ type MarketHandler struct {
 	cacheAnalytics   *services.CacheAnalyticsService
 }
 
-// CacheStats tracks cache hit/miss statistics (deprecated - use CacheAnalyticsService)
+// CacheStats tracks cache hit/miss statistics (deprecated - use CacheAnalyticsService).
 type CacheStats struct {
 	Hits   int64 `json:"hits"`
 	Misses int64 `json:"misses"`
 }
 
+// NewMarketHandler creates a new instance of MarketHandler.
+//
+// Parameters:
+//
+//	db: Database connection.
+//	ccxtService: CCXT service.
+//	collectorService: Collector service.
+//	redis: Redis client.
+//	cacheAnalytics: Cache analytics service.
+//
+// Returns:
+//
+//	*MarketHandler: Initialized handler.
 func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, redis *database.RedisClient, cacheAnalytics *services.CacheAnalyticsService) *MarketHandler {
 	return &MarketHandler{
 		db:               db,
@@ -40,7 +54,7 @@ func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, col
 	}
 }
 
-// MarketPricesResponse represents the response for market prices
+// MarketPricesResponse represents the response for market prices.
 type MarketPricesResponse struct {
 	Data      []MarketPriceData `json:"data"`
 	Total     int               `json:"total"`
@@ -49,6 +63,7 @@ type MarketPricesResponse struct {
 	Timestamp time.Time         `json:"timestamp"`
 }
 
+// MarketPriceData represents a single market price record.
 type MarketPriceData struct {
 	Exchange    string          `json:"exchange"`
 	Symbol      string          `json:"symbol"`
@@ -58,7 +73,7 @@ type MarketPriceData struct {
 	LastUpdated time.Time       `json:"last_updated"`
 }
 
-// TickerResponse represents the response for a single ticker
+// TickerResponse represents the response for a single ticker.
 type TickerResponse struct {
 	Exchange  string          `json:"exchange"`
 	Symbol    string          `json:"symbol"`
@@ -67,7 +82,7 @@ type TickerResponse struct {
 	Timestamp time.Time       `json:"timestamp"`
 }
 
-// BulkTickerResponse represents bulk ticker data for an exchange
+// BulkTickerResponse represents bulk ticker data for an exchange.
 type BulkTickerResponse struct {
 	Exchange  string           `json:"exchange"`
 	Tickers   []TickerResponse `json:"tickers"`
@@ -75,7 +90,7 @@ type BulkTickerResponse struct {
 	Cached    bool             `json:"cached"`
 }
 
-// OrderBookResponse represents order book data
+// OrderBookResponse represents order book data.
 type OrderBookResponse struct {
 	Exchange  string      `json:"exchange"`
 	Symbol    string      `json:"symbol"`
@@ -85,7 +100,7 @@ type OrderBookResponse struct {
 	Cached    bool        `json:"cached"`
 }
 
-// CacheMarketPrices caches market prices data in Redis with 10-second TTL
+// CacheMarketPrices caches market prices data in Redis with 10-second TTL.
 func (h *MarketHandler) CacheMarketPrices(ctx context.Context, cacheKey string, data MarketPricesResponse) {
 	if h.redis == nil {
 		return
@@ -103,7 +118,7 @@ func (h *MarketHandler) CacheMarketPrices(ctx context.Context, cacheKey string, 
 	}
 }
 
-// GetCachedMarketPrices retrieves cached market prices from Redis
+// GetCachedMarketPrices retrieves cached market prices from Redis.
 func (h *MarketHandler) GetCachedMarketPrices(ctx context.Context, cacheKey string) (*MarketPricesResponse, bool) {
 	if h.redis == nil {
 		if h.cacheAnalytics != nil {
@@ -136,7 +151,7 @@ func (h *MarketHandler) GetCachedMarketPrices(ctx context.Context, cacheKey stri
 	return &data, true
 }
 
-// CacheTicker caches single ticker data in Redis with 10-second TTL
+// CacheTicker caches single ticker data in Redis with 10-second TTL.
 func (h *MarketHandler) CacheTicker(ctx context.Context, cacheKey string, data TickerResponse) {
 	if h.redis == nil {
 		return
@@ -154,7 +169,7 @@ func (h *MarketHandler) CacheTicker(ctx context.Context, cacheKey string, data T
 	}
 }
 
-// GetCachedTicker retrieves cached ticker from Redis
+// GetCachedTicker retrieves cached ticker from Redis.
 func (h *MarketHandler) GetCachedTicker(ctx context.Context, cacheKey string) (*TickerResponse, bool) {
 	if h.redis == nil {
 		if h.cacheAnalytics != nil {
@@ -187,7 +202,7 @@ func (h *MarketHandler) GetCachedTicker(ctx context.Context, cacheKey string) (*
 	return &data, true
 }
 
-// CacheBulkTickers caches bulk ticker data in Redis with 10-second TTL
+// CacheBulkTickers caches bulk ticker data in Redis with 10-second TTL.
 func (h *MarketHandler) CacheBulkTickers(ctx context.Context, cacheKey string, data BulkTickerResponse) {
 	if h.redis == nil {
 		return
@@ -205,7 +220,7 @@ func (h *MarketHandler) CacheBulkTickers(ctx context.Context, cacheKey string, d
 	}
 }
 
-// GetCachedBulkTickers retrieves cached bulk ticker data from Redis
+// GetCachedBulkTickers retrieves cached bulk ticker data from Redis.
 func (h *MarketHandler) GetCachedBulkTickers(ctx context.Context, cacheKey string) (*BulkTickerResponse, bool) {
 	if h.redis == nil {
 		if h.cacheAnalytics != nil {
@@ -239,7 +254,7 @@ func (h *MarketHandler) GetCachedBulkTickers(ctx context.Context, cacheKey strin
 	return &data, true
 }
 
-// CacheOrderBook caches order book data in Redis with 5-second TTL
+// CacheOrderBook caches order book data in Redis with 5-second TTL.
 func (h *MarketHandler) CacheOrderBook(ctx context.Context, cacheKey string, data OrderBookResponse) {
 	if h.redis == nil {
 		return
@@ -257,7 +272,7 @@ func (h *MarketHandler) CacheOrderBook(ctx context.Context, cacheKey string, dat
 	}
 }
 
-// GetCachedOrderBook retrieves cached order book from Redis
+// GetCachedOrderBook retrieves cached order book from Redis.
 func (h *MarketHandler) GetCachedOrderBook(ctx context.Context, cacheKey string) (*OrderBookResponse, bool) {
 	if h.redis == nil {
 		if h.cacheAnalytics != nil {
@@ -291,7 +306,7 @@ func (h *MarketHandler) GetCachedOrderBook(ctx context.Context, cacheKey string)
 	return &data, true
 }
 
-// GetMarketPrices retrieves market prices with pagination and filtering
+// GetMarketPrices retrieves market prices with pagination and filtering.
 func (h *MarketHandler) GetMarketPrices(c *gin.Context) {
 	// Parse query parameters
 	exchange := c.Query("exchange")
@@ -416,7 +431,7 @@ func (h *MarketHandler) GetMarketPrices(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetTicker retrieves the latest ticker data for a specific exchange and symbol
+// GetTicker retrieves the latest ticker data for a specific exchange and symbol.
 func (h *MarketHandler) GetTicker(c *gin.Context) {
 	exchange := c.Param("exchange")
 	symbol := c.Param("symbol")
@@ -499,7 +514,7 @@ func (h *MarketHandler) GetTicker(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetOrderBook retrieves order book data for a specific exchange and symbol
+// GetOrderBook retrieves order book data for a specific exchange and symbol.
 func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 	exchange := c.Param("exchange")
 	symbol := c.Param("symbol")
@@ -556,7 +571,7 @@ func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetBulkTickers retrieves all tickers for a specific exchange with caching
+// GetBulkTickers retrieves all tickers for a specific exchange with caching.
 func (h *MarketHandler) GetBulkTickers(c *gin.Context) {
 	exchange := c.Param("exchange")
 
@@ -626,7 +641,7 @@ func convertOrderBookEntries(entries []ccxt.OrderBookEntry) [][]float64 {
 // Note: GetCacheStats and ResetCacheStats methods have been moved to CacheHandler
 // to centralize cache analytics functionality
 
-// GetWorkerStatus returns the status of all collection workers
+// GetWorkerStatus returns the status of all collection workers.
 func (h *MarketHandler) GetWorkerStatus(c *gin.Context) {
 	if h.collectorService == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

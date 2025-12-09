@@ -12,16 +12,19 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
-// DatabaseHealthChecker interface for database health checks
+// DatabaseHealthChecker interface for database health checks.
 type DatabaseHealthChecker interface {
+	// HealthCheck verifies the database connection.
 	HealthCheck(ctx context.Context) error
 }
 
-// RedisHealthChecker interface for redis health checks
+// RedisHealthChecker interface for redis health checks.
 type RedisHealthChecker interface {
+	// HealthCheck verifies the Redis connection.
 	HealthCheck(ctx context.Context) error
 }
 
+// HealthHandler manages health check endpoints.
 type HealthHandler struct {
 	db             DatabaseHealthChecker
 	redis          RedisHealthChecker
@@ -29,21 +32,44 @@ type HealthHandler struct {
 	cacheAnalytics CacheAnalyticsInterface
 }
 
+// HealthResponse represents the health status response.
 type HealthResponse struct {
-	Status       string                         `json:"status"`
-	Timestamp    time.Time                      `json:"timestamp"`
-	Services     map[string]string              `json:"services"`
-	Version      string                         `json:"version"`
-	Uptime       string                         `json:"uptime"`
-	CacheMetrics *services.CacheMetrics         `json:"cache_metrics,omitempty"`
-	CacheStats   map[string]services.CacheStats `json:"cache_stats,omitempty"`
+	// Status is the overall system status ("healthy", "degraded", "unhealthy").
+	Status string `json:"status"`
+	// Timestamp is the check time.
+	Timestamp time.Time `json:"timestamp"`
+	// Services contains status of individual services.
+	Services map[string]string `json:"services"`
+	// Version is the application version.
+	Version string `json:"version"`
+	// Uptime is the service uptime.
+	Uptime string `json:"uptime"`
+	// CacheMetrics contains detailed cache metrics if available.
+	CacheMetrics *services.CacheMetrics `json:"cache_metrics,omitempty"`
+	// CacheStats contains cache statistics if available.
+	CacheStats map[string]services.CacheStats `json:"cache_stats,omitempty"`
 }
 
+// ServiceStatus represents the status of a single service.
 type ServiceStatus struct {
-	Status  string `json:"status"`
+	// Status indicates if the service is operational.
+	Status string `json:"status"`
+	// Message provides details if the service is unhealthy.
 	Message string `json:"message,omitempty"`
 }
 
+// NewHealthHandler creates a new instance of HealthHandler.
+//
+// Parameters:
+//
+//	db: Database checker.
+//	redis: Redis checker.
+//	ccxtURL: URL of the CCXT service.
+//	cacheAnalytics: Cache analytics service.
+//
+// Returns:
+//
+//	*HealthHandler: Initialized handler.
 func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtURL string, cacheAnalytics CacheAnalyticsInterface) *HealthHandler {
 	return &HealthHandler{
 		db:             db,
@@ -53,6 +79,13 @@ func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtUR
 	}
 }
 
+// HealthCheck performs a comprehensive system health check.
+// It verifies connectivity to database, Redis, and CCXT service.
+//
+// Parameters:
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	// Create context with timeout for health checks
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -190,7 +223,13 @@ func (h *HealthHandler) checkCCXTService() error {
 // Global start time for uptime calculation
 var startTime = time.Now()
 
-// ReadinessCheck checks if the service is ready to accept traffic
+// ReadinessCheck checks if the service is ready to accept traffic.
+// This is typically used by load balancers or Kubernetes.
+//
+// Parameters:
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
 	span := sentry.StartSpan(r.Context(), "readiness_check")
 	defer span.Finish()
@@ -238,7 +277,13 @@ func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// LivenessCheck checks if the service is alive
+// LivenessCheck checks if the service is alive.
+// This is a lightweight check to confirm the process is running.
+//
+// Parameters:
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) LivenessCheck(w http.ResponseWriter, r *http.Request) {
 	span := sentry.StartSpan(r.Context(), "liveness_check")
 	defer span.Finish()

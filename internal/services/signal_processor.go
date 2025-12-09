@@ -18,7 +18,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
 
-// SignalProcessorConfig holds configuration for the signal processor
+// SignalProcessorConfig holds configuration settings for the signal processor service.
 type SignalProcessorConfig struct {
 	BatchSize            int                  `json:"batch_size"`
 	ProcessingInterval   time.Duration        `json:"processing_interval"`
@@ -34,7 +34,8 @@ type SignalProcessorConfig struct {
 	CircuitBreakerConfig CircuitBreakerConfig `json:"circuit_breaker"`
 }
 
-// SignalProcessor orchestrates the entire signal processing pipeline
+// SignalProcessor orchestrates the entire signal processing pipeline.
+// It retrieves market data, generates signals, aggregates them, assesses quality, and triggers notifications.
 type SignalProcessor struct {
 	config              *SignalProcessorConfig
 	db                  *pgxpool.Pool
@@ -58,7 +59,7 @@ type SignalProcessor struct {
 	rateLimitCache map[string]time.Time
 }
 
-// ProcessingMetrics tracks signal processing performance
+// ProcessingMetrics tracks performance statistics of the signal processing pipeline.
 type ProcessingMetrics struct {
 	TotalSignalsProcessed  int64     `json:"total_signals_processed"`
 	SuccessfulSignals      int64     `json:"successful_signals"`
@@ -71,7 +72,7 @@ type ProcessingMetrics struct {
 	ThroughputPerMinute    float64   `json:"throughput_per_minute"`
 }
 
-// ProcessingResult represents the outcome of signal processing
+// ProcessingResult represents the outcome of processing a single signal or batch.
 type ProcessingResult struct {
 	SignalID         string                 `json:"signal_id"`
 	SignalType       SignalType             `json:"signal_type"`
@@ -84,7 +85,20 @@ type ProcessingResult struct {
 	Metadata         map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// NewSignalProcessor creates a new signal processor instance
+// NewSignalProcessor creates a new instance of SignalProcessor.
+//
+// Parameters:
+//   - db: Connection pool to the database.
+//   - logger: Logger instance.
+//   - signalAggregator: Service for aggregating signals.
+//   - qualityScorer: Service for scoring signal quality.
+//   - technicalAnalysis: Service for technical analysis.
+//   - notificationService: Service for sending notifications.
+//   - collectorService: Service for collecting market data.
+//   - circuitBreaker: Circuit breaker for fault tolerance.
+//
+// Returns:
+//   - A pointer to the initialized SignalProcessor.
 func NewSignalProcessor(
 	db *pgxpool.Pool,
 	logger *slog.Logger,
@@ -124,7 +138,10 @@ func NewSignalProcessor(
 	}
 }
 
-// Start begins the signal processing pipeline
+// Start begins the signal processing pipeline in a background goroutine.
+//
+// Returns:
+//   - An error if the processor is already running.
 func (sp *SignalProcessor) Start() error {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -150,7 +167,10 @@ func (sp *SignalProcessor) Start() error {
 	return nil
 }
 
-// Stop gracefully shuts down the signal processor
+// Stop gracefully shuts down the signal processor, waiting for pending operations to complete.
+//
+// Returns:
+//   - An error if the processor is not running.
 func (sp *SignalProcessor) Stop() error {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -167,21 +187,27 @@ func (sp *SignalProcessor) Stop() error {
 	return nil
 }
 
-// IsRunning returns whether the processor is currently running
+// IsRunning checks if the signal processor is currently active.
+//
+// Returns:
+//   - True if running, false otherwise.
 func (sp *SignalProcessor) IsRunning() bool {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 	return sp.running
 }
 
-// GetMetrics returns current processing metrics
+// GetMetrics returns a snapshot of the current processing metrics.
+//
+// Returns:
+//   - A pointer to the ProcessingMetrics struct.
 func (sp *SignalProcessor) GetMetrics() *ProcessingMetrics {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 	return sp.metrics
 }
 
-// processingLoop is the main processing loop that runs continuously
+// processingLoop is the main loop that triggers signal processing at configured intervals.
 func (sp *SignalProcessor) processingLoop() {
 	defer sp.wg.Done()
 
@@ -202,7 +228,10 @@ func (sp *SignalProcessor) processingLoop() {
 	}
 }
 
-// processSignalBatch processes a batch of signals with comprehensive error handling
+// processSignalBatch executes a single batch processing run with circuit breaker protection.
+//
+// Returns:
+//   - An error if the batch processing fails or the circuit breaker is open.
 func (sp *SignalProcessor) processSignalBatch() error {
 	// Stub logging for telemetry
 	_ = fmt.Sprintf("Signal batch processing: batch_size=%d, max_concurrent=%d, quality_threshold=%f",
@@ -230,7 +259,14 @@ func (sp *SignalProcessor) processSignalBatch() error {
 	return nil
 }
 
-// processSignalBatchWithRetry processes signals with retry logic
+// processSignalBatchWithRetry attempts to process a signal batch with exponential backoff retries.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - startTime: The start time of the batch processing.
+//
+// Returns:
+//   - An error if all retry attempts fail.
 func (sp *SignalProcessor) processSignalBatchWithRetry(ctx context.Context, startTime time.Time) error {
 	var lastErr error
 
@@ -271,7 +307,14 @@ func (sp *SignalProcessor) processSignalBatchWithRetry(ctx context.Context, star
 	return fmt.Errorf("signal batch processing failed after %d attempts: %w", sp.config.RetryAttempts, lastErr)
 }
 
-// executeSignalBatch performs the actual signal processing
+// executeSignalBatch performs the core logic of fetching data, processing signals, and handling results.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - startTime: The start time of the batch execution.
+//
+// Returns:
+//   - An error if any step of the batch execution fails.
 func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime time.Time) error {
 	// Stub logging for telemetry
 	_ = fmt.Sprintf("Signal execution: timeout_duration=%s", sp.config.TimeoutDuration.String())
@@ -333,7 +376,7 @@ func (sp *SignalProcessor) executeSignalBatch(ctx context.Context, startTime tim
 	return nil
 }
 
-// isRetryableError determines if an error should trigger a retry
+// isRetryableError determines if a given error warrants a retry attempt.
 func (sp *SignalProcessor) isRetryableError(err error) bool {
 	if err == nil {
 		return false
@@ -376,7 +419,7 @@ func (sp *SignalProcessor) isRetryableError(err error) bool {
 	return false
 }
 
-// getMarketDataForProcessingWithContext retrieves market data that needs signal processing
+// getMarketDataForProcessingWithContext retrieves market data respecting the provided context.
 func (sp *SignalProcessor) getMarketDataForProcessingWithContext(ctx context.Context) ([]models.MarketData, error) {
 	// Check context first
 	select {
@@ -388,7 +431,7 @@ func (sp *SignalProcessor) getMarketDataForProcessingWithContext(ctx context.Con
 	return sp.getMarketDataForProcessing()
 }
 
-// getMarketDataForProcessing retrieves market data that needs signal processing
+// getMarketDataForProcessing retrieves recent market data for active trading pairs.
 func (sp *SignalProcessor) getMarketDataForProcessing() ([]models.MarketData, error) {
 	// Get active trading pairs
 	tradingPairs, err := sp.getActiveTradingPairs()
@@ -413,7 +456,7 @@ func (sp *SignalProcessor) getMarketDataForProcessing() ([]models.MarketData, er
 	return marketData, nil
 }
 
-// processSignalsConcurrentlyWithContext processes signals using worker pool with context
+// processSignalsConcurrentlyWithContext processes signals concurrently, respecting the provided context.
 func (sp *SignalProcessor) processSignalsConcurrentlyWithContext(ctx context.Context, marketData []models.MarketData) ([]ProcessingResult, error) {
 	// Check context first
 	select {
@@ -426,7 +469,7 @@ func (sp *SignalProcessor) processSignalsConcurrentlyWithContext(ctx context.Con
 	return results, nil
 }
 
-// processSignalsConcurrently processes signals using worker pool
+// processSignalsConcurrently distributes market data processing across a pool of workers.
 func (sp *SignalProcessor) processSignalsConcurrently(marketData []models.MarketData) []ProcessingResult {
 	// Stub logging for telemetry
 	workerCount := sp.config.MaxConcurrentBatch
@@ -480,7 +523,7 @@ func (sp *SignalProcessor) processSignalsConcurrently(marketData []models.Market
 	return allResults
 }
 
-// getRecentMarketDataFromDB retrieves recent market data from the database
+// getRecentMarketDataFromDB retrieves market data for a specific symbol and exchange within a duration.
 func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, duration time.Duration) ([]models.MarketData, error) {
 	since := time.Now().Add(-duration)
 
@@ -526,7 +569,7 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 	return marketData, nil
 }
 
-// getTradingPairSymbol retrieves the symbol for a given trading pair ID
+// getTradingPairSymbol retrieves the symbol string for a given trading pair ID.
 func (sp *SignalProcessor) getTradingPairSymbol(tradingPairID int) (string, error) {
 	var symbol string
 	query := `SELECT symbol FROM trading_pairs WHERE id = $1`
@@ -537,7 +580,7 @@ func (sp *SignalProcessor) getTradingPairSymbol(tradingPairID int) (string, erro
 	return symbol, nil
 }
 
-// getExchangeName retrieves the exchange name for a given exchange ID
+// getExchangeName retrieves the exchange name string for a given exchange ID.
 func (sp *SignalProcessor) getExchangeName(exchangeID int) (string, error) {
 	var name string
 	query := `SELECT name FROM exchanges WHERE id = $1`
@@ -548,7 +591,7 @@ func (sp *SignalProcessor) getExchangeName(exchangeID int) (string, error) {
 	return name, nil
 }
 
-// signalWorker processes individual market data points
+// signalWorker consumes market data jobs and produces processing results.
 func (sp *SignalProcessor) signalWorker(jobs <-chan models.MarketData, results chan<- ProcessingResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -558,7 +601,8 @@ func (sp *SignalProcessor) signalWorker(jobs <-chan models.MarketData, results c
 	}
 }
 
-// processSignal processes a single market data point to generate signals
+// processSignal analyzes a single market data point to generate, aggregate, and score signals.
+// It covers arbitrage, technical analysis, aggregation, and quality assessment.
 func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResult {
 	// Stub logging for telemetry
 	_ = fmt.Sprintf("Signal processing: trading_pair_id=%d, exchange_id=%d, price=%s, volume=%s",
@@ -650,7 +694,7 @@ func (sp *SignalProcessor) processSignal(data models.MarketData) ProcessingResul
 	return result
 }
 
-// generateArbitrageSignals creates arbitrage signals from market data
+// generateArbitrageSignals identifies potential arbitrage opportunities for a symbol.
 func (sp *SignalProcessor) generateArbitrageSignals(data models.MarketData) ([]ArbitrageSignalInput, error) {
 	// Get trading pair symbol
 	symbol, err := sp.getTradingPairSymbol(data.TradingPairID)
@@ -678,7 +722,7 @@ func (sp *SignalProcessor) generateArbitrageSignals(data models.MarketData) ([]A
 	return signals, nil
 }
 
-// getArbitrageOpportunities retrieves arbitrage opportunities for a symbol
+// getArbitrageOpportunities queries the database for active arbitrage opportunities for a symbol.
 func (sp *SignalProcessor) getArbitrageOpportunities(symbol string) ([]models.ArbitrageOpportunity, error) {
 	// Query the database for arbitrage opportunities
 	query := `
@@ -711,7 +755,7 @@ func (sp *SignalProcessor) getArbitrageOpportunities(symbol string) ([]models.Ar
 	return opportunities, nil
 }
 
-// generateTechnicalSignals creates technical analysis signals from market data
+// generateTechnicalSignals prepares technical signal input from market data.
 func (sp *SignalProcessor) generateTechnicalSignals(data models.MarketData) ([]TechnicalSignalInput, error) {
 	// Get trading pair symbol and exchange name
 	symbol, err := sp.getTradingPairSymbol(data.TradingPairID)
@@ -739,7 +783,7 @@ func (sp *SignalProcessor) generateTechnicalSignals(data models.MarketData) ([]T
 	return signals, nil
 }
 
-// aggregateSignals combines arbitrage and technical signals
+// aggregateSignals combines separate arbitrage and technical signals into a unified signal.
 func (sp *SignalProcessor) aggregateSignals(arbitrageSignals []ArbitrageSignalInput, technicalSignals []TechnicalSignalInput, data models.MarketData) (*AggregatedSignal, error) {
 	// Use market data to enhance signal aggregation
 	marketVolatility := sp.calculateMarketVolatility(data)
@@ -797,7 +841,7 @@ func (sp *SignalProcessor) aggregateSignals(arbitrageSignals []ArbitrageSignalIn
 	return nil, fmt.Errorf("no signals to aggregate")
 }
 
-// calculateMarketVolatility calculates market volatility from market data
+// calculateMarketVolatility estimates volatility based on recent market data range or spread.
 func (sp *SignalProcessor) calculateMarketVolatility(data models.MarketData) float64 {
 	// Calculate volatility based on available market data
 	if data.LastPrice.IsZero() {
@@ -823,7 +867,7 @@ func (sp *SignalProcessor) calculateMarketVolatility(data models.MarketData) flo
 	return 0.02 // Default volatility
 }
 
-// calculateMarketTrend determines market trend from market data
+// calculateMarketTrend determines the market trend (bullish/bearish/neutral) from recent price action.
 func (sp *SignalProcessor) calculateMarketTrend(data models.MarketData) string {
 	if data.LastPrice.IsZero() || data.High24h.IsZero() || data.Low24h.IsZero() {
 		return "neutral"
@@ -851,7 +895,7 @@ func (sp *SignalProcessor) calculateMarketTrend(data models.MarketData) string {
 	return "neutral"
 }
 
-// assessSignalQuality evaluates the quality of an aggregated signal using comprehensive scoring
+// assessSignalQuality evaluates the quality of an aggregated signal using the quality scorer service.
 func (sp *SignalProcessor) assessSignalQuality(signal *AggregatedSignal, data models.MarketData) (float64, error) {
 	// Use the comprehensive quality scorer for detailed assessment
 	volumeFloat := sp.extractVolumeFromMetadata(signal.Metadata)
@@ -896,9 +940,7 @@ func (sp *SignalProcessor) assessSignalQuality(signal *AggregatedSignal, data mo
 	return overallScore, nil
 }
 
-// Unused helper functions removed to clean up linting issues
-
-// getActiveTradingPairs retrieves active trading pairs from database
+// getActiveTradingPairs retrieves active trading pairs from the database.
 func (sp *SignalProcessor) getActiveTradingPairs() ([]models.TradingPair, error) {
 	query := `
 		SELECT tp.id, tp.symbol, tp.is_active, tp.created_at, tp.updated_at, e.id as exchange_id, e.name as exchange_name
@@ -934,7 +976,7 @@ func (sp *SignalProcessor) getActiveTradingPairs() ([]models.TradingPair, error)
 	return pairs, nil
 }
 
-// handleProcessingResultsWithContext stores results and sends notifications with context
+// handleProcessingResultsWithContext processes and filters results, respecting the provided context.
 func (sp *SignalProcessor) handleProcessingResultsWithContext(ctx context.Context, results []ProcessingResult) error {
 	// Check context first
 	select {
@@ -946,7 +988,7 @@ func (sp *SignalProcessor) handleProcessingResultsWithContext(ctx context.Contex
 	return sp.handleProcessingResults(results)
 }
 
-// handleProcessingResults stores results and sends notifications with enhanced filtering
+// handleProcessingResults deduplicates, filters, stores, and notifies for the processed results.
 func (sp *SignalProcessor) handleProcessingResults(results []ProcessingResult) error {
 	// Apply deduplication across all results
 	deduplicatedResults := sp.deduplicateResults(results)
@@ -1009,7 +1051,7 @@ func (sp *SignalProcessor) handleProcessingResults(results []ProcessingResult) e
 	return nil
 }
 
-// storeAggregatedSignal stores the signal in the database
+// storeAggregatedSignal persists the aggregated signal to the database.
 func (sp *SignalProcessor) storeAggregatedSignal(result ProcessingResult) error {
 	aggregatedSignal, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
 	if !ok {
@@ -1053,7 +1095,7 @@ func (sp *SignalProcessor) storeAggregatedSignal(result ProcessingResult) error 
 	return err
 }
 
-// sendSignalNotification sends notification for high-quality signals
+// sendSignalNotification triggers a notification for high-quality signals.
 func (sp *SignalProcessor) sendSignalNotification(result ProcessingResult) error {
 	_, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
 	if !ok {
@@ -1065,7 +1107,7 @@ func (sp *SignalProcessor) sendSignalNotification(result ProcessingResult) error
 	return nil // Temporary placeholder
 }
 
-// metricsLoop periodically updates processing metrics
+// metricsLoop periodically updates internal throughput metrics.
 func (sp *SignalProcessor) metricsLoop() {
 	defer sp.wg.Done()
 
@@ -1084,7 +1126,7 @@ func (sp *SignalProcessor) metricsLoop() {
 
 // Helper methods for enhanced signal quality filtering and deduplication
 
-// extractVolumeFromMetadata extracts volume information from signal metadata
+// extractVolumeFromMetadata parses volume information from signal metadata.
 func (sp *SignalProcessor) extractVolumeFromMetadata(metadata map[string]interface{}) float64 {
 	if volume, ok := metadata["volume"]; ok {
 		if v, ok := volume.(float64); ok {
@@ -1099,7 +1141,7 @@ func (sp *SignalProcessor) extractVolumeFromMetadata(metadata map[string]interfa
 	return 0.0
 }
 
-// extractIndicatorsFromMetadata extracts technical indicators from signal metadata
+// extractIndicatorsFromMetadata parses technical indicator values from signal metadata.
 func (sp *SignalProcessor) extractIndicatorsFromMetadata(metadata map[string]interface{}) map[string]float64 {
 	indicators := make(map[string]float64)
 
@@ -1120,7 +1162,7 @@ func (sp *SignalProcessor) extractIndicatorsFromMetadata(metadata map[string]int
 	return indicators
 }
 
-// convertToMarketDataSnapshot converts MarketData to MarketDataSnapshot
+// convertToMarketDataSnapshot converts internal MarketData to the snapshot format used by the quality scorer.
 func (sp *SignalProcessor) convertToMarketDataSnapshot(data *models.MarketData) *MarketDataSnapshot {
 	if data == nil {
 		return nil
@@ -1137,7 +1179,7 @@ func (sp *SignalProcessor) convertToMarketDataSnapshot(data *models.MarketData) 
 	}
 }
 
-// extractSignalComponents extracts signal components from metadata
+// extractSignalComponents parses the list of signal components from metadata.
 func (sp *SignalProcessor) extractSignalComponents(metadata map[string]interface{}) []string {
 	var components []string
 
@@ -1154,7 +1196,7 @@ func (sp *SignalProcessor) extractSignalComponents(metadata map[string]interface
 	return components
 }
 
-// extractSignalCount extracts the number of signals that contributed to aggregation
+// extractSignalCount parses the count of signals contributing to an aggregation from metadata.
 func (sp *SignalProcessor) extractSignalCount(metadata map[string]interface{}) int {
 	if count, ok := metadata["signal_count"]; ok {
 		if c, ok := count.(int); ok {
@@ -1167,7 +1209,7 @@ func (sp *SignalProcessor) extractSignalCount(metadata map[string]interface{}) i
 	return 1
 }
 
-// fallbackQualityAssessment provides a simple quality assessment when the scorer fails
+// fallbackQualityAssessment provides a simplified quality score when the detailed scorer fails.
 func (sp *SignalProcessor) fallbackQualityAssessment(signal *AggregatedSignal) float64 {
 	baseQuality := 0.5
 
@@ -1198,7 +1240,7 @@ func (sp *SignalProcessor) fallbackQualityAssessment(signal *AggregatedSignal) f
 	return baseQuality
 }
 
-// passesAdvancedFiltering applies additional filtering rules beyond basic quality scoring
+// passesAdvancedFiltering applies additional checks on signal metrics to filter low-quality signals.
 func (sp *SignalProcessor) passesAdvancedFiltering(signal *AggregatedSignal, metrics *SignalQualityMetrics) bool {
 	// Check minimum exchange score
 	exchangeScore, _ := metrics.ExchangeScore.Float64()
@@ -1232,7 +1274,7 @@ func (sp *SignalProcessor) passesAdvancedFiltering(signal *AggregatedSignal, met
 	return true
 }
 
-// deduplicateResults removes duplicate signals based on symbol and signal type
+// deduplicateResults removes processing results that are duplicates based on symbol and signal type.
 func (sp *SignalProcessor) deduplicateResults(results []ProcessingResult) []ProcessingResult {
 	seen := make(map[string]bool)
 	var deduplicated []ProcessingResult
@@ -1248,7 +1290,7 @@ func (sp *SignalProcessor) deduplicateResults(results []ProcessingResult) []Proc
 	return deduplicated
 }
 
-// applyBatchQualityFiltering applies quality filtering across a batch of results
+// applyBatchQualityFiltering filters out results that do not meet the quality threshold from a batch.
 func (sp *SignalProcessor) applyBatchQualityFiltering(results []ProcessingResult) []ProcessingResult {
 	var filtered []ProcessingResult
 
@@ -1268,7 +1310,7 @@ func (sp *SignalProcessor) applyBatchQualityFiltering(results []ProcessingResult
 	return filtered
 }
 
-// passesRateLimiting checks if a signal passes rate limiting rules
+// passesRateLimiting checks if a signal should be processed based on rate limiting rules.
 func (sp *SignalProcessor) passesRateLimiting(result ProcessingResult) bool {
 	// Implement actual rate limiting logic
 	sp.mu.Lock()
@@ -1307,12 +1349,15 @@ func (sp *SignalProcessor) passesRateLimiting(result ProcessingResult) bool {
 }
 
 // Helper methods for metrics and processing...
+
+// incrementErrorCount increases the internal error counter thread-safely.
 func (sp *SignalProcessor) incrementErrorCount() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	sp.errorCount++
 }
 
+// updateMetrics updates the processing metrics with results from a batch execution.
 func (sp *SignalProcessor) updateMetrics(results []ProcessingResult, processingTime time.Duration) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -1343,6 +1388,7 @@ func (sp *SignalProcessor) updateMetrics(results []ProcessingResult, processingT
 	}
 }
 
+// updateThroughputMetrics calculates and updates the throughput per minute metric.
 func (sp *SignalProcessor) updateThroughputMetrics() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -1356,6 +1402,7 @@ func (sp *SignalProcessor) updateThroughputMetrics() {
 	}
 }
 
+// countSuccessful counts the number of successful results in a batch.
 func (sp *SignalProcessor) countSuccessful(results []ProcessingResult) int {
 	count := 0
 	for _, result := range results {
@@ -1366,7 +1413,7 @@ func (sp *SignalProcessor) countSuccessful(results []ProcessingResult) int {
 	return count
 }
 
-// GetDefaultSignalProcessorConfig returns default configuration
+// GetDefaultSignalProcessorConfig provides a default configuration for the SignalProcessor.
 func GetDefaultSignalProcessorConfig() *SignalProcessorConfig {
 	return &SignalProcessorConfig{
 		ProcessingInterval:  time.Minute * 5,

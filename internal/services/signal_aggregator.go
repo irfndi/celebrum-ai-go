@@ -40,7 +40,7 @@ const (
 	SignalStrengthStrong SignalStrength = "strong"
 )
 
-// AggregatedSignal represents a consolidated trading signal
+// AggregatedSignal represents a consolidated trading signal derived from multiple sources or indicators.
 type AggregatedSignal struct {
 	ID              string                 `json:"id" gorm:"primaryKey"`
 	SignalType      SignalType             `json:"signal_type"`
@@ -57,7 +57,7 @@ type AggregatedSignal struct {
 	ExpiresAt       time.Time              `json:"expires_at"`
 }
 
-// SignalFingerprint represents a unique identifier for deduplication
+// SignalFingerprint represents a unique identifier for deduplication of signals.
 type SignalFingerprint struct {
 	ID        string    `json:"id" gorm:"primaryKey"`
 	Hash      string    `json:"hash" gorm:"uniqueIndex"`
@@ -65,7 +65,7 @@ type SignalFingerprint struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// SignalComponent represents an individual technical indicator signal
+// SignalComponent represents an individual technical indicator signal that contributes to an aggregated signal.
 type SignalComponent struct {
 	Indicator   string          `json:"indicator"`
 	Description string          `json:"description"`
@@ -73,7 +73,7 @@ type SignalComponent struct {
 	Strength    float64         `json:"strength"`
 }
 
-// TechnicalSignalInput represents input data for technical analysis
+// TechnicalSignalInput represents input data required for technical analysis signal generation.
 type TechnicalSignalInput struct {
 	Symbol     string
 	Exchange   string
@@ -82,21 +82,21 @@ type TechnicalSignalInput struct {
 	Timestamps []time.Time
 }
 
-// ArbitrageSignalInput represents input data for arbitrage analysis
+// ArbitrageSignalInput represents input data required for arbitrage signal generation.
 type ArbitrageSignalInput struct {
 	Opportunities []models.ArbitrageOpportunity
 	MinVolume     decimal.Decimal `json:"min_volume"`
 	BaseAmount    decimal.Decimal `json:"base_amount"` // For profit calculation (e.g., $20,000)
 }
 
-// SignalQualityScorerInterface defines the interface for signal quality assessment
+// SignalQualityScorerInterface defines the contract for assessing the quality of trading signals.
 type SignalQualityScorerInterface interface {
 	AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error)
 	IsSignalQualityAcceptable(metrics *SignalQualityMetrics, thresholds *QualityThresholds) bool
 	GetDefaultQualityThresholds() *QualityThresholds
 }
 
-// SignalAggregatorConfig holds configuration for the signal aggregator
+// SignalAggregatorConfig holds configuration parameters for the signal aggregator service.
 type SignalAggregatorConfig struct {
 	MinConfidence       decimal.Decimal `json:"min_confidence"`
 	MinProfitThreshold  decimal.Decimal `json:"min_profit_threshold"`
@@ -106,7 +106,7 @@ type SignalAggregatorConfig struct {
 	MaxSignalsPerSymbol int             `json:"max_signals_per_symbol"`
 }
 
-// SignalAggregator handles the aggregation and processing of trading signals
+// SignalAggregator handles the aggregation, processing, and deduplication of trading signals.
 type SignalAggregator struct {
 	config        *config.Config
 	db            *database.PostgresDB
@@ -116,7 +116,15 @@ type SignalAggregator struct {
 	cache         map[string]*AggregatedSignal
 }
 
-// NewSignalAggregator creates a new signal aggregator instance
+// NewSignalAggregator creates a new instance of SignalAggregator.
+//
+// Parameters:
+//   - cfg: The application configuration.
+//   - db: The database connection pool.
+//   - logger: The logger instance.
+//
+// Returns:
+//   - A pointer to the initialized SignalAggregator.
 func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *logrus.Logger) *SignalAggregator {
 	return &SignalAggregator{
 		config: cfg,
@@ -135,7 +143,15 @@ func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *lo
 	}
 }
 
-// AggregateArbitrageSignals processes arbitrage opportunities into aggregated signals with price ranges
+// AggregateArbitrageSignals processes raw arbitrage opportunities into aggregated signals.
+// It groups opportunities by symbol, filters by volume and profit threshold, and creates enhanced signals with price ranges.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - input: The input data containing arbitrage opportunities.
+//
+// Returns:
+//   - A slice of aggregated signals, or an error if aggregation fails.
 func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input ArbitrageSignalInput) ([]*AggregatedSignal, error) {
 	// Stub telemetry - log arbitrage signal aggregation
 	sa.logger.WithFields(logrus.Fields{
@@ -243,7 +259,15 @@ func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input
 	return signals, nil
 }
 
-// AggregateTechnicalSignals processes technical analysis data into aggregated signals
+// AggregateTechnicalSignals processes historical price and volume data to generate technical analysis signals.
+// It calculates indicators like SMA, EMA, RSI, MACD and generates buy/sell signals based on crossovers and thresholds.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - input: The input data containing price and volume history.
+//
+// Returns:
+//   - A slice of aggregated signals based on technical indicators, or an error if processing fails.
 func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input TechnicalSignalInput) ([]*AggregatedSignal, error) {
 	// Stub telemetry - log technical signal aggregation
 	sa.logger.WithFields(logrus.Fields{
@@ -358,7 +382,15 @@ func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input
 	return qualitySignals, nil
 }
 
-// DeduplicateSignals removes duplicate signals based on fingerprinting
+// DeduplicateSignals filters out signals that are considered duplicates of recently processed signals.
+// It uses a fingerprinting mechanism based on signal characteristics to identify duplicates within a configured time window.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - signals: The list of signals to deduplicate.
+//
+// Returns:
+//   - A slice of unique signals, or an error if deduplication fails.
 func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*AggregatedSignal) ([]*AggregatedSignal, error) {
 	// Stub telemetry - log deduplication start
 	sa.logger.WithFields(logrus.Fields{
@@ -405,7 +437,7 @@ func (sa *SignalAggregator) DeduplicateSignals(ctx context.Context, signals []*A
 	return uniqueSignals, nil
 }
 
-// createEnhancedArbitrageSignal creates an aggregated signal with price ranges from multiple opportunities
+// createEnhancedArbitrageSignal creates an aggregated signal with price ranges from multiple opportunities.
 func (sa *SignalAggregator) createEnhancedArbitrageSignal(opportunities []models.ArbitrageOpportunity, symbol string, minVolume, baseAmount decimal.Decimal) *AggregatedSignal {
 	if len(opportunities) == 0 {
 		return nil
@@ -556,7 +588,7 @@ func (sa *SignalAggregator) removeDuplicateStrings(slice []string) []string {
 	return result
 }
 
-// calculateTechnicalIndicators computes various technical indicators
+// calculateTechnicalIndicators computes various technical indicators from price history.
 func (sa *SignalAggregator) calculateTechnicalIndicators(prices []float64) map[string][]float64 {
 	indicators := make(map[string][]float64)
 
@@ -592,7 +624,7 @@ func (sa *SignalAggregator) calculateTechnicalIndicators(prices []float64) map[s
 	return indicators
 }
 
-// generateTechnicalSignals creates signals based on technical indicators
+// generateTechnicalSignals interprets technical indicators to generate buy/sell signals.
 func (sa *SignalAggregator) generateTechnicalSignals(symbol, exchange string, indicators map[string][]float64) []*AggregatedSignal {
 	// Collect individual signal components
 	buySignals := make([]SignalComponent, 0)
@@ -696,7 +728,7 @@ func (sa *SignalAggregator) generateTechnicalSignals(symbol, exchange string, in
 	return aggregatedSignals
 }
 
-// createAggregatedTechnicalSignal creates an aggregated signal from multiple signal components
+// createAggregatedTechnicalSignal combines multiple signal components into a single aggregated signal.
 func (sa *SignalAggregator) createAggregatedTechnicalSignal(symbol, exchange, action string, components []SignalComponent) *AggregatedSignal {
 	// Combine descriptions
 	descriptions := make([]string, len(components))
@@ -800,7 +832,7 @@ func (sa *SignalAggregator) determineSignalStrength(confidence decimal.Decimal) 
 	return SignalStrengthWeak
 }
 
-// determineSignalStrengthWithProfit determines signal strength based on both confidence and profit potential
+// determineSignalStrengthWithProfit determines signal strength based on both confidence and profit potential.
 func (sa *SignalAggregator) determineSignalStrengthWithProfit(confidence, profitPotential decimal.Decimal) SignalStrength {
 	// For arbitrage signals, consider both confidence and profit potential
 	// Both factors must be considered together, not individually
@@ -867,7 +899,14 @@ func (sa *SignalAggregator) storeFingerprint(ctx context.Context, fingerprint *S
 	}
 }
 
-// GetActiveAggregatedSignals retrieves active aggregated signals from the database
+// GetActiveAggregatedSignals retrieves active aggregated signals from the database, filtered by confidence.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - limit: The maximum number of signals to retrieve.
+//
+// Returns:
+//   - A slice of active aggregated signals, or an error if retrieval fails.
 func (sa *SignalAggregator) GetActiveAggregatedSignals(ctx context.Context, limit int) ([]*AggregatedSignal, error) {
 	if sa.db == nil {
 		return []*AggregatedSignal{}, nil
@@ -945,7 +984,15 @@ func (sa *SignalAggregator) GetActiveAggregatedSignals(ctx context.Context, limi
 	return signals, nil
 }
 
-// GetAggregatedSignalsBySymbol retrieves aggregated signals for a specific symbol
+// GetAggregatedSignalsBySymbol retrieves active aggregated signals for a specific symbol.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - symbol: The trading symbol to filter by.
+//   - limit: The maximum number of signals to retrieve.
+//
+// Returns:
+//   - A slice of aggregated signals for the specified symbol, or an error if retrieval fails.
 func (sa *SignalAggregator) GetAggregatedSignalsBySymbol(ctx context.Context, symbol string, limit int) ([]*AggregatedSignal, error) {
 	if sa.db == nil {
 		return []*AggregatedSignal{}, nil

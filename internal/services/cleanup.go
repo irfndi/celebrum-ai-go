@@ -12,7 +12,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 )
 
-// CleanupService handles automatic cleanup of old data
+// CleanupService handles automatic cleanup of old data.
 type CleanupService struct {
 	db                   database.DatabasePool
 	ctx                  context.Context
@@ -23,10 +23,21 @@ type CleanupService struct {
 	logger               *slog.Logger
 }
 
-// CleanupConfig defines cleanup configuration
+// CleanupConfig defines cleanup configuration.
 type CleanupConfig = config.CleanupConfig
 
-// NewCleanupService creates a new cleanup service
+// NewCleanupService creates a new cleanup service.
+//
+// Parameters:
+//
+//	db: Database pool.
+//	errorRecoveryManager: Error recovery manager.
+//	resourceManager: Resource manager.
+//	performanceMonitor: Performance monitor.
+//
+// Returns:
+//
+//	*CleanupService: Initialized service.
 func NewCleanupService(db database.DatabasePool, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CleanupService{
@@ -40,7 +51,11 @@ func NewCleanupService(db database.DatabasePool, errorRecoveryManager *ErrorReco
 	}
 }
 
-// Start begins the cleanup service with periodic cleanup
+// Start begins the cleanup service with periodic cleanup.
+//
+// Parameters:
+//
+//	config: Cleanup configuration.
 func (c *CleanupService) Start(config CleanupConfig) {
 	if config.EnableSmartCleanup {
 		c.logger.Info("Starting cleanup service with smart cleanup",
@@ -94,13 +109,21 @@ func (c *CleanupService) Start(config CleanupConfig) {
 	}()
 }
 
-// Stop stops the cleanup service
+// Stop stops the cleanup service.
 func (c *CleanupService) Stop() {
 	c.logger.Info("Stopping cleanup service")
 	c.cancel()
 }
 
-// RunCleanup performs a manual cleanup operation
+// RunCleanup performs a manual cleanup operation.
+//
+// Parameters:
+//
+//	config: Cleanup configuration.
+//
+// Returns:
+//
+//	error: Error if cleanup fails.
 func (c *CleanupService) RunCleanup(config CleanupConfig) error {
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
 	defer cancel()
@@ -336,7 +359,16 @@ func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Contex
 	return nil
 }
 
-// GetDataStats returns statistics about current data storage
+// GetDataStats returns statistics about current data storage.
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	map[string]int64: Statistics map.
+//	error: Error if retrieval fails.
 func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	stats := make(map[string]int64)
 

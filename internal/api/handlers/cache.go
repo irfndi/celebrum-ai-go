@@ -9,29 +9,49 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
-// CacheAnalyticsInterface defines the interface for cache analytics operations
+// CacheAnalyticsInterface defines the interface for cache analytics operations.
 type CacheAnalyticsInterface interface {
+	// GetStats retrieves stats for a specific category.
 	GetStats(category string) services.CacheStats
+	// GetAllStats retrieves stats for all categories.
 	GetAllStats() map[string]services.CacheStats
+	// GetMetrics retrieves comprehensive cache metrics.
 	GetMetrics(ctx context.Context) (*services.CacheMetrics, error)
+	// ResetStats resets all statistics.
 	ResetStats()
+	// RecordHit records a cache hit for a category.
 	RecordHit(category string)
+	// RecordMiss records a cache miss for a category.
 	RecordMiss(category string)
 }
 
-// CacheHandler handles cache monitoring and analytics endpoints
+// CacheHandler handles cache monitoring and analytics endpoints.
 type CacheHandler struct {
 	cacheAnalytics CacheAnalyticsInterface
 }
 
-// NewCacheHandler creates a new cache handler
+// NewCacheHandler creates a new cache handler.
+//
+// Parameters:
+//
+//	cacheAnalytics: The analytics service implementation.
+//
+// Returns:
+//
+//	*CacheHandler: The initialized handler.
 func NewCacheHandler(cacheAnalytics CacheAnalyticsInterface) *CacheHandler {
 	return &CacheHandler{
 		cacheAnalytics: cacheAnalytics,
 	}
 }
 
-// GetCacheStats returns cache statistics for all categories
+// GetCacheStats returns cache statistics for all categories.
+// It retrieves hit/miss counts and other metrics for every cache category.
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Get cache statistics
 // @Description Get comprehensive cache hit/miss statistics for all categories
 // @Tags cache
@@ -46,7 +66,12 @@ func (h *CacheHandler) GetCacheStats(c *gin.Context) {
 	})
 }
 
-// GetCacheStatsByCategory returns cache statistics for a specific category
+// GetCacheStatsByCategory returns cache statistics for a specific category.
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Get cache statistics by category
 // @Description Get cache hit/miss statistics for a specific category
 // @Tags cache
@@ -71,7 +96,12 @@ func (h *CacheHandler) GetCacheStatsByCategory(c *gin.Context) {
 	})
 }
 
-// GetCacheMetrics returns comprehensive cache metrics including Redis info
+// GetCacheMetrics returns comprehensive cache metrics including Redis info.
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Get comprehensive cache metrics
 // @Description Get detailed cache metrics including Redis information and memory usage
 // @Tags cache
@@ -94,7 +124,12 @@ func (h *CacheHandler) GetCacheMetrics(c *gin.Context) {
 	})
 }
 
-// ResetCacheStats resets all cache statistics
+// ResetCacheStats resets all cache statistics.
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Reset cache statistics
 // @Description Reset all cache hit/miss statistics to zero
 // @Tags cache
@@ -109,7 +144,12 @@ func (h *CacheHandler) ResetCacheStats(c *gin.Context) {
 	})
 }
 
-// RecordCacheHit manually records a cache hit (for testing purposes)
+// RecordCacheHit manually records a cache hit (for testing purposes).
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Record cache hit
 // @Description Manually record a cache hit for testing purposes
 // @Tags cache
@@ -146,7 +186,12 @@ func (h *CacheHandler) RecordCacheHit(c *gin.Context) {
 	})
 }
 
-// RecordCacheMiss manually records a cache miss (for testing purposes)
+// RecordCacheMiss manually records a cache miss (for testing purposes).
+//
+// Parameters:
+//
+//	c: The Gin context.
+//
 // @Summary Record cache miss
 // @Description Manually record a cache miss for testing purposes
 // @Tags cache

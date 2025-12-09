@@ -8,15 +8,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TelemetryMiddleware creates a Gin middleware for Sentry tracing
+// TelemetryMiddleware creates a Gin middleware for Sentry tracing.
+// It initializes the Sentry hub for each request.
+//
+// Returns:
+//
+//	gin.HandlerFunc: Gin handler.
 func TelemetryMiddleware() gin.HandlerFunc {
 	return sentrygin.New(sentrygin.Options{
 		Repanic: true,
 	})
 }
 
-// HealthCheckTelemetryMiddleware creates a Gin middleware that disables Sentry tracing for health checks
-// or configures it to be lightweight
+// HealthCheckTelemetryMiddleware creates a Gin middleware for health check endpoints.
+// It tags the transaction as a health check.
+//
+// Returns:
+//
+//	gin.HandlerFunc: Gin handler.
 func HealthCheckTelemetryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// For now, we just pass through as we want to monitor health checks too
@@ -28,7 +37,13 @@ func HealthCheckTelemetryMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RecordError records an error on the current span/hub
+// RecordError records an error on the current span/hub.
+//
+// Parameters:
+//
+//	c: Gin context.
+//	err: Error to record.
+//	description: Description of the error.
 func RecordError(c *gin.Context, err error, description string) {
 	if hub := sentrygin.GetHubFromContext(c); hub != nil {
 		hub.CaptureException(err)
@@ -38,8 +53,13 @@ func RecordError(c *gin.Context, err error, description string) {
 	}
 }
 
-// StartSpan starts a new span for the given context
-// This is a wrapper to maintain compatibility with existing code but using Sentry
+// StartSpan starts a new span or adds a breadcrumb.
+// This is a wrapper to maintain compatibility with existing code but using Sentry.
+//
+// Parameters:
+//
+//	c: Gin context.
+//	name: Span name.
 func StartSpan(c *gin.Context, name string) {
 	if hub := sentrygin.GetHubFromContext(c); hub != nil {
 		// Sentry Gin middleware starts the transaction automatically.
@@ -53,7 +73,13 @@ func StartSpan(c *gin.Context, name string) {
 	}
 }
 
-// AddSpanAttribute adds an attribute to the current span
+// AddSpanAttribute adds an attribute to the current span.
+//
+// Parameters:
+//
+//	c: Gin context.
+//	key: Attribute key.
+//	value: Attribute value.
 func AddSpanAttribute(c *gin.Context, key string, value interface{}) {
 	if hub := sentrygin.GetHubFromContext(c); hub != nil {
 		hub.Scope().SetTag(key, fmt.Sprint(value))

@@ -6,7 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// EnhancedArbitrageOpportunity represents an arbitrage opportunity with price ranges and volume data
+// EnhancedArbitrageOpportunity represents a more detailed arbitrage opportunity.
+// It includes price ranges, volume-weighted prices, and quality scores in addition to basic details.
 type EnhancedArbitrageOpportunity struct {
 	ID                  string               `json:"id" db:"id"`
 	Symbol              string               `json:"symbol"`
@@ -24,7 +25,8 @@ type EnhancedArbitrageOpportunity struct {
 	VolumeWeightedPrice VolumeWeightedPrices `json:"volume_weighted_price"`
 }
 
-// ExchangePrice represents price and volume data from a specific exchange
+// ExchangePrice represents price and volume data from a specific exchange.
+// It is used to provide detailed pricing information within an enhanced opportunity.
 type ExchangePrice struct {
 	ExchangeID   int             `json:"exchange_id"`
 	ExchangeName string          `json:"exchange_name"`
@@ -34,13 +36,13 @@ type ExchangePrice struct {
 	Reliability  decimal.Decimal `json:"reliability"` // 0-1 score
 }
 
-// VolumeWeightedPrices represents volume-weighted average prices
+// VolumeWeightedPrices represents volume-weighted average prices (VWAP) for buy and sell sides.
 type VolumeWeightedPrices struct {
 	BuyVWAP  decimal.Decimal `json:"buy_vwap"`
 	SellVWAP decimal.Decimal `json:"sell_vwap"`
 }
 
-// ArbitrageAggregationInput represents input for enhanced arbitrage aggregation
+// ArbitrageAggregationInput represents the input data required to aggregate multiple arbitrage opportunities.
 type ArbitrageAggregationInput struct {
 	Opportunities []ArbitrageOpportunity `json:"opportunities"`
 	MinVolume     decimal.Decimal        `json:"min_volume"`
@@ -48,7 +50,7 @@ type ArbitrageAggregationInput struct {
 	BaseAmount    decimal.Decimal        `json:"base_amount"` // For profit calculation
 }
 
-// ArbitrageQualityMetrics represents quality assessment metrics for arbitrage opportunities
+// ArbitrageQualityMetrics represents the scores derived from assessing the quality of an arbitrage opportunity.
 type ArbitrageQualityMetrics struct {
 	VolumeScore     decimal.Decimal `json:"volume_score"`
 	SpreadScore     decimal.Decimal `json:"spread_score"`

@@ -16,18 +16,42 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
+// HealthResponse represents the response structure for health check endpoints.
+// It provides the overall system status and the status of individual components.
 type HealthResponse struct {
-	Status    string    `json:"status"`
+	// Status indicates the overall health of the service (e.g., "ok", "error").
+	Status string `json:"status"`
+	// Timestamp is the server time when the response was generated.
 	Timestamp time.Time `json:"timestamp"`
-	Version   string    `json:"version"`
-	Services  Services  `json:"services"`
+	// Version is the current version of the application.
+	Version string `json:"version"`
+	// Services contains the health status of dependent services like Database and Redis.
+	Services Services `json:"services"`
 }
 
+// Services contains the health status of individual dependencies.
 type Services struct {
+	// Database indicates the status of the primary database connection (e.g., "up", "down").
 	Database string `json:"database"`
-	Redis    string `json:"redis"`
+	// Redis indicates the status of the Redis cache connection (e.g., "up", "down").
+	Redis string `json:"redis"`
 }
 
+// SetupRoutes configures all the HTTP routes for the application.
+// It sets up middleware, health checks, and API endpoints (v1), and injects necessary dependencies into handlers.
+//
+// Parameters:
+//
+//	router: The Gin engine instance to register routes on.
+//	db: The PostgreSQL database connection wrapper.
+//	redis: The Redis client wrapper.
+//	ccxtService: Service for interacting with crypto exchanges via CCXT.
+//	collectorService: Service for collecting market data.
+//	cleanupService: Service for data cleanup tasks.
+//	cacheAnalyticsService: Service for cache metrics and analytics.
+//	signalAggregator: Service for aggregating trading signals.
+//	telegramConfig: Configuration for Telegram notifications.
+//	authMiddleware: Middleware for handling authentication.
 func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()

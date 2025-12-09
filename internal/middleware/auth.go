@@ -14,26 +14,41 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTClaims represents the JWT token claims
+// JWTClaims represents the JWT token claims.
 type JWTClaims struct {
+	// UserID is the user identifier.
 	UserID string `json:"user_id"`
-	Email  string `json:"email"`
+	// Email is the user email.
+	Email string `json:"email"`
 	jwt.RegisteredClaims
 }
 
-// AuthMiddleware provides JWT authentication middleware
+// AuthMiddleware provides JWT authentication middleware.
 type AuthMiddleware struct {
 	secretKey []byte
 }
 
-// NewAuthMiddleware creates a new authentication middleware
+// NewAuthMiddleware creates a new authentication middleware.
+//
+// Parameters:
+//
+//	secretKey: Secret key for signing tokens.
+//
+// Returns:
+//
+//	*AuthMiddleware: Initialized middleware.
 func NewAuthMiddleware(secretKey string) *AuthMiddleware {
 	return &AuthMiddleware{
 		secretKey: []byte(secretKey),
 	}
 }
 
-// RequireAuth middleware validates JWT tokens
+// RequireAuth middleware validates JWT tokens.
+// It requires a valid Bearer token in the Authorization header.
+//
+// Returns:
+//
+//	gin.HandlerFunc: Gin handler.
 func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
@@ -95,7 +110,12 @@ func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth middleware validates JWT tokens but doesn't require them
+// OptionalAuth middleware validates JWT tokens but doesn't require them.
+// If a valid token is present, user context is set.
+//
+// Returns:
+//
+//	gin.HandlerFunc: Gin handler.
 func (am *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -133,7 +153,18 @@ func (am *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	}
 }
 
-// GenerateToken creates a new JWT token for a user
+// GenerateToken creates a new JWT token for a user.
+//
+// Parameters:
+//
+//	userID: User identifier.
+//	email: User email.
+//	duration: Token validity duration.
+//
+// Returns:
+//
+//	string: Signed token string.
+//	error: Error if generation fails.
 func (am *AuthMiddleware) GenerateToken(userID, email string, duration time.Duration) (string, error) {
 	claims := &JWTClaims{
 		UserID: userID,
@@ -149,7 +180,16 @@ func (am *AuthMiddleware) GenerateToken(userID, email string, duration time.Dura
 	return token.SignedString(am.secretKey)
 }
 
-// ValidateToken validates a JWT token and returns claims
+// ValidateToken validates a JWT token and returns claims.
+//
+// Parameters:
+//
+//	tokenString: Token string to validate.
+//
+// Returns:
+//
+//	*JWTClaims: Token claims.
+//	error: Error if validation fails.
 func (am *AuthMiddleware) ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

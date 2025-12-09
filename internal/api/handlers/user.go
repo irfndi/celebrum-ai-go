@@ -19,41 +19,71 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// UserHandler manages user-related API endpoints.
 type UserHandler struct {
 	db      *database.PostgresDB
 	redis   *redis.Client
 	querier DBQuerier // For testing with mocks
 }
 
+// RegisterRequest represents the user registration request body.
 type RegisterRequest struct {
-	Email          string  `json:"email" binding:"required,email"`
-	Password       string  `json:"password" binding:"required,min=8"`
+	// Email is the user's email address.
+	Email string `json:"email" binding:"required,email"`
+	// Password is the user's password.
+	Password string `json:"password" binding:"required,min=8"`
+	// TelegramChatID is the optional Telegram chat ID.
 	TelegramChatID *string `json:"telegram_chat_id,omitempty"`
 }
 
+// LoginRequest represents the user login request body.
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	// Email is the user's email address.
+	Email string `json:"email" binding:"required,email"`
+	// Password is the user's password.
 	Password string `json:"password" binding:"required"`
 }
 
+// UserResponse represents the user data in API responses.
 type UserResponse struct {
-	ID               string    `json:"id"`
-	Email            string    `json:"email"`
-	TelegramChatID   *string   `json:"telegram_chat_id,omitempty"`
-	SubscriptionTier string    `json:"subscription_tier"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	// ID is the unique user identifier.
+	ID string `json:"id"`
+	// Email is the user's email address.
+	Email string `json:"email"`
+	// TelegramChatID is the linked Telegram chat ID.
+	TelegramChatID *string `json:"telegram_chat_id,omitempty"`
+	// SubscriptionTier is the user's subscription level (e.g., "free", "premium").
+	SubscriptionTier string `json:"subscription_tier"`
+	// CreatedAt is the account creation time.
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is the last update time.
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// LoginResponse represents the response for a successful login.
 type LoginResponse struct {
-	User  UserResponse `json:"user"`
-	Token string       `json:"token"`
+	// User contains the user details.
+	User UserResponse `json:"user"`
+	// Token is the authentication token.
+	Token string `json:"token"`
 }
 
+// UpdateProfileRequest represents the user profile update request body.
 type UpdateProfileRequest struct {
+	// TelegramChatID is the new Telegram chat ID.
 	TelegramChatID *string `json:"telegram_chat_id,omitempty"`
 }
 
+// NewUserHandler creates a new instance of UserHandler.
+//
+// Parameters:
+//
+//	db: Database connection.
+//	redisClient: Redis client.
+//
+// Returns:
+//
+//	*UserHandler: Initialized handler.
 func NewUserHandler(db *database.PostgresDB, redisClient *redis.Client) *UserHandler {
 	return &UserHandler{
 		db:    db,
@@ -61,14 +91,24 @@ func NewUserHandler(db *database.PostgresDB, redisClient *redis.Client) *UserHan
 	}
 }
 
-// DBQuerier interface for database operations
+// DBQuerier interface for database operations.
+// This allows mocking database calls for testing.
 type DBQuerier interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
-// NewUserHandlerWithQuerier creates a UserHandler with a custom querier for testing
+// NewUserHandlerWithQuerier creates a UserHandler with a custom querier for testing.
+//
+// Parameters:
+//
+//	querier: The database querier interface.
+//	redisClient: Redis client.
+//
+// Returns:
+//
+//	*UserHandler: Initialized handler.
 func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *UserHandler {
 	// For testing, we create a special database wrapper that uses the querier directly
 	db := &database.PostgresDB{}
@@ -88,7 +128,12 @@ func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *Us
 	}
 }
 
-// RegisterUser handles user registration
+// RegisterUser handles user registration.
+// It creates a new user account if the email is not already taken.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *UserHandler) RegisterUser(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -161,7 +206,12 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"user": userResponse})
 }
 
-// LoginUser handles user authentication
+// LoginUser handles user authentication.
+// It verifies credentials and returns a JWT token.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *UserHandler) LoginUser(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -203,7 +253,12 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetUserProfile returns the current user's profile
+// GetUserProfile returns the current user's profile.
+// It retrieves user details based on the authenticated user ID.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *UserHandler) GetUserProfile(c *gin.Context) {
 	// In a real implementation, you would extract user ID from JWT token
 	// For now, we'll use a query parameter or header
@@ -235,7 +290,12 @@ func (h *UserHandler) GetUserProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": userResponse})
 }
 
-// UpdateUserProfile updates user profile information
+// UpdateUserProfile updates user profile information.
+// It allows updating optional fields like Telegram Chat ID.
+//
+// Parameters:
+//
+//	c: Gin context.
 func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
 	userID := c.GetHeader("X-User-ID")
 	if userID == "" {
@@ -499,7 +559,17 @@ func (h *UserHandler) generateSimpleToken(userID string) string {
 	return fmt.Sprintf("token_%s_%d", userID, time.Now().Unix())
 }
 
-// GetUserByTelegramChatID retrieves user by Telegram chat ID (for Telegram bot) with Redis caching
+// GetUserByTelegramChatID retrieves user by Telegram chat ID (for Telegram bot) with Redis caching.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	chatID: Telegram chat ID.
+//
+// Returns:
+//
+//	*models.User: User if found.
+//	error: Error if lookup fails.
 func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string) (*models.User, error) {
 	// Use querier if available (for testing), otherwise use database
 	if h.querier != nil {
@@ -577,7 +647,18 @@ func (h *UserHandler) GetUserByTelegramChatID(ctx context.Context, chatID string
 	return &user, nil
 }
 
-// CreateTelegramUser creates a new user from Telegram registration
+// CreateTelegramUser creates a new user from Telegram registration.
+//
+// Parameters:
+//
+//	ctx: Context.
+//	chatID: Telegram chat ID.
+//	username: Telegram username.
+//
+// Returns:
+//
+//	*models.User: Created user.
+//	error: Error if creation fails.
 func (h *UserHandler) CreateTelegramUser(ctx context.Context, chatID string, username string) (*models.User, error) {
 	// Validate chat ID
 	if chatID == "" {

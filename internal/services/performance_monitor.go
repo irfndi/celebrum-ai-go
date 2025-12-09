@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// PerformanceMonitor tracks system and application performance metrics
+// PerformanceMonitor tracks system and application performance metrics.
 type PerformanceMonitor struct {
 	logger *logrus.Logger
 	redis  *redis.Client
@@ -30,7 +30,7 @@ type PerformanceMonitor struct {
 	stopChan        chan struct{}
 }
 
-// SystemMetrics holds system-level performance data
+// SystemMetrics holds system-level performance data.
 type SystemMetrics struct {
 	CPUUsage    float64   `json:"cpu_usage"`
 	MemoryUsage uint64    `json:"memory_usage"`
@@ -45,7 +45,7 @@ type SystemMetrics struct {
 	NumGC       uint32    `json:"num_gc"`
 }
 
-// ApplicationMetrics holds application-specific performance data
+// ApplicationMetrics holds application-specific performance data.
 type ApplicationMetrics struct {
 	// Collector metrics
 	CollectorMetrics CollectorPerformanceMetrics `json:"collector"`
@@ -62,7 +62,7 @@ type ApplicationMetrics struct {
 	LastUpdated time.Time `json:"last_updated"`
 }
 
-// CollectorPerformanceMetrics tracks collector service performance
+// CollectorPerformanceMetrics tracks collector service performance.
 type CollectorPerformanceMetrics struct {
 	ActiveWorkers         int           `json:"active_workers"`
 	TotalCollections      int64         `json:"total_collections"`
@@ -77,7 +77,7 @@ type CollectorPerformanceMetrics struct {
 	BackfillOperations    int64         `json:"backfill_operations"`
 }
 
-// RedisPerformanceMetrics tracks Redis performance
+// RedisPerformanceMetrics tracks Redis performance.
 type RedisPerformanceMetrics struct {
 	Connections       int           `json:"connections"`
 	Hits              int64         `json:"hits"`
@@ -89,7 +89,7 @@ type RedisPerformanceMetrics struct {
 	ErrorRate         float64       `json:"error_rate"`
 }
 
-// APIPerformanceMetrics tracks API performance
+// APIPerformanceMetrics tracks API performance.
 type APIPerformanceMetrics struct {
 	TotalRequests      int64         `json:"total_requests"`
 	SuccessfulRequests int64         `json:"successful_requests"`
@@ -99,7 +99,7 @@ type APIPerformanceMetrics struct {
 	RateLimitHits      int64         `json:"rate_limit_hits"`
 }
 
-// TelegramPerformanceMetrics tracks Telegram bot performance
+// TelegramPerformanceMetrics tracks Telegram bot performance.
 type TelegramPerformanceMetrics struct {
 	MessagesProcessed int64         `json:"messages_processed"`
 	NotificationsSent int64         `json:"notifications_sent"`
@@ -109,7 +109,17 @@ type TelegramPerformanceMetrics struct {
 	RateLimitedUsers  int64         `json:"rate_limited_users"`
 }
 
-// NewPerformanceMonitor creates a new performance monitor
+// NewPerformanceMonitor creates a new performance monitor.
+//
+// Parameters:
+//
+//	logger: Logger.
+//	redis: Redis client.
+//	ctx: Context.
+//
+// Returns:
+//
+//	*PerformanceMonitor: Initialized monitor.
 func NewPerformanceMonitor(logger *logrus.Logger, redis *redis.Client, ctx context.Context) *PerformanceMonitor {
 	return &PerformanceMonitor{
 		logger:          logger,
@@ -120,7 +130,7 @@ func NewPerformanceMonitor(logger *logrus.Logger, redis *redis.Client, ctx conte
 	}
 }
 
-// Start begins performance monitoring
+// Start begins performance monitoring.
 func (pm *PerformanceMonitor) Start() {
 	pm.logger.Info("Starting performance monitor")
 
@@ -141,7 +151,7 @@ func (pm *PerformanceMonitor) Start() {
 	}
 }
 
-// Stop stops performance monitoring
+// Stop stops performance monitoring.
 func (pm *PerformanceMonitor) Stop() {
 	select {
 	case <-pm.stopChan:
@@ -253,42 +263,68 @@ func (pm *PerformanceMonitor) logPerformanceSummary() {
 	}).Debug("Performance metrics collected")
 }
 
-// GetSystemMetrics returns current system metrics
+// GetSystemMetrics returns current system metrics.
+//
+// Returns:
+//
+//	SystemMetrics: System metrics.
 func (pm *PerformanceMonitor) GetSystemMetrics() SystemMetrics {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.systemMetrics
 }
 
-// GetApplicationMetrics returns current application metrics
+// GetApplicationMetrics returns current application metrics.
+//
+// Returns:
+//
+//	ApplicationMetrics: App metrics.
 func (pm *PerformanceMonitor) GetApplicationMetrics() ApplicationMetrics {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.appMetrics
 }
 
-// UpdateCollectorMetrics updates collector performance metrics
+// UpdateCollectorMetrics updates collector performance metrics.
+//
+// Parameters:
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateCollectorMetrics(metrics CollectorPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.appMetrics.CollectorMetrics = metrics
 }
 
-// UpdateAPIMetrics updates API performance metrics
+// UpdateAPIMetrics updates API performance metrics.
+//
+// Parameters:
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateAPIMetrics(metrics APIPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.appMetrics.APIMetrics = metrics
 }
 
-// UpdateTelegramMetrics updates Telegram performance metrics
+// UpdateTelegramMetrics updates Telegram performance metrics.
+//
+// Parameters:
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateTelegramMetrics(metrics TelegramPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.appMetrics.TelegramMetrics = metrics
 }
 
-// RecordWorkerHealth records worker health status for monitoring
+// RecordWorkerHealth records worker health status for monitoring.
+//
+// Parameters:
+//
+//	exchange: Exchange name.
+//	isRunning: Running status.
+//	errorCount: Error count.
 func (pm *PerformanceMonitor) RecordWorkerHealth(exchange string, isRunning bool, errorCount int) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -328,7 +364,11 @@ func (pm *PerformanceMonitor) RecordWorkerHealth(exchange string, isRunning bool
 	}).Debug("Worker health recorded")
 }
 
-// GetPerformanceReport generates a comprehensive performance report
+// GetPerformanceReport generates a comprehensive performance report.
+//
+// Returns:
+//
+//	map[string]interface{}: Report.
 func (pm *PerformanceMonitor) GetPerformanceReport() map[string]interface{} {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()

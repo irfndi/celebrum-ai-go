@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// TimeoutConfig defines timeout settings for different operation types
+// TimeoutConfig defines timeout durations for various types of operations.
 type TimeoutConfig struct {
 	APICall        time.Duration
 	DatabaseQuery  time.Duration
@@ -20,7 +20,8 @@ type TimeoutConfig struct {
 	MarketData     time.Duration
 }
 
-// TimeoutManager manages timeouts for concurrent operations
+// TimeoutManager handles the creation and management of contexts with timeouts for operations,
+// allowing for centralized configuration and monitoring of operation durations.
 type TimeoutManager struct {
 	config         *TimeoutConfig
 	logger         *logrus.Logger
@@ -29,7 +30,7 @@ type TimeoutManager struct {
 	defaultTimeout time.Duration
 }
 
-// OperationContext wraps a context with timeout and cancellation
+// OperationContext represents a specific operation's context, including its ID, start time, and configured timeout.
 type OperationContext struct {
 	Ctx         context.Context
 	Cancel      context.CancelFunc
@@ -38,7 +39,14 @@ type OperationContext struct {
 	Timeout     time.Duration
 }
 
-// NewTimeoutManager creates a new timeout manager
+// NewTimeoutManager creates a new instance of TimeoutManager.
+//
+// Parameters:
+//   - config: The configuration defining timeout durations. If nil, defaults are used.
+//   - logger: The logger instance.
+//
+// Returns:
+//   - A pointer to the initialized TimeoutManager.
 func NewTimeoutManager(config *TimeoutConfig, logger *logrus.Logger) *TimeoutManager {
 	if config == nil {
 		config = DefaultTimeoutConfig()
@@ -52,7 +60,7 @@ func NewTimeoutManager(config *TimeoutConfig, logger *logrus.Logger) *TimeoutMan
 	}
 }
 
-// DefaultTimeoutConfig returns default timeout configuration
+// DefaultTimeoutConfig returns a TimeoutConfig with sensible default values.
 func DefaultTimeoutConfig() *TimeoutConfig {
 	return &TimeoutConfig{
 		APICall:        10 * time.Second,
@@ -66,7 +74,15 @@ func DefaultTimeoutConfig() *TimeoutConfig {
 	}
 }
 
-// CreateOperationContext creates a new operation context with timeout
+// CreateOperationContext creates a new context with a timeout suitable for the given operation type.
+// It tracks the operation to allow for cancellation and monitoring.
+//
+// Parameters:
+//   - operationType: The type of operation (e.g., "api_call", "database_query").
+//   - operationID: A unique identifier for the operation instance.
+//
+// Returns:
+//   - A pointer to the created OperationContext.
 func (tm *TimeoutManager) CreateOperationContext(operationType string, operationID string) *OperationContext {
 	timeout := tm.getTimeoutForOperation(operationType)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -84,7 +100,16 @@ func (tm *TimeoutManager) CreateOperationContext(operationType string, operation
 	}
 }
 
-// CreateOperationContextWithParent creates a new operation context with a parent context
+// CreateOperationContextWithParent creates a new context derived from a parent context, with a timeout
+// suitable for the given operation type.
+//
+// Parameters:
+//   - parent: The parent context.
+//   - operationType: The type of operation.
+//   - operationID: A unique identifier for the operation.
+//
+// Returns:
+//   - A pointer to the created OperationContext.
 func (tm *TimeoutManager) CreateOperationContextWithParent(parent context.Context, operationType string, operationID string) *OperationContext {
 	timeout := tm.getTimeoutForOperation(operationType)
 	ctx, cancel := context.WithTimeout(parent, timeout)
@@ -102,7 +127,14 @@ func (tm *TimeoutManager) CreateOperationContextWithParent(parent context.Contex
 	}
 }
 
-// CreateOperationContextWithCustomTimeout creates a context with custom timeout
+// CreateOperationContextWithCustomTimeout creates a new context with a specific timeout duration.
+//
+// Parameters:
+//   - operationID: A unique identifier for the operation.
+//   - timeout: The specific duration for the timeout.
+//
+// Returns:
+//   - A pointer to the created OperationContext.
 func (tm *TimeoutManager) CreateOperationContextWithCustomTimeout(operationID string, timeout time.Duration) *OperationContext {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
@@ -119,7 +151,7 @@ func (tm *TimeoutManager) CreateOperationContextWithCustomTimeout(operationID st
 	}
 }
 
-// getTimeoutForOperation returns the appropriate timeout for an operation type
+// getTimeoutForOperation resolves the timeout duration based on the operation type string.
 func (tm *TimeoutManager) getTimeoutForOperation(operationType string) time.Duration {
 	switch operationType {
 	case "api_call":
@@ -143,7 +175,10 @@ func (tm *TimeoutManager) getTimeoutForOperation(operationType string) time.Dura
 	}
 }
 
-// CompleteOperation marks an operation as complete and cleans up resources
+// CompleteOperation signals that an operation has finished successfully and cleans up its tracking.
+//
+// Parameters:
+//   - operationID: The unique identifier of the completed operation.
 func (tm *TimeoutManager) CompleteOperation(operationID string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -154,7 +189,10 @@ func (tm *TimeoutManager) CompleteOperation(operationID string) {
 	}
 }
 
-// CancelOperation cancels a specific operation
+// CancelOperation manually cancels an active operation and cleans up its tracking.
+//
+// Parameters:
+//   - operationID: The unique identifier of the operation to cancel.
 func (tm *TimeoutManager) CancelOperation(operationID string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -166,7 +204,7 @@ func (tm *TimeoutManager) CancelOperation(operationID string) {
 	}
 }
 
-// CancelAllOperations cancels all active operations
+// CancelAllOperations cancels all currently tracked operations. This is useful during shutdown.
 func (tm *TimeoutManager) CancelAllOperations() {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -179,14 +217,20 @@ func (tm *TimeoutManager) CancelAllOperations() {
 	tm.activeContexts = make(map[string]context.CancelFunc)
 }
 
-// GetActiveOperationCount returns the number of active operations
+// GetActiveOperationCount returns the current number of operations being tracked.
+//
+// Returns:
+//   - The count of active operations.
 func (tm *TimeoutManager) GetActiveOperationCount() int {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 	return len(tm.activeContexts)
 }
 
-// GetActiveOperations returns a list of active operation IDs
+// GetActiveOperations returns a list of IDs for all currently active operations.
+//
+// Returns:
+//   - A slice of operation IDs.
 func (tm *TimeoutManager) GetActiveOperations() []string {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
@@ -199,7 +243,17 @@ func (tm *TimeoutManager) GetActiveOperations() []string {
 	return operations
 }
 
-// ExecuteWithTimeout executes a function with timeout handling
+// ExecuteWithTimeout wraps a function execution with timeout handling.
+// It runs the operation in a goroutine and waits for either completion or timeout.
+//
+// Parameters:
+//   - operationType: The type of operation for timeout lookup.
+//   - operationID: A unique identifier for this execution.
+//   - operation: The function to execute, accepting a context.
+//
+// Returns:
+//   - The result of the operation, or nil if timed out.
+//   - An error if the operation fails or times out.
 func (tm *TimeoutManager) ExecuteWithTimeout(
 	operationType string,
 	operationID string,
@@ -247,7 +301,18 @@ func (tm *TimeoutManager) ExecuteWithTimeout(
 	}
 }
 
-// ExecuteWithTimeoutAndFallback executes a function with timeout and fallback
+// ExecuteWithTimeoutAndFallback executes an operation with a timeout and, if it fails or times out,
+// executes a fallback function.
+//
+// Parameters:
+//   - operationType: The type of operation.
+//   - operationID: A unique identifier.
+//   - operation: The primary function to execute.
+//   - fallback: The function to execute if the primary operation fails.
+//
+// Returns:
+//   - The result of the primary or fallback operation.
+//   - An error if both fail.
 func (tm *TimeoutManager) ExecuteWithTimeoutAndFallback(
 	operationType string,
 	operationID string,
@@ -268,7 +333,8 @@ func (tm *TimeoutManager) ExecuteWithTimeoutAndFallback(
 	return result, err
 }
 
-// MonitorOperationHealth monitors the health of active operations
+// MonitorOperationHealth periodically logs the state of active operations.
+// It can warn if the number of active operations exceeds a threshold.
 func (tm *TimeoutManager) MonitorOperationHealth() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -284,7 +350,10 @@ func (tm *TimeoutManager) MonitorOperationHealth() {
 	}
 }
 
-// UpdateTimeoutConfig updates the timeout configuration
+// UpdateTimeoutConfig safely updates the timeout configuration at runtime.
+//
+// Parameters:
+//   - config: The new timeout configuration.
 func (tm *TimeoutManager) UpdateTimeoutConfig(config *TimeoutConfig) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -292,14 +361,23 @@ func (tm *TimeoutManager) UpdateTimeoutConfig(config *TimeoutConfig) {
 	tm.logger.Info("Timeout configuration updated")
 }
 
-// GetTimeoutConfig returns the current timeout configuration
+// GetTimeoutConfig retrieves the current timeout configuration.
+//
+// Returns:
+//   - A pointer to the current TimeoutConfig.
 func (tm *TimeoutManager) GetTimeoutConfig() *TimeoutConfig {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 	return tm.config
 }
 
-// IsOperationActive checks if an operation is currently active
+// IsOperationActive checks if a specific operation is currently being tracked.
+//
+// Parameters:
+//   - operationID: The ID of the operation to check.
+//
+// Returns:
+//   - True if the operation is active, false otherwise.
 func (tm *TimeoutManager) IsOperationActive(operationID string) bool {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
@@ -307,7 +385,10 @@ func (tm *TimeoutManager) IsOperationActive(operationID string) bool {
 	return exists
 }
 
-// GetOperationStats returns statistics about operations
+// GetOperationStats returns a map of statistics regarding the timeout manager's state.
+//
+// Returns:
+//   - A map containing active operation count, current config, and default timeout.
 func (tm *TimeoutManager) GetOperationStats() map[string]interface{} {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
@@ -319,7 +400,7 @@ func (tm *TimeoutManager) GetOperationStats() map[string]interface{} {
 	}
 }
 
-// Shutdown gracefully shuts down the timeout manager
+// Shutdown stops the timeout manager, cancelling all active operations.
 func (tm *TimeoutManager) Shutdown() {
 	tm.logger.Info("Shutting down timeout manager")
 	tm.CancelAllOperations()
