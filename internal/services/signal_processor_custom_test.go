@@ -1,12 +1,10 @@
 package services
 
 import (
-	"context"
-	"testing"
-	"time"
-
 	"log/slog"
 	"os"
+	"testing"
+	"time"
 
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/shopspring/decimal"
@@ -15,58 +13,6 @@ import (
 
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
-
-// MockSignalAggregator for testing
-type MockSignalAggregator struct {
-	mock.Mock
-}
-
-func (m *MockSignalAggregator) AggregateArbitrageSignals(ctx context.Context, input ArbitrageSignalInput) ([]*AggregatedSignal, error) {
-	args := m.Called(ctx, input)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*AggregatedSignal), args.Error(1)
-}
-
-func (m *MockSignalAggregator) AggregateTechnicalSignals(ctx context.Context, input TechnicalSignalInput) ([]*AggregatedSignal, error) {
-	args := m.Called(ctx, input)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*AggregatedSignal), args.Error(1)
-}
-
-func (m *MockSignalAggregator) DeduplicateSignals(ctx context.Context, signals []*AggregatedSignal) ([]*AggregatedSignal, error) {
-	args := m.Called(ctx, signals)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*AggregatedSignal), args.Error(1)
-}
-
-// MockQualityScorer for testing (redefined here to avoid dependency on test file)
-type MockQualityScorer struct {
-	mock.Mock
-}
-
-func (m *MockQualityScorer) AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error) {
-	args := m.Called(ctx, input)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*SignalQualityMetrics), args.Error(1)
-}
-
-func (m *MockQualityScorer) IsSignalQualityAcceptable(metrics *SignalQualityMetrics, thresholds *QualityThresholds) bool {
-	args := m.Called(metrics, thresholds)
-	return args.Bool(0)
-}
-
-func (m *MockQualityScorer) GetDefaultQualityThresholds() *QualityThresholds {
-	args := m.Called()
-	return args.Get(0).(*QualityThresholds)
-}
 
 func TestSignalProcessor_ProcessSignal(t *testing.T) {
 	// Setup mocks
@@ -77,7 +23,7 @@ func TestSignalProcessor_ProcessSignal(t *testing.T) {
 	defer mockPool.Close()
 
 	mockAggregator := &MockSignalAggregator{}
-	mockScorer := &MockQualityScorer{}
+	mockScorer := &MockSignalQualityScorer{}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	// Create SignalProcessor
