@@ -35,25 +35,25 @@ type HealthHandler struct {
 // HealthResponse represents the health status response.
 type HealthResponse struct {
 	// Status is the overall system status ("healthy", "degraded", "unhealthy").
-	Status       string                         `json:"status"`
+	Status string `json:"status"`
 	// Timestamp is the check time.
-	Timestamp    time.Time                      `json:"timestamp"`
+	Timestamp time.Time `json:"timestamp"`
 	// Services contains status of individual services.
-	Services     map[string]string              `json:"services"`
+	Services map[string]string `json:"services"`
 	// Version is the application version.
-	Version      string                         `json:"version"`
+	Version string `json:"version"`
 	// Uptime is the service uptime.
-	Uptime       string                         `json:"uptime"`
+	Uptime string `json:"uptime"`
 	// CacheMetrics contains detailed cache metrics if available.
-	CacheMetrics *services.CacheMetrics         `json:"cache_metrics,omitempty"`
+	CacheMetrics *services.CacheMetrics `json:"cache_metrics,omitempty"`
 	// CacheStats contains cache statistics if available.
-	CacheStats   map[string]services.CacheStats `json:"cache_stats,omitempty"`
+	CacheStats map[string]services.CacheStats `json:"cache_stats,omitempty"`
 }
 
 // ServiceStatus represents the status of a single service.
 type ServiceStatus struct {
 	// Status indicates if the service is operational.
-	Status  string `json:"status"`
+	Status string `json:"status"`
 	// Message provides details if the service is unhealthy.
 	Message string `json:"message,omitempty"`
 }
@@ -61,13 +61,15 @@ type ServiceStatus struct {
 // NewHealthHandler creates a new instance of HealthHandler.
 //
 // Parameters:
-//   db: Database checker.
-//   redis: Redis checker.
-//   ccxtURL: URL of the CCXT service.
-//   cacheAnalytics: Cache analytics service.
+//
+//	db: Database checker.
+//	redis: Redis checker.
+//	ccxtURL: URL of the CCXT service.
+//	cacheAnalytics: Cache analytics service.
 //
 // Returns:
-//   *HealthHandler: Initialized handler.
+//
+//	*HealthHandler: Initialized handler.
 func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtURL string, cacheAnalytics CacheAnalyticsInterface) *HealthHandler {
 	return &HealthHandler{
 		db:             db,
@@ -81,8 +83,9 @@ func NewHealthHandler(db DatabaseHealthChecker, redis RedisHealthChecker, ccxtUR
 // It verifies connectivity to database, Redis, and CCXT service.
 //
 // Parameters:
-//   w: HTTP response writer.
-//   r: HTTP request.
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	// Create context with timeout for health checks
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -224,8 +227,9 @@ var startTime = time.Now()
 // This is typically used by load balancers or Kubernetes.
 //
 // Parameters:
-//   w: HTTP response writer.
-//   r: HTTP request.
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
 	span := sentry.StartSpan(r.Context(), "readiness_check")
 	defer span.Finish()
@@ -277,8 +281,9 @@ func (h *HealthHandler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
 // This is a lightweight check to confirm the process is running.
 //
 // Parameters:
-//   w: HTTP response writer.
-//   r: HTTP request.
+//
+//	w: HTTP response writer.
+//	r: HTTP request.
 func (h *HealthHandler) LivenessCheck(w http.ResponseWriter, r *http.Request) {
 	span := sentry.StartSpan(r.Context(), "liveness_check")
 	defer span.Finish()

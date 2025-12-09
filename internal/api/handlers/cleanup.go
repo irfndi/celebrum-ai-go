@@ -25,10 +25,12 @@ type CleanupHandler struct {
 // NewCleanupHandler creates a new cleanup handler.
 //
 // Parameters:
-//   cleanupService: The cleanup service implementation.
+//
+//	cleanupService: The cleanup service implementation.
 //
 // Returns:
-//   *CleanupHandler: The initialized handler.
+//
+//	*CleanupHandler: The initialized handler.
 func NewCleanupHandler(cleanupService CleanupInterface) *CleanupHandler {
 	return &CleanupHandler{
 		cleanupService: cleanupService,
@@ -38,21 +40,22 @@ func NewCleanupHandler(cleanupService CleanupInterface) *CleanupHandler {
 // DataStatsResponse represents the response for data statistics.
 type DataStatsResponse struct {
 	// MarketDataCount is the number of market data records.
-	MarketDataCount                    int64 `json:"market_data_count"`
+	MarketDataCount int64 `json:"market_data_count"`
 	// FundingRatesCount is the number of funding rate records.
-	FundingRatesCount                  int64 `json:"funding_rates_count"`
+	FundingRatesCount int64 `json:"funding_rates_count"`
 	// ArbitrageOpportunitiesCount is the number of arbitrage opportunity records.
-	ArbitrageOpportunitiesCount        int64 `json:"arbitrage_opportunities_count"`
+	ArbitrageOpportunitiesCount int64 `json:"arbitrage_opportunities_count"`
 	// FundingArbitrageOpportunitiesCount is the number of funding arbitrage records.
 	FundingArbitrageOpportunitiesCount int64 `json:"funding_arbitrage_opportunities_count"`
 	// TotalRecords is the sum of all records.
-	TotalRecords                       int64 `json:"total_records"`
+	TotalRecords int64 `json:"total_records"`
 }
 
 // GetDataStats returns statistics about current data storage.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *CleanupHandler) GetDataStats(c *gin.Context) {
 	stats, err := h.cleanupService.GetDataStats(c.Request.Context())
 	if err != nil {
@@ -83,7 +86,8 @@ func parseIntParam(param string) (int, error) {
 // It supports optional query parameters to override default retention hours.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *CleanupHandler) TriggerCleanup(c *gin.Context) {
 	// Parse optional retention hours from query parameters
 	marketDataHours := 24

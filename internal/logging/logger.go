@@ -56,11 +56,13 @@ type StandardLogger struct {
 // NewStandardLogger creates a new standardized logger based on configuration.
 //
 // Parameters:
-//   logLevel: The log level (debug, info, warn, error).
-//   environment: The environment (development, production).
+//
+//	logLevel: The log level (debug, info, warn, error).
+//	environment: The environment (development, production).
 //
 // Returns:
-//   *StandardLogger: The initialized logger.
+//
+//	*StandardLogger: The initialized logger.
 func NewStandardLogger(logLevel string, environment string) *StandardLogger {
 	// For now, return a basic logger - we'll integrate with Sentry in the main initialization
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -75,7 +77,8 @@ func NewStandardLogger(logLevel string, environment string) *StandardLogger {
 // SetLogger sets the underlying logger implementation.
 //
 // Parameters:
-//   logger: The logger implementation to use.
+//
+//	logger: The logger implementation to use.
 func (l *StandardLogger) SetLogger(logger Logger) {
 	l.logger = logger
 }
@@ -83,10 +86,12 @@ func (l *StandardLogger) SetLogger(logger Logger) {
 // WithService creates a logger with service context.
 //
 // Parameters:
-//   serviceName: The service name.
+//
+//	serviceName: The service name.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithService(serviceName string) *slog.Logger {
 	return l.logger.WithService(serviceName)
 }
@@ -94,10 +99,12 @@ func (l *StandardLogger) WithService(serviceName string) *slog.Logger {
 // WithComponent creates a logger with component context.
 //
 // Parameters:
-//   componentName: The component name.
+//
+//	componentName: The component name.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithComponent(componentName string) *slog.Logger {
 	return l.logger.WithComponent(componentName)
 }
@@ -105,10 +112,12 @@ func (l *StandardLogger) WithComponent(componentName string) *slog.Logger {
 // WithOperation creates a logger with operation context.
 //
 // Parameters:
-//   operationName: The operation name.
+//
+//	operationName: The operation name.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithOperation(operationName string) *slog.Logger {
 	return l.logger.WithOperation(operationName)
 }
@@ -116,10 +125,12 @@ func (l *StandardLogger) WithOperation(operationName string) *slog.Logger {
 // WithRequestID creates a logger with request ID context.
 //
 // Parameters:
-//   requestID: The request identifier.
+//
+//	requestID: The request identifier.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithRequestID(requestID string) *slog.Logger {
 	return l.logger.WithRequestID(requestID)
 }
@@ -127,10 +138,12 @@ func (l *StandardLogger) WithRequestID(requestID string) *slog.Logger {
 // WithUserID creates a logger with user ID context.
 //
 // Parameters:
-//   userID: The user identifier.
+//
+//	userID: The user identifier.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithUserID(userID string) *slog.Logger {
 	return l.logger.WithUserID(userID)
 }
@@ -138,10 +151,12 @@ func (l *StandardLogger) WithUserID(userID string) *slog.Logger {
 // WithExchange creates a logger with exchange context.
 //
 // Parameters:
-//   exchange: The exchange name.
+//
+//	exchange: The exchange name.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithExchange(exchange string) *slog.Logger {
 	return l.logger.WithExchange(exchange)
 }
@@ -149,10 +164,12 @@ func (l *StandardLogger) WithExchange(exchange string) *slog.Logger {
 // WithSymbol creates a logger with symbol context.
 //
 // Parameters:
-//   symbol: The trading symbol.
+//
+//	symbol: The trading symbol.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithSymbol(symbol string) *slog.Logger {
 	return l.logger.WithSymbol(symbol)
 }
@@ -160,10 +177,12 @@ func (l *StandardLogger) WithSymbol(symbol string) *slog.Logger {
 // WithError creates a logger with error context.
 //
 // Parameters:
-//   err: The error to log.
+//
+//	err: The error to log.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithError(err error) *slog.Logger {
 	return l.logger.WithError(err)
 }
@@ -171,10 +190,12 @@ func (l *StandardLogger) WithError(err error) *slog.Logger {
 // WithMetrics creates a logger with metrics context.
 //
 // Parameters:
-//   metrics: Map of metrics.
+//
+//	metrics: Map of metrics.
 //
 // Returns:
-//   *slog.Logger: Logger with context.
+//
+//	*slog.Logger: Logger with context.
 func (l *StandardLogger) WithMetrics(metrics map[string]interface{}) *slog.Logger {
 	return l.logger.WithMetrics(metrics)
 }
@@ -182,9 +203,10 @@ func (l *StandardLogger) WithMetrics(metrics map[string]interface{}) *slog.Logge
 // LogStartup logs application startup information.
 //
 // Parameters:
-//   serviceName: Name of the service.
-//   version: Service version.
-//   port: Port number.
+//
+//	serviceName: Name of the service.
+//	version: Service version.
+//	port: Port number.
 func (l *StandardLogger) LogStartup(serviceName string, version string, port int) {
 	l.logger.LogStartup(serviceName, version, port)
 }
@@ -192,8 +214,9 @@ func (l *StandardLogger) LogStartup(serviceName string, version string, port int
 // LogShutdown logs application shutdown information.
 //
 // Parameters:
-//   serviceName: Name of the service.
-//   reason: Reason for shutdown.
+//
+//	serviceName: Name of the service.
+//	reason: Reason for shutdown.
 func (l *StandardLogger) LogShutdown(serviceName string, reason string) {
 	l.logger.LogShutdown(serviceName, reason)
 }
@@ -201,8 +224,9 @@ func (l *StandardLogger) LogShutdown(serviceName string, reason string) {
 // LogPerformanceMetrics logs performance metrics in a standardized format.
 //
 // Parameters:
-//   serviceName: Name of the service.
-//   metrics: Map of performance metrics.
+//
+//	serviceName: Name of the service.
+//	metrics: Map of performance metrics.
 func (l *StandardLogger) LogPerformanceMetrics(serviceName string, metrics map[string]interface{}) {
 	l.logger.LogPerformanceMetrics(serviceName, metrics)
 }
@@ -210,8 +234,9 @@ func (l *StandardLogger) LogPerformanceMetrics(serviceName string, metrics map[s
 // LogResourceStats logs resource statistics in a standardized format.
 //
 // Parameters:
-//   serviceName: Name of the service.
-//   stats: Map of resource statistics.
+//
+//	serviceName: Name of the service.
+//	stats: Map of resource statistics.
 func (l *StandardLogger) LogResourceStats(serviceName string, stats map[string]interface{}) {
 	l.logger.LogResourceStats(serviceName, stats)
 }
@@ -219,10 +244,11 @@ func (l *StandardLogger) LogResourceStats(serviceName string, stats map[string]i
 // LogCacheOperation logs cache operations in a standardized format.
 //
 // Parameters:
-//   operation: Cache operation (e.g., "get", "set").
-//   key: Cache key.
-//   hit: Whether it was a cache hit.
-//   duration: Duration in milliseconds.
+//
+//	operation: Cache operation (e.g., "get", "set").
+//	key: Cache key.
+//	hit: Whether it was a cache hit.
+//	duration: Duration in milliseconds.
 func (l *StandardLogger) LogCacheOperation(operation string, key string, hit bool, duration int64) {
 	l.logger.LogCacheOperation(operation, key, hit, duration)
 }
@@ -230,10 +256,11 @@ func (l *StandardLogger) LogCacheOperation(operation string, key string, hit boo
 // LogDatabaseOperation logs database operations in a standardized format.
 //
 // Parameters:
-//   operation: DB operation (e.g., "select", "insert").
-//   table: Table name.
-//   duration: Duration in milliseconds.
-//   rowsAffected: Number of rows affected.
+//
+//	operation: DB operation (e.g., "select", "insert").
+//	table: Table name.
+//	duration: Duration in milliseconds.
+//	rowsAffected: Number of rows affected.
 func (l *StandardLogger) LogDatabaseOperation(operation string, table string, duration int64, rowsAffected int64) {
 	l.logger.LogDatabaseOperation(operation, table, duration, rowsAffected)
 }
@@ -241,11 +268,12 @@ func (l *StandardLogger) LogDatabaseOperation(operation string, table string, du
 // LogAPIRequest logs API requests in a standardized format.
 //
 // Parameters:
-//   method: HTTP method.
-//   path: Request path.
-//   statusCode: HTTP status code.
-//   duration: Duration in milliseconds.
-//   userID: User identifier (if authenticated).
+//
+//	method: HTTP method.
+//	path: Request path.
+//	statusCode: HTTP status code.
+//	duration: Duration in milliseconds.
+//	userID: User identifier (if authenticated).
 func (l *StandardLogger) LogAPIRequest(method string, path string, statusCode int, duration int64, userID string) {
 	l.logger.LogAPIRequest(method, path, statusCode, duration, userID)
 }
@@ -253,8 +281,9 @@ func (l *StandardLogger) LogAPIRequest(method string, path string, statusCode in
 // LogBusinessEvent logs business events in a standardized format.
 //
 // Parameters:
-//   eventType: Type of business event.
-//   details: Event details.
+//
+//	eventType: Type of business event.
+//	details: Event details.
 func (l *StandardLogger) LogBusinessEvent(eventType string, details map[string]interface{}) {
 	l.logger.LogBusinessEvent(eventType, details)
 }
@@ -262,7 +291,8 @@ func (l *StandardLogger) LogBusinessEvent(eventType string, details map[string]i
 // Logger returns the underlying *slog.Logger.
 //
 // Returns:
-//   *slog.Logger: The underlying logger.
+//
+//	*slog.Logger: The underlying logger.
 func (l *StandardLogger) Logger() *slog.Logger {
 	return l.logger.Logger()
 }

@@ -112,12 +112,14 @@ type TelegramPerformanceMetrics struct {
 // NewPerformanceMonitor creates a new performance monitor.
 //
 // Parameters:
-//   logger: Logger.
-//   redis: Redis client.
-//   ctx: Context.
+//
+//	logger: Logger.
+//	redis: Redis client.
+//	ctx: Context.
 //
 // Returns:
-//   *PerformanceMonitor: Initialized monitor.
+//
+//	*PerformanceMonitor: Initialized monitor.
 func NewPerformanceMonitor(logger *logrus.Logger, redis *redis.Client, ctx context.Context) *PerformanceMonitor {
 	return &PerformanceMonitor{
 		logger:          logger,
@@ -264,7 +266,8 @@ func (pm *PerformanceMonitor) logPerformanceSummary() {
 // GetSystemMetrics returns current system metrics.
 //
 // Returns:
-//   SystemMetrics: System metrics.
+//
+//	SystemMetrics: System metrics.
 func (pm *PerformanceMonitor) GetSystemMetrics() SystemMetrics {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -274,7 +277,8 @@ func (pm *PerformanceMonitor) GetSystemMetrics() SystemMetrics {
 // GetApplicationMetrics returns current application metrics.
 //
 // Returns:
-//   ApplicationMetrics: App metrics.
+//
+//	ApplicationMetrics: App metrics.
 func (pm *PerformanceMonitor) GetApplicationMetrics() ApplicationMetrics {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -284,7 +288,8 @@ func (pm *PerformanceMonitor) GetApplicationMetrics() ApplicationMetrics {
 // UpdateCollectorMetrics updates collector performance metrics.
 //
 // Parameters:
-//   metrics: New metrics.
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateCollectorMetrics(metrics CollectorPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -294,7 +299,8 @@ func (pm *PerformanceMonitor) UpdateCollectorMetrics(metrics CollectorPerformanc
 // UpdateAPIMetrics updates API performance metrics.
 //
 // Parameters:
-//   metrics: New metrics.
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateAPIMetrics(metrics APIPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -304,7 +310,8 @@ func (pm *PerformanceMonitor) UpdateAPIMetrics(metrics APIPerformanceMetrics) {
 // UpdateTelegramMetrics updates Telegram performance metrics.
 //
 // Parameters:
-//   metrics: New metrics.
+//
+//	metrics: New metrics.
 func (pm *PerformanceMonitor) UpdateTelegramMetrics(metrics TelegramPerformanceMetrics) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -314,9 +321,10 @@ func (pm *PerformanceMonitor) UpdateTelegramMetrics(metrics TelegramPerformanceM
 // RecordWorkerHealth records worker health status for monitoring.
 //
 // Parameters:
-//   exchange: Exchange name.
-//   isRunning: Running status.
-//   errorCount: Error count.
+//
+//	exchange: Exchange name.
+//	isRunning: Running status.
+//	errorCount: Error count.
 func (pm *PerformanceMonitor) RecordWorkerHealth(exchange string, isRunning bool, errorCount int) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -359,7 +367,8 @@ func (pm *PerformanceMonitor) RecordWorkerHealth(exchange string, isRunning bool
 // GetPerformanceReport generates a comprehensive performance report.
 //
 // Returns:
-//   map[string]interface{}: Report.
+//
+//	map[string]interface{}: Report.
 func (pm *PerformanceMonitor) GetPerformanceReport() map[string]interface{} {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()

@@ -65,27 +65,27 @@ type CollectorConfig struct {
 	// IntervalSeconds is the data collection interval.
 	IntervalSeconds int `mapstructure:"interval_seconds"`
 	// MaxErrors is the maximum number of errors before stopping a worker.
-	MaxErrors       int `mapstructure:"max_errors"`
+	MaxErrors int `mapstructure:"max_errors"`
 }
 
 // BackfillConfig holds configuration for historical data backfill.
 type BackfillConfig struct {
 	// Enabled indicates if backfill is enabled.
-	Enabled               bool `yaml:"enabled" default:"true"`
+	Enabled bool `yaml:"enabled" default:"true"`
 	// BackfillHours is the number of hours to backfill.
-	BackfillHours         int  `yaml:"backfill_hours" default:"6"`
+	BackfillHours int `yaml:"backfill_hours" default:"6"`
 	// MinDataThresholdHours is the minimum data required to skip backfill.
-	MinDataThresholdHours int  `yaml:"min_data_threshold_hours" default:"12"`
+	MinDataThresholdHours int `yaml:"min_data_threshold_hours" default:"12"`
 	// BatchSize is the number of items per batch.
-	BatchSize             int  `yaml:"batch_size" default:"50"`
+	BatchSize int `yaml:"batch_size" default:"50"`
 	// DelayBetweenBatches is the delay between batches in ms.
-	DelayBetweenBatches   int  `yaml:"delay_between_batches_ms" default:"100"`
+	DelayBetweenBatches int `yaml:"delay_between_batches_ms" default:"100"`
 }
 
 // SymbolCacheEntry represents a cached entry for exchange symbols.
 type SymbolCacheEntry struct {
 	// Symbols is the list of symbols.
-	Symbols   []string
+	Symbols []string
 	// ExpiresAt is the expiration time.
 	ExpiresAt time.Time
 }
@@ -117,9 +117,9 @@ type ExchangeCapabilityEntry struct {
 	// SupportsFundingRates indicates if the exchange supports funding rates.
 	SupportsFundingRates bool
 	// LastChecked is the time of the last check.
-	LastChecked          time.Time
+	LastChecked time.Time
 	// ExpiresAt is the expiration time of this capability info.
-	ExpiresAt            time.Time
+	ExpiresAt time.Time
 }
 
 // ExchangeCapabilityCache manages cached exchange capability information.
@@ -132,10 +132,12 @@ type ExchangeCapabilityCache struct {
 // NewSymbolCache creates a new symbol cache with specified TTL.
 //
 // Parameters:
-//   ttl: Time to live for cache entries.
+//
+//	ttl: Time to live for cache entries.
 //
 // Returns:
-//   *SymbolCache: Initialized cache.
+//
+//	*SymbolCache: Initialized cache.
 func NewSymbolCache(ttl time.Duration) *SymbolCache {
 	return &SymbolCache{
 		cache: make(map[string]*SymbolCacheEntry),
@@ -146,11 +148,13 @@ func NewSymbolCache(ttl time.Duration) *SymbolCache {
 // Get retrieves symbols from cache if not expired.
 //
 // Parameters:
-//   exchangeID: Exchange identifier.
+//
+//	exchangeID: Exchange identifier.
 //
 // Returns:
-//   []string: List of symbols.
-//   bool: True if found and valid.
+//
+//	[]string: List of symbols.
+//	bool: True if found and valid.
 func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -179,8 +183,9 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 // Set stores symbols in cache with TTL.
 //
 // Parameters:
-//   exchangeID: Exchange identifier.
-//   symbols: List of symbols to cache.
+//
+//	exchangeID: Exchange identifier.
+//	symbols: List of symbols to cache.
 func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -196,7 +201,8 @@ func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 // GetStats returns current cache statistics.
 //
 // Returns:
-//   cache.SymbolCacheStats: Cache statistics.
+//
+//	cache.SymbolCacheStats: Cache statistics.
 func (sc *SymbolCache) GetStats() cache.SymbolCacheStats {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
@@ -228,10 +234,12 @@ func (sc *SymbolCache) LogStats() {
 // NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL.
 //
 // Parameters:
-//   ttl: Time to live.
+//
+//	ttl: Time to live.
 //
 // Returns:
-//   *ExchangeCapabilityCache: Initialized cache.
+//
+//	*ExchangeCapabilityCache: Initialized cache.
 func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
 	return &ExchangeCapabilityCache{
 		cache: make(map[string]*ExchangeCapabilityEntry),
@@ -242,11 +250,13 @@ func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
 // SupportsFundingRates checks if an exchange supports funding rates.
 //
 // Parameters:
-//   exchange: Exchange name.
+//
+//	exchange: Exchange name.
 //
 // Returns:
-//   bool: True if supported.
-//   bool: True if info is found in cache.
+//
+//	bool: True if supported.
+//	bool: True if info is found in cache.
 func (ecc *ExchangeCapabilityCache) SupportsFundingRates(exchange string) (bool, bool) {
 	ecc.mu.RLock()
 	defer ecc.mu.RUnlock()
@@ -267,8 +277,9 @@ func (ecc *ExchangeCapabilityCache) SupportsFundingRates(exchange string) (bool,
 // SetFundingRateSupport sets the funding rate support capability for an exchange.
 //
 // Parameters:
-//   exchange: Exchange name.
-//   supports: Whether funding rates are supported.
+//
+//	exchange: Exchange name.
+//	supports: Whether funding rates are supported.
 func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, supports bool) {
 	ecc.mu.Lock()
 	defer ecc.mu.Unlock()
@@ -388,19 +399,19 @@ type CollectorService struct {
 // Worker represents a background worker for collecting data from a specific exchange.
 type Worker struct {
 	// Exchange is the exchange name.
-	Exchange   string
+	Exchange string
 	// Symbols is the list of symbols being monitored.
-	Symbols    []string
+	Symbols []string
 	// Interval is the collection interval.
-	Interval   time.Duration
+	Interval time.Duration
 	// LastUpdate is the time of the last update.
 	LastUpdate time.Time
 	// IsRunning indicates if the worker is active.
-	IsRunning  bool
+	IsRunning bool
 	// ErrorCount is the consecutive error count.
 	ErrorCount int
 	// MaxErrors is the maximum allowed consecutive errors.
-	MaxErrors  int
+	MaxErrors int
 }
 
 // initializeSymbolCache creates either Redis-based or in-memory symbol cache
@@ -419,14 +430,16 @@ func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
 // NewCollectorService creates a new market data collector service.
 //
 // Parameters:
-//   db: Database connection.
-//   ccxtService: CCXT service.
-//   cfg: Configuration.
-//   redisClient: Redis client.
-//   blacklistCache: Blacklist cache.
+//
+//	db: Database connection.
+//	ccxtService: CCXT service.
+//	cfg: Configuration.
+//	redisClient: Redis client.
+//	blacklistCache: Blacklist cache.
 //
 // Returns:
-//   *CollectorService: Initialized service.
+//
+//	*CollectorService: Initialized service.
 func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, cfg *config.Config, redisClient *redis.Client, blacklistCache cache.BlacklistCache) *CollectorService {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -550,7 +563,8 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 // Start initializes and starts all collection workers asynchronously.
 //
 // Returns:
-//   error: Error if initialization fails.
+//
+//	error: Error if initialization fails.
 func (c *CollectorService) Start() error {
 	c.logger.Info("Starting market data collector service...")
 
@@ -669,7 +683,8 @@ func (c *CollectorService) Stop() {
 // IsInitialized returns true if the collector service has been initialized.
 //
 // Returns:
-//   bool: True if initialized.
+//
+//	bool: True if initialized.
 func (c *CollectorService) IsInitialized() bool {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
@@ -679,7 +694,8 @@ func (c *CollectorService) IsInitialized() bool {
 // IsReady returns true if the collector service is fully ready (workers created and running).
 //
 // Returns:
-//   bool: True if ready.
+//
+//	bool: True if ready.
 func (c *CollectorService) IsReady() bool {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
@@ -689,8 +705,9 @@ func (c *CollectorService) IsReady() bool {
 // GetReadinessStatus returns the current readiness status.
 //
 // Returns:
-//   initialized: True if initialized.
-//   ready: True if ready.
+//
+//	initialized: True if initialized.
+//	ready: True if ready.
 func (c *CollectorService) GetReadinessStatus() (initialized bool, ready bool) {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
@@ -1545,7 +1562,8 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 // GetWorkerStatus returns the status of all workers.
 //
 // Returns:
-//   map[string]*Worker: Map of exchange to worker status.
+//
+//	map[string]*Worker: Map of exchange to worker status.
 func (c *CollectorService) GetWorkerStatus() map[string]*Worker {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1568,10 +1586,12 @@ func (c *CollectorService) GetWorkerStatus() map[string]*Worker {
 // RestartWorker restarts a specific worker.
 //
 // Parameters:
-//   exchangeID: Exchange identifier.
+//
+//	exchangeID: Exchange identifier.
 //
 // Returns:
-//   error: Error if worker not found.
+//
+//	error: Error if worker not found.
 func (c *CollectorService) RestartWorker(exchangeID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1596,7 +1616,8 @@ func (c *CollectorService) RestartWorker(exchangeID string) error {
 // IsHealthy checks if the collector service is healthy.
 //
 // Returns:
-//   bool: True if healthy.
+//
+//	bool: True if healthy.
 func (c *CollectorService) IsHealthy() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

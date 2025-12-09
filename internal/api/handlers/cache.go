@@ -33,10 +33,12 @@ type CacheHandler struct {
 // NewCacheHandler creates a new cache handler.
 //
 // Parameters:
-//   cacheAnalytics: The analytics service implementation.
+//
+//	cacheAnalytics: The analytics service implementation.
 //
 // Returns:
-//   *CacheHandler: The initialized handler.
+//
+//	*CacheHandler: The initialized handler.
 func NewCacheHandler(cacheAnalytics CacheAnalyticsInterface) *CacheHandler {
 	return &CacheHandler{
 		cacheAnalytics: cacheAnalytics,
@@ -47,7 +49,8 @@ func NewCacheHandler(cacheAnalytics CacheAnalyticsInterface) *CacheHandler {
 // It retrieves hit/miss counts and other metrics for every cache category.
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Get cache statistics
 // @Description Get comprehensive cache hit/miss statistics for all categories
@@ -66,7 +69,8 @@ func (h *CacheHandler) GetCacheStats(c *gin.Context) {
 // GetCacheStatsByCategory returns cache statistics for a specific category.
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Get cache statistics by category
 // @Description Get cache hit/miss statistics for a specific category
@@ -95,7 +99,8 @@ func (h *CacheHandler) GetCacheStatsByCategory(c *gin.Context) {
 // GetCacheMetrics returns comprehensive cache metrics including Redis info.
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Get comprehensive cache metrics
 // @Description Get detailed cache metrics including Redis information and memory usage
@@ -122,7 +127,8 @@ func (h *CacheHandler) GetCacheMetrics(c *gin.Context) {
 // ResetCacheStats resets all cache statistics.
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Reset cache statistics
 // @Description Reset all cache hit/miss statistics to zero
@@ -141,7 +147,8 @@ func (h *CacheHandler) ResetCacheStats(c *gin.Context) {
 // RecordCacheHit manually records a cache hit (for testing purposes).
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Record cache hit
 // @Description Manually record a cache hit for testing purposes
@@ -182,7 +189,8 @@ func (h *CacheHandler) RecordCacheHit(c *gin.Context) {
 // RecordCacheMiss manually records a cache miss (for testing purposes).
 //
 // Parameters:
-//   c: The Gin context.
+//
+//	c: The Gin context.
 //
 // @Summary Record cache miss
 // @Description Manually record a cache miss for testing purposes

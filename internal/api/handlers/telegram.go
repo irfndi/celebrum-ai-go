@@ -40,14 +40,16 @@ type TelegramHandler struct {
 // It initializes the Telegram bot and sets up either webhook or polling mode based on configuration.
 //
 // Parameters:
-//   db: Database connection.
-//   cfg: Telegram configuration.
-//   arbitrageHandler: Handler for arbitrage operations.
-//   signalAggregator: Service for signal aggregation.
-//   redisClient: Redis client.
+//
+//	db: Database connection.
+//	cfg: Telegram configuration.
+//	arbitrageHandler: Handler for arbitrage operations.
+//	signalAggregator: Service for signal aggregation.
+//	redisClient: Redis client.
 //
 // Returns:
-//   *TelegramHandler: Initialized handler.
+//
+//	*TelegramHandler: Initialized handler.
 func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arbitrageHandler *ArbitrageHandler, signalAggregator *services.SignalAggregator, redisClient *redis.Client) *TelegramHandler {
 	log.Printf("[TELEGRAM] NewTelegramHandler called")
 	// Return handler with nil bot if config is not provided
@@ -122,7 +124,8 @@ func NewTelegramHandler(db *database.PostgresDB, cfg *config.TelegramConfig, arb
 // It parses the update and delegates processing to the bot framework.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *TelegramHandler) HandleWebhook(c *gin.Context) {
 	log.Printf("[TELEGRAM] HandleWebhook called from %s", c.ClientIP())
 

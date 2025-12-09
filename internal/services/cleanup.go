@@ -29,13 +29,15 @@ type CleanupConfig = config.CleanupConfig
 // NewCleanupService creates a new cleanup service.
 //
 // Parameters:
-//   db: Database pool.
-//   errorRecoveryManager: Error recovery manager.
-//   resourceManager: Resource manager.
-//   performanceMonitor: Performance monitor.
+//
+//	db: Database pool.
+//	errorRecoveryManager: Error recovery manager.
+//	resourceManager: Resource manager.
+//	performanceMonitor: Performance monitor.
 //
 // Returns:
-//   *CleanupService: Initialized service.
+//
+//	*CleanupService: Initialized service.
 func NewCleanupService(db database.DatabasePool, errorRecoveryManager *ErrorRecoveryManager, resourceManager *ResourceManager, performanceMonitor *PerformanceMonitor) *CleanupService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CleanupService{
@@ -52,7 +54,8 @@ func NewCleanupService(db database.DatabasePool, errorRecoveryManager *ErrorReco
 // Start begins the cleanup service with periodic cleanup.
 //
 // Parameters:
-//   config: Cleanup configuration.
+//
+//	config: Cleanup configuration.
 func (c *CleanupService) Start(config CleanupConfig) {
 	if config.EnableSmartCleanup {
 		c.logger.Info("Starting cleanup service with smart cleanup",
@@ -115,10 +118,12 @@ func (c *CleanupService) Stop() {
 // RunCleanup performs a manual cleanup operation.
 //
 // Parameters:
-//   config: Cleanup configuration.
+//
+//	config: Cleanup configuration.
 //
 // Returns:
-//   error: Error if cleanup fails.
+//
+//	error: Error if cleanup fails.
 func (c *CleanupService) RunCleanup(config CleanupConfig) error {
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
 	defer cancel()
@@ -357,11 +362,13 @@ func (c *CleanupService) cleanupFundingArbitrageOpportunities(ctx context.Contex
 // GetDataStats returns statistics about current data storage.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   map[string]int64: Statistics map.
-//   error: Error if retrieval fails.
+//
+//	map[string]int64: Statistics map.
+//	error: Error if retrieval fails.
 func (c *CleanupService) GetDataStats(ctx context.Context) (map[string]int64, error) {
 	stats := make(map[string]int64)
 

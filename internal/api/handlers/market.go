@@ -34,14 +34,16 @@ type CacheStats struct {
 // NewMarketHandler creates a new instance of MarketHandler.
 //
 // Parameters:
-//   db: Database connection.
-//   ccxtService: CCXT service.
-//   collectorService: Collector service.
-//   redis: Redis client.
-//   cacheAnalytics: Cache analytics service.
+//
+//	db: Database connection.
+//	ccxtService: CCXT service.
+//	collectorService: Collector service.
+//	redis: Redis client.
+//	cacheAnalytics: Cache analytics service.
 //
 // Returns:
-//   *MarketHandler: Initialized handler.
+//
+//	*MarketHandler: Initialized handler.
 func NewMarketHandler(db *database.PostgresDB, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, redis *database.RedisClient, cacheAnalytics *services.CacheAnalyticsService) *MarketHandler {
 	return &MarketHandler{
 		db:               db,

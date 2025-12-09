@@ -40,11 +40,13 @@ type MetricsCollector struct {
 // NewMetricsCollector creates a new metrics collector.
 //
 // Parameters:
-//   logger: Standard logger.
-//   serviceName: Name of the service.
+//
+//	logger: Standard logger.
+//	serviceName: Name of the service.
 //
 // Returns:
-//   *MetricsCollector: Initialized collector.
+//
+//	*MetricsCollector: Initialized collector.
 func NewMetricsCollector(logger *logging.StandardLogger, serviceName string) *MetricsCollector {
 	return &MetricsCollector{
 		logger:      logger,
@@ -55,9 +57,10 @@ func NewMetricsCollector(logger *logging.StandardLogger, serviceName string) *Me
 // RecordCounter records a counter metric.
 //
 // Parameters:
-//   name: Metric name.
-//   value: Counter increment value.
-//   tags: Metric tags.
+//
+//	name: Metric name.
+//	value: Counter increment value.
+//	tags: Metric tags.
 func (mc *MetricsCollector) RecordCounter(name string, value float64, tags map[string]string) {
 	metric := Metric{
 		Name:      name,
@@ -73,10 +76,11 @@ func (mc *MetricsCollector) RecordCounter(name string, value float64, tags map[s
 // RecordGauge records a gauge metric.
 //
 // Parameters:
-//   name: Metric name.
-//   value: Gauge value.
-//   unit: Unit of measurement.
-//   tags: Metric tags.
+//
+//	name: Metric name.
+//	value: Gauge value.
+//	unit: Unit of measurement.
+//	tags: Metric tags.
 func (mc *MetricsCollector) RecordGauge(name string, value float64, unit string, tags map[string]string) {
 	metric := Metric{
 		Name:      name,
@@ -92,9 +96,10 @@ func (mc *MetricsCollector) RecordGauge(name string, value float64, unit string,
 // RecordTiming records a timing metric.
 //
 // Parameters:
-//   name: Metric name.
-//   duration: Duration value.
-//   tags: Metric tags.
+//
+//	name: Metric name.
+//	duration: Duration value.
+//	tags: Metric tags.
 func (mc *MetricsCollector) RecordTiming(name string, duration time.Duration, tags map[string]string) {
 	metric := Metric{
 		Name:      name,
@@ -110,10 +115,11 @@ func (mc *MetricsCollector) RecordTiming(name string, duration time.Duration, ta
 // RecordHistogram records a histogram metric.
 //
 // Parameters:
-//   name: Metric name.
-//   value: Metric value.
-//   unit: Unit of measurement.
-//   tags: Metric tags.
+//
+//	name: Metric name.
+//	value: Metric value.
+//	unit: Unit of measurement.
+//	tags: Metric tags.
 func (mc *MetricsCollector) RecordHistogram(name string, value float64, unit string, tags map[string]string) {
 	metric := Metric{
 		Name:      name,
@@ -129,11 +135,12 @@ func (mc *MetricsCollector) RecordHistogram(name string, value float64, unit str
 // RecordBusinessMetric records a business-specific metric with additional fields.
 //
 // Parameters:
-//   name: Metric name.
-//   value: Metric value.
-//   unit: Unit.
-//   tags: Tags.
-//   fields: Additional fields.
+//
+//	name: Metric name.
+//	value: Metric value.
+//	unit: Unit.
+//	tags: Tags.
+//	fields: Additional fields.
 func (mc *MetricsCollector) RecordBusinessMetric(name string, value float64, unit string, tags map[string]string, fields map[string]interface{}) {
 	metric := Metric{
 		Name:      name,
@@ -171,11 +178,12 @@ func (mc *MetricsCollector) logMetric(metric Metric) {
 // RecordAPIRequestMetrics records standardized API request metrics.
 //
 // Parameters:
-//   method: HTTP method.
-//   endpoint: API endpoint.
-//   statusCode: HTTP status code.
-//   duration: Request duration.
-//   userID: User identifier.
+//
+//	method: HTTP method.
+//	endpoint: API endpoint.
+//	statusCode: HTTP status code.
+//	duration: Request duration.
+//	userID: User identifier.
 func (mc *MetricsCollector) RecordAPIRequestMetrics(method, endpoint string, statusCode int, duration time.Duration, userID string) {
 	tags := map[string]string{
 		"method":      method,
@@ -193,11 +201,12 @@ func (mc *MetricsCollector) RecordAPIRequestMetrics(method, endpoint string, sta
 // RecordDatabaseMetrics records standardized database operation metrics.
 //
 // Parameters:
-//   operation: Database operation (e.g., "select", "insert").
-//   table: Table name.
-//   duration: Operation duration.
-//   rowsAffected: Number of rows affected.
-//   success: Whether the operation was successful.
+//
+//	operation: Database operation (e.g., "select", "insert").
+//	table: Table name.
+//	duration: Operation duration.
+//	rowsAffected: Number of rows affected.
+//	success: Whether the operation was successful.
 func (mc *MetricsCollector) RecordDatabaseMetrics(operation, table string, duration time.Duration, rowsAffected int64, success bool) {
 	tags := map[string]string{
 		"operation": operation,
@@ -218,10 +227,11 @@ func (mc *MetricsCollector) RecordDatabaseMetrics(operation, table string, durat
 // RecordCacheMetrics records standardized cache operation metrics.
 //
 // Parameters:
-//   operation: Cache operation (e.g., "get", "set").
-//   key: Cache key.
-//   hit: Whether it was a cache hit.
-//   duration: Operation duration.
+//
+//	operation: Cache operation (e.g., "get", "set").
+//	key: Cache key.
+//	hit: Whether it was a cache hit.
+//	duration: Operation duration.
 func (mc *MetricsCollector) RecordCacheMetrics(operation, key string, hit bool, duration time.Duration) {
 	tags := map[string]string{
 		"operation": operation,
@@ -238,11 +248,12 @@ func (mc *MetricsCollector) RecordCacheMetrics(operation, key string, hit bool, 
 // RecordExchangeMetrics records standardized exchange operation metrics.
 //
 // Parameters:
-//   exchange: Exchange name.
-//   operation: Exchange operation.
-//   symbol: Trading symbol.
-//   duration: Operation duration.
-//   success: Whether the operation was successful.
+//
+//	exchange: Exchange name.
+//	operation: Exchange operation.
+//	symbol: Trading symbol.
+//	duration: Operation duration.
+//	success: Whether the operation was successful.
 func (mc *MetricsCollector) RecordExchangeMetrics(exchange, operation, symbol string, duration time.Duration, success bool) {
 	tags := map[string]string{
 		"exchange":  exchange,
@@ -263,10 +274,11 @@ func (mc *MetricsCollector) RecordExchangeMetrics(exchange, operation, symbol st
 // RecordArbitrageMetrics records standardized arbitrage opportunity metrics.
 //
 // Parameters:
-//   symbol: Trading symbol.
-//   profitPercent: Profit percentage.
-//   buyExchange: Buy exchange.
-//   sellExchange: Sell exchange.
+//
+//	symbol: Trading symbol.
+//	profitPercent: Profit percentage.
+//	buyExchange: Buy exchange.
+//	sellExchange: Sell exchange.
 func (mc *MetricsCollector) RecordArbitrageMetrics(symbol string, profitPercent float64, buyExchange, sellExchange string) {
 	tags := map[string]string{
 		"symbol":        symbol,
@@ -281,9 +293,10 @@ func (mc *MetricsCollector) RecordArbitrageMetrics(symbol string, profitPercent 
 // RecordSystemMetrics records standardized system resource metrics.
 //
 // Parameters:
-//   memoryMB: Memory usage in MB.
-//   goroutines: Number of goroutines.
-//   cpuPercent: CPU usage percentage.
+//
+//	memoryMB: Memory usage in MB.
+//	goroutines: Number of goroutines.
+//	cpuPercent: CPU usage percentage.
 func (mc *MetricsCollector) RecordSystemMetrics(memoryMB, goroutines int, cpuPercent float64) {
 	tags := map[string]string{}
 
@@ -295,9 +308,10 @@ func (mc *MetricsCollector) RecordSystemMetrics(memoryMB, goroutines int, cpuPer
 // RecordNotificationMetrics records standardized notification metrics.
 //
 // Parameters:
-//   notificationType: Type of notification.
-//   userID: User ID.
-//   success: Whether the notification was successful.
+//
+//	notificationType: Type of notification.
+//	userID: User ID.
+//	success: Whether the notification was successful.
 func (mc *MetricsCollector) RecordNotificationMetrics(notificationType, userID string, success bool) {
 	tags := map[string]string{
 		"type":    notificationType,

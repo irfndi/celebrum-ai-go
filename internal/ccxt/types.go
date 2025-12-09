@@ -26,12 +26,14 @@ type Service struct {
 // NewService creates a new CCXT service instance.
 //
 // Parameters:
-//   cfg: CCXT configuration.
-//   logger: Logger instance.
-//   blacklistCache: Blacklist cache.
+//
+//	cfg: CCXT configuration.
+//	logger: Logger instance.
+//	blacklistCache: Blacklist cache.
 //
 // Returns:
-//   *Service: Initialized service.
+//
+//	*Service: Initialized service.
 func NewService(cfg *config.CCXTConfig, logger *logrus.Logger, blacklistCache cache.BlacklistCache) *Service {
 	s := &Service{
 		client:             NewClient(cfg),
@@ -46,10 +48,12 @@ func NewService(cfg *config.CCXTConfig, logger *logrus.Logger, blacklistCache ca
 // Initialize initializes the service by fetching supported exchanges and loading blacklist.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   error: Error if initialization fails.
+//
+//	error: Error if initialization fails.
 func (s *Service) Initialize(ctx context.Context) error {
 	exchangesResp, err := s.client.GetExchanges(ctx)
 	if err != nil {
@@ -89,10 +93,12 @@ func (s *Service) Initialize(ctx context.Context) error {
 // IsHealthy checks if the CCXT service is healthy.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   bool: True if healthy.
+//
+//	bool: True if healthy.
 func (s *Service) IsHealthy(ctx context.Context) bool {
 	_, err := s.client.HealthCheck(ctx)
 	return err == nil
@@ -101,7 +107,8 @@ func (s *Service) IsHealthy(ctx context.Context) bool {
 // GetSupportedExchanges returns a list of supported exchange IDs.
 //
 // Returns:
-//   []string: List of exchange IDs.
+//
+//	[]string: List of exchange IDs.
 func (s *Service) GetSupportedExchanges() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -116,11 +123,13 @@ func (s *Service) GetSupportedExchanges() []string {
 // GetExchangeInfo returns information about a specific exchange.
 //
 // Parameters:
-//   exchangeID: Exchange identifier.
+//
+//	exchangeID: Exchange identifier.
 //
 // Returns:
-//   ExchangeInfo: Exchange information.
-//   bool: True if found.
+//
+//	ExchangeInfo: Exchange information.
+//	bool: True if found.
 func (s *Service) GetExchangeInfo(exchangeID string) (ExchangeInfo, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -132,13 +141,15 @@ func (s *Service) GetExchangeInfo(exchangeID string) (ExchangeInfo, bool) {
 // FetchMarketData fetches market data for multiple exchanges and symbols.
 //
 // Parameters:
-//   ctx: Context.
-//   exchanges: List of exchanges.
-//   symbols: List of symbols.
+//
+//	ctx: Context.
+//	exchanges: List of exchanges.
+//	symbols: List of symbols.
 //
 // Returns:
-//   []MarketPriceInterface: List of market data.
-//   error: Error if fetch fails.
+//
+//	[]MarketPriceInterface: List of market data.
+//	error: Error if fetch fails.
 func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbols []string) ([]MarketPriceInterface, error) {
 	if len(exchanges) == 0 || len(symbols) == 0 {
 		return nil, fmt.Errorf("exchanges and symbols cannot be empty")
@@ -177,13 +188,15 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 // FetchSingleTicker fetches ticker data for a single exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
 //
 // Returns:
-//   MarketPriceInterface: Ticker data.
-//   error: Error if fetch fails.
+//
+//	MarketPriceInterface: Ticker data.
+//	error: Error if fetch fails.
 func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string) (MarketPriceInterface, error) {
 	resp, err := s.client.GetTicker(ctx, exchange, symbol)
 	if err != nil {
@@ -202,14 +215,16 @@ func (s *Service) FetchSingleTicker(ctx context.Context, exchange, symbol string
 // FetchOrderBook fetches order book data for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   limit: Depth limit.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	limit: Depth limit.
 //
 // Returns:
-//   *OrderBookResponse: Order book data.
-//   error: Error if fetch fails.
+//
+//	*OrderBookResponse: Order book data.
+//	error: Error if fetch fails.
 func (s *Service) FetchOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
 	resp, err := s.client.GetOrderBook(ctx, exchange, symbol, limit)
 	if err != nil {
@@ -221,15 +236,17 @@ func (s *Service) FetchOrderBook(ctx context.Context, exchange, symbol string, l
 // FetchOHLCV fetches OHLCV data for technical analysis.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   timeframe: Candle timeframe.
-//   limit: Number of candles.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	timeframe: Candle timeframe.
+//	limit: Number of candles.
 //
 // Returns:
-//   *OHLCVResponse: OHLCV data.
-//   error: Error if fetch fails.
+//
+//	*OHLCVResponse: OHLCV data.
+//	error: Error if fetch fails.
 func (s *Service) FetchOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
 	resp, err := s.client.GetOHLCV(ctx, exchange, symbol, timeframe, limit)
 	if err != nil {
@@ -241,14 +258,16 @@ func (s *Service) FetchOHLCV(ctx context.Context, exchange, symbol, timeframe st
 // FetchTrades fetches recent trades for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   limit: Number of trades.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	limit: Number of trades.
 //
 // Returns:
-//   *TradesResponse: Trade history.
-//   error: Error if fetch fails.
+//
+//	*TradesResponse: Trade history.
+//	error: Error if fetch fails.
 func (s *Service) FetchTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
 	resp, err := s.client.GetTrades(ctx, exchange, symbol, limit)
 	if err != nil {
@@ -260,12 +279,14 @@ func (s *Service) FetchTrades(ctx context.Context, exchange, symbol string, limi
 // FetchMarkets fetches all available trading pairs for an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *MarketsResponse: List of markets.
-//   error: Error if fetch fails.
+//
+//	*MarketsResponse: List of markets.
+//	error: Error if fetch fails.
 func (s *Service) FetchMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
 	resp, err := s.client.GetMarkets(ctx, exchange)
 	if err != nil {
@@ -278,14 +299,16 @@ func (s *Service) FetchMarkets(ctx context.Context, exchange string) (*MarketsRe
 // This function takes ticker data with bid/ask prices to find arbitrage opportunities.
 //
 // Parameters:
-//   ctx: Context.
-//   exchanges: List of exchanges to consider.
-//   symbols: List of symbols to check.
-//   minProfitPercent: Minimum profit threshold.
+//
+//	ctx: Context.
+//	exchanges: List of exchanges to consider.
+//	symbols: List of symbols to check.
+//	minProfitPercent: Minimum profit threshold.
 //
 // Returns:
-//   []models.ArbitrageOpportunityResponse: List of opportunities.
-//   error: Error if calculation fails.
+//
+//	[]models.ArbitrageOpportunityResponse: List of opportunities.
+//	error: Error if calculation fails.
 func (s *Service) CalculateArbitrageOpportunities(ctx context.Context, exchanges []string, symbols []string, minProfitPercent decimal.Decimal) ([]models.ArbitrageOpportunityResponse, error) {
 	if len(exchanges) == 0 || len(symbols) == 0 {
 		return nil, fmt.Errorf("exchanges and symbols cannot be empty")
@@ -366,13 +389,15 @@ func (s *Service) CalculateArbitrageOpportunities(ctx context.Context, exchanges
 // FetchFundingRate fetches funding rate for a specific symbol on an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
 //
 // Returns:
-//   *FundingRate: Funding rate data.
-//   error: Error if fetch fails.
+//
+//	*FundingRate: Funding rate data.
+//	error: Error if fetch fails.
 func (s *Service) FetchFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
 	return s.client.GetFundingRate(ctx, exchange, symbol)
 }
@@ -380,13 +405,15 @@ func (s *Service) FetchFundingRate(ctx context.Context, exchange, symbol string)
 // FetchFundingRates fetches funding rates for multiple symbols on an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbols: List of symbols.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbols: List of symbols.
 //
 // Returns:
-//   []FundingRate: List of funding rates.
-//   error: Error if fetch fails.
+//
+//	[]FundingRate: List of funding rates.
+//	error: Error if fetch fails.
 func (s *Service) FetchFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 	return s.client.GetFundingRates(ctx, exchange, symbols)
 }
@@ -394,12 +421,14 @@ func (s *Service) FetchFundingRates(ctx context.Context, exchange string, symbol
 // FetchAllFundingRates fetches all available funding rates for an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   []FundingRate: List of funding rates.
-//   error: Error if fetch fails.
+//
+//	[]FundingRate: List of funding rates.
+//	error: Error if fetch fails.
 func (s *Service) FetchAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error) {
 	return s.client.GetAllFundingRates(ctx, exchange)
 }
@@ -408,14 +437,16 @@ func (s *Service) FetchAllFundingRates(ctx context.Context, exchange string) ([]
 // It compares funding rates across exchanges for the same symbols.
 //
 // Parameters:
-//   ctx: Context.
-//   symbols: List of symbols.
-//   exchanges: List of exchanges.
-//   minProfit: Minimum profit threshold.
+//
+//	ctx: Context.
+//	symbols: List of symbols.
+//	exchanges: List of exchanges.
+//	minProfit: Minimum profit threshold.
 //
 // Returns:
-//   []FundingArbitrageOpportunity: List of opportunities.
-//   error: Error if calculation fails.
+//
+//	[]FundingArbitrageOpportunity: List of opportunities.
+//	error: Error if calculation fails.
 func (s *Service) CalculateFundingRateArbitrage(ctx context.Context, symbols []string, exchanges []string, minProfit float64) ([]FundingArbitrageOpportunity, error) {
 	var opportunities []FundingArbitrageOpportunity
 
@@ -551,7 +582,8 @@ func (s *Service) CalculateFundingRateArbitrage(ctx context.Context, symbols []s
 // Close closes the CCXT service.
 //
 // Returns:
-//   error: Error if closing fails.
+//
+//	error: Error if closing fails.
 func (s *Service) Close() error {
 	return s.client.Close()
 }
@@ -559,7 +591,8 @@ func (s *Service) Close() error {
 // GetServiceURL returns the CCXT service URL for health checks.
 //
 // Returns:
-//   string: The service URL.
+//
+//	string: The service URL.
 func (s *Service) GetServiceURL() string {
 	if s.client != nil {
 		return s.client.BaseURL()
@@ -570,11 +603,13 @@ func (s *Service) GetServiceURL() string {
 // GetExchangeConfig retrieves the current exchange configuration.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *ExchangeConfigResponse: Exchange configuration.
-//   error: Error if retrieval fails.
+//
+//	*ExchangeConfigResponse: Exchange configuration.
+//	error: Error if retrieval fails.
 func (s *Service) GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error) {
 	return s.client.GetExchangeConfig(ctx)
 }
@@ -583,12 +618,14 @@ func (s *Service) GetExchangeConfig(ctx context.Context) (*ExchangeConfigRespons
 // It updates both the database cache and the runtime service.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (s *Service) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	// Add to database-backed cache first (0 duration means no expiration)
 	s.blacklistCache.Add(exchange, "Manual blacklist via API", 0)
@@ -601,12 +638,14 @@ func (s *Service) AddExchangeToBlacklist(ctx context.Context, exchange string) (
 // It updates both the database cache and the runtime service.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (s *Service) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	// Remove from database-backed cache first
 	s.blacklistCache.Remove(exchange)
@@ -618,11 +657,13 @@ func (s *Service) RemoveExchangeFromBlacklist(ctx context.Context, exchange stri
 // RefreshExchanges refreshes all non-blacklisted exchanges.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (s *Service) RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error) {
 	return s.client.RefreshExchanges(ctx)
 }
@@ -630,12 +671,14 @@ func (s *Service) RefreshExchanges(ctx context.Context) (*ExchangeManagementResp
 // AddExchange dynamically adds and initializes a new exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (s *Service) AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	return s.client.AddExchange(ctx, exchange)
 }

@@ -19,7 +19,7 @@ type JWTClaims struct {
 	// UserID is the user identifier.
 	UserID string `json:"user_id"`
 	// Email is the user email.
-	Email  string `json:"email"`
+	Email string `json:"email"`
 	jwt.RegisteredClaims
 }
 
@@ -31,10 +31,12 @@ type AuthMiddleware struct {
 // NewAuthMiddleware creates a new authentication middleware.
 //
 // Parameters:
-//   secretKey: Secret key for signing tokens.
+//
+//	secretKey: Secret key for signing tokens.
 //
 // Returns:
-//   *AuthMiddleware: Initialized middleware.
+//
+//	*AuthMiddleware: Initialized middleware.
 func NewAuthMiddleware(secretKey string) *AuthMiddleware {
 	return &AuthMiddleware{
 		secretKey: []byte(secretKey),
@@ -45,7 +47,8 @@ func NewAuthMiddleware(secretKey string) *AuthMiddleware {
 // It requires a valid Bearer token in the Authorization header.
 //
 // Returns:
-//   gin.HandlerFunc: Gin handler.
+//
+//	gin.HandlerFunc: Gin handler.
 func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
@@ -111,7 +114,8 @@ func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 // If a valid token is present, user context is set.
 //
 // Returns:
-//   gin.HandlerFunc: Gin handler.
+//
+//	gin.HandlerFunc: Gin handler.
 func (am *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -152,13 +156,15 @@ func (am *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 // GenerateToken creates a new JWT token for a user.
 //
 // Parameters:
-//   userID: User identifier.
-//   email: User email.
-//   duration: Token validity duration.
+//
+//	userID: User identifier.
+//	email: User email.
+//	duration: Token validity duration.
 //
 // Returns:
-//   string: Signed token string.
-//   error: Error if generation fails.
+//
+//	string: Signed token string.
+//	error: Error if generation fails.
 func (am *AuthMiddleware) GenerateToken(userID, email string, duration time.Duration) (string, error) {
 	claims := &JWTClaims{
 		UserID: userID,
@@ -177,11 +183,13 @@ func (am *AuthMiddleware) GenerateToken(userID, email string, duration time.Dura
 // ValidateToken validates a JWT token and returns claims.
 //
 // Parameters:
-//   tokenString: Token string to validate.
+//
+//	tokenString: Token string to validate.
 //
 // Returns:
-//   *JWTClaims: Token claims.
-//   error: Error if validation fails.
+//
+//	*JWTClaims: Token claims.
+//	error: Error if validation fails.
 func (am *AuthMiddleware) ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

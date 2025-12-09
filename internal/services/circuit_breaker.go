@@ -24,31 +24,31 @@ const (
 // CircuitBreakerConfig holds configuration for the circuit breaker.
 type CircuitBreakerConfig struct {
 	// FailureThreshold is the number of failures before opening.
-	FailureThreshold int           `json:"failure_threshold"`
+	FailureThreshold int `json:"failure_threshold"`
 	// SuccessThreshold is the number of successes to close from half-open.
-	SuccessThreshold int           `json:"success_threshold"`
+	SuccessThreshold int `json:"success_threshold"`
 	// Timeout is the time to wait before trying half-open.
-	Timeout          time.Duration `json:"timeout"`
+	Timeout time.Duration `json:"timeout"`
 	// MaxRequests is the max requests allowed in half-open state.
-	MaxRequests      int           `json:"max_requests"`
+	MaxRequests int `json:"max_requests"`
 	// ResetTimeout is the time to reset failure count.
-	ResetTimeout     time.Duration `json:"reset_timeout"`
+	ResetTimeout time.Duration `json:"reset_timeout"`
 }
 
 // CircuitBreakerStats holds statistics for the circuit breaker.
 type CircuitBreakerStats struct {
 	// TotalRequests is the total number of requests.
-	TotalRequests      int64     `json:"total_requests"`
+	TotalRequests int64 `json:"total_requests"`
 	// SuccessfulRequests is the number of successful requests.
-	SuccessfulRequests int64     `json:"successful_requests"`
+	SuccessfulRequests int64 `json:"successful_requests"`
 	// FailedRequests is the number of failed requests.
-	FailedRequests     int64     `json:"failed_requests"`
+	FailedRequests int64 `json:"failed_requests"`
 	// LastFailureTime is the time of the last failure.
-	LastFailureTime    time.Time `json:"last_failure_time"`
+	LastFailureTime time.Time `json:"last_failure_time"`
 	// LastSuccessTime is the time of the last success.
-	LastSuccessTime    time.Time `json:"last_success_time"`
+	LastSuccessTime time.Time `json:"last_success_time"`
 	// StateChanges is the number of times state has changed.
-	StateChanges       int64     `json:"state_changes"`
+	StateChanges int64 `json:"state_changes"`
 }
 
 // CircuitBreaker implements the circuit breaker pattern.
@@ -69,12 +69,14 @@ type CircuitBreaker struct {
 // NewCircuitBreaker creates a new circuit breaker.
 //
 // Parameters:
-//   name: Breaker name.
-//   config: Configuration.
-//   logger: Logger instance.
+//
+//	name: Breaker name.
+//	config: Configuration.
+//	logger: Logger instance.
 //
 // Returns:
-//   *CircuitBreaker: Initialized breaker.
+//
+//	*CircuitBreaker: Initialized breaker.
 func NewCircuitBreaker(name string, config CircuitBreakerConfig, logger *logrus.Logger) *CircuitBreaker {
 	if config.FailureThreshold <= 0 {
 		config.FailureThreshold = 5
@@ -104,11 +106,13 @@ func NewCircuitBreaker(name string, config CircuitBreakerConfig, logger *logrus.
 // Execute runs the given function with circuit breaker protection.
 //
 // Parameters:
-//   ctx: Context.
-//   fn: Function to execute.
+//
+//	ctx: Context.
+//	fn: Function to execute.
 //
 // Returns:
-//   error: Error from function or circuit breaker.
+//
+//	error: Error from function or circuit breaker.
 func (cb *CircuitBreaker) Execute(ctx context.Context, fn func(context.Context) error) error {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -249,7 +253,8 @@ func (cb *CircuitBreaker) setState(newState CircuitBreakerState) {
 // GetState returns the current state of the circuit breaker.
 //
 // Returns:
-//   CircuitBreakerState: Current state.
+//
+//	CircuitBreakerState: Current state.
 func (cb *CircuitBreaker) GetState() CircuitBreakerState {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
@@ -259,7 +264,8 @@ func (cb *CircuitBreaker) GetState() CircuitBreakerState {
 // GetStats returns the current statistics.
 //
 // Returns:
-//   CircuitBreakerStats: Stats.
+//
+//	CircuitBreakerStats: Stats.
 func (cb *CircuitBreaker) GetStats() CircuitBreakerStats {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
@@ -269,7 +275,8 @@ func (cb *CircuitBreaker) GetStats() CircuitBreakerStats {
 // IsOpen returns true if the circuit breaker is open.
 //
 // Returns:
-//   bool: True if open.
+//
+//	bool: True if open.
 func (cb *CircuitBreaker) IsOpen() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
@@ -318,10 +325,12 @@ type CircuitBreakerManager struct {
 // NewCircuitBreakerManager creates a new circuit breaker manager.
 //
 // Parameters:
-//   logger: Logger instance.
+//
+//	logger: Logger instance.
 //
 // Returns:
-//   *CircuitBreakerManager: Initialized manager.
+//
+//	*CircuitBreakerManager: Initialized manager.
 func NewCircuitBreakerManager(logger *logrus.Logger) *CircuitBreakerManager {
 	return &CircuitBreakerManager{
 		breakers: make(map[string]*CircuitBreaker),
@@ -332,11 +341,13 @@ func NewCircuitBreakerManager(logger *logrus.Logger) *CircuitBreakerManager {
 // GetOrCreate gets an existing circuit breaker or creates a new one.
 //
 // Parameters:
-//   name: Breaker name.
-//   config: Configuration.
+//
+//	name: Breaker name.
+//	config: Configuration.
 //
 // Returns:
-//   *CircuitBreaker: The breaker.
+//
+//	*CircuitBreaker: The breaker.
 func (cbm *CircuitBreakerManager) GetOrCreate(name string, config CircuitBreakerConfig) *CircuitBreaker {
 	cbm.mu.Lock()
 	defer cbm.mu.Unlock()
@@ -353,7 +364,8 @@ func (cbm *CircuitBreakerManager) GetOrCreate(name string, config CircuitBreaker
 // GetAllStats returns statistics for all circuit breakers.
 //
 // Returns:
-//   map[string]CircuitBreakerStats: Map of stats.
+//
+//	map[string]CircuitBreakerStats: Map of stats.
 func (cbm *CircuitBreakerManager) GetAllStats() map[string]CircuitBreakerStats {
 	cbm.mu.RLock()
 	defer cbm.mu.RUnlock()

@@ -26,11 +26,13 @@ type RedisClient struct {
 // NewRedisConnection creates a new Redis connection.
 //
 // Parameters:
-//   cfg: Redis configuration.
+//
+//	cfg: Redis configuration.
 //
 // Returns:
-//   *RedisClient: The initialized client.
-//   error: Error if connection fails.
+//
+//	*RedisClient: The initialized client.
+//	error: Error if connection fails.
 func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 	return NewRedisConnectionWithRetry(cfg, nil)
 }
@@ -38,12 +40,14 @@ func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 // NewRedisConnectionWithRetry creates a new Redis connection with retry logic.
 //
 // Parameters:
-//   cfg: Redis configuration.
-//   errorRecoveryManager: Optional retry manager.
+//
+//	cfg: Redis configuration.
+//	errorRecoveryManager: Optional retry manager.
 //
 // Returns:
-//   *RedisClient: The initialized client.
-//   error: Error if connection fails.
+//
+//	*RedisClient: The initialized client.
+//	error: Error if connection fails.
 func NewRedisConnectionWithRetry(cfg config.RedisConfig, errorRecoveryManager ErrorRecoveryManager) (*RedisClient, error) {
 	logger := logrus.New()
 
@@ -105,10 +109,12 @@ func (r *RedisClient) Close() {
 // HealthCheck verifies the Redis connection.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   error: Error if ping fails.
+//
+//	error: Error if ping fails.
 func (r *RedisClient) HealthCheck(ctx context.Context) error {
 	if r.Client == nil {
 		return fmt.Errorf("redis client is nil")
@@ -119,13 +125,15 @@ func (r *RedisClient) HealthCheck(ctx context.Context) error {
 // Set stores a key-value pair with expiration.
 //
 // Parameters:
-//   ctx: Context.
-//   key: Key.
-//   value: Value.
-//   expiration: TTL.
+//
+//	ctx: Context.
+//	key: Key.
+//	value: Value.
+//	expiration: TTL.
 //
 // Returns:
-//   error: Error if set fails.
+//
+//	error: Error if set fails.
 func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if r.Client == nil {
 		return fmt.Errorf("redis client is nil")
@@ -136,12 +144,14 @@ func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ex
 // Get retrieves a value by key.
 //
 // Parameters:
-//   ctx: Context.
-//   key: Key.
+//
+//	ctx: Context.
+//	key: Key.
 //
 // Returns:
-//   string: Value.
-//   error: Error if get fails.
+//
+//	string: Value.
+//	error: Error if get fails.
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	if r.Client == nil {
 		return "", fmt.Errorf("redis client is nil")
@@ -152,11 +162,13 @@ func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 // Delete removes one or more keys.
 //
 // Parameters:
-//   ctx: Context.
-//   keys: Keys to remove.
+//
+//	ctx: Context.
+//	keys: Keys to remove.
 //
 // Returns:
-//   error: Error if delete fails.
+//
+//	error: Error if delete fails.
 func (r *RedisClient) Delete(ctx context.Context, keys ...string) error {
 	if r.Client == nil {
 		return fmt.Errorf("redis client is nil")
@@ -167,12 +179,14 @@ func (r *RedisClient) Delete(ctx context.Context, keys ...string) error {
 // Exists checks if keys exist.
 //
 // Parameters:
-//   ctx: Context.
-//   keys: Keys to check.
+//
+//	ctx: Context.
+//	keys: Keys to check.
 //
 // Returns:
-//   int64: Number of existing keys.
-//   error: Error if check fails.
+//
+//	int64: Number of existing keys.
+//	error: Error if check fails.
 func (r *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error) {
 	if r.Client == nil {
 		return 0, fmt.Errorf("redis client is nil")

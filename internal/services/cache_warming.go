@@ -24,12 +24,14 @@ type CacheWarmingService struct {
 // NewCacheWarmingService creates a new cache warming service.
 //
 // Parameters:
-//   redisClient: Redis client.
-//   ccxtService: CCXT service.
-//   db: Database connection.
+//
+//	redisClient: Redis client.
+//	ccxtService: CCXT service.
+//	db: Database connection.
 //
 // Returns:
-//   *CacheWarmingService: Initialized service.
+//
+//	*CacheWarmingService: Initialized service.
 func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTService, db *database.PostgresDB) *CacheWarmingService {
 	// Initialize logger with fallback for tests
 	logger := telemetry.Logger()
@@ -46,10 +48,12 @@ func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTServ
 // It populates exchange configs, supported exchanges, trading pairs, and funding rates.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   error: Error if warming fails (partially or fully).
+//
+//	error: Error if warming fails (partially or fully).
 func (c *CacheWarmingService) WarmCache(ctx context.Context) error {
 	c.logger.Info("Starting cache warming")
 	start := time.Now()

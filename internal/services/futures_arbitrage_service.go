@@ -40,15 +40,17 @@ type FuturesArbitrageService struct {
 // NewFuturesArbitrageService creates a new futures arbitrage service.
 //
 // Parameters:
-//   db: Database connection.
-//   redisClient: Redis client.
-//   cfg: Configuration.
-//   errorRecoveryManager: Error recovery manager.
-//   resourceManager: Resource manager.
-//   performanceMonitor: Performance monitor.
+//
+//	db: Database connection.
+//	redisClient: Redis client.
+//	cfg: Configuration.
+//	errorRecoveryManager: Error recovery manager.
+//	resourceManager: Resource manager.
+//	performanceMonitor: Performance monitor.
 //
 // Returns:
-//   *FuturesArbitrageService: Initialized service.
+//
+//	*FuturesArbitrageService: Initialized service.
 func NewFuturesArbitrageService(
 	db *database.PostgresDB,
 	redisClient *redis.Client,
@@ -71,7 +73,8 @@ func NewFuturesArbitrageService(
 // Start begins the futures arbitrage opportunity calculation service.
 //
 // Returns:
-//   error: Error if service is already running.
+//
+//	error: Error if service is already running.
 func (s *FuturesArbitrageService) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

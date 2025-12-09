@@ -63,10 +63,12 @@ type ResourceManager struct {
 // NewResourceManager creates a new resource manager.
 //
 // Parameters:
-//   logger: Logger instance.
+//
+//	logger: Logger instance.
 //
 // Returns:
-//   *ResourceManager: Initialized manager.
+//
+//	*ResourceManager: Initialized manager.
 func NewResourceManager(logger *logrus.Logger) *ResourceManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -97,10 +99,11 @@ func NewResourceManager(logger *logrus.Logger) *ResourceManager {
 // RegisterResource registers a new resource for management.
 //
 // Parameters:
-//   id: Unique resource identifier.
-//   resourceType: Type of resource.
-//   cleanupFunc: Function to clean up the resource.
-//   metadata: Additional metadata.
+//
+//	id: Unique resource identifier.
+//	resourceType: Type of resource.
+//	cleanupFunc: Function to clean up the resource.
+//	metadata: Additional metadata.
 func (rm *ResourceManager) RegisterResource(id string, resourceType ResourceType, cleanupFunc func() error, metadata map[string]interface{}) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -133,7 +136,8 @@ func (rm *ResourceManager) RegisterResource(id string, resourceType ResourceType
 // UpdateResourceUsage updates the last used time for a resource.
 //
 // Parameters:
-//   id: Resource identifier.
+//
+//	id: Resource identifier.
 func (rm *ResourceManager) UpdateResourceUsage(id string) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -146,10 +150,12 @@ func (rm *ResourceManager) UpdateResourceUsage(id string) {
 // CleanupResource manually cleans up a specific resource.
 //
 // Parameters:
-//   id: Resource identifier.
+//
+//	id: Resource identifier.
 //
 // Returns:
-//   error: Error if cleanup fails.
+//
+//	error: Error if cleanup fails.
 func (rm *ResourceManager) CleanupResource(id string) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -261,7 +267,8 @@ func (rm *ResourceManager) DetectLeaks() {
 // GetResourceStats returns statistics for all resource types.
 //
 // Returns:
-//   map[ResourceType]*ResourceStats: Stats per type.
+//
+//	map[ResourceType]*ResourceStats: Stats per type.
 func (rm *ResourceManager) GetResourceStats() map[ResourceType]*ResourceStats {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -284,7 +291,8 @@ func (rm *ResourceManager) GetResourceStats() map[ResourceType]*ResourceStats {
 // GetSystemStats returns system-level resource statistics.
 //
 // Returns:
-//   map[string]interface{}: System stats.
+//
+//	map[string]interface{}: System stats.
 func (rm *ResourceManager) GetSystemStats() map[string]interface{} {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -380,7 +388,8 @@ func (rm *ResourceManager) Shutdown() {
 // SetMaxIdleTime sets the maximum idle time before cleanup.
 //
 // Parameters:
-//   duration: Idle duration.
+//
+//	duration: Idle duration.
 func (rm *ResourceManager) SetMaxIdleTime(duration time.Duration) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -390,7 +399,8 @@ func (rm *ResourceManager) SetMaxIdleTime(duration time.Duration) {
 // SetCleanupInterval sets the cleanup interval.
 //
 // Parameters:
-//   duration: Interval duration.
+//
+//	duration: Interval duration.
 func (rm *ResourceManager) SetCleanupInterval(duration time.Duration) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -400,7 +410,8 @@ func (rm *ResourceManager) SetCleanupInterval(duration time.Duration) {
 // SetMaxResources sets the maximum number of resources.
 //
 // Parameters:
-//   max: Maximum count.
+//
+//	max: Maximum count.
 func (rm *ResourceManager) SetMaxResources(max int) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -410,7 +421,8 @@ func (rm *ResourceManager) SetMaxResources(max int) {
 // GetResourceCount returns the current number of managed resources.
 //
 // Returns:
-//   int: Count.
+//
+//	int: Count.
 func (rm *ResourceManager) GetResourceCount() int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -420,10 +432,12 @@ func (rm *ResourceManager) GetResourceCount() int {
 // IsResourceManaged checks if a resource is currently managed.
 //
 // Parameters:
-//   id: Resource identifier.
+//
+//	id: Resource identifier.
 //
 // Returns:
-//   bool: True if managed.
+//
+//	bool: True if managed.
 func (rm *ResourceManager) IsResourceManaged(id string) bool {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()

@@ -38,10 +38,12 @@ type FuturesArbitrageHandler struct {
 // NewFuturesArbitrageHandler creates a new futures arbitrage handler.
 //
 // Parameters:
-//   db: Database pool.
+//
+//	db: Database pool.
 //
 // Returns:
-//   *FuturesArbitrageHandler: Initialized handler.
+//
+//	*FuturesArbitrageHandler: Initialized handler.
 func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
 	// Initialize logger and metrics collector
 	logger := logging.NewStandardLogger("info", "production")
@@ -58,10 +60,12 @@ func NewFuturesArbitrageHandler(db *pgxpool.Pool) *FuturesArbitrageHandler {
 // This is useful for testing.
 //
 // Parameters:
-//   db: Database querier.
+//
+//	db: Database querier.
 //
 // Returns:
-//   *FuturesArbitrageHandler: Initialized handler.
+//
+//	*FuturesArbitrageHandler: Initialized handler.
 func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandler {
 	// Initialize logger and metrics collector
 	logger := logging.NewStandardLogger("info", "production")
@@ -78,7 +82,8 @@ func NewFuturesArbitrageHandlerWithQuerier(db DBQuerier) *FuturesArbitrageHandle
 // It retrieves available opportunities based on filters.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesArbitrageOpportunities(c *gin.Context) {
 	// Parse query parameters
 	req := h.parseArbitrageRequest(c)
@@ -119,7 +124,8 @@ func (h *FuturesArbitrageHandler) GetFuturesArbitrageOpportunities(c *gin.Contex
 // It calculates arbitrage potential for a specific scenario.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *FuturesArbitrageHandler) CalculateFuturesArbitrage(c *gin.Context) {
 	var input models.FuturesArbitrageCalculationInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -169,7 +175,8 @@ func (h *FuturesArbitrageHandler) CalculateFuturesArbitrage(c *gin.Context) {
 // It retrieves a specific strategy by ID.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesArbitrageStrategy(c *gin.Context) {
 	strategyID := c.Param("id")
 
@@ -190,7 +197,8 @@ func (h *FuturesArbitrageHandler) GetFuturesArbitrageStrategy(c *gin.Context) {
 // It provides a summary of market conditions and opportunities.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *FuturesArbitrageHandler) GetFuturesMarketSummary(c *gin.Context) {
 	// Get all active opportunities
 	opportunities, _, err := h.getFuturesOpportunitiesFromDB(models.FuturesArbitrageRequest{
@@ -219,7 +227,8 @@ func (h *FuturesArbitrageHandler) GetFuturesMarketSummary(c *gin.Context) {
 // It calculates recommended position sizes based on risk parameters.
 //
 // Parameters:
-//   c: Gin context.
+//
+//	c: Gin context.
 func (h *FuturesArbitrageHandler) GetPositionSizingRecommendation(c *gin.Context) {
 	var input models.FuturesArbitrageCalculationInput
 	if err := c.ShouldBindJSON(&input); err != nil {

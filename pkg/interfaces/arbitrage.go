@@ -11,21 +11,21 @@ import (
 // prices, profit margins, and timestamps.
 type ArbitrageOpportunityResponse struct {
 	// Symbol is the trading pair symbol (e.g., "BTC/USD").
-	Symbol           string          `json:"symbol"`
+	Symbol string `json:"symbol"`
 	// BuyExchange is the name of the exchange where the asset is bought.
-	BuyExchange      string          `json:"buy_exchange"`
+	BuyExchange string `json:"buy_exchange"`
 	// SellExchange is the name of the exchange where the asset is sold.
-	SellExchange     string          `json:"sell_exchange"`
+	SellExchange string `json:"sell_exchange"`
 	// BuyPrice is the price at which the asset can be bought on the BuyExchange.
-	BuyPrice         decimal.Decimal `json:"buy_price"`
+	BuyPrice decimal.Decimal `json:"buy_price"`
 	// SellPrice is the price at which the asset can be sold on the SellExchange.
-	SellPrice        decimal.Decimal `json:"sell_price"`
+	SellPrice decimal.Decimal `json:"sell_price"`
 	// ProfitPercentage is the potential profit percentage from the arbitrage trade.
 	ProfitPercentage decimal.Decimal `json:"profit_percentage"`
 	// DetectedAt is the timestamp when the arbitrage opportunity was first detected.
-	DetectedAt       time.Time       `json:"detected_at"`
+	DetectedAt time.Time `json:"detected_at"`
 	// ExpiresAt is the timestamp when the opportunity is expected to no longer be valid.
-	ExpiresAt        time.Time       `json:"expires_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // ArbitrageOpportunityInterface defines the contract for accessing arbitrage opportunity data.
@@ -83,7 +83,8 @@ type ArbitrageOpportunityInterface interface {
 // GetSymbol returns the trading pair symbol for this arbitrage opportunity.
 //
 // Returns:
-//   string: The symbol (e.g., "BTC/USDT").
+//
+//	string: The symbol (e.g., "BTC/USDT").
 func (ao *ArbitrageOpportunityResponse) GetSymbol() string {
 	return ao.Symbol
 }
@@ -91,7 +92,8 @@ func (ao *ArbitrageOpportunityResponse) GetSymbol() string {
 // GetBuyExchange returns the name of the exchange where the asset is to be bought.
 //
 // Returns:
-//   string: The buy exchange name.
+//
+//	string: The buy exchange name.
 func (ao *ArbitrageOpportunityResponse) GetBuyExchange() string {
 	return ao.BuyExchange
 }
@@ -99,7 +101,8 @@ func (ao *ArbitrageOpportunityResponse) GetBuyExchange() string {
 // GetSellExchange returns the name of the exchange where the asset is to be sold.
 //
 // Returns:
-//   string: The sell exchange name.
+//
+//	string: The sell exchange name.
 func (ao *ArbitrageOpportunityResponse) GetSellExchange() string {
 	return ao.SellExchange
 }
@@ -107,7 +110,8 @@ func (ao *ArbitrageOpportunityResponse) GetSellExchange() string {
 // GetBuyPrice returns the price at which the asset is bought.
 //
 // Returns:
-//   decimal.Decimal: The buy price.
+//
+//	decimal.Decimal: The buy price.
 func (ao *ArbitrageOpportunityResponse) GetBuyPrice() decimal.Decimal {
 	return ao.BuyPrice
 }
@@ -115,7 +119,8 @@ func (ao *ArbitrageOpportunityResponse) GetBuyPrice() decimal.Decimal {
 // GetSellPrice returns the price at which the asset is sold.
 //
 // Returns:
-//   decimal.Decimal: The sell price.
+//
+//	decimal.Decimal: The sell price.
 func (ao *ArbitrageOpportunityResponse) GetSellPrice() decimal.Decimal {
 	return ao.SellPrice
 }
@@ -123,7 +128,8 @@ func (ao *ArbitrageOpportunityResponse) GetSellPrice() decimal.Decimal {
 // GetProfitPercentage returns the calculated profit percentage.
 //
 // Returns:
-//   decimal.Decimal: The profit percentage.
+//
+//	decimal.Decimal: The profit percentage.
 func (ao *ArbitrageOpportunityResponse) GetProfitPercentage() decimal.Decimal {
 	return ao.ProfitPercentage
 }
@@ -131,7 +137,8 @@ func (ao *ArbitrageOpportunityResponse) GetProfitPercentage() decimal.Decimal {
 // GetDetectedAt returns the timestamp when the opportunity was detected.
 //
 // Returns:
-//   time.Time: The detection time.
+//
+//	time.Time: The detection time.
 func (ao *ArbitrageOpportunityResponse) GetDetectedAt() time.Time {
 	return ao.DetectedAt
 }
@@ -139,7 +146,8 @@ func (ao *ArbitrageOpportunityResponse) GetDetectedAt() time.Time {
 // GetExpiresAt returns the timestamp when the opportunity expires.
 //
 // Returns:
-//   time.Time: The expiration time.
+//
+//	time.Time: The expiration time.
 func (ao *ArbitrageOpportunityResponse) GetExpiresAt() time.Time {
 	return ao.ExpiresAt
 }

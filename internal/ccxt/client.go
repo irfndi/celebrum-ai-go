@@ -26,10 +26,12 @@ type Client struct {
 // NewClient creates a new CCXT client instance.
 //
 // Parameters:
-//   cfg: CCXT configuration.
+//
+//	cfg: CCXT configuration.
 //
 // Returns:
-//   *Client: Initialized client.
+//
+//	*Client: Initialized client.
 func NewClient(cfg *config.CCXTConfig) *Client {
 	timeout := time.Duration(cfg.Timeout) * time.Second
 	if timeout == 0 {
@@ -53,11 +55,13 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 // HealthCheck checks if the CCXT service is healthy.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *HealthResponse: Health status.
-//   error: Error if check fails.
+//
+//	*HealthResponse: Health status.
+//	error: Error if check fails.
 func (c *Client) HealthCheck(ctx context.Context) (*HealthResponse, error) {
 	var response HealthResponse
 	err := c.makeRequest(ctx, "GET", "/health", nil, &response)
@@ -70,11 +74,13 @@ func (c *Client) HealthCheck(ctx context.Context) (*HealthResponse, error) {
 // GetExchanges retrieves all supported exchanges.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *ExchangesResponse: List of exchanges.
-//   error: Error if retrieval fails.
+//
+//	*ExchangesResponse: List of exchanges.
+//	error: Error if retrieval fails.
 func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
 	var response ExchangesResponse
 	err := c.makeRequest(ctx, "GET", "/api/exchanges", nil, &response)
@@ -84,13 +90,15 @@ func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
 // GetTicker retrieves ticker data for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
 //
 // Returns:
-//   *TickerResponse: Ticker data.
-//   error: Error if retrieval fails.
+//
+//	*TickerResponse: Ticker data.
+//	error: Error if retrieval fails.
 func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
 	// Convert symbol format based on exchange requirements
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
@@ -103,12 +111,14 @@ func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*Ticke
 // GetTickers retrieves multiple tickers in a single request.
 //
 // Parameters:
-//   ctx: Context.
-//   req: Tickers request containing symbols and optional exchanges.
+//
+//	ctx: Context.
+//	req: Tickers request containing symbols and optional exchanges.
 //
 // Returns:
-//   *TickersResponse: Ticker data list.
-//   error: Error if retrieval fails.
+//
+//	*TickersResponse: Ticker data list.
+//	error: Error if retrieval fails.
 func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
 	var response TickersResponse
 	err := c.makeRequest(ctx, "POST", "/api/tickers", req, &response)
@@ -118,14 +128,16 @@ func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersR
 // GetOrderBook retrieves order book data for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   limit: Depth limit.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	limit: Depth limit.
 //
 // Returns:
-//   *OrderBookResponse: Order book data.
-//   error: Error if retrieval fails.
+//
+//	*OrderBookResponse: Order book data.
+//	error: Error if retrieval fails.
 func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
 	// Convert symbol format based on exchange requirements
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
@@ -141,14 +153,16 @@ func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limi
 // GetTrades retrieves recent trades for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   limit: Number of trades to retrieve.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	limit: Number of trades to retrieve.
 //
 // Returns:
-//   *TradesResponse: Trade history.
-//   error: Error if retrieval fails.
+//
+//	*TradesResponse: Trade history.
+//	error: Error if retrieval fails.
 func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
 	// Convert symbol format based on exchange requirements
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
@@ -164,15 +178,17 @@ func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit i
 // GetOHLCV retrieves OHLCV data for a specific exchange and symbol.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
-//   timeframe: Candle timeframe.
-//   limit: Number of candles.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
+//	timeframe: Candle timeframe.
+//	limit: Number of candles.
 //
 // Returns:
-//   *OHLCVResponse: OHLCV data.
-//   error: Error if retrieval fails.
+//
+//	*OHLCVResponse: OHLCV data.
+//	error: Error if retrieval fails.
 func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
 	// Convert symbol format based on exchange requirements
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
@@ -195,12 +211,14 @@ func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe strin
 // GetMarkets retrieves all trading pairs for a specific exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *MarketsResponse: List of markets.
-//   error: Error if retrieval fails.
+//
+//	*MarketsResponse: List of markets.
+//	error: Error if retrieval fails.
 func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
 	path := fmt.Sprintf("/api/markets/%s", exchange)
 	var response MarketsResponse
@@ -211,13 +229,15 @@ func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsRespo
 // GetFundingRate retrieves funding rate for a specific symbol on an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbol: Trading pair symbol.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbol: Trading pair symbol.
 //
 // Returns:
-//   *FundingRate: Funding rate data.
-//   error: Error if retrieval fails.
+//
+//	*FundingRate: Funding rate data.
+//	error: Error if retrieval fails.
 func (c *Client) GetFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
 	path := fmt.Sprintf("/api/funding-rate/%s/%s", exchange, ccxtSymbol)
@@ -229,13 +249,15 @@ func (c *Client) GetFundingRate(ctx context.Context, exchange, symbol string) (*
 // GetFundingRates retrieves funding rates for multiple symbols on an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
-//   symbols: List of symbols.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
+//	symbols: List of symbols.
 //
 // Returns:
-//   []FundingRate: List of funding rates.
-//   error: Error if retrieval fails.
+//
+//	[]FundingRate: List of funding rates.
+//	error: Error if retrieval fails.
 func (c *Client) GetFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 	if len(symbols) == 0 {
 		return []FundingRate{}, nil
@@ -262,12 +284,14 @@ func (c *Client) GetFundingRates(ctx context.Context, exchange string, symbols [
 // GetAllFundingRates retrieves all available funding rates for an exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   []FundingRate: List of funding rates.
-//   error: Error if retrieval fails.
+//
+//	[]FundingRate: List of funding rates.
+//	error: Error if retrieval fails.
 func (c *Client) GetAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error) {
 	path := fmt.Sprintf("/api/funding-rates/%s", exchange)
 	var response FundingRateResponse
@@ -283,11 +307,13 @@ func (c *Client) GetAllFundingRates(ctx context.Context, exchange string) ([]Fun
 // GetExchangeConfig retrieves the current exchange configuration.
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *ExchangeConfigResponse: Exchange configuration.
-//   error: Error if retrieval fails.
+//
+//	*ExchangeConfigResponse: Exchange configuration.
+//	error: Error if retrieval fails.
 func (c *Client) GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse, error) {
 	var response ExchangeConfigResponse
 	err := c.makeRequest(ctx, "GET", "/api/admin/exchanges/config", nil, &response)
@@ -297,12 +323,14 @@ func (c *Client) GetExchangeConfig(ctx context.Context) (*ExchangeConfigResponse
 // AddExchangeToBlacklist adds an exchange to the blacklist.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (c *Client) AddExchangeToBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	path := fmt.Sprintf("/api/admin/exchanges/blacklist/%s", exchange)
 	var response ExchangeManagementResponse
@@ -313,12 +341,14 @@ func (c *Client) AddExchangeToBlacklist(ctx context.Context, exchange string) (*
 // RemoveExchangeFromBlacklist removes an exchange from the blacklist.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (c *Client) RemoveExchangeFromBlacklist(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	path := fmt.Sprintf("/api/admin/exchanges/blacklist/%s", exchange)
 	var response ExchangeManagementResponse
@@ -329,11 +359,13 @@ func (c *Client) RemoveExchangeFromBlacklist(ctx context.Context, exchange strin
 // RefreshExchanges refreshes all exchanges (re-initializes non-blacklisted exchanges).
 //
 // Parameters:
-//   ctx: Context.
+//
+//	ctx: Context.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (c *Client) RefreshExchanges(ctx context.Context) (*ExchangeManagementResponse, error) {
 	var response ExchangeManagementResponse
 	err := c.makeRequest(ctx, "POST", "/api/admin/exchanges/refresh", nil, &response)
@@ -343,12 +375,14 @@ func (c *Client) RefreshExchanges(ctx context.Context) (*ExchangeManagementRespo
 // AddExchange dynamically adds a new exchange.
 //
 // Parameters:
-//   ctx: Context.
-//   exchange: Exchange ID.
+//
+//	ctx: Context.
+//	exchange: Exchange ID.
 //
 // Returns:
-//   *ExchangeManagementResponse: Response.
-//   error: Error if operation fails.
+//
+//	*ExchangeManagementResponse: Response.
+//	error: Error if operation fails.
 func (c *Client) AddExchange(ctx context.Context, exchange string) (*ExchangeManagementResponse, error) {
 	path := fmt.Sprintf("/api/admin/exchanges/add/%s", exchange)
 	var response ExchangeManagementResponse
@@ -430,7 +464,8 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 // Close closes the HTTP client (if needed for cleanup).
 //
 // Returns:
-//   error: Always nil.
+//
+//	error: Always nil.
 func (c *Client) Close() error {
 	// HTTP client doesn't need explicit closing, but this method
 	// is provided for interface compatibility
@@ -440,7 +475,8 @@ func (c *Client) Close() error {
 // BaseURL returns the base URL of the CCXT service.
 //
 // Returns:
-//   string: The base URL.
+//
+//	string: The base URL.
 func (c *Client) BaseURL() string {
 	return c.baseURL
 }

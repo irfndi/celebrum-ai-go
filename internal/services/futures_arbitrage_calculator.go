@@ -21,7 +21,8 @@ type FuturesArbitrageCalculator struct {
 // NewFuturesArbitrageCalculator creates a new calculator instance.
 //
 // Returns:
-//   *FuturesArbitrageCalculator: Initialized calculator.
+//
+//	*FuturesArbitrageCalculator: Initialized calculator.
 func NewFuturesArbitrageCalculator() *FuturesArbitrageCalculator {
 	return &FuturesArbitrageCalculator{
 		DefaultFundingInterval:  8,
@@ -33,11 +34,13 @@ func NewFuturesArbitrageCalculator() *FuturesArbitrageCalculator {
 // CalculateFuturesArbitrage calculates a complete futures arbitrage opportunity.
 //
 // Parameters:
-//   input: Calculation inputs.
+//
+//	input: Calculation inputs.
 //
 // Returns:
-//   *models.FuturesArbitrageOpportunity: Calculated opportunity.
-//   error: Error if calculation fails.
+//
+//	*models.FuturesArbitrageOpportunity: Calculated opportunity.
+//	error: Error if calculation fails.
 func (calc *FuturesArbitrageCalculator) CalculateFuturesArbitrage(
 	input models.FuturesArbitrageCalculationInput,
 ) (*models.FuturesArbitrageOpportunity, error) {
@@ -127,10 +130,12 @@ func (calc *FuturesArbitrageCalculator) calculateHourlyRate(netFundingRate decim
 // CalculateAPY calculates Annual Percentage Yield from hourly rate.
 //
 // Parameters:
-//   hourlyRate: Hourly profit rate.
+//
+//	hourlyRate: Hourly profit rate.
 //
 // Returns:
-//   decimal.Decimal: APY.
+//
+//	decimal.Decimal: APY.
 func (calc *FuturesArbitrageCalculator) CalculateAPY(hourlyRate decimal.Decimal) decimal.Decimal {
 	// APY = (1 + hourly_rate)^(24*365) - 1
 	// Using compound interest formula
@@ -173,10 +178,12 @@ func (calc *FuturesArbitrageCalculator) calculatePeriodProfit(
 // CalculateRiskScore calculates overall risk score (0-100).
 //
 // Parameters:
-//   input: Calculation inputs.
+//
+//	input: Calculation inputs.
 //
 // Returns:
-//   decimal.Decimal: Risk score.
+//
+//	decimal.Decimal: Risk score.
 func (calc *FuturesArbitrageCalculator) CalculateRiskScore(
 	input models.FuturesArbitrageCalculationInput,
 ) decimal.Decimal {
@@ -307,11 +314,13 @@ func (calc *FuturesArbitrageCalculator) calculateLiquidityScore(
 // CalculatePositionSizing calculates recommended position sizes and leverage.
 //
 // Parameters:
-//   input: Calculation inputs.
-//   riskScore: Calculated risk score.
+//
+//	input: Calculation inputs.
+//	riskScore: Calculated risk score.
 //
 // Returns:
-//   models.FuturesPositionSizing: Position sizing details.
+//
+//	models.FuturesPositionSizing: Position sizing details.
 func (calc *FuturesArbitrageCalculator) CalculatePositionSizing(
 	input models.FuturesArbitrageCalculationInput,
 	riskScore decimal.Decimal,
@@ -456,11 +465,13 @@ func (calc *FuturesArbitrageCalculator) isOpportunityActive(
 // CalculateRiskMetrics calculates comprehensive risk assessment.
 //
 // Parameters:
-//   input: Calculation inputs.
-//   historicalData: Historical funding rates.
+//
+//	input: Calculation inputs.
+//	historicalData: Historical funding rates.
 //
 // Returns:
-//   models.FuturesArbitrageRiskMetrics: Risk metrics.
+//
+//	models.FuturesArbitrageRiskMetrics: Risk metrics.
 func (calc *FuturesArbitrageCalculator) CalculateRiskMetrics(
 	input models.FuturesArbitrageCalculationInput,
 	historicalData []models.FundingRateHistoryPoint,
@@ -682,12 +693,14 @@ func (calc *FuturesArbitrageCalculator) calculateVariance(values []float64, mean
 // CalculateArbitrageOpportunities calculates regular price arbitrage opportunities across exchanges.
 //
 // Parameters:
-//   ctx: Context.
-//   marketData: Market data map.
+//
+//	ctx: Context.
+//	marketData: Market data map.
 //
 // Returns:
-//   []models.ArbitrageOpportunity: List of opportunities.
-//   error: Error if calculation fails.
+//
+//	[]models.ArbitrageOpportunity: List of opportunities.
+//	error: Error if calculation fails.
 func (calc *FuturesArbitrageCalculator) CalculateArbitrageOpportunities(
 	ctx context.Context,
 	marketData map[string][]models.MarketData,
@@ -809,12 +822,14 @@ func (calc *FuturesArbitrageCalculator) calculateSymbolArbitrage(
 // GenerateCompleteStrategy creates a complete futures arbitrage strategy with execution details.
 //
 // Parameters:
-//   opportunity: The arbitrage opportunity.
-//   availableCapital: Capital to allocate.
-//   riskTolerance: User risk tolerance ("low", "medium", "high").
+//
+//	opportunity: The arbitrage opportunity.
+//	availableCapital: Capital to allocate.
+//	riskTolerance: User risk tolerance ("low", "medium", "high").
 //
 // Returns:
-//   *models.FuturesArbitrageStrategy: Generated strategy.
+//
+//	*models.FuturesArbitrageStrategy: Generated strategy.
 func (calc *FuturesArbitrageCalculator) GenerateCompleteStrategy(
 	opportunity *models.FuturesArbitrageOpportunity,
 	availableCapital decimal.Decimal,

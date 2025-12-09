@@ -247,7 +247,8 @@ type BlacklistCache interface {
 // This function serves as a factory for creating default blacklist cache instances.
 //
 // Returns:
-//   BlacklistCache: An in-memory implementation of the BlacklistCache interface.
+//
+//	BlacklistCache: An in-memory implementation of the BlacklistCache interface.
 func NewInMemoryBlacklistCache() BlacklistCache {
 	return &mockBlacklistCache{}
 }
@@ -256,11 +257,13 @@ func NewInMemoryBlacklistCache() BlacklistCache {
 // This function serves as a factory for creating Redis symbol cache instances.
 //
 // Parameters:
-//   redisClient: The Redis client instance (typed as interface{} to avoid imports).
-//   ttl: The default time-to-live for cache entries.
+//
+//	redisClient: The Redis client instance (typed as interface{} to avoid imports).
+//	ttl: The default time-to-live for cache entries.
 //
 // Returns:
-//   SymbolCacheInterface: A Redis-based implementation of the SymbolCacheInterface.
+//
+//	SymbolCacheInterface: A Redis-based implementation of the SymbolCacheInterface.
 func NewRedisSymbolCache(redisClient interface{}, ttl time.Duration) SymbolCacheInterface {
 	return &mockSymbolCache{}
 }
