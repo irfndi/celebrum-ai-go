@@ -252,11 +252,11 @@ func TestCalculateRSI(t *testing.T) {
 }
 
 func TestCalculateMACD(t *testing.T) {
-	t.Skip("Skipping due to goroutine leaks in github.com/cinar/indicator/v2 library")
+	t.Skip("Skipping due to hangs in github.com/cinar/indicator/v2 MACD implementation")
 
 	service, _ := setupTestService()
 
-	prices := make([]float64, 50)
+	prices := make([]float64, 200)
 	for i := range prices {
 		prices[i] = 100 + float64(i)*0.5 // Trending upward
 	}
@@ -551,7 +551,7 @@ func TestConvertToSnapshots(t *testing.T) {
 // Integration-style tests
 
 func TestCalculateAllIndicators(t *testing.T) {
-	t.Skip("Skipping due to goroutine leaks in github.com/cinar/indicator/v2 library")
+	t.Skip("Skipping due to hangs in MACD calculation")
 
 	service, _ := setupTestService()
 	priceData := generateTestPriceData(100)
@@ -622,7 +622,7 @@ func BenchmarkCalculateRSI(b *testing.B) {
 }
 
 func BenchmarkCalculateAllIndicators(b *testing.B) {
-	b.Skip("Skipping due to goroutine leaks in github.com/cinar/indicator/v2 library")
+	b.Skip("Skipping due to hangs in MACD calculation")
 
 	service, _ := setupTestService()
 	priceData := generateTestPriceData(200)
