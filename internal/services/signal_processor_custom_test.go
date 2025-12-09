@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+	"os"
+
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"log/slog"
-	"os"
 
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 )
