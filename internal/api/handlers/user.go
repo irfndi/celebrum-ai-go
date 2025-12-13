@@ -19,10 +19,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TokenGenerator interface for generating JWT tokens
+type TokenGenerator interface {
+	GenerateToken(userID, email string, duration time.Duration) (string, error)
+}
+
 type UserHandler struct {
-	db      *database.PostgresDB
-	redis   *redis.Client
-	querier DBQuerier // For testing with mocks
+	db       *database.PostgresDB
+	redis    *redis.Client
+	querier  DBQuerier // For testing with mocks
+	tokenGen TokenGenerator
 }
 
 type RegisterRequest struct {
@@ -54,10 +60,11 @@ type UpdateProfileRequest struct {
 	TelegramChatID *string `json:"telegram_chat_id,omitempty"`
 }
 
-func NewUserHandler(db *database.PostgresDB, redisClient *redis.Client) *UserHandler {
+func NewUserHandler(db *database.PostgresDB, redisClient *redis.Client, tokenGen TokenGenerator) *UserHandler {
 	return &UserHandler{
-		db:    db,
-		redis: redisClient,
+		db:       db,
+		redis:    redisClient,
+		tokenGen: tokenGen,
 	}
 }
 
@@ -69,7 +76,7 @@ type DBQuerier interface {
 }
 
 // NewUserHandlerWithQuerier creates a UserHandler with a custom querier for testing
-func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *UserHandler {
+func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client, tokenGen TokenGenerator) *UserHandler {
 	// For testing, we create a special database wrapper that uses the querier directly
 	db := &database.PostgresDB{}
 	// We'll need to modify the methods to use the querier interface instead of Pool
@@ -82,9 +89,10 @@ func NewUserHandlerWithQuerier(querier DBQuerier, redisClient *redis.Client) *Us
 		db = nil // This will force methods to handle nil database
 	}
 	return &UserHandler{
-		db:      db,
-		redis:   redisClient,
-		querier: querier, // We need to add this field
+		db:       db,
+		redis:    redisClient,
+		querier:  querier, // We need to add this field
+		tokenGen: tokenGen,
 	}
 }
 
@@ -183,8 +191,21 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT token (simplified - in production use proper JWT library)
-	token := h.generateSimpleToken(user.ID)
+	// Generate JWT token
+	var token string
+	if h.tokenGen != nil {
+		var err error
+		token, err = h.tokenGen.GenerateToken(user.ID, user.Email, 24*time.Hour)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+			return
+		}
+	} else {
+		// Fallback should only happen in tests if tokenGen is not provided
+		// In production, tokenGen must be provided
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Token generator not configured"})
+		return
+	}
 
 	userResponse := UserResponse{
 		ID:               user.ID,
@@ -205,12 +226,8 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 
 // GetUserProfile returns the current user's profile
 func (h *UserHandler) GetUserProfile(c *gin.Context) {
-	// In a real implementation, you would extract user ID from JWT token
-	// For now, we'll use a query parameter or header
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
-	}
+	// Extract user ID from JWT token context (set by AuthMiddleware)
+	userID := c.GetString("user_id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
@@ -237,10 +254,8 @@ func (h *UserHandler) GetUserProfile(c *gin.Context) {
 
 // UpdateUserProfile updates user profile information
 func (h *UserHandler) UpdateUserProfile(c *gin.Context) {
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
-	}
+	// Extract user ID from JWT token context (set by AuthMiddleware)
+	userID := c.GetString("user_id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
@@ -490,13 +505,6 @@ func (h *UserHandler) invalidateUserCache(ctx context.Context, userID string, ol
 			log.Printf("Invalidated new telegram cache for chat ID %s", *newTelegramChatID)
 		}
 	}
-}
-
-// generateSimpleToken creates a simple token (in production, use proper JWT)
-func (h *UserHandler) generateSimpleToken(userID string) string {
-	// This is a simplified token generation
-	// In production, use a proper JWT library like github.com/golang-jwt/jwt
-	return fmt.Sprintf("token_%s_%d", userID, time.Now().Unix())
 }
 
 // GetUserByTelegramChatID retrieves user by Telegram chat ID (for Telegram bot) with Redis caching
