@@ -139,3 +139,25 @@ local/
 
 # Fix files
 fix.txt
+
+# Added by Task Master AI
+logs
+dev-debug.log
+# Dependency directories
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+
+mcp.json
+# MCP Server directories (taskmaster, cursor, roo, etc.)
+.taskmaster/
+.cursor/
+.roo/
+.roomodes
+.windsurfrules
