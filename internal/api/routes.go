@@ -56,7 +56,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	telegramHandler := handlers.NewTelegramHandler(db, telegramConfig, arbitrageHandler, signalAggregator, redis.Client)
 	fmt.Printf("DEBUG: Telegram handler initialized: %+v\n", telegramHandler != nil)
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
-	userHandler := handlers.NewUserHandler(db, redis.Client)
+	userHandler := handlers.NewUserHandler(db, redis.Client, authMiddleware)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
 	cacheHandler := handlers.NewCacheHandler(cacheAnalyticsService)

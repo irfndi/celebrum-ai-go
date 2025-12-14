@@ -23,6 +23,22 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// MockTokenGenerator for testing
+type MockTokenGenerator struct {
+	Token string
+	Error error
+}
+
+func (m *MockTokenGenerator) GenerateToken(userID, email string, duration time.Duration) (string, error) {
+	if m.Error != nil {
+		return "", m.Error
+	}
+	if m.Token != "" {
+		return m.Token, nil
+	}
+	return "mock_token_" + userID, nil
+}
+
 // setupTestRedis creates a Redis client for testing
 func setupTestRedis(t *testing.T) *redis.Client {
 	// Use Redis database 15 for testing to avoid conflicts
@@ -44,15 +60,17 @@ func setupTestRedis(t *testing.T) *redis.Client {
 
 func TestNewUserHandler(t *testing.T) {
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	tokenGen := &MockTokenGenerator{}
+	handler := NewUserHandler(mockDB, nil, tokenGen)
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, mockDB, handler.db)
+	assert.Equal(t, tokenGen, handler.tokenGen)
 }
 
 func TestUserHandler_RegisterUser(t *testing.T) {
 	t.Run("invalid JSON body", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -70,7 +88,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 	})
 
 	t.Run("missing email", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"password": TestValidPassword,
@@ -93,7 +111,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 	})
 
 	t.Run("missing password", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email": "test@example.com",
@@ -116,7 +134,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 	})
 
 	t.Run("password too short", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email":    "test@example.com",
@@ -140,7 +158,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 	})
 
 	t.Run("invalid email format", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email":    "invalid-email",
@@ -179,7 +197,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs(pgxmock.AnyArg(), "test@example.com", pgxmock.AnyArg(), (*string)(nil), "free").
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
@@ -220,7 +238,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs("existing@example.com").
 			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:    "existing@example.com",
@@ -257,7 +275,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs("test@example.com").
 			WillReturnError(fmt.Errorf("database connection error"))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
@@ -299,7 +317,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs(pgxmock.AnyArg(), "test@example.com", pgxmock.AnyArg(), (*string)(nil), "free").
 			WillReturnError(fmt.Errorf("insertion failed"))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:    "test@example.com",
@@ -343,7 +361,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs(pgxmock.AnyArg(), "test@example.com", pgxmock.AnyArg(), &telegramChatID, "free").
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:          "test@example.com",
@@ -376,7 +394,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 func TestUserHandler_LoginUser(t *testing.T) {
 	t.Run("invalid JSON body", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -394,7 +412,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 	})
 
 	t.Run("missing email", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"password": TestValidPassword,
@@ -417,7 +435,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 	})
 
 	t.Run("missing password", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email": "test@example.com",
@@ -454,7 +472,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WithArgs("test@example.com").
 			WillReturnError(fmt.Errorf("database connection error"))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "test@example.com",
@@ -481,7 +499,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 	})
 
 	t.Run("empty email", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email":    "",
@@ -505,7 +523,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 	})
 
 	t.Run("empty password", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user := map[string]interface{}{
 			"email":    "test@example.com",
@@ -548,7 +566,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 				AddRow(userID.String(), "test@example.com", string(hashedPassword), nil, "free", time.Now(), time.Now()))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "test@example.com",
@@ -590,7 +608,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WithArgs("nonexistent@example.com").
 			WillReturnError(pgx.ErrNoRows)
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "nonexistent@example.com",
@@ -636,7 +654,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 				AddRow(userID.String(), "test@example.com", string(hashedPassword), nil, "free", time.Now(), time.Now()))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "test@example.com",
@@ -677,7 +695,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WithArgs("test@example.com").
 			WillReturnError(fmt.Errorf("database connection error"))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "test@example.com",
@@ -724,7 +742,7 @@ func TestUserHandler_LoginUser(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
 				AddRow(userID.String(), "test@example.com", string(hashedPassword), &telegramChatID, "premium", time.Now(), time.Now()))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := LoginRequest{
 			Email:    "test@example.com",
@@ -756,12 +774,13 @@ func TestUserHandler_LoginUser(t *testing.T) {
 }
 
 func TestUserHandler_GetUserProfile(t *testing.T) {
-	t.Run("missing user ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+	t.Run("missing user ID in context", func(t *testing.T) {
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request, _ = http.NewRequest("GET", "/users/profile", nil)
+		// Do not set user_id in context
 
 		handler.GetUserProfile(c)
 
@@ -774,38 +793,39 @@ func TestUserHandler_GetUserProfile(t *testing.T) {
 		assert.Contains(t, response["error"], "User ID required")
 	})
 
-	t.Run("user ID in header", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+	t.Run("user ID in context", func(t *testing.T) {
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/users/profile", nil)
+		c.Set("user_id", "test-user-id")
+
+		handler.GetUserProfile(c)
+
+		// Will return 404 since we don't have a real database
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("ignores X-User-ID header", func(t *testing.T) {
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request, _ = http.NewRequest("GET", "/users/profile", nil)
 		c.Request.Header.Set("X-User-ID", "test-user-id")
+		// user_id in context is missing
 
 		handler.GetUserProfile(c)
 
-		// Will return 404 since we don't have a real database
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("user ID in query", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
-
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("GET", "/users/profile?user_id=test-user-id", nil)
-		c.Request.URL.RawQuery = "user_id=test-user-id"
-
-		handler.GetUserProfile(c)
-
-		// Will return 404 since we don't have a real database
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		// Should be unauthorized because it ignores header
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
 
 func TestUserHandler_UpdateUserProfile(t *testing.T) {
 	t.Run("missing user ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		update := map[string]interface{}{
 			"telegram_chat_id": "123456789",
@@ -829,13 +849,13 @@ func TestUserHandler_UpdateUserProfile(t *testing.T) {
 	})
 
 	t.Run("invalid JSON body", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request, _ = http.NewRequest("PUT", "/users/profile", bytes.NewBuffer([]byte("invalid json")))
 		c.Request.Header.Set("Content-Type", "application/json")
-		c.Request.Header.Set("X-User-ID", "test-user-id")
+		c.Set("user_id", "test-user-id")
 
 		handler.UpdateUserProfile(c)
 
@@ -847,8 +867,8 @@ func TestUserHandler_UpdateUserProfile(t *testing.T) {
 		assert.Contains(t, response, "error")
 	})
 
-	t.Run("user ID from query parameter", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+	t.Run("ignores query parameter", func(t *testing.T) {
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		update := map[string]interface{}{
 			"telegram_chat_id": "123456789",
@@ -860,15 +880,16 @@ func TestUserHandler_UpdateUserProfile(t *testing.T) {
 		c.Request, _ = http.NewRequest("PUT", "/users/profile?user_id=test-user-id", bytes.NewBuffer(jsonData))
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Request.URL.RawQuery = "user_id=test-user-id"
+		// No user_id in context
 
 		handler.UpdateUserProfile(c)
 
-		// Should return 500 since database is not available
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		// Should return Unauthorized because query param is ignored
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("empty telegram chat ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		emptyChatID := ""
 		update := UpdateProfileRequest{
@@ -880,7 +901,7 @@ func TestUserHandler_UpdateUserProfile(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request, _ = http.NewRequest("PUT", "/users/profile", bytes.NewBuffer(jsonData))
 		c.Request.Header.Set("Content-Type", "application/json")
-		c.Request.Header.Set("X-User-ID", "test-user-id")
+		c.Set("user_id", "test-user-id")
 
 		handler.UpdateUserProfile(c)
 
@@ -969,7 +990,7 @@ func TestUserHandler_RegisterUser_InvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	// Create request with invalid JSON
 	invalidJSON := `{"email": "test@example.com", "password":}`
@@ -994,7 +1015,7 @@ func TestUserHandler_RegisterUser_MissingEmail(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	// Create request without email
 	reqBody := RegisterRequest{
@@ -1027,7 +1048,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock userExists query
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).WithArgs("test@example.com").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(0))
@@ -1057,7 +1078,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock userExists query returning true
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).WithArgs("existing@example.com").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
@@ -1084,7 +1105,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock userExists query with error
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).WithArgs("test@example.com").WillReturnError(assert.AnError)
@@ -1111,7 +1132,7 @@ func TestUserHandler_RegisterUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock userExists query
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).WithArgs("test@example.com").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(0))
@@ -1141,7 +1162,7 @@ func TestUserHandler_LoginUser_InvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	// Create request with invalid JSON
 	invalidJSON := `{"email": "test@example.com", "password":}`
@@ -1170,7 +1191,7 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock getUserByEmail query
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestPassword123), bcrypt.DefaultCost)
@@ -1200,7 +1221,7 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock getUserByEmail query with no rows
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).WithArgs("nonexistent@example.com").WillReturnError(pgx.ErrNoRows)
@@ -1227,7 +1248,7 @@ func TestUserHandler_LoginUser_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock getUserByEmail query with different password
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(TestDifferentPassword), bcrypt.DefaultCost)
@@ -1257,7 +1278,7 @@ func TestUserHandler_GetUserProfile_MissingUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -1279,7 +1300,7 @@ func TestUserHandler_UpdateUserProfile_MissingUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	reqBody := UpdateProfileRequest{
 		TelegramChatID: nil,
@@ -1311,7 +1332,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).WithArgs("user-123", (*string)(nil), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
@@ -1330,6 +1351,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1342,7 +1364,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query with error
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).WithArgs("user-123", (*string)(nil), pgxmock.AnyArg()).WillReturnError(assert.AnError)
@@ -1356,6 +1378,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1368,7 +1391,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock successful update
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).WithArgs("user-123", (*string)(nil), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
@@ -1385,6 +1408,7 @@ func TestUserHandler_UpdateUserProfile_WithMocks(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1397,7 +1421,7 @@ func TestUserHandler_UpdateUserProfile_InvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockDB := &database.PostgresDB{}
-	handler := NewUserHandler(mockDB, nil)
+	handler := NewUserHandler(mockDB, nil, &MockTokenGenerator{})
 
 	// Create request with invalid JSON
 	invalidJSON := `{"telegram_chat_id":}`
@@ -1405,7 +1429,7 @@ func TestUserHandler_UpdateUserProfile_InvalidJSON(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("PUT", "/profile", bytes.NewBufferString(invalidJSON))
 	c.Request.Header.Set("Content-Type", "application/json")
-	c.Request.Header.Set("X-User-ID", "user-123")
+	c.Set("user_id", "user-123")
 
 	// Execute
 	handler.UpdateUserProfile(c)
@@ -1427,7 +1451,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "987654321"
 		// Mock update query
@@ -1450,7 +1474,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
-		c.Request.Header.Set("X-User-ID", "user-123")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1463,23 +1487,23 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		assert.Contains(t, response, "user")
 	})
 
-	t.Run("user ID from header", func(t *testing.T) {
+	t.Run("user ID from context", func(t *testing.T) {
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).
-			WithArgs("header-user-123", (*string)(nil), pgxmock.AnyArg()).
+			WithArgs("context-user-123", (*string)(nil), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 		// Mock getUserByID query
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE id = \$1`).
-			WithArgs("header-user-123").
+			WithArgs("context-user-123").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
-				AddRow("header-user-123", "test@example.com", "hashedpass", nil, "free", time.Now(), time.Now()))
+				AddRow("context-user-123", "test@example.com", "hashedpass", nil, "free", time.Now(), time.Now()))
 
 		reqBody := UpdateProfileRequest{
 			TelegramChatID: nil,
@@ -1490,7 +1514,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
-		c.Request.Header.Set("X-User-ID", "header-user-123")
+		c.Set("user_id", "context-user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1499,7 +1523,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 	})
 
 	t.Run("missing user ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		reqBody := UpdateProfileRequest{
 			TelegramChatID: nil,
@@ -1523,7 +1547,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		reqBody := UpdateProfileRequest{
 			TelegramChatID: nil,
@@ -1534,6 +1558,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1551,7 +1576,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query with nil telegram_chat_id
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).
@@ -1568,6 +1593,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer([]byte("{}")))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1580,7 +1606,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query that affects 0 rows (user not found)
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).
@@ -1596,6 +1622,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=nonexistent-user", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "nonexistent-user")
 
 		handler.UpdateUserProfile(c)
 
@@ -1610,7 +1637,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock update query to return database error
 		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$2, updated_at = \$3 WHERE id = \$1`).
@@ -1626,6 +1653,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1644,7 +1672,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "987654321"
 		// Mock successful update query
@@ -1666,6 +1694,7 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer(jsonBody))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1680,12 +1709,13 @@ func TestUserHandler_UpdateUserProfile_Comprehensive(t *testing.T) {
 	})
 
 	t.Run("invalid JSON body", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("PUT", "/profile?user_id=user-123", bytes.NewBuffer([]byte("invalid json")))
 		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("user_id", "user-123")
 
 		handler.UpdateUserProfile(c)
 
@@ -1707,7 +1737,7 @@ func TestUserHandler_userExists(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
 			WithArgs("test@example.com").
@@ -1724,7 +1754,7 @@ func TestUserHandler_userExists(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
 			WithArgs("nonexistent@example.com").
@@ -1741,7 +1771,7 @@ func TestUserHandler_userExists(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
 			WithArgs("error@example.com").
@@ -1754,7 +1784,7 @@ func TestUserHandler_userExists(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 		exists, err := handler.userExists(context.Background(), "test@example.com")
 		assert.Error(t, err)
 		assert.False(t, exists)
@@ -1768,7 +1798,7 @@ func TestUserHandler_getUserByEmail(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		userID := uuid.New().String()
 		now := time.Now()
@@ -1798,7 +1828,7 @@ func TestUserHandler_getUserByEmail(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock the query to return no rows
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).
@@ -1818,7 +1848,7 @@ func TestUserHandler_getUserByEmail(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		// Mock the query to return a database error
 		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).
@@ -1833,7 +1863,7 @@ func TestUserHandler_getUserByEmail(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user, err := handler.getUserByEmail(context.Background(), "test@example.com")
 		assert.Error(t, err)
@@ -1848,7 +1878,7 @@ func TestUserHandler_getUserByID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil) // No Redis for this test
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{}) // No Redis for this test
 
 		userID := uuid.New().String()
 		now := time.Now()
@@ -1915,7 +1945,7 @@ func TestUserHandler_getUserByID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		userID := uuid.New().String()
 
@@ -1937,7 +1967,7 @@ func TestUserHandler_getUserByID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		userID := uuid.New().String()
 
@@ -1954,7 +1984,7 @@ func TestUserHandler_getUserByID(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		userID := uuid.New().String()
 		user, err := handler.getUserByID(context.Background(), userID)
@@ -1970,7 +2000,7 @@ func TestUserHandler_GetUserByTelegramChatID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 		userID := uuid.New().String()
@@ -2038,7 +2068,7 @@ func TestUserHandler_GetUserByTelegramChatID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 
@@ -2060,7 +2090,7 @@ func TestUserHandler_GetUserByTelegramChatID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 
@@ -2077,7 +2107,7 @@ func TestUserHandler_GetUserByTelegramChatID(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 		user, err := handler.GetUserByTelegramChatID(context.Background(), chatID)
@@ -2093,7 +2123,7 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 
@@ -2116,7 +2146,7 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 	})
 
 	t.Run("empty chat ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		user, err := handler.CreateTelegramUser(context.Background(), "", "testuser")
 		assert.Error(t, err)
@@ -2129,7 +2159,7 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 
@@ -2146,7 +2176,7 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 	})
 
 	t.Run("database not available", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, &MockTokenGenerator{})
 
 		chatID := "123456789"
 		user, err := handler.CreateTelegramUser(context.Background(), chatID, "testuser")
@@ -2156,49 +2186,3 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 	})
 }
 
-func TestUserHandler_generateSimpleToken(t *testing.T) {
-	t.Run("generates valid token", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
-
-		userID := uuid.New().String()
-		token := handler.generateSimpleToken(userID)
-
-		assert.NotEmpty(t, token)
-		assert.Greater(t, len(token), 10) // Token should be reasonably long
-	})
-
-	t.Run("generates different tokens for different users", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
-
-		userID1 := uuid.New().String()
-		userID2 := uuid.New().String()
-
-		token1 := handler.generateSimpleToken(userID1)
-		token2 := handler.generateSimpleToken(userID2)
-
-		assert.NotEqual(t, token1, token2)
-	})
-
-	t.Run("generates consistent tokens for same user", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
-
-		userID := uuid.New().String()
-
-		token1 := handler.generateSimpleToken(userID)
-		token2 := handler.generateSimpleToken(userID)
-
-		// Note: This test might fail if the token generation includes random elements
-		// If the implementation uses time or random data, tokens might be different
-		assert.NotEmpty(t, token1)
-		assert.NotEmpty(t, token2)
-	})
-
-	t.Run("handles empty user ID", func(t *testing.T) {
-		handler := NewUserHandler(nil, nil)
-
-		token := handler.generateSimpleToken("")
-
-		// Should still generate a token even with empty user ID
-		assert.NotEmpty(t, token)
-	})
-}
