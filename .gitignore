@@ -161,3 +161,7 @@ mcp.json
 .roo/
 .roomodes
 .windsurfrules
+
+# Task files
+# tasks.json
+# tasks/ 
