@@ -25,7 +25,7 @@
 - [x] Identify database schema for arbitrage opportunities table
 - [x] Document cleanup service for historical opportunity management
 
-## 🔄 **NEXT STEPS - GitHub Actions Integration**
+## 🔄 **NEXT STEPS - GitHub Actions Integration** [skip this, because we already using coolify managge vps, already create webhook github actions]
 - [ ] test-https-endpoint: Test HTTPS endpoint with curl -I https://143.198.219.213 (priority: Medium)
 - [ ] verify-webhook-https: Verify Telegram webhook is working with HTTPS (priority: Medium)
 - [ ] setup-github-actions: Configure GitHub Actions to eliminate manual rsync after every push (priority: High)
@@ -38,13 +38,14 @@
 - [x] **Collection Intervals**: Reduced from 5 minutes to 10-60 seconds
 - [x] **Storage Estimation**: Updated with 2x buffer for high-frequency collection
 
-## 🔄 **NEXT STEPS - High-Frequency Collection**
+## 🔄 **NEXT STEPS - High-Frequency Collection** [read comment below]
 - [ ] Deploy optimized nginx configuration
 - [ ] Monitor collection rates for 24-48 hours
 - [ ] Scale database infrastructure (16GB RAM, 1TB NVMe)
 - [ ] Implement table partitioning for efficient storage
 - [ ] Set up automated cleanup for old data
 - [ ] Configure monitoring and alerting for storage growth
+we depricated nginx - becuase we deploy on VPS manage by coolify autodeploy via webhook github, on coolify use traefik, and i bealive we already make this only one docker.
 
 ## ✅ **COMPLETED - Analytics Persistence Configuration**
 - [x] **Extended Arbitrage Retention**: From 72 hours to 1 year for analytics
