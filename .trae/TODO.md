@@ -54,6 +54,18 @@
 - [x] **Configuration Scripts**: Created enable/disable analytics persistence
 - [x] **Documentation**: Added comprehensive setup and rollback guides
 
+## ✅ **COMPLETED - Database Migration Cleanup (2025-12-14)**
+- [x] Fixed duplicate migration number 051 (renamed to 053)
+- [x] Fixed duplicate migration number 003 (renamed to 009)
+- [x] Verified migration file integrity and sequence
+
+## 🔄 **IN PROGRESS - Code Quality & Testing (2025-12-14)**
+- [ ] Create integration test for arbitrage service (internal/services/arbitrage_service_test.go:1166) (priority: High)
+- [ ] Improve test coverage for internal/services from 49% to 70%+ (priority: High)
+- [ ] Improve test coverage for internal/database from 60% to 75%+ (priority: Medium)
+- [ ] Improve test coverage for cmd/server from 16.5% to 50%+ (priority: Medium)
+- [ ] Re-enable Sentry monitoring once Bun.serve instrumentation issue is resolved (services/ccxt/sentry.ts:30) (priority: Low)
+
 ## 📋 **FUTURE ENHANCEMENTS - Arbitrage System**
 - [ ] Add deduplication logic with unique constraints
 - [ ] Add opportunity expiration and invalidation mechanisms
