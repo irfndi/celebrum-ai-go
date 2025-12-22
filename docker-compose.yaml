@@ -1,11 +1,11 @@
-version: '3.8'
+# Celebrum AI - Docker Compose for Local Development
+# All services are built from the services/ directory
 
 services:
-  celebrum:
+  backend-api:
     build:
-      context: .
+      context: services/backend-api
       dockerfile: Dockerfile
-      target: production
     restart: always
     environment:
       - DATABASE_HOST=${DATABASE_HOST}
@@ -15,12 +15,75 @@ services:
       - DATABASE_DBNAME=${DATABASE_DBNAME}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - PORT=${PORT:-3001}
-      - CCXT_SERVICE_URL=${CCXT_SERVICE_URL:-http://localhost:3001}
+      - PORT=8080
+      - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - TELEGRAM_SERVICE_URL=http://telegram-service:3002
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
-      - TELEGRAM_WEBHOOK_ENABLED=${TELEGRAM_WEBHOOK_ENABLED:-false}
+      - TELEGRAM_EXTERNAL_SERVICE=true
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+    networks:
+      - default
+      - coolify
+    depends_on:
+      - ccxt-service
+      - telegram-service
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      POSTGRES_DB: ${DATABASE_DBNAME:-celebrum}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    networks:
+      - default
+      - coolify
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+      - coolify
+
+  ccxt-service:
+    build:
+      context: services/ccxt-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - PORT=3001
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+    networks:
+      - default
+      - coolify
+
+  telegram-service:
+    build:
+      context: services/telegram-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - PORT=3002
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
+      - TELEGRAM_WEBHOOK_PATH=${TELEGRAM_WEBHOOK_PATH:-/telegram/webhook}
+      - TELEGRAM_API_BASE_URL=http://backend-api:8080
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
     networks:
       - default
       - coolify
@@ -29,3 +92,7 @@ networks:
   coolify:
     external: true
     name: ${COOLIFY_SHARED_NETWORK:-coolify}
+
+volumes:
+  postgres_data:
+  redis_data:

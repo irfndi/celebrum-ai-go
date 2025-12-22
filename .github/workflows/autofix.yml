@@ -34,13 +34,16 @@ jobs:
 
       - name: Install Go dependencies
         run: |
-          go mod download
+          cd services/backend-api && go mod download
           go install golang.org/x/tools/cmd/goimports@latest
 
       - name: Install Bun dependencies
         run: |
-          if [ -d "services/ccxt" ]; then
-            cd services/ccxt && bun install
+          if [ -d "services/ccxt-service" ]; then
+            cd services/ccxt-service && bun install
+          fi
+          if [ -d "services/telegram-service" ]; then
+            cd services/telegram-service && bun install
           fi
 
       - name: Install golangci-lint
@@ -54,27 +57,42 @@ jobs:
 
       - name: Run Go formatters
         run: |
+          cd services/backend-api
           gofmt -s -w .
           goimports -w .
-          ./bin/golangci-lint run --fix || true
+          ../bin/golangci-lint run --fix || true
+        working-directory: ${{ github.workspace }}
 
       - name: Run TypeScript/JS formatters
         run: |
-          if [ -d "services/ccxt" ]; then
-            cd services/ccxt
+          if [ -d "services/ccxt-service" ]; then
+            cd services/ccxt-service
+            bunx prettier --write . || true
+            bunx oxlint --fix . || true
+            cd ../..
+          fi
+          if [ -d "services/telegram-service" ]; then
+            cd services/telegram-service
             bunx prettier --write . || true
             bunx oxlint --fix . || true
           fi
 
       - name: Format shell scripts
         run: |
-          shfmt -w -i 2 -ci -bn $(find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*") || true
+          # Exclude .github/workflows to avoid permission issues
+          shfmt -w -i 2 -ci -bn $(find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./.github/*" -not -path "./bin/*" -not -path "./build/*") || true
 
       - name: Format YAML files
         run: |
           if command -v bunx >/dev/null 2>&1; then
-            bunx prettier --write "**/*.{yml,yaml}" || true
+            # Exclude .github/workflows to avoid permission issues with GitHub App
+            bunx prettier --write "**/*.{yml,yaml}" --ignore-path <(echo ".github/workflows/*") || true
           fi
+
+      - name: Restore workflow files
+        run: |
+          # Restore any changes to .github/workflows/ since GitHub Apps cannot modify them
+          git checkout -- .github/workflows/ 2>/dev/null || true
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -83,3 +101,4 @@ jobs:
           commit_user_name: "autofix-ci[bot]"
           commit_user_email: "autofix-ci[bot]@users.noreply.github.com"
           commit_author: "autofix-ci[bot] <autofix-ci[bot]@users.noreply.github.com>"
+          file_pattern: "services/** scripts/** protos/** docs/**"

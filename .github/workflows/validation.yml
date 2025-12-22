@@ -36,7 +36,7 @@ jobs:
           make mod-download
           # Retry bun install up to 3 times with exponential backoff
           for i in 1 2 3; do
-            if make ccxt-setup; then
+            if make services-setup; then
               break
             else
               if [ $i -lt 3 ]; then
@@ -59,4 +59,6 @@ jobs:
         run: make fmt-check
 
       - name: Run CI Checks
-        run: make ci-check
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/bin:$PATH"
+          make ci-check

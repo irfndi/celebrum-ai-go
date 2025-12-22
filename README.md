@@ -17,6 +17,7 @@ Celebrum AI is a high-performance, scalable platform designed for real-time cryp
 
 *   **Backend Core**: Go 1.25+ (Gin Framework) - Handles business logic, API, and orchestration.
 *   **Market Data Service**: TypeScript (Bun runtime) - Wraps the CCXT library for unified exchange access.
+*   **Telegram Bot Service**: TypeScript (Bun runtime) - Powered by grammY for user alerts.
 *   **Database**: PostgreSQL 15+ - Persistent storage for users, signals, and historical data.
 *   **Caching & Pub/Sub**: Redis 7+ - High-speed caching and inter-service messaging.
 *   **Observability**: Sentry for error tracking and performance monitoring.
@@ -64,6 +65,10 @@ The system follows a microservices-like architecture:
     ```bash
     make dev-up-orchestrated
     ```
+    For future split deploys, build individual services using their Dockerfiles:
+    - Backend API: `services/backend-api/Dockerfile`
+    - CCXT Service: `services/ccxt-service/Dockerfile`
+    - Telegram Service: `services/telegram-service/Dockerfile`
 
 4.  **Run Manually (for deeper debugging)**
     *   Start dependencies:
@@ -74,7 +79,8 @@ The system follows a microservices-like architecture:
         ```bash
         make run
         ```
-    *   (Optional) The CCXT service is managed automatically or via Docker, but can be run separately in `services/ccxt`.
+*   (Optional) The CCXT service is managed automatically or via Docker, but can be run separately in `services/ccxt-service/`.
+*   (Optional) The Telegram bot service can be run separately in `services/telegram-service/`.
 
 ## 💻 Usage
 
@@ -90,6 +96,8 @@ The platform exposes a RESTful API. Key endpoints include:
 ### Telegram Bot
 
 Configure your `TELEGRAM_BOT_TOKEN` in `.env` to receive real-time alerts for high-quality arbitrage opportunities.
+The bot is implemented in `services/telegram-service/` using grammY and can run in polling or webhook mode.
+When running the Telegram service, set `TELEGRAM_EXTERNAL_SERVICE=true` to disable the legacy Go bot.
 
 ## 🧪 Development
 
@@ -101,14 +109,20 @@ We use `make` to manage common tasks:
 *   `make fmt`: Format code to standard Go conventions.
 *   `make clean`: Clean build artifacts.
 
-### Project Structure
+### Project Structure (Monorepo)
 
-*   `cmd/server`: Entry point for the main application.
-*   `internal/api`: REST API handlers and routing.
-*   `internal/services`: Core business logic (Arbitrage, Analysis, etc.).
-*   `internal/models`: Database structs and domain objects.
-*   `services/ccxt`: The TypeScript/Bun service for exchange integration.
-*   `pkg`: Shared libraries and utilities.
+This is a monorepo with all services organized under the `services/` directory:
+
+*   `services/backend-api/`: Go backend service
+    *   `cmd/server`: Entry point for the main application.
+    *   `internal/api`: REST API handlers and routing.
+    *   `internal/services`: Core business logic (Arbitrage, Analysis, etc.).
+    *   `internal/models`: Database structs and domain objects.
+    *   `pkg`: Shared libraries and utilities.
+*   `services/ccxt-service/`: TypeScript/Bun service for exchange integration via CCXT.
+*   `services/telegram-service/`: TypeScript/Bun service for the Telegram bot (grammY).
+*   `protos/`: Protocol Buffer definitions for gRPC communication.
+*   `docs/`: Project documentation.
 
 ## 🤝 Contributing
 

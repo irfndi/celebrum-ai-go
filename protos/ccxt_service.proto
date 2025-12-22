@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package ccxt;
+option go_package = "github.com/irfandi/celebrum-ai-go/services/backend-api/pkg/pb/ccxt";
+
+service CcxtService {
+  rpc GetTicker(GetTickerRequest) returns (GetTickerResponse);
+  rpc GetMarkets(GetMarketsRequest) returns (GetMarketsResponse);
+  rpc GetFundingRates(GetFundingRatesRequest) returns (GetFundingRatesResponse);
+  rpc GetOrderBook(GetOrderBookRequest) returns (GetOrderBookResponse);
+  rpc GetOHLCV(GetOHLCVRequest) returns (GetOHLCVResponse);
+  rpc GetExchanges(GetExchangesRequest) returns (GetExchangesResponse);
+  rpc GetTickers(GetTickersRequest) returns (GetTickersResponse);
+  rpc GetTrades(GetTradesRequest) returns (GetTradesResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetTickerRequest {
+  string exchange = 1;
+  string symbol = 2;
+}
+
+message GetTickerResponse {
+  string exchange = 1;
+  string symbol = 2;
+  TickerData ticker = 3;
+  int64 timestamp = 4;
+  string error = 5;
+}
+
+message TickerData {
+  string last = 1;
+  string high = 2;
+  string low = 3;
+  string bid = 4;
+  string ask = 5;
+  string base_volume = 6;
+  string quote_volume = 7;
+}
+
+
+message GetTickersRequest {
+  repeated string exchanges = 1;
+  repeated string symbols = 2;
+}
+
+message ExchangeTicker {
+  string exchange = 1;
+  string symbol = 2;
+  TickerData ticker = 3;
+  string error = 4;
+  int64 timestamp = 5;
+}
+
+message GetTickersResponse {
+  repeated ExchangeTicker tickers = 1;
+  string error = 2;
+}
+
+
+message GetMarketsRequest {
+  string exchange = 1;
+}
+
+message GetMarketsResponse {
+  string exchange = 1;
+  repeated string symbols = 2;
+  int32 count = 3;
+  string error = 4;
+}
+
+message GetFundingRatesRequest {
+  string exchange = 1;
+  repeated string symbols = 2;
+}
+
+message GetFundingRatesResponse {
+  string exchange = 1;
+  repeated FundingRate rates = 2;
+  string error = 3;
+}
+
+message FundingRate {
+  string symbol = 1;
+  string funding_rate = 2;
+  int64 timestamp = 3;
+  int64 next_funding_time = 4;
+  string mark_price = 5;
+  string index_price = 6;
+}
+
+message GetOrderBookRequest {
+  string exchange = 1;
+  string symbol = 2;
+  int32 limit = 3;
+}
+
+message GetOrderBookResponse {
+  string exchange = 1;
+  string symbol = 2;
+  OrderBook orderbook = 3;
+  int64 timestamp = 4;
+  string error = 5;
+}
+
+message OrderBook {
+  repeated PriceLevel bids = 1;
+  repeated PriceLevel asks = 2;
+  int64 timestamp = 3;
+  int64 nonce = 4;
+}
+
+message PriceLevel {
+  string price = 1;
+  string amount = 2;
+}
+
+message GetTradesRequest {
+  string exchange = 1;
+  string symbol = 2;
+  int32 limit = 3;
+}
+
+message Trade {
+  string id = 1;
+  int64 timestamp = 2;
+  string symbol = 3;
+  string side = 4;
+  string amount = 5;
+  string price = 6;
+  string cost = 7;
+}
+
+message GetTradesResponse {
+  string exchange = 1;
+  string symbol = 2;
+  repeated Trade trades = 3;
+  int64 timestamp = 4;
+  string error = 5;
+}
+
+
+message GetOHLCVRequest {
+  string exchange = 1;
+  string symbol = 2;
+  string timeframe = 3;
+  int32 limit = 4;
+}
+
+message GetOHLCVResponse {
+  string exchange = 1;
+  string symbol = 2;
+  string timeframe = 3;
+  repeated OHLCV candles = 4;
+  int64 timestamp = 5;
+  string error = 6;
+}
+
+message OHLCV {
+  int64 timestamp = 1;
+  string open = 2;
+  string high = 3;
+  string low = 4;
+  string close = 5;
+  string volume = 6;
+}
+
+message GetExchangesRequest {}
+
+message GetExchangesResponse {
+  repeated ExchangeInfo exchanges = 1;
+  string error = 2;
+}
+
+message ExchangeInfo {
+  string id = 1;
+  string name = 2;
+  repeated string countries = 3;
+}
+
+message HealthCheckRequest {}
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+  string service = 3;
+}

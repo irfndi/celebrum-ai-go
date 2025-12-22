@@ -10,6 +10,16 @@ We use a single Docker container architecture that unifies the Go backend and Bu
 - **Cache**: Managed Redis service (provisioned via Coolify).
 - **Routing**: Handled automatically by Coolify's built-in Traefik proxy.
 
+## Optional Split Deploy (Future)
+
+If you later want to deploy services separately, use:
+- `Dockerfile.api` for the Go API service
+- `ccxt-service/Dockerfile` for the CCXT service
+- `telegram-service/Dockerfile` for the Telegram bot service
+
+When split, set `CCXT_SERVICE_URL` to the CCXT container URL (e.g., `http://ccxt-service:3001`).
+If you run the Telegram bot as a separate service, set `TELEGRAM_EXTERNAL_SERVICE=true` on the Go API to disable the built-in bot.
+
 ## Deployment Steps
 
 ### 1. Prepare Coolify Resources
