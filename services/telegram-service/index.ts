@@ -45,7 +45,9 @@ const loadConfig = Effect.try((): TelegramConfig => {
   // Validate ADMIN_API_KEY only in production
   if (isProduction) {
     if (!adminApiKey) {
-      throw new Error("ADMIN_API_KEY environment variable must be set in production");
+      throw new Error(
+        "ADMIN_API_KEY environment variable must be set in production",
+      );
     }
 
     if (
@@ -419,7 +421,10 @@ app.get("/health", (c) => {
 app.post("/send-message", async (c) => {
   // If ADMIN_API_KEY is not configured, disable admin endpoints
   if (!config.adminApiKey) {
-    return c.json({ error: "Admin endpoints are disabled (ADMIN_API_KEY not set)" }, 503);
+    return c.json(
+      { error: "Admin endpoints are disabled (ADMIN_API_KEY not set)" },
+      503,
+    );
   }
 
   const apiKey = c.req.header("X-API-Key");

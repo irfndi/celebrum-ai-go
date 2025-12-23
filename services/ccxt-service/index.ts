@@ -80,7 +80,9 @@ const loadRuntimeConfig = Effect.try((): RuntimeConfig => {
   // Validate ADMIN_API_KEY only in production
   if (isProduction) {
     if (!adminApiKey) {
-      throw new Error("ADMIN_API_KEY environment variable must be set in production");
+      throw new Error(
+        "ADMIN_API_KEY environment variable must be set in production",
+      );
     }
 
     if (
