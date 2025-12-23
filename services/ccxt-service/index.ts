@@ -542,7 +542,8 @@ app.get("/api/ticker/:exchange/*", async (c) => {
 
     throw lastError;
   } catch (error: any) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     const errorResponse: ErrorResponse = {
       error: errorMessage,
       timestamp: new Date().toISOString(),

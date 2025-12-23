@@ -202,11 +202,11 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // CCXTHealthResponse represents the detailed health response from CCXT service.
 type CCXTHealthResponse struct {
-	Status              string `json:"status"`
-	Timestamp           string `json:"timestamp"`
-	Service             string `json:"service"`
-	Version             string `json:"version"`
-	ExchangesCount      int    `json:"exchanges_count"`
+	Status               string `json:"status"`
+	Timestamp            string `json:"timestamp"`
+	Service              string `json:"service"`
+	Version              string `json:"version"`
+	ExchangesCount       int    `json:"exchanges_count"`
 	ExchangeConnectivity string `json:"exchange_connectivity"`
 }
 
