@@ -602,7 +602,20 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 	return nil
 }
 
-// extractExchangeSymbolFromPath extracts exchange and symbol from API paths like /api/ticker/binance/BTCUSDT
+// extractExchangeSymbolFromPath extracts exchange and symbol from API paths.
+//
+// Expected path formats:
+//   - /api/ticker/{exchange}/{symbol}     -> returns exchange, symbol
+//   - /api/orderbook/{exchange}/{symbol}  -> returns exchange, symbol
+//   - /api/ohlcv/{exchange}/{symbol}      -> returns exchange, symbol
+//   - /api/trades/{exchange}/{symbol}     -> returns exchange, symbol
+//   - /api/markets/{exchange}             -> returns exchange, ""
+//   - /api/exchanges                      -> returns "", ""
+//
+// For paths with slashes in the symbol (e.g., /api/ticker/binance/BTC/USDT),
+// the symbol parts are joined back together (BTC/USDT).
+//
+// Returns empty strings for paths that don't match the expected format.
 func (c *Client) extractExchangeSymbolFromPath(path string) (exchange, symbol string) {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if len(parts) >= 3 {
@@ -614,7 +627,9 @@ func (c *Client) extractExchangeSymbolFromPath(path string) (exchange, symbol st
 	return
 }
 
-// ExtractExchangeSymbolFromPath is an exported version for testing.
+// ExtractExchangeSymbolFromPath is exported for testing purposes only.
+// It wraps the internal extractExchangeSymbolFromPath function.
+// Do not use in production code.
 func (c *Client) ExtractExchangeSymbolFromPath(path string) (exchange, symbol string) {
 	return c.extractExchangeSymbolFromPath(path)
 }

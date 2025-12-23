@@ -548,27 +548,34 @@ app.get("/api/ticker/:exchange/*", async (c) => {
       timestamp: new Date().toISOString(),
     };
 
-    // Return 404 for symbol not found errors (BadSymbol, market not found, etc.)
-    if (
+    // Determine error type using constructor name (most reliable) or message patterns
+    const errorName = error?.constructor?.name || error?.name || "";
+
+    // Symbol not found errors - return 404 (non-retryable)
+    const isSymbolNotFound =
+      errorName === "BadSymbol" ||
+      errorName === "InvalidOrder" ||
       errorMessage.includes("does not have market symbol") ||
       errorMessage.includes("market not found") ||
-      errorMessage.includes("BadSymbol") ||
       errorMessage.includes("symbol not found") ||
-      errorMessage.includes("invalid symbol") ||
-      error?.constructor?.name === "BadSymbol"
-    ) {
+      errorMessage.includes("invalid symbol");
+
+    if (isSymbolNotFound) {
       return c.json(errorResponse, 404);
     }
 
-    // Return 503 for exchange unavailable errors
-    if (
+    // Exchange unavailable errors - return 503 (retryable)
+    const isExchangeUnavailable =
+      errorName === "ExchangeNotAvailable" ||
+      errorName === "RequestTimeout" ||
+      errorName === "NetworkError" ||
+      errorName === "DDoSProtection" ||
+      errorName === "RateLimitExceeded" ||
       errorMessage.includes("ExchangeNotAvailable") ||
       errorMessage.includes("RequestTimeout") ||
-      errorMessage.includes("NetworkError") ||
-      error?.constructor?.name === "ExchangeNotAvailable" ||
-      error?.constructor?.name === "RequestTimeout" ||
-      error?.constructor?.name === "NetworkError"
-    ) {
+      errorMessage.includes("NetworkError");
+
+    if (isExchangeUnavailable) {
       return c.json(errorResponse, 503);
     }
 
