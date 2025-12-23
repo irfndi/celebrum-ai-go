@@ -19,7 +19,8 @@ async function getService() {
       initializationPromise = (async () => {
         // Force fresh import by adding timestamp to avoid module caching issues
         const mod = await import("./index.ts?" + Date.now());
-        serviceInstance = mod.default as {
+        // Use named export 'app' instead of default to avoid Bun auto-serve
+        serviceInstance = mod.app as {
           port: number | string;
           fetch: (req: Request) => Promise<Response>;
         };

@@ -1171,8 +1171,11 @@ app.notFound((c) => {
   return c.json(errorResponse, 404);
 });
 
-// Export app for tests; only start server when run directly
-export default app;
+// Export app as named export for tests
+// NOTE: We explicitly do NOT use `export default app` because Bun auto-starts
+// a server when the default export has a `fetch` function, which causes EADDRINUSE
+// since we already call Bun.serve() manually.
+export { app };
 
 const shouldAutoServe =
   import.meta.main &&
