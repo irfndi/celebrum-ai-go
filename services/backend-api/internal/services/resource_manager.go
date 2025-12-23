@@ -343,12 +343,17 @@ func (rm *ResourceManager) GetSystemStats() map[string]interface{} {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
+	// Safely access rm.resources with read lock to prevent data race
+	rm.mu.RLock()
+	resourceCount := len(rm.resources)
+	rm.mu.RUnlock()
+
 	return map[string]interface{}{
 		"goroutines":        runtime.NumGoroutine(),
 		"memory_alloc":      m.Alloc,
 		"memory_sys":        m.Sys,
 		"gc_cycles":         m.NumGC,
-		"managed_resources": len(rm.resources),
+		"managed_resources": resourceCount,
 	}
 }
 

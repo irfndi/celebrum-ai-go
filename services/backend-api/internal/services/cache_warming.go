@@ -113,7 +113,7 @@ func (c *CacheWarmingService) WarmCache(ctx context.Context) error {
 	return nil
 }
 
-// warmExchangeConfig warms the exchange configuration cache
+// warmExchangeConfig warms the exchange configuration cache with retry logic
 func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) (err error) {
 	spanCtx, span := observability.StartSpan(ctx, "cache.warm.exchange_config", "CacheWarmingService.warmExchangeConfig")
 	defer func() {
@@ -132,10 +132,41 @@ func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) (err error
 		return err
 	}
 
-	// Get exchange config from CCXT service
-	config, err := c.ccxtService.GetExchangeConfig(spanCtx)
-	if err != nil {
-		return err
+	// Retry logic for fetching exchange config
+	const maxRetries = 3
+	var config *ccxt.ExchangeConfigResponse
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		config, lastErr = c.ccxtService.GetExchangeConfig(spanCtx)
+		if lastErr == nil {
+			break
+		}
+
+		c.logger.Warn("Failed to get exchange config, retrying",
+			"attempt", attempt,
+			"max_retries", maxRetries,
+			"error", lastErr)
+
+		if attempt < maxRetries {
+			// Exponential backoff: 1s, 2s, 4s
+			backoffDuration := time.Duration(1<<(attempt-1)) * time.Second
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoffDuration):
+				// Continue to next attempt
+			}
+		}
+	}
+
+	if lastErr != nil {
+		c.logger.Warn("Failed to warm exchange config cache after retries",
+			"attempts", maxRetries,
+			"error", lastErr)
+		// Return nil to allow startup to continue (non-fatal)
+		// The error is already logged and tracked
+		return nil
 	}
 
 	// Marshal and cache the config

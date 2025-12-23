@@ -852,6 +852,8 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	// Track consecutive failures for graceful degradation
 	consecutiveFailures := 0
 	maxConsecutiveFailures := 3
+	intervalIncreased := false            // Track if interval was doubled due to failures
+	degradationStartTime := time.Time{}   // Track when degradation started
 
 	for {
 		select {
@@ -913,6 +915,8 @@ func (c *CollectorService) runWorker(worker *Worker) {
 					// Increase interval temporarily to reduce load
 					ticker.Stop()
 					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
+					intervalIncreased = true
+					degradationStartTime = time.Now()
 					c.logger.Info("Temporarily increased collection interval", "exchange", worker.Exchange, "new_interval", c.tickerInterval*2)
 				}
 
@@ -936,12 +940,24 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				)
 
 				// Restore normal interval if it was increased due to failures
-				if ticker.C != time.NewTicker(c.tickerInterval).C {
+				if intervalIncreased {
 					ticker.Stop()
 					ticker = time.NewTicker(c.tickerInterval)
+					intervalIncreased = false
+					degradationStartTime = time.Time{}
 					c.logger.Info("Restored normal collection interval",
 						"exchange", worker.Exchange, "interval", c.tickerInterval)
 				}
+			}
+
+			// Check if we've been degraded for too long (> 5 minutes) and force restore
+			if intervalIncreased && !degradationStartTime.IsZero() && time.Since(degradationStartTime) > 5*time.Minute {
+				ticker.Stop()
+				ticker = time.NewTicker(c.tickerInterval)
+				intervalIncreased = false
+				c.logger.Warn("Degradation timeout reached, forcing interval restoration",
+					"exchange", worker.Exchange, "degraded_duration", time.Since(degradationStartTime))
+				degradationStartTime = time.Time{}
 			}
 
 			// Check if it's time to collect funding rates (separate interval)

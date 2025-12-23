@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -271,8 +272,10 @@ func (erm *ErrorRecoveryManager) calculateDelay(baseDelay time.Duration, policy 
 		return baseDelay
 	}
 
-	// Add up to 25% jitter
-	jitter := time.Duration(float64(baseDelay) * 0.25 * (0.5 - float64(time.Now().UnixNano()%1000)/1000.0))
+	// Add up to 25% jitter using proper random distribution
+	// jitterFactor ranges from -0.25 to +0.25
+	jitterFactor := (rand.Float64() - 0.5) * 0.5
+	jitter := time.Duration(float64(baseDelay) * jitterFactor)
 	return baseDelay + jitter
 }
 

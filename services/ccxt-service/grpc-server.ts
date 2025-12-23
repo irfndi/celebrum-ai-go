@@ -1,5 +1,5 @@
 import * as grpc from "@grpc/grpc-js";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Duration, Cause } from "effect";
 import {
   CcxtServiceService,
   CcxtServiceServer,
@@ -154,10 +154,10 @@ export class CcxtGrpcServer {
                     }),
                   ),
                 ),
-              { concurrency: "unbounded" },
+              { concurrency: 10 }, // Limit concurrent fetches per exchange
             );
           },
-          { concurrency: "unbounded" },
+          { concurrency: 5 }, // Limit exchanges fetched in parallel
         ),
       );
 
@@ -316,7 +316,7 @@ export class CcxtGrpcServer {
             Effect.forEach(
               symbols,
               (s) => Effect.tryPromise(() => ex.fetchFundingRate(s)),
-              { concurrency: "unbounded" },
+              { concurrency: 10 }, // Limit concurrent requests
             ),
           )) as any[];
         }
@@ -538,7 +538,7 @@ export function startGrpcServer(exchanges: any, port: number) {
     (err, port) => {
       if (err) {
         console.error(`Failed to bind gRPC server: ${err}`);
-        return;
+        throw err; // Propagate error to caller
       }
       console.log(`🚀 CCXT gRPC Service listening on ${bindAddr}`);
     },

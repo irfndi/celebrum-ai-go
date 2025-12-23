@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -383,14 +384,25 @@ func setDefaults() {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
-	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
-	viper.SetDefault("ccxt.grpc_address", "localhost:50051")
+	// CCXT - Use Docker service names when running in Docker/Coolify
+	isDocker := os.Getenv("DOCKER_ENVIRONMENT") == "true" || os.Getenv("COOLIFY") == "true"
+	if isDocker {
+		viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
+		viper.SetDefault("ccxt.grpc_address", "ccxt-service:50051")
+	} else {
+		viper.SetDefault("ccxt.service_url", "http://localhost:3001")
+		viper.SetDefault("ccxt.grpc_address", "localhost:50051")
+	}
 	viper.SetDefault("ccxt.timeout", 30)
 
-	// Telegram
-	viper.SetDefault("telegram.service_url", "http://localhost:3002")
-	viper.SetDefault("telegram.grpc_address", "localhost:50052")
+	// Telegram - Use Docker service names when running in Docker/Coolify
+	if isDocker {
+		viper.SetDefault("telegram.service_url", "http://telegram-service:3002")
+		viper.SetDefault("telegram.grpc_address", "telegram-service:50052")
+	} else {
+		viper.SetDefault("telegram.service_url", "http://localhost:3002")
+		viper.SetDefault("telegram.grpc_address", "localhost:50052")
+	}
 	viper.SetDefault("telegram.admin_api_key", "")
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")
