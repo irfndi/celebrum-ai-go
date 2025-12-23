@@ -5,9 +5,7 @@ const sentryDsn = process.env.SENTRY_DSN || "";
 const sentryEnvironment =
   process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
 const sentryRelease = process.env.SENTRY_RELEASE || "telegram-service@1.0.0";
-const tracesSampleRate = Number(
-  process.env.SENTRY_TRACES_SAMPLE_RATE || "0.2"
-);
+const tracesSampleRate = Number(process.env.SENTRY_TRACES_SAMPLE_RATE || "0.2");
 
 // Only enable Sentry if DSN is provided
 export const isSentryEnabled = Boolean(sentryDsn);
@@ -62,7 +60,7 @@ export async function initializeSentry(): Promise<boolean> {
 
     sentryInitialized = true;
     console.log(
-      `✓ Sentry initialized for telegram-service (environment: ${sentryEnvironment})`
+      `✓ Sentry initialized for telegram-service (environment: ${sentryEnvironment})`,
     );
     return true;
   } catch (error) {
@@ -76,7 +74,7 @@ export async function initializeSentry(): Promise<boolean> {
  */
 export function captureException(
   error: Error | unknown,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   if (!Sentry || !sentryInitialized) {
     console.error("Sentry not initialized, logging error locally:", error);
@@ -100,7 +98,7 @@ export function captureException(
 export function captureMessage(
   message: string,
   level: "debug" | "info" | "warning" | "error" | "fatal" = "info",
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   if (!Sentry || !sentryInitialized) {
     console.log(`[${level.toUpperCase()}] ${message}`);
@@ -126,7 +124,7 @@ export function addBreadcrumb(
   category: string,
   message: string,
   level: "debug" | "info" | "warning" | "error" = "info",
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): void {
   if (!Sentry || !sentryInitialized) {
     return;
@@ -184,7 +182,7 @@ export function setExtra(key: string, value: unknown): void {
 export function startSpan<T>(
   name: string,
   operation: string,
-  callback: () => T | Promise<T>
+  callback: () => T | Promise<T>,
 ): T | Promise<T> {
   if (!Sentry || !sentryInitialized) {
     return callback();
@@ -195,7 +193,7 @@ export function startSpan<T>(
       name,
       op: operation,
     },
-    callback
+    callback,
   );
 }
 
@@ -241,7 +239,7 @@ export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
       },
       async () => {
         await next();
-      }
+      },
     );
 
     // Record successful request metrics
@@ -273,7 +271,7 @@ export async function traceBotCommand<T>(
   command: string,
   chatId: number | string,
   userId: number | string | undefined,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   if (!Sentry || !sentryInitialized) {
     return fn();
@@ -312,7 +310,7 @@ export async function traceBotCommand<T>(
         });
         throw error;
       }
-    }
+    },
   );
 }
 
@@ -323,7 +321,7 @@ export function trackMessageDelivery(
   chatId: number | string,
   success: boolean,
   messageType: string,
-  error?: string
+  error?: string,
 ): void {
   if (!Sentry || !sentryInitialized) {
     return;

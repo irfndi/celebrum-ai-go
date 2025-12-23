@@ -21,13 +21,24 @@ declare module "@sentry/bun" {
     release?: string;
     tracesSampleRate?: number;
     attachStacktrace?: boolean;
-    integrations?: Integration[] | ((integrations: Integration[]) => Integration[]);
-    beforeSend?: (event: Event, hint?: EventHint) => Event | null | Promise<Event | null>;
+    integrations?:
+      | Integration[]
+      | ((integrations: Integration[]) => Integration[]);
+    beforeSend?: (
+      event: Event,
+      hint?: EventHint,
+    ) => Event | null | Promise<Event | null>;
   }
 
   export function init(options: BunOptions): NodeClient | undefined;
-  export function captureException(exception: unknown, captureContext?: Partial<ScopeContext>): string;
-  export function captureMessage(message: string, captureContext?: Partial<ScopeContext> | SeverityLevel): string;
+  export function captureException(
+    exception: unknown,
+    captureContext?: Partial<ScopeContext>,
+  ): string;
+  export function captureMessage(
+    message: string,
+    captureContext?: Partial<ScopeContext> | SeverityLevel,
+  ): string;
   export function addBreadcrumb(breadcrumb: Breadcrumb): void;
   export function setUser(user: User | null): void;
   export function setTag(key: string, value: string): void;
@@ -44,7 +55,7 @@ declare module "@sentry/bun" {
 
   export function startSpan<T>(
     options: SpanOptions,
-    callback: () => T | Promise<T>
+    callback: () => T | Promise<T>,
   ): T | Promise<T>;
 
   export * from "@sentry/node";

@@ -158,7 +158,7 @@ func TestCalculateMaxDrawdown(t *testing.T) {
 			name: "20% drawdown",
 			equityCurve: []EquityPoint{
 				{Timestamp: time.Now(), Equity: decimal.NewFromInt(10000)},
-				{Timestamp: time.Now().Add(time.Hour), Equity: decimal.NewFromInt(12000)}, // Peak
+				{Timestamp: time.Now().Add(time.Hour), Equity: decimal.NewFromInt(12000)},    // Peak
 				{Timestamp: time.Now().Add(2 * time.Hour), Equity: decimal.NewFromInt(9600)}, // 20% from peak
 				{Timestamp: time.Now().Add(3 * time.Hour), Equity: decimal.NewFromInt(11000)},
 			},
@@ -187,9 +187,9 @@ func TestCalculateSharpeRatio(t *testing.T) {
 	backtester := NewBacktester(nil)
 
 	tests := []struct {
-		name          string
-		returns       []float64
-		expectedSign  int // 1 for positive, -1 for negative, 0 for zero
+		name         string
+		returns      []float64
+		expectedSign int // 1 for positive, -1 for negative, 0 for zero
 	}{
 		{
 			name:         "empty returns",
@@ -362,9 +362,9 @@ func TestCloseTrade(t *testing.T) {
 	backtester := NewBacktester(nil)
 
 	config := BacktestConfig{
-		TradingFee:  decimal.NewFromFloat(0.001),
-		Slippage:    decimal.NewFromFloat(0.001),
-		FundingFee:  decimal.NewFromFloat(0.1),
+		TradingFee: decimal.NewFromFloat(0.001),
+		Slippage:   decimal.NewFromFloat(0.001),
+		FundingFee: decimal.NewFromFloat(0.1),
 	}
 
 	// Use fixed times to avoid nanosecond precision issues
@@ -379,8 +379,8 @@ func TestCloseTrade(t *testing.T) {
 		PositionSize:   decimal.NewFromInt(10000),
 		EntryAPY:       decimal.NewFromInt(50), // 50% APY
 		EntryRiskScore: decimal.NewFromInt(30),
-		TradingFees:    decimal.NewFromInt(20),  // Pre-calculated entry fees
-		Slippage:       decimal.NewFromInt(20),  // Pre-calculated slippage
+		TradingFees:    decimal.NewFromInt(20), // Pre-calculated entry fees
+		Slippage:       decimal.NewFromInt(20), // Pre-calculated slippage
 	}
 
 	closedTrade := backtester.closeTrade(trade, exitTime, config)
@@ -453,7 +453,7 @@ func TestBacktestResultCalculations(t *testing.T) {
 			EntryTime:     time.Now().Add(-48 * time.Hour),
 			ExitTime:      time.Now().Add(-40 * time.Hour),
 			PositionSize:  decimal.NewFromInt(1000),
-			NetPnL:        decimal.NewFromInt(50),   // Win
+			NetPnL:        decimal.NewFromInt(50), // Win
 			ReturnPct:     decimal.NewFromFloat(5),
 			HoldingTime:   8 * time.Hour,
 		},
@@ -464,7 +464,7 @@ func TestBacktestResultCalculations(t *testing.T) {
 			EntryTime:     time.Now().Add(-36 * time.Hour),
 			ExitTime:      time.Now().Add(-28 * time.Hour),
 			PositionSize:  decimal.NewFromInt(1000),
-			NetPnL:        decimal.NewFromInt(-20),  // Loss
+			NetPnL:        decimal.NewFromInt(-20), // Loss
 			ReturnPct:     decimal.NewFromFloat(-2),
 			HoldingTime:   8 * time.Hour,
 		},
@@ -475,7 +475,7 @@ func TestBacktestResultCalculations(t *testing.T) {
 			EntryTime:     time.Now().Add(-24 * time.Hour),
 			ExitTime:      time.Now().Add(-16 * time.Hour),
 			PositionSize:  decimal.NewFromInt(1000),
-			NetPnL:        decimal.NewFromInt(100),  // Win
+			NetPnL:        decimal.NewFromInt(100), // Win
 			ReturnPct:     decimal.NewFromFloat(10),
 			HoldingTime:   8 * time.Hour,
 		},
@@ -530,4 +530,3 @@ func TestBacktestResultCalculations(t *testing.T) {
 	assert.Equal(t, "SOL/USDT", result.BestTrade.Symbol)
 	assert.Equal(t, "ETH/USDT", result.WorstTrade.Symbol)
 }
-

@@ -4,11 +4,11 @@ import "time"
 
 // CorrelationMatrix represents pairwise correlation results for a set of symbols.
 type CorrelationMatrix struct {
-	Exchange   string    `json:"exchange"`
-	Symbols    []string  `json:"symbols"`
-	Matrix     [][]float64 `json:"matrix"`
-	WindowSize int       `json:"window_size"`
-	GeneratedAt time.Time `json:"generated_at"`
+	Exchange    string      `json:"exchange"`
+	Symbols     []string    `json:"symbols"`
+	Matrix      [][]float64 `json:"matrix"`
+	WindowSize  int         `json:"window_size"`
+	GeneratedAt time.Time   `json:"generated_at"`
 }
 
 // MarketRegime represents detected market regime characteristics.

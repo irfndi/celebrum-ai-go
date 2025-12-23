@@ -156,10 +156,10 @@ func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *lo
 //   - A slice of aggregated signals, or an error if aggregation fails.
 func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input ArbitrageSignalInput) ([]*AggregatedSignal, error) {
 	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpSignalProcessing, "SignalAggregator.AggregateArbitrageSignals", map[string]string{
-		"signal_type":  "arbitrage",
-		"input_count":  fmt.Sprintf("%d", len(input.Opportunities)),
-		"min_volume":   input.MinVolume.String(),
-		"base_amount":  input.BaseAmount.String(),
+		"signal_type": "arbitrage",
+		"input_count": fmt.Sprintf("%d", len(input.Opportunities)),
+		"min_volume":  input.MinVolume.String(),
+		"base_amount": input.BaseAmount.String(),
 	})
 	defer observability.FinishSpan(span, nil)
 

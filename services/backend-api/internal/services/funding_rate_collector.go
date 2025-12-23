@@ -33,9 +33,9 @@ type FundingRateCollector struct {
 	mu      sync.RWMutex
 
 	// Configuration
-	retentionDays     int           // How long to keep historical data
+	retentionDays      int           // How long to keep historical data
 	collectionInterval time.Duration // How often to collect funding rates
-	targetExchanges   []string      // Exchanges to collect from
+	targetExchanges    []string      // Exchanges to collect from
 }
 
 // FundingRateCollectorConfig contains configuration for the collector.

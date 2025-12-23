@@ -72,21 +72,21 @@ type ExchangeReliabilityMetrics struct {
 
 // FundingRateStats contains statistical analysis of funding rates.
 type FundingRateStats struct {
-	Symbol            string          `json:"symbol"`
-	Exchange          string          `json:"exchange"`
-	CurrentRate       decimal.Decimal `json:"current_rate"`
-	AvgRate7d         decimal.Decimal `json:"avg_rate_7d"`
-	AvgRate30d        decimal.Decimal `json:"avg_rate_30d"`
-	StdDev7d          decimal.Decimal `json:"std_dev_7d"`
-	StdDev30d         decimal.Decimal `json:"std_dev_30d"`
-	MinRate7d         decimal.Decimal `json:"min_rate_7d"`
-	MaxRate7d         decimal.Decimal `json:"max_rate_7d"`
-	TrendDirection    string          `json:"trend_direction"` // "increasing", "decreasing", "stable"
-	TrendStrength     decimal.Decimal `json:"trend_strength"`  // 0-1 scale
-	VolatilityScore   decimal.Decimal `json:"volatility_score"`
-	StabilityScore    decimal.Decimal `json:"stability_score"`
-	DataPoints        int             `json:"data_points"`
-	LastUpdated       time.Time       `json:"last_updated"`
+	Symbol          string          `json:"symbol"`
+	Exchange        string          `json:"exchange"`
+	CurrentRate     decimal.Decimal `json:"current_rate"`
+	AvgRate7d       decimal.Decimal `json:"avg_rate_7d"`
+	AvgRate30d      decimal.Decimal `json:"avg_rate_30d"`
+	StdDev7d        decimal.Decimal `json:"std_dev_7d"`
+	StdDev30d       decimal.Decimal `json:"std_dev_30d"`
+	MinRate7d       decimal.Decimal `json:"min_rate_7d"`
+	MaxRate7d       decimal.Decimal `json:"max_rate_7d"`
+	TrendDirection  string          `json:"trend_direction"` // "increasing", "decreasing", "stable"
+	TrendStrength   decimal.Decimal `json:"trend_strength"`  // 0-1 scale
+	VolatilityScore decimal.Decimal `json:"volatility_score"`
+	StabilityScore  decimal.Decimal `json:"stability_score"`
+	DataPoints      int             `json:"data_points"`
+	LastUpdated     time.Time       `json:"last_updated"`
 }
 
 // CalculateSpread calculates the bid-ask spread as a percentage.

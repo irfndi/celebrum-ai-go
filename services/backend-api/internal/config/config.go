@@ -269,15 +269,15 @@ type FeesConfig struct {
 
 // AnalyticsConfig defines settings for analytics features.
 type AnalyticsConfig struct {
-	EnableForecasting     bool    `mapstructure:"enable_forecasting"`
-	EnableCorrelation     bool    `mapstructure:"enable_correlation"`
-	EnableRegimeDetection bool    `mapstructure:"enable_regime_detection"`
-	ForecastLookback      int     `mapstructure:"forecast_lookback"`
-	ForecastHorizon       int     `mapstructure:"forecast_horizon"`
-	CorrelationWindow     int     `mapstructure:"correlation_window"`
-	CorrelationMinPoints  int     `mapstructure:"correlation_min_points"`
-	RegimeShortWindow     int     `mapstructure:"regime_short_window"`
-	RegimeLongWindow      int     `mapstructure:"regime_long_window"`
+	EnableForecasting       bool    `mapstructure:"enable_forecasting"`
+	EnableCorrelation       bool    `mapstructure:"enable_correlation"`
+	EnableRegimeDetection   bool    `mapstructure:"enable_regime_detection"`
+	ForecastLookback        int     `mapstructure:"forecast_lookback"`
+	ForecastHorizon         int     `mapstructure:"forecast_horizon"`
+	CorrelationWindow       int     `mapstructure:"correlation_window"`
+	CorrelationMinPoints    int     `mapstructure:"correlation_min_points"`
+	RegimeShortWindow       int     `mapstructure:"regime_short_window"`
+	RegimeLongWindow        int     `mapstructure:"regime_long_window"`
 	VolatilityHighThreshold float64 `mapstructure:"volatility_high_threshold"`
 	VolatilityLowThreshold  float64 `mapstructure:"volatility_low_threshold"`
 }

@@ -31,24 +31,24 @@ type ExchangeReliabilityTracker struct {
 
 // exchangeCounters holds real-time counters for an exchange.
 type exchangeCounters struct {
-	successCount24h   int64
-	failureCount24h   int64
-	totalLatency24h   int64 // Cumulative latency in ms
-	requestCount24h   int64
-	lastFailure       *time.Time
-	lastSuccess       *time.Time
-	consecutiveFails  int
-	mu                sync.Mutex
+	successCount24h  int64
+	failureCount24h  int64
+	totalLatency24h  int64 // Cumulative latency in ms
+	requestCount24h  int64
+	lastFailure      *time.Time
+	lastSuccess      *time.Time
+	consecutiveFails int
+	mu               sync.Mutex
 }
 
 // APICallResult represents the result of an API call for tracking.
 type APICallResult struct {
-	Exchange    string
-	Endpoint    string
-	Success     bool
-	LatencyMs   int64
-	ErrorMsg    string
-	Timestamp   time.Time
+	Exchange  string
+	Endpoint  string
+	Success   bool
+	LatencyMs int64
+	ErrorMsg  string
+	Timestamp time.Time
 }
 
 // NewExchangeReliabilityTracker creates a new exchange reliability tracker.

@@ -15,11 +15,11 @@ func TestAPYOverflowProtection(t *testing.T) {
 	calc := NewFuturesArbitrageCalculator()
 
 	tests := []struct {
-		name         string
-		hourlyRate   decimal.Decimal
-		expectedMax  decimal.Decimal
-		expectedMin  decimal.Decimal
-		description  string
+		name        string
+		hourlyRate  decimal.Decimal
+		expectedMax decimal.Decimal
+		expectedMin decimal.Decimal
+		description string
 	}{
 		{
 			name:        "normal positive rate",
@@ -143,25 +143,25 @@ func TestSlippageEstimation(t *testing.T) {
 		expectedMaxSlip  decimal.Decimal
 	}{
 		{
-			name:         "small position - no order book data",
-			positionSize: decimal.NewFromInt(10000),
+			name:             "small position - no order book data",
+			positionSize:     decimal.NewFromInt(10000),
 			orderBookMetrics: nil, // No order book data
-			expectedMinSlip: decimal.NewFromFloat(0.04),
-			expectedMaxSlip: decimal.NewFromFloat(0.06),
+			expectedMinSlip:  decimal.NewFromFloat(0.04),
+			expectedMaxSlip:  decimal.NewFromFloat(0.06),
 		},
 		{
-			name:         "medium position - no order book data",
-			positionSize: decimal.NewFromInt(75000),
+			name:             "medium position - no order book data",
+			positionSize:     decimal.NewFromInt(75000),
 			orderBookMetrics: nil,
-			expectedMinSlip: decimal.NewFromFloat(0.09),
-			expectedMaxSlip: decimal.NewFromFloat(0.11),
+			expectedMinSlip:  decimal.NewFromFloat(0.09),
+			expectedMaxSlip:  decimal.NewFromFloat(0.11),
 		},
 		{
-			name:         "large position - no order book data",
-			positionSize: decimal.NewFromInt(150000),
+			name:             "large position - no order book data",
+			positionSize:     decimal.NewFromInt(150000),
 			orderBookMetrics: nil,
-			expectedMinSlip: decimal.NewFromFloat(0.19),
-			expectedMaxSlip: decimal.NewFromFloat(0.21),
+			expectedMinSlip:  decimal.NewFromFloat(0.19),
+			expectedMaxSlip:  decimal.NewFromFloat(0.21),
 		},
 		{
 			name:         "with order book data",
@@ -257,29 +257,29 @@ func TestLiquidityScoreWithOrderBook(t *testing.T) {
 					LiquidityScore: decimal.NewFromInt(50),
 				},
 			},
-			baseAmount:  decimal.NewFromInt(50000),
+			baseAmount: decimal.NewFromInt(50000),
 			// Calculation: avgSpread=0.055, spreadScore=89, depthScore=100, slippageScore=100
 			// Final: 89*0.4 + 100*0.35 + 100*0.25 = 35.6 + 35 + 25 = 95.6
 			expectedMin: decimal.NewFromInt(90),
 			expectedMax: decimal.NewFromInt(100),
 		},
 		{
-			name: "nil order book - uses fallback",
+			name:             "nil order book - uses fallback",
 			orderBookMetrics: nil,
-			baseAmount:  decimal.NewFromInt(10000),
-			expectedMin: decimal.NewFromInt(0),
-			expectedMax: decimal.NewFromInt(100),
+			baseAmount:       decimal.NewFromInt(10000),
+			expectedMin:      decimal.NewFromInt(0),
+			expectedMax:      decimal.NewFromInt(100),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := models.FuturesArbitrageCalculationInput{
-				Symbol:        "BTC/USDT",
-				LongExchange:  "binance",
-				ShortExchange: "okx",
-				BaseAmount:    tt.baseAmount,
-				LongMarkPrice: decimal.NewFromInt(50000),
+				Symbol:         "BTC/USDT",
+				LongExchange:   "binance",
+				ShortExchange:  "okx",
+				BaseAmount:     tt.baseAmount,
+				LongMarkPrice:  decimal.NewFromInt(50000),
 				ShortMarkPrice: decimal.NewFromInt(50000),
 			}
 
@@ -393,14 +393,14 @@ func TestFundingRateStats(t *testing.T) {
 // TestOrderBookMetricsMethods tests helper methods on OrderBookMetrics
 func TestOrderBookMetricsMethods(t *testing.T) {
 	metrics := &models.OrderBookMetrics{
-		Exchange:     "binance",
-		Symbol:       "BTC/USDT",
-		BestBid:      decimal.NewFromInt(49990),
-		BestAsk:      decimal.NewFromInt(50010),
-		MidPrice:     decimal.NewFromInt(50000),
-		BidAskSpread: decimal.NewFromFloat(0.04), // 0.04%
-		BidDepth1Pct: decimal.NewFromInt(1000000),
-		AskDepth1Pct: decimal.NewFromInt(800000),
+		Exchange:      "binance",
+		Symbol:        "BTC/USDT",
+		BestBid:       decimal.NewFromInt(49990),
+		BestAsk:       decimal.NewFromInt(50010),
+		MidPrice:      decimal.NewFromInt(50000),
+		BidAskSpread:  decimal.NewFromFloat(0.04), // 0.04%
+		BidDepth1Pct:  decimal.NewFromInt(1000000),
+		AskDepth1Pct:  decimal.NewFromInt(800000),
 		Imbalance1Pct: decimal.NewFromFloat(0.111), // (1M-0.8M)/(1M+0.8M) = 0.2M/1.8M
 		SlippageEstimates: map[string]models.SlippageEstimate{
 			"10000": {

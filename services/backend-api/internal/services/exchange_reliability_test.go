@@ -169,40 +169,40 @@ func TestExchangeReliabilityRiskScoreCalculation(t *testing.T) {
 	tracker := NewExchangeReliabilityTracker(nil, nil)
 
 	tests := []struct {
-		name            string
-		uptimePercent   float64
-		avgLatencyMs    int64
+		name             string
+		uptimePercent    float64
+		avgLatencyMs     int64
 		consecutiveFails int
 		hasRecentFailure bool
-		expectedMinRisk decimal.Decimal
-		expectedMaxRisk decimal.Decimal
+		expectedMinRisk  decimal.Decimal
+		expectedMaxRisk  decimal.Decimal
 	}{
 		{
-			name:            "perfect reliability",
-			uptimePercent:   99.9,
-			avgLatencyMs:    50,
+			name:             "perfect reliability",
+			uptimePercent:    99.9,
+			avgLatencyMs:     50,
 			consecutiveFails: 0,
 			hasRecentFailure: false,
-			expectedMinRisk: decimal.NewFromInt(0),
-			expectedMaxRisk: decimal.NewFromInt(6),
+			expectedMinRisk:  decimal.NewFromInt(0),
+			expectedMaxRisk:  decimal.NewFromInt(6),
 		},
 		{
-			name:            "good reliability",
-			uptimePercent:   98.0,
-			avgLatencyMs:    200,
+			name:             "good reliability",
+			uptimePercent:    98.0,
+			avgLatencyMs:     200,
 			consecutiveFails: 0,
 			hasRecentFailure: false,
-			expectedMinRisk: decimal.NewFromInt(5),
-			expectedMaxRisk: decimal.NewFromInt(10),
+			expectedMinRisk:  decimal.NewFromInt(5),
+			expectedMaxRisk:  decimal.NewFromInt(10),
 		},
 		{
-			name:            "poor reliability with failures",
-			uptimePercent:   90.0,
-			avgLatencyMs:    1000,
+			name:             "poor reliability with failures",
+			uptimePercent:    90.0,
+			avgLatencyMs:     1000,
 			consecutiveFails: 3,
 			hasRecentFailure: true,
-			expectedMinRisk: decimal.NewFromInt(15),
-			expectedMaxRisk: decimal.NewFromInt(20),
+			expectedMinRisk:  decimal.NewFromInt(15),
+			expectedMaxRisk:  decimal.NewFromInt(20),
 		},
 	}
 
