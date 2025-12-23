@@ -9,6 +9,8 @@ paths:
       - ".trae/**"
       - "services/ccxt-service/*.test.ts"
       - "services/ccxt-service/test-*.js"
+      - "services/telegram-service/*.test.ts"
+      - "**/test-setup.ts"
       - "**/*_test.go"
       - "test/**"
 secrets:
@@ -17,17 +19,26 @@ secrets:
       match: test-secret-key
     - name: test-admin-key
       match: test-admin-key
+    - name: test-bot-token
+      match: test-bot-token
+    - name: test-webhook-secret
+      match: test-webhook-secret
     - name: secret-key-placeholder
       match: replace-with-secure-secret
     - name: docker-compose-dev-default
       match: "postgres"
     - name: dev-jwt-secret
       match: dev-jwt-secret
+    - name: admin-secret-key-change-me
+      match: admin-secret-key-change-me
+    - name: admin-dev-key-change-in-production
+      match: admin-dev-key-change-in-production
   ignored-paths:
     # Test files commonly use fake credentials
     - "**/*_test.go"
     - "**/*.test.ts"
     - "**/*.spec.ts"
+    - "**/test-setup.ts"
     # Docker compose uses environment variable defaults
     - "docker-compose*.yaml"
     - "docker-compose*.yml"
