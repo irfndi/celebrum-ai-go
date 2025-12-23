@@ -223,259 +223,259 @@ const formatOpportunitiesMessage = (opps: any[]) => {
 // Only register bot commands if bot is available
 if (bot) {
   bot.command("start", async (ctx) => {
-  const chatId = ctx.chat?.id;
-  const userId = ctx.from?.id;
+    const chatId = ctx.chat?.id;
+    const userId = ctx.from?.id;
 
-  if (!chatId || !userId) {
-    await ctx.reply("Unable to start: missing chat information.");
-    return;
-  }
+    if (!chatId || !userId) {
+      await ctx.reply("Unable to start: missing chat information.");
+      return;
+    }
 
-  const chatIdStr = String(chatId);
+    const chatIdStr = String(chatId);
 
-  const userResult = await Effect.runPromise(
-    Effect.catchAll(getUserByChatId(chatIdStr), () => Effect.succeed(null)),
-  );
+    const userResult = await Effect.runPromise(
+      Effect.catchAll(getUserByChatId(chatIdStr), () => Effect.succeed(null)),
+    );
 
-  if (!userResult) {
-    await Effect.runPromise(
-      Effect.catchAll(registerTelegramUser(chatIdStr, userId), () =>
+    if (!userResult) {
+      await Effect.runPromise(
+        Effect.catchAll(registerTelegramUser(chatIdStr, userId), () =>
+          Effect.succeed(null),
+        ),
+      );
+    }
+
+    const welcomeMsg =
+      "🚀 Welcome to Celebrum AI!\n\n" +
+      "✅ You're now registered and ready to receive arbitrage alerts!\n\n" +
+      "Use /opportunities to see current opportunities.\n" +
+      "Use /help to see available commands.";
+
+    await ctx.reply(welcomeMsg);
+  });
+
+  bot.command("help", async (ctx) => {
+    const msg =
+      "🤖 Celebrum AI Bot Commands:\n\n" +
+      "/start - Register and get started\n" +
+      "/opportunities - View current arbitrage opportunities\n" +
+      "/settings - Configure your alert preferences\n" +
+      "/upgrade - Upgrade to premium subscription\n" +
+      "/status - Check your account status\n" +
+      "/stop - Pause all notifications\n" +
+      "/resume - Resume notifications\n" +
+      "/help - Show this help message\n\n" +
+      "💡 Tip: You'll receive automatic alerts when profitable opportunities are detected!";
+
+    await ctx.reply(msg);
+  });
+
+  bot.command("opportunities", async (ctx) => {
+    const response = await Effect.runPromise(
+      Effect.catchAll(
+        apiFetch<{ opportunities: any[] }>(
+          "/api/v1/arbitrage/opportunities?limit=5&min_profit=0.5",
+        ),
+        (error) => Effect.fail(error as Error),
+      ),
+    ).catch(async (error) => {
+      await ctx.reply(
+        `❌ Failed to fetch opportunities. Please try again later. (${(error as Error).message})`,
+      );
+      return null;
+    });
+
+    if (!response) {
+      return;
+    }
+
+    await ctx.reply(formatOpportunitiesMessage(response.opportunities));
+  });
+
+  bot.command("status", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const userId = ctx.from?.id;
+    if (!chatId) {
+      await ctx.reply("Unable to lookup status: missing chat information.");
+      return;
+    }
+
+    const userResult = await Effect.runPromise(
+      Effect.catchAll(getUserByChatId(String(chatId)), () =>
         Effect.succeed(null),
       ),
     );
-  }
 
-  const welcomeMsg =
-    "🚀 Welcome to Celebrum AI!\n\n" +
-    "✅ You're now registered and ready to receive arbitrage alerts!\n\n" +
-    "Use /opportunities to see current opportunities.\n" +
-    "Use /help to see available commands.";
+    if (!userResult) {
+      await ctx.reply("User not found. Please use /start to register.");
+      return;
+    }
 
-  await ctx.reply(welcomeMsg);
-});
+    const preference = userId
+      ? await Effect.runPromise(
+          Effect.catchAll(getNotificationPreference(String(userId)), () =>
+            Effect.succeed({
+              enabled: true,
+              profit_threshold: 0.5,
+              alert_frequency: "Every 5 minutes",
+            }),
+          ),
+        )
+      : {
+          enabled: true,
+          profit_threshold: 0.5,
+          alert_frequency: "Every 5 minutes",
+        };
 
-bot.command("help", async (ctx) => {
-  const msg =
-    "🤖 Celebrum AI Bot Commands:\n\n" +
-    "/start - Register and get started\n" +
-    "/opportunities - View current arbitrage opportunities\n" +
-    "/settings - Configure your alert preferences\n" +
-    "/upgrade - Upgrade to premium subscription\n" +
-    "/status - Check your account status\n" +
-    "/stop - Pause all notifications\n" +
-    "/resume - Resume notifications\n" +
-    "/help - Show this help message\n\n" +
-    "💡 Tip: You'll receive automatic alerts when profitable opportunities are detected!";
+    const createdAt = new Date(userResult.user.created_at).toLocaleDateString();
+    const tier = userResult.user.subscription_tier;
+    const notificationStatus = preference.enabled ? "Active" : "Paused";
 
-  await ctx.reply(msg);
-});
+    const msg =
+      "📊 Account Status:\n\n" +
+      `💰 Subscription: ${tier}\n` +
+      `📅 Member since: ${createdAt}\n` +
+      `🔔 Notifications: ${notificationStatus}`;
 
-bot.command("opportunities", async (ctx) => {
-  const response = await Effect.runPromise(
-    Effect.catchAll(
-      apiFetch<{ opportunities: any[] }>(
-        "/api/v1/arbitrage/opportunities?limit=5&min_profit=0.5",
-      ),
-      (error) => Effect.fail(error as Error),
-    ),
-  ).catch(async (error) => {
-    await ctx.reply(
-      `❌ Failed to fetch opportunities. Please try again later. (${(error as Error).message})`,
-    );
-    return null;
+    await ctx.reply(msg);
   });
 
-  if (!response) {
-    return;
-  }
+  bot.command("settings", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const userId = ctx.from?.id;
+    if (!userId || !chatId) {
+      await ctx.reply("Unable to fetch settings right now.");
+      return;
+    }
 
-  await ctx.reply(formatOpportunitiesMessage(response.opportunities));
-});
+    // Fetch user for subscription tier
+    const userResult = await Effect.runPromise(
+      Effect.catchAll(getUserByChatId(String(chatId)), () =>
+        Effect.succeed(null),
+      ),
+    );
 
-bot.command("status", async (ctx) => {
-  const chatId = ctx.chat?.id;
-  const userId = ctx.from?.id;
-  if (!chatId) {
-    await ctx.reply("Unable to lookup status: missing chat information.");
-    return;
-  }
+    const preference = await Effect.runPromise(
+      Effect.catchAll(getNotificationPreference(String(userId)), () =>
+        Effect.succeed({
+          enabled: true,
+          profit_threshold: 0.5,
+          alert_frequency: "Immediate (Periodic Scan 5m)",
+        }),
+      ),
+    );
 
-  const userResult = await Effect.runPromise(
-    Effect.catchAll(getUserByChatId(String(chatId)), () =>
-      Effect.succeed(null),
-    ),
-  );
+    const statusIcon = preference.enabled ? "✅" : "❌";
+    const statusText = preference.enabled ? "ON" : "OFF";
+    const threshold = preference.profit_threshold ?? 0.5;
+    const frequency =
+      preference.alert_frequency ?? "Immediate (Periodic Scan 5m)";
+    const tier = userResult?.user?.subscription_tier ?? "Free Tier";
 
-  if (!userResult) {
-    await ctx.reply("User not found. Please use /start to register.");
-    return;
-  }
+    const msg =
+      "⚙️ Alert Settings:\n\n" +
+      `🔔 Notifications: ${statusIcon} ${statusText}\n` +
+      `📊 Min Profit Threshold: ${threshold}%\n` +
+      `⏰ Alert Frequency: ${frequency}\n` +
+      `💰 Subscription: ${tier}\n\n` +
+      "To change settings:\n" +
+      "/stop - Pause notifications\n" +
+      "/resume - Resume notifications\n" +
+      "/upgrade - Upgrade to premium for more options";
 
-  const preference = userId
-    ? await Effect.runPromise(
-        Effect.catchAll(getNotificationPreference(String(userId)), () =>
-          Effect.succeed({
-            enabled: true,
-            profit_threshold: 0.5,
-            alert_frequency: "Every 5 minutes",
-          }),
-        ),
-      )
-    : {
-        enabled: true,
-        profit_threshold: 0.5,
-        alert_frequency: "Every 5 minutes",
-      };
+    await ctx.reply(msg);
+  });
 
-  const createdAt = new Date(userResult.user.created_at).toLocaleDateString();
-  const tier = userResult.user.subscription_tier;
-  const notificationStatus = preference.enabled ? "Active" : "Paused";
+  bot.command("stop", async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) {
+      await ctx.reply("Unable to update notifications.");
+      return;
+    }
 
-  const msg =
-    "📊 Account Status:\n\n" +
-    `💰 Subscription: ${tier}\n` +
-    `📅 Member since: ${createdAt}\n` +
-    `🔔 Notifications: ${notificationStatus}`;
+    await Effect.runPromise(
+      Effect.catchAll(setNotificationPreference(String(userId), false), () =>
+        Effect.succeed(null),
+      ),
+    );
 
-  await ctx.reply(msg);
-});
+    const msg =
+      "⏸️ Notifications Paused\n\n" +
+      "You will no longer receive arbitrage alerts.\n\n" +
+      "Use /resume to start receiving alerts again.";
 
-bot.command("settings", async (ctx) => {
-  const chatId = ctx.chat?.id;
-  const userId = ctx.from?.id;
-  if (!userId || !chatId) {
-    await ctx.reply("Unable to fetch settings right now.");
-    return;
-  }
+    await ctx.reply(msg);
+  });
 
-  // Fetch user for subscription tier
-  const userResult = await Effect.runPromise(
-    Effect.catchAll(getUserByChatId(String(chatId)), () =>
-      Effect.succeed(null),
-    ),
-  );
+  bot.command("resume", async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) {
+      await ctx.reply("Unable to update notifications.");
+      return;
+    }
 
-  const preference = await Effect.runPromise(
-    Effect.catchAll(getNotificationPreference(String(userId)), () =>
-      Effect.succeed({
-        enabled: true,
-        profit_threshold: 0.5,
-        alert_frequency: "Immediate (Periodic Scan 5m)",
-      }),
-    ),
-  );
+    await Effect.runPromise(
+      Effect.catchAll(setNotificationPreference(String(userId), true), () =>
+        Effect.succeed(null),
+      ),
+    );
 
-  const statusIcon = preference.enabled ? "✅" : "❌";
-  const statusText = preference.enabled ? "ON" : "OFF";
-  const threshold = preference.profit_threshold ?? 0.5;
-  const frequency =
-    preference.alert_frequency ?? "Immediate (Periodic Scan 5m)";
-  const tier = userResult?.user?.subscription_tier ?? "Free Tier";
+    const msg =
+      "▶️ Notifications Resumed\n\n" +
+      "You will now receive arbitrage alerts again.\n\n" +
+      "Use /opportunities to see current opportunities.";
 
-  const msg =
-    "⚙️ Alert Settings:\n\n" +
-    `🔔 Notifications: ${statusIcon} ${statusText}\n` +
-    `📊 Min Profit Threshold: ${threshold}%\n` +
-    `⏰ Alert Frequency: ${frequency}\n` +
-    `💰 Subscription: ${tier}\n\n` +
-    "To change settings:\n" +
-    "/stop - Pause notifications\n" +
-    "/resume - Resume notifications\n" +
-    "/upgrade - Upgrade to premium for more options";
+    await ctx.reply(msg);
+  });
 
-  await ctx.reply(msg);
-});
+  bot.command("upgrade", async (ctx) => {
+    const msg =
+      "🎯 Upgrade to Premium\n\n" +
+      "✨ Premium Benefits:\n" +
+      "• Unlimited alerts\n" +
+      "• Instant notifications\n" +
+      "• Custom profit thresholds\n" +
+      "• Website dashboard access\n" +
+      "• Priority support\n\n" +
+      "💰 Price: $29/month\n\n" +
+      "To upgrade, please contact support.";
 
-bot.command("stop", async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId) {
-    await ctx.reply("Unable to update notifications.");
-    return;
-  }
+    await ctx.reply(msg);
+  });
 
-  await Effect.runPromise(
-    Effect.catchAll(setNotificationPreference(String(userId), false), () =>
-      Effect.succeed(null),
-    ),
-  );
+  bot.on("message:text", async (ctx) => {
+    await ctx.reply("Thanks for your message! 👋\n\nTry /help for commands.");
+  });
 
-  const msg =
-    "⏸️ Notifications Paused\n\n" +
-    "You will no longer receive arbitrage alerts.\n\n" +
-    "Use /resume to start receiving alerts again.";
+  bot.catch((err) => {
+    const ctx = err.ctx;
+    console.error(`Error while handling update ${ctx.update.update_id}:`);
+    const error = err.error;
 
-  await ctx.reply(msg);
-});
+    // Capture error to Sentry with context
+    if (isSentryEnabled) {
+      captureException(error, {
+        update_id: ctx.update.update_id,
+        chat_id: ctx.chat?.id,
+        user_id: ctx.from?.id,
+        message_text: ctx.message?.text,
+        error_type:
+          error instanceof GrammyError
+            ? "GrammyError"
+            : error instanceof HttpError
+              ? "HttpError"
+              : "UnknownError",
+      });
+    }
 
-bot.command("resume", async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId) {
-    await ctx.reply("Unable to update notifications.");
-    return;
-  }
-
-  await Effect.runPromise(
-    Effect.catchAll(setNotificationPreference(String(userId), true), () =>
-      Effect.succeed(null),
-    ),
-  );
-
-  const msg =
-    "▶️ Notifications Resumed\n\n" +
-    "You will now receive arbitrage alerts again.\n\n" +
-    "Use /opportunities to see current opportunities.";
-
-  await ctx.reply(msg);
-});
-
-bot.command("upgrade", async (ctx) => {
-  const msg =
-    "🎯 Upgrade to Premium\n\n" +
-    "✨ Premium Benefits:\n" +
-    "• Unlimited alerts\n" +
-    "• Instant notifications\n" +
-    "• Custom profit thresholds\n" +
-    "• Website dashboard access\n" +
-    "• Priority support\n\n" +
-    "💰 Price: $29/month\n\n" +
-    "To upgrade, please contact support.";
-
-  await ctx.reply(msg);
-});
-
-bot.on("message:text", async (ctx) => {
-  await ctx.reply("Thanks for your message! 👋\n\nTry /help for commands.");
-});
-
-bot.catch((err) => {
-  const ctx = err.ctx;
-  console.error(`Error while handling update ${ctx.update.update_id}:`);
-  const error = err.error;
-
-  // Capture error to Sentry with context
-  if (isSentryEnabled) {
-    captureException(error, {
-      update_id: ctx.update.update_id,
-      chat_id: ctx.chat?.id,
-      user_id: ctx.from?.id,
-      message_text: ctx.message?.text,
-      error_type:
-        error instanceof GrammyError
-          ? "GrammyError"
-          : error instanceof HttpError
-            ? "HttpError"
-            : "UnknownError",
-    });
-  }
-
-  if (error instanceof GrammyError) {
-    console.error("Error in request:", error.description);
-  } else if (error instanceof HttpError) {
-    console.error("Could not contact Telegram:", error);
-  } else {
-    console.error("Unknown error:", error);
-  }
-});
+    if (error instanceof GrammyError) {
+      console.error("Error in request:", error.description);
+    } else if (error instanceof HttpError) {
+      console.error("Could not contact Telegram:", error);
+    } else {
+      console.error("Unknown error:", error);
+    }
+  });
 } // End of if (bot) block
 
 const app = new Hono();
