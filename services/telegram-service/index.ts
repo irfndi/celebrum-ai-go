@@ -45,7 +45,9 @@ type TelegramConfigPartial = TelegramConfig & {
 };
 
 const loadConfig = (): TelegramConfigPartial => {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN || "";
+  // Support both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN for compatibility with different platforms
+  const botToken =
+    process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN || "";
   const botTokenMissing = !botToken;
 
   const adminApiKey = process.env.ADMIN_API_KEY || "";

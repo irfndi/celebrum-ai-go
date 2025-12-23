@@ -25,11 +25,15 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
+      # Database configuration - prefer individual vars over DATABASE_URL
+      # DATABASE_URL often has stale hostnames from Coolify's auto-generation
       - DATABASE_HOST=${DATABASE_HOST:-postgres}
       - DATABASE_PORT=${DATABASE_PORT:-5432}
       - DATABASE_USER=${DATABASE_USER:-postgres}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-changeme}
       - DATABASE_DBNAME=${DATABASE_DBNAME:-celebrum}
+      # Pass DATABASE_URL for compatibility, but entrypoint prefers individual vars
+      - DATABASE_URL=${DATABASE_URL:-}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
@@ -84,7 +88,8 @@ services:
     environment:
       - PORT=3002
       - TELEGRAM_PORT=3002
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      # Support both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN for compatibility
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
       - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
