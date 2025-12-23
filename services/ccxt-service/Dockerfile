@@ -26,4 +26,5 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["bun", "run", "dist/index.js"]
+# Run the bundled file directly to avoid bun run overhead and potential duplicate server
+CMD ["bun", "dist/index.js"]
