@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -509,6 +510,21 @@ func validateConfig(config *Config) error {
 		for _, insecure := range insecureSecrets {
 			if config.Auth.JWTSecret == insecure {
 				return fmt.Errorf("JWT_SECRET '%s' is insecure and not allowed in %s environment. Please use a secure, randomly generated secret", insecure, config.Environment)
+			}
+		}
+
+		// Validate Service URLs for production/staging
+		// If running in a containerized environment (common for production/staging),
+		// localhost/127.0.0.1 is almost always wrong for service-to-service communication.
+		if config.CCXT.ServiceURL != "" {
+			if strings.Contains(config.CCXT.ServiceURL, "localhost") || strings.Contains(config.CCXT.ServiceURL, "127.0.0.1") {
+				log.Printf("WARNING: CCXT_SERVICE_URL '%s' contains localhost/127.0.0.1 in %s environment. This may cause connectivity issues between containers.", config.CCXT.ServiceURL, config.Environment)
+			}
+		}
+
+		if config.Telegram.ServiceURL != "" {
+			if strings.Contains(config.Telegram.ServiceURL, "localhost") || strings.Contains(config.Telegram.ServiceURL, "127.0.0.1") {
+				log.Printf("WARNING: TELEGRAM_SERVICE_URL '%s' contains localhost/127.0.0.1 in %s environment. This may cause connectivity issues between containers.", config.Telegram.ServiceURL, config.Environment)
 			}
 		}
 	}

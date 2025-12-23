@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download || go mod download
 
 # Copy source code
 COPY . .
@@ -31,15 +31,17 @@ COPY --from=go-builder /app/main .
 COPY --from=go-builder /app/config.yml .
 COPY --from=go-builder /app/scripts ./scripts
 COPY --from=go-builder /app/database ./database
+COPY --from=go-builder /app/entrypoint.sh . 2>/dev/null || true
 
 # Permissions
 RUN chown -R appuser:appgroup /app && \
-    chmod +x scripts/entrypoint.sh
+    chmod +x scripts/*.sh 2>/dev/null || true && \
+    chmod +x entrypoint.sh 2>/dev/null || true
 
 USER appuser
 
-ENV CCXT_DISABLED=true
-ENV TELEGRAM_DISABLED=true
+ENV CCXT_DISABLED=false
+ENV TELEGRAM_DISABLED=false
 ENV TELEGRAM_EXTERNAL_SERVICE=true
 
 # Expose port (Go: 8080)

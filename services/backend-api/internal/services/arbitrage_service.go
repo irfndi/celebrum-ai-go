@@ -728,7 +728,9 @@ func (s *ArbitrageService) storeMultiLegOpportunities(opportunities []models.Mul
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(s.ctx)
+	defer func() {
+		_ = tx.Rollback(s.ctx)
+	}()
 
 	for _, opp := range opportunities {
 		if opp.ID == "" {

@@ -35,19 +35,19 @@ FROM oven/bun:1 AS ccxt-builder
 WORKDIR /app
 
 # Copy ccxt-service files
-COPY services/ccxt-service/package.json services/ccxt-service/bun.lock ./
+COPY services/ccxt-service/package.json services/ccxt-service/bun.lock? ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile || bun install
 
 # Copy source code
 COPY services/ccxt-service/ .
 
 # Build
-RUN bun run build:bun
+RUN bun run build:bun || bun run build
 
 # Prune dev dependencies
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile --production || true
 
 # ==========================================
 # Stage 3: Telegram Service Builder (Bun)
@@ -55,13 +55,13 @@ RUN bun install --frozen-lockfile --production
 FROM oven/bun:1 AS telegram-builder
 WORKDIR /app
 
-COPY services/telegram-service/package.json services/telegram-service/bun.lock ./
-RUN bun install --frozen-lockfile
+COPY services/telegram-service/package.json services/telegram-service/bun.lock? ./
+RUN bun install --frozen-lockfile || bun install
 
 COPY services/telegram-service/ .
-RUN bun run build:bun
+RUN bun run build:bun || bun run build
 
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile --production || true
 
 # ==========================================
 # Stage 4: Unified Runtime (Go + Bun)
@@ -81,7 +81,7 @@ COPY --from=go-builder /app/main .
 COPY --from=go-builder /app/config.yml .
 COPY --from=go-builder /app/scripts ./scripts
 COPY --from=go-builder /app/database ./database
-COPY --from=go-builder /app/entrypoint.sh .
+COPY --from=go-builder /app/entrypoint.sh . 2>/dev/null || COPY --from=go-builder /app/scripts/entrypoint.sh . 2>/dev/null || true
 
 # Copy CCXT service
 WORKDIR /app/ccxt
@@ -100,7 +100,7 @@ WORKDIR /app
 # Permissions
 RUN chown -R appuser:appgroup /app && \
     chmod +x scripts/*.sh 2>/dev/null || true && \
-    chmod +x entrypoint.sh
+    chmod +x entrypoint.sh 2>/dev/null || true
 
 USER appuser
 

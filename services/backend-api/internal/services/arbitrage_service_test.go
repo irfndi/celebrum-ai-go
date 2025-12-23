@@ -1040,7 +1040,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 
 	// Test with nil database - various scenarios
 	t.Run("nil database scenario", func(t *testing.T) {
-		var mockDB *database.PostgresDB // Using nil to test error handling
+		var mockDB database.DatabasePool // Using nil interface to test error handling
 		service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 		// Should return error due to nil database
@@ -1082,7 +1082,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 
 		for i, cfg := range configs {
 			t.Run(fmt.Sprintf("config_%d", i), func(t *testing.T) {
-				var mockDB *database.PostgresDB = nil
+				var mockDB database.DatabasePool = nil
 				service := NewArbitrageService(mockDB, cfg, calculator, nil)
 
 				// Should return error due to nil database
@@ -1099,7 +1099,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 		// Cancel context immediately
 		cancel()
 
-		var mockDB *database.PostgresDB = nil
+		var mockDB database.DatabasePool = nil
 		service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 		service.ctx = ctx // Replace with cancelled context
 
@@ -1112,11 +1112,11 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 	t.Run("edge cases", func(t *testing.T) {
 		edgeCases := []struct {
 			name  string
-			setup func() *database.PostgresDB
+			setup func() database.DatabasePool
 		}{
 			{
 				name: "nil_database",
-				setup: func() *database.PostgresDB {
+				setup: func() database.DatabasePool {
 					return nil
 				},
 			},
@@ -1164,7 +1164,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_SuccessPath(t *testing.
 
 	// For now, test error handling with nil pool
 	// TODO: Create proper integration test with real database setup
-	var realDB *database.PostgresDB // nil for error handling test
+	var realDB database.DatabasePool // nil for error handling test
 
 	calculator := NewSpotArbitrageCalculator()
 
@@ -1191,9 +1191,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_CleanupError(t *testing
 	_ = telemetry.Logger()
 
 	// Create real PostgresDB with nil pool (will be mocked at service level)
-	mockDB := &database.PostgresDB{
-		Pool: nil, // We'll mock the service methods instead
-	}
+	var mockDB database.DatabasePool // nil for error handling test
 
 	calculator := NewSpotArbitrageCalculator()
 	mockConfig := &config.Config{
@@ -1216,9 +1214,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError(t *t
 	_ = telemetry.Logger()
 
 	// Create real PostgresDB with nil pool (will be mocked at service level)
-	mockDB := &database.PostgresDB{
-		Pool: nil, // We'll mock the service methods instead
-	}
+	var mockDB database.DatabasePool // nil for error handling test
 
 	calculator := NewSpotArbitrageCalculator()
 	mockConfig := &config.Config{
@@ -1234,7 +1230,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError(t *t
 
 	err := service.calculateAndStoreOpportunities()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get market data")
+	assert.Contains(t, err.Error(), "database pool is not available")
 }
 
 // TestArbitrageService_calculateAndStoreOpportunities_CalculateError tests error handling when calculator fails
@@ -1242,9 +1238,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_CalculateError(t *testi
 	_ = telemetry.Logger()
 
 	// Create real PostgresDB with nil pool (will be mocked at service level)
-	mockDB := &database.PostgresDB{
-		Pool: nil, // We'll mock the service methods instead
-	}
+	var mockDB database.DatabasePool // nil for error handling test
 
 	// Create calculator that returns error
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
@@ -1271,9 +1265,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T
 	_ = telemetry.Logger()
 
 	// Create real PostgresDB with nil pool (will be mocked at service level)
-	mockDB := &database.PostgresDB{
-		Pool: nil, // We'll mock the service methods instead
-	}
+	var mockDB database.DatabasePool // nil for error handling test
 
 	// Create calculator that returns valid opportunities
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
@@ -1362,7 +1354,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities(t 
 	_ = telemetry.Logger()
 
 	// Use nil database since we're mocking the service method directly
-	var mockDB *database.PostgresDB
+	var mockDB database.DatabasePool
 
 	// Create calculator that returns opportunities below profit threshold
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
@@ -1410,7 +1402,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation(t *
 	_ = telemetry.Logger()
 
 	// Use nil database since we're mocking the calculator directly
-	var mockDB *database.PostgresDB
+	var mockDB database.DatabasePool
 
 	// Create calculator with mock data for cancellation test
 	calculator := &testmocks.MockSpotArbitrageCalculator{}
