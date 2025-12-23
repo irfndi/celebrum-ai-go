@@ -1113,14 +1113,13 @@ func (sp *SignalProcessor) storeAggregatedSignal(result ProcessingResult) error 
 
 // sendSignalNotification triggers a notification for high-quality signals.
 func (sp *SignalProcessor) sendSignalNotification(result ProcessingResult) error {
-	_, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
+	aggregatedSignal, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
 	if !ok {
 		return fmt.Errorf("invalid aggregated signal in result metadata")
 	}
 
-	// Convert to notification format and send (placeholder - implement based on notification service interface)
-	// return sp.notificationService.NotifyAggregatedSignal(aggregatedSignal)
-	return nil // Temporary placeholder
+	// Send notification using the notification service
+	return sp.notificationService.NotifyAggregatedSignals(sp.ctx, []*AggregatedSignal{aggregatedSignal})
 }
 
 // metricsLoop periodically updates internal throughput metrics.

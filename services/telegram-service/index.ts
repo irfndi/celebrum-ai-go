@@ -156,7 +156,7 @@ const getUserByChatId = (chatId: string) =>
   }>(`/api/v1/telegram/internal/users/${encodeURIComponent(chatId)}`, {}, true);
 
 const getNotificationPreference = (userId: string) =>
-  apiFetch<{ enabled: boolean }>(
+  apiFetch<{ enabled: boolean; profit_threshold: number; alert_frequency: string }>(
     `/api/v1/telegram/internal/notifications/${encodeURIComponent(userId)}`,
     {},
     true,
@@ -297,10 +297,10 @@ bot.command("status", async (ctx) => {
   const preference = userId
     ? await Effect.runPromise(
         Effect.catchAll(getNotificationPreference(String(userId)), () =>
-          Effect.succeed({ enabled: true }),
+          Effect.succeed({ enabled: true, profit_threshold: 0.5, alert_frequency: "Every 5 minutes" }),
         ),
       )
-    : { enabled: true };
+    : { enabled: true, profit_threshold: 0.5, alert_frequency: "Every 5 minutes" };
 
   const createdAt = new Date(userResult.user.created_at).toLocaleDateString();
   const tier = userResult.user.subscription_tier;
@@ -316,27 +316,36 @@ bot.command("status", async (ctx) => {
 });
 
 bot.command("settings", async (ctx) => {
+  const chatId = ctx.chat?.id;
   const userId = ctx.from?.id;
-  if (!userId) {
+  if (!userId || !chatId) {
     await ctx.reply("Unable to fetch settings right now.");
     return;
   }
 
+  // Fetch user for subscription tier
+  const userResult = await Effect.runPromise(
+    Effect.catchAll(getUserByChatId(String(chatId)), () => Effect.succeed(null)),
+  );
+
   const preference = await Effect.runPromise(
     Effect.catchAll(getNotificationPreference(String(userId)), () =>
-      Effect.succeed({ enabled: true }),
+      Effect.succeed({ enabled: true, profit_threshold: 0.5, alert_frequency: "Immediate (Periodic Scan 5m)" }),
     ),
   );
 
   const statusIcon = preference.enabled ? "✅" : "❌";
   const statusText = preference.enabled ? "ON" : "OFF";
+  const threshold = preference.profit_threshold ?? 0.5;
+  const frequency = preference.alert_frequency ?? "Immediate (Periodic Scan 5m)";
+  const tier = userResult?.user?.subscription_tier ?? "Free Tier";
 
   const msg =
     "⚙️ Alert Settings:\n\n" +
     `🔔 Notifications: ${statusIcon} ${statusText}\n` +
-    "📊 Min Profit Threshold: 0.5%\n" +
-    "⏰ Alert Frequency: Every 5 minutes\n" +
-    "💰 Subscription: Free Tier\n\n" +
+    `📊 Min Profit Threshold: ${threshold}%\n` +
+    `⏰ Alert Frequency: ${frequency}\n` +
+    `💰 Subscription: ${tier}\n\n` +
     "To change settings:\n" +
     "/stop - Pause notifications\n" +
     "/resume - Resume notifications\n" +
