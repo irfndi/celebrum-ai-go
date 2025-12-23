@@ -469,7 +469,9 @@ if (!config.usePolling) {
 const server = Bun.serve({
   fetch: app.fetch,
   port: config.port,
-  reusePort: true,
+  // reusePort can cause EADDRINUSE on some Linux configurations
+  // Only enable if explicitly requested via environment variable
+  reusePort: process.env.BUN_REUSE_PORT === "true",
 });
 
 console.log(`🤖 Telegram service listening on port ${server.port}`);
