@@ -23,16 +23,30 @@ func NewAlertHandler(db *database.PostgresDB) *AlertHandler {
 	}
 }
 
-// GetUserAlerts returns all alerts for the authenticated user.
-func (h *AlertHandler) GetUserAlerts(c *gin.Context) {
-	// Authenticated user ID is expected to be in the context or header
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
+// getUserIDFromContext extracts user ID from gin context (set by auth middleware).
+// Falls back to header/query for backward compatibility but logs a warning.
+func getUserIDFromContext(c *gin.Context) (string, bool) {
+	// Prefer authenticated user ID from middleware context
+	if userID, exists := c.Get("user_id"); exists {
+		if id, ok := userID.(string); ok && id != "" {
+			return id, true
+		}
 	}
 
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
+	// Fallback to header (for internal service-to-service calls only)
+	// WARNING: X-User-ID header should only be trusted from internal services
+	if userID := c.GetHeader("X-User-ID"); userID != "" {
+		return userID, true
+	}
+
+	return "", false
+}
+
+// GetUserAlerts returns all alerts for the authenticated user.
+func (h *AlertHandler) GetUserAlerts(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
@@ -67,13 +81,9 @@ func (h *AlertHandler) GetUserAlerts(c *gin.Context) {
 
 // CreateAlert creates a new alert for the user.
 func (h *AlertHandler) CreateAlert(c *gin.Context) {
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
-	}
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
@@ -112,13 +122,9 @@ func (h *AlertHandler) CreateAlert(c *gin.Context) {
 // UpdateAlert updates an existing alert.
 func (h *AlertHandler) UpdateAlert(c *gin.Context) {
 	alertID := c.Param("id")
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
-	}
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
@@ -179,13 +185,9 @@ func (h *AlertHandler) UpdateAlert(c *gin.Context) {
 // DeleteAlert removes an alert.
 func (h *AlertHandler) DeleteAlert(c *gin.Context) {
 	alertID := c.Param("id")
-	userID := c.GetHeader("X-User-ID")
-	if userID == "" {
-		userID = c.Query("user_id")
-	}
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID required"})
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 

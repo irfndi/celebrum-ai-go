@@ -32,7 +32,7 @@ services:
       - DATABASE_DBNAME=${DATABASE_DBNAME:-celebrum}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PORT=8080
       - CCXT_SERVICE_URL=http://ccxt-service:3001
       - TELEGRAM_SERVICE_URL=http://telegram-service:3002

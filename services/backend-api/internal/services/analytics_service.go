@@ -90,7 +90,9 @@ func (s *AnalyticsService) CalculateCorrelationMatrix(ctx context.Context, excha
 		return nil, fmt.Errorf("insufficient points for correlation")
 	}
 
-	orderedSymbols := append([]string{}, symbols...)
+	// Create a copy of symbols for sorting (avoid modifying input slice)
+	orderedSymbols := make([]string, len(symbols))
+	copy(orderedSymbols, symbols)
 	sort.Strings(orderedSymbols)
 
 	matrix := make([][]float64, len(orderedSymbols))

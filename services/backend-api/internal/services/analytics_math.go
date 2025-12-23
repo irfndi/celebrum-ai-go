@@ -1,6 +1,9 @@
 package services
 
-import "math"
+import (
+	"log"
+	"math"
+)
 
 func calculateMeanFloat64(values []float64) float64 {
 	if len(values) == 0 {
@@ -106,14 +109,18 @@ func fitAR1(series []float64) (phi float64, c float64) {
 }
 
 // garch11Forecast computes forecasted variance using simple GARCH(1,1) parameters.
+// For GARCH(1,1) stationarity, alpha + beta must be < 1.
 func garch11Forecast(returns []float64, horizon int, omega float64, alpha float64, beta float64) []float64 {
 	if horizon <= 0 {
 		return nil
 	}
 
+	// GARCH(1,1) stationarity constraint: alpha + beta < 1
+	// If violated, use safe defaults and log warning
 	if alpha+beta >= 1 {
-		beta = 0.8
+		log.Printf("WARNING: GARCH parameters violate stationarity (alpha=%.4f + beta=%.4f = %.4f >= 1). Using safe defaults (alpha=0.1, beta=0.8)", alpha, beta, alpha+beta)
 		alpha = 0.1
+		beta = 0.8
 	}
 
 	variance := math.Pow(calculateStdDev(returns), 2)

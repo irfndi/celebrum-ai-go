@@ -37,17 +37,17 @@ WORKDIR /app
 # Copy ccxt-service files
 COPY services/ccxt-service/package.json services/ccxt-service/bun.lock? ./
 
-# Install dependencies
+# Install dependencies (fallback to non-frozen if lockfile missing)
 RUN bun install --frozen-lockfile || bun install
 
 # Copy source code
 COPY services/ccxt-service/ .
 
-# Build
+# Build (try build:bun first, then standard build)
 RUN bun run build:bun || bun run build
 
 # Prune dev dependencies
-RUN bun install --frozen-lockfile --production || true
+RUN bun install --frozen-lockfile --production || bun install --production
 
 # ==========================================
 # Stage 3: Telegram Service Builder (Bun)
@@ -61,7 +61,7 @@ RUN bun install --frozen-lockfile || bun install
 COPY services/telegram-service/ .
 RUN bun run build:bun || bun run build
 
-RUN bun install --frozen-lockfile --production || true
+RUN bun install --frozen-lockfile --production || bun install --production
 
 # ==========================================
 # Stage 4: Unified Runtime (Go + Bun)
@@ -81,7 +81,8 @@ COPY --from=go-builder /app/main .
 COPY --from=go-builder /app/config.yml .
 COPY --from=go-builder /app/scripts ./scripts
 COPY --from=go-builder /app/database ./database
-COPY --from=go-builder /app/entrypoint.sh . 2>/dev/null || COPY --from=go-builder /app/scripts/entrypoint.sh . 2>/dev/null || true
+# Copy entrypoint from scripts directory (standard location)
+COPY --from=go-builder /app/scripts/entrypoint.sh ./entrypoint.sh
 
 # Copy CCXT service
 WORKDIR /app/ccxt
@@ -100,7 +101,7 @@ WORKDIR /app
 # Permissions
 RUN chown -R appuser:appgroup /app && \
     chmod +x scripts/*.sh 2>/dev/null || true && \
-    chmod +x entrypoint.sh 2>/dev/null || true
+    chmod +x entrypoint.sh
 
 USER appuser
 

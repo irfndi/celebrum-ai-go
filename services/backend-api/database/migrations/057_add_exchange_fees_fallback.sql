@@ -31,13 +31,13 @@ INSERT INTO exchange_fees (exchange_id, taker_fee, maker_fee)
 SELECT id, 0.001, 0.001 FROM exchanges
 ON CONFLICT (exchange_id) DO NOTHING;
 
--- Specific overrides for common exchanges
-UPDATE exchange_fees 
-SET taker_fee = 0.0006, maker_fee = 0.0002 
-WHERE exchange_id IN (SELECT id FROM exchanges WHERE name = 'binance');
+-- Specific overrides for common exchanges (using ccxt_id for consistency)
+UPDATE exchange_fees
+SET taker_fee = 0.0006, maker_fee = 0.0002
+WHERE exchange_id IN (SELECT id FROM exchanges WHERE LOWER(ccxt_id) = 'binance' OR LOWER(name) = 'binance');
 
-UPDATE exchange_fees 
-SET taker_fee = 0.0005, maker_fee = 0.0002 
-WHERE exchange_id IN (SELECT id FROM exchanges WHERE name = 'bybit');
+UPDATE exchange_fees
+SET taker_fee = 0.0005, maker_fee = 0.0002
+WHERE exchange_id IN (SELECT id FROM exchanges WHERE LOWER(ccxt_id) = 'bybit' OR LOWER(name) = 'bybit');
 
 COMMIT;

@@ -85,7 +85,7 @@ func (h *TelegramInternalHandler) GetNotificationPreferences(c *gin.Context) {
 		LIMIT 1
 	`
 	var conditionsJSON []byte
-	var profitThreshold float64 = 0.5 // Default
+	profitThreshold := 0.5 // Default
 
 	// We ignore sql.ErrNoRows here, as we fall back to defaults
 	row := h.db.Pool.QueryRow(c.Request.Context(), queryActive, userID)
@@ -124,7 +124,7 @@ func (h *TelegramInternalHandler) SetNotificationPreferences(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to begin transaction"})
 		return
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 
 	if req.Enabled {
 		// To enable, we remove any disabling records for 'arbitrage'

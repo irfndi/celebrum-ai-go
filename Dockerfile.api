@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download || go mod download
+RUN go mod download
 
 # Copy source code
 COPY . .
@@ -40,8 +40,9 @@ RUN chown -R appuser:appgroup /app && \
 
 USER appuser
 
-ENV CCXT_DISABLED=false
-ENV TELEGRAM_DISABLED=false
+# Default to disabled - enable explicitly if services are available
+ENV CCXT_DISABLED=true
+ENV TELEGRAM_DISABLED=true
 ENV TELEGRAM_EXTERNAL_SERVICE=true
 
 # Expose port (Go: 8080)

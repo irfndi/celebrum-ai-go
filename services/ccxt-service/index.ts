@@ -25,7 +25,6 @@ import {
   initializeSentry,
   captureException,
   flush as sentryFlush,
-  traceExchangeOperation,
 } from "./sentry";
 import { startGrpcServer } from "./grpc-server";
 import type {

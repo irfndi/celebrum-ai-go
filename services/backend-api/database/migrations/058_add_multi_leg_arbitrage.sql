@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS multi_leg_legs (
     id BIGSERIAL PRIMARY KEY,
     opportunity_id UUID NOT NULL REFERENCES multi_leg_opportunities(id) ON DELETE CASCADE,
     leg_index INTEGER NOT NULL, -- 0, 1, 2...
-    symbol VARCHAR(20) NOT NULL,
+    symbol VARCHAR(100) NOT NULL, -- Matches trading_pairs.symbol column size
     side VARCHAR(10) NOT NULL, -- 'buy' or 'sell'
     price DECIMAL(20, 8) NOT NULL,
     volume DECIMAL(20, 8),

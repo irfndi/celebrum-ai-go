@@ -11,9 +11,7 @@ import {
   initializeSentry,
   captureException,
   flush as sentryFlush,
-  traceBotCommand,
   trackBotMode,
-  addBreadcrumb,
 } from "./sentry";
 
 const resolvePort = (raw: string | undefined, fallback: number) => {

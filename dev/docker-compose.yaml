@@ -1,8 +1,14 @@
-# Celebrum AI - Local Development Overrides
-# This file contains services used only for local development (database, redis)
+# Celebrum AI - Local Development Services
+# This file contains PostgreSQL and Redis for local development only.
+#
+# WARNING: This file is for LOCAL DEVELOPMENT ONLY. Do NOT use in production.
+# The default passwords here are insecure and meant only for local testing.
 #
 # Usage:
-#   docker-compose -f docker-compose.yaml -f docker-compose.local.yaml up -d
+#   cd dev && docker-compose up -d
+#
+# Then run the main application with:
+#   DATABASE_HOST=localhost REDIS_HOST=localhost make run
 #
 
 services:
@@ -12,15 +18,12 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-local_dev_password_only}
       POSTGRES_DB: ${DATABASE_DBNAME:-celebrum}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${DATABASE_PORT:-5432}:5432"
-    networks:
-      - default
-      - coolify
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
       interval: 10s
@@ -35,9 +38,6 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
-    networks:
-      - default
-      - coolify
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

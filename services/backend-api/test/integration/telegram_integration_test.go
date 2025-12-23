@@ -90,8 +90,8 @@ func TestTelegramIntegration(t *testing.T) {
 
 	// Clean up after test
 	defer func() {
-		db.Pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", userID)
-		db.Pool.Exec(context.Background(), "DELETE FROM user_alerts WHERE user_id = $1", userID)
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", userID)
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM user_alerts WHERE user_id = $1", userID)
 	}()
 
 	t.Run("GetUserByChatID", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestTelegramIntegration(t *testing.T) {
 		router.ServeHTTP(wValues, reqValues)
 
 		var resp map[string]interface{}
-		json.Unmarshal(wValues.Body.Bytes(), &resp)
+		_ = json.Unmarshal(wValues.Body.Bytes(), &resp)
 		assert.Equal(t, false, resp["enabled"])
 	})
 
@@ -166,7 +166,7 @@ func TestTelegramIntegration(t *testing.T) {
 		router.ServeHTTP(wValues, reqValues)
 
 		var resp map[string]interface{}
-		json.Unmarshal(wValues.Body.Bytes(), &resp)
+		_ = json.Unmarshal(wValues.Body.Bytes(), &resp)
 		assert.Equal(t, true, resp["enabled"])
 	})
 
