@@ -198,6 +198,11 @@ func (db *PostgresDB) Exec(ctx context.Context, sql string, args ...interface{})
 	return db.Pool.Exec(ctx, sql, args...)
 }
 
+// Begin starts a new transaction.
+func (db *PostgresDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return db.Pool.Begin(ctx)
+}
+
 func buildPGXPoolConfig(cfg *config.DatabaseConfig) (*pgxpool.Config, error) {
 	var dsn string
 

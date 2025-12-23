@@ -286,7 +286,7 @@ func TestNewArbitrageService(t *testing.T) {
 
 	calculator := NewSpotArbitrageCalculator()
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, mockDB, service.db)
@@ -311,7 +311,7 @@ func TestNewArbitrageService_DefaultValues(t *testing.T) {
 
 	calculator := NewSpotArbitrageCalculator()
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, 60, service.arbitrageConfig.IntervalSeconds) // default
@@ -331,7 +331,7 @@ func TestArbitrageService_StartStop(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Test initial state
 	assert.False(t, service.IsRunning())
@@ -356,7 +356,7 @@ func TestArbitrageService_StartDisabled(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Test starting when disabled
 	err := service.Start()
@@ -459,7 +459,7 @@ func TestArbitrageService_Start(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var mockDB *database.PostgresDB // Using nil for testing service logic
 			calculator := NewSpotArbitrageCalculator()
-			service := NewArbitrageService(mockDB, tc.config, calculator)
+			service := NewArbitrageService(mockDB, tc.config, calculator, nil)
 
 			// Store initial context values for comparison
 			initialCtx := service.ctx
@@ -528,7 +528,7 @@ func TestArbitrageService_Start_ContextHandling(t *testing.T) {
 
 	var mockDB *database.PostgresDB // Using nil for testing service logic
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Test that Start creates a context - context is initialized in constructor
 	assert.NotNil(t, service.ctx, "Context should be initialized in constructor")
@@ -579,7 +579,7 @@ func TestArbitrageService_Start_GoroutineLaunch(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test initial state
 	assert.False(t, service.IsRunning(), "Service should not be running initially")
@@ -610,7 +610,7 @@ func TestArbitrageService_Start_Logging(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test that logger is properly initialized
 	assert.NotNil(t, service.logger, "Logger should be initialized")
@@ -641,7 +641,7 @@ func TestArbitrageService_Start_MutexBehavior(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test concurrent access to Start method
 	var wg sync.WaitGroup
@@ -685,7 +685,7 @@ func TestArbitrageService_GetStatus(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test initial status
 	isRunning, lastCalculation, opportunitiesFound := service.GetStatus()
@@ -704,7 +704,7 @@ func TestArbitrageService_ConcurrentAccess(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	var wg sync.WaitGroup
 
@@ -785,7 +785,7 @@ func TestArbitrageService_ConfigValidation(t *testing.T) {
 			}
 
 			calculator := NewSpotArbitrageCalculator()
-			service := NewArbitrageService(mockDB, mockConfig, calculator)
+			service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 			assert.Equal(t, tc.expected.Enabled, service.arbitrageConfig.Enabled)
 			assert.Equal(t, tc.expected.IntervalSeconds, service.arbitrageConfig.IntervalSeconds)
@@ -810,7 +810,7 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 		}
 
 		calculator := NewSpotArbitrageCalculator()
-		service := NewArbitrageService(nil, mockConfig, calculator)
+		service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 		// Test that calculationLoop exits when context is cancelled
 		ctx, cancel := context.WithCancel(context.Background())
@@ -889,7 +889,7 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 		for _, tc := range testConfigs {
 			t.Run(tc.name, func(t *testing.T) {
 				calculator := NewSpotArbitrageCalculator()
-				service := NewArbitrageService(nil, tc.config, calculator)
+				service := NewArbitrageService(nil, tc.config, calculator, nil)
 
 				// Set up context with cancellation
 				ctx, cancel := context.WithCancel(context.Background())
@@ -935,7 +935,7 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 		}
 
 		calculator := NewSpotArbitrageCalculator()
-		service := NewArbitrageService(nil, mockConfig, calculator)
+		service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 		// Set up context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
@@ -980,7 +980,7 @@ func TestArbitrageService_calculationLoop(t *testing.T) {
 		}
 
 		calculator := NewSpotArbitrageCalculator()
-		service := NewArbitrageService(nil, mockConfig, calculator)
+		service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 		// Set up wait group
 		service.wg.Add(1)
@@ -1031,7 +1031,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Call the function - expect error due to nil database
 	err := service.calculateAndStoreOpportunities()
@@ -1041,7 +1041,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 	// Test with nil database - various scenarios
 	t.Run("nil database scenario", func(t *testing.T) {
 		var mockDB *database.PostgresDB // Using nil to test error handling
-		service := NewArbitrageService(mockDB, mockConfig, calculator)
+		service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 		// Should return error due to nil database
 		err := service.calculateAndStoreOpportunities()
@@ -1083,7 +1083,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 		for i, cfg := range configs {
 			t.Run(fmt.Sprintf("config_%d", i), func(t *testing.T) {
 				var mockDB *database.PostgresDB = nil
-				service := NewArbitrageService(mockDB, cfg, calculator)
+				service := NewArbitrageService(mockDB, cfg, calculator, nil)
 
 				// Should return error due to nil database
 				err := service.calculateAndStoreOpportunities()
@@ -1100,7 +1100,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 		cancel()
 
 		var mockDB *database.PostgresDB = nil
-		service := NewArbitrageService(mockDB, mockConfig, calculator)
+		service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 		service.ctx = ctx // Replace with cancelled context
 
 		// Should return error due to nil database (context cancellation happens later in the function)
@@ -1125,7 +1125,7 @@ func TestArbitrageService_calculateAndStoreOpportunities(t *testing.T) {
 		for _, tc := range edgeCases {
 			t.Run(tc.name, func(t *testing.T) {
 				mockDB := tc.setup()
-				service := NewArbitrageService(mockDB, mockConfig, calculator)
+				service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 				// Should return error due to nil database
 				err := service.calculateAndStoreOpportunities()
@@ -1149,7 +1149,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoMarketData(t *testing
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Call the function - expect error due to nil database
 	err := service.calculateAndStoreOpportunities()
@@ -1178,7 +1178,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_SuccessPath(t *testing.
 		},
 	}
 
-	service := NewArbitrageService(realDB, mockConfig, calculator)
+	service := NewArbitrageService(realDB, mockConfig, calculator, nil)
 
 	// Since pool is nil, expect error
 	err := service.calculateAndStoreOpportunities()
@@ -1202,7 +1202,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_CleanupError(t *testing
 		},
 	}
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Since we now have nil checks that return early, this test will get a database error
 	// instead of reaching the cleanup logic. Update the expectation accordingly.
@@ -1227,7 +1227,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_GetMarketDataError(t *t
 		},
 	}
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Note: getLatestMarketData is a private method, so we can't mock it directly
 	// The test relies on database errors to test this path
@@ -1256,7 +1256,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_CalculateError(t *testi
 		},
 	}
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Note: getLatestMarketData is a private method, so we can't mock it directly
 	// Since we now have nil checks that return early, this test will get a database error
@@ -1348,7 +1348,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_StoreError(t *testing.T
 	// and mock the calculator to return opportunities for this test case
 	// mockDB is already declared above on line 1356
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Since we now have nil checks that return early, this test will get a database error
 	// instead of reaching the store logic. Update the expectation accordingly.
@@ -1387,7 +1387,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_NoValidOpportunities(t 
 		},
 	}
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Start the service to ensure it's running
 	err := service.Start()
@@ -1434,7 +1434,7 @@ func TestArbitrageService_calculateAndStoreOpportunities_ContextCancellation(t *
 		},
 	}
 
-	service := NewArbitrageService(mockDB, mockConfig, calculator)
+	service := NewArbitrageService(mockDB, mockConfig, calculator, nil)
 
 	// Cancel context before calling function
 	service.ctx, service.cancel = context.WithCancel(context.Background())
@@ -1460,7 +1460,7 @@ func TestArbitrageService_getLatestMarketData(t *testing.T) {
 	calculator := NewSpotArbitrageCalculator()
 
 	// Test with nil database - should return error
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Call the function and expect error
 	_, err := service.getLatestMarketData()
@@ -1479,7 +1479,7 @@ func TestArbitrageService_getLatestMarketData_Context(t *testing.T) {
 		},
 	}
 
-	service := NewArbitrageService(nil, mockConfig, nil)
+	service := NewArbitrageService(nil, mockConfig, nil, nil)
 
 	// With nil database, should return error when calling getLatestMarketData
 	_, err := service.getLatestMarketData()
@@ -1533,7 +1533,7 @@ func TestArbitrageService_getLatestMarketData_ConfigVariations(t *testing.T) {
 
 	for _, tc := range testConfigs {
 		t.Run(tc.name, func(t *testing.T) {
-			service := NewArbitrageService(nil, tc.config, nil)
+			service := NewArbitrageService(nil, tc.config, nil, nil)
 
 			// All scenarios should return error due to nil database
 			_, err := service.getLatestMarketData()
@@ -1554,7 +1554,7 @@ func TestArbitrageService_getLatestMarketData_ErrorScenarios(t *testing.T) {
 		},
 	}
 
-	service := NewArbitrageService(nil, mockConfig, nil)
+	service := NewArbitrageService(nil, mockConfig, nil, nil)
 
 	// Test multiple calls - all should return error consistently
 	for i := 0; i < 3; i++ {
@@ -1580,7 +1580,7 @@ func TestArbitrageService_filterOpportunities(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunities
 	now := time.Now()
@@ -1620,7 +1620,7 @@ func TestArbitrageService_storeOpportunities(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunities
 	opportunities := []models.ArbitrageOpportunity{
@@ -1655,7 +1655,7 @@ func TestArbitrageService_storeOpportunities_Empty(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Store empty opportunities
 	err := service.storeOpportunities([]models.ArbitrageOpportunity{})
@@ -1676,7 +1676,7 @@ func TestArbitrageService_storeOpportunityBatch(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test Case 1: Single opportunity with nil database - should return error
 	t.Run("SingleOpportunityNilDB", func(t *testing.T) {
@@ -1831,7 +1831,7 @@ func TestArbitrageService_cleanupOldOpportunities(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Cleanup old opportunities - should return error due to nil database
 	err := service.cleanupOldOpportunities()
@@ -1851,7 +1851,7 @@ func TestArbitrageService_countTotalTradingPairs(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test market data
 	marketData := map[string][]models.MarketData{
@@ -1883,7 +1883,7 @@ func TestArbitrageService_GetActiveOpportunities(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Get active opportunities - should return error due to nil database
 	_, err := service.GetActiveOpportunities(context.Background(), 10)
@@ -1903,7 +1903,7 @@ func TestArbitrageService_GetActiveOpportunities_WithData(t *testing.T) {
 	}
 
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Get active opportunities - should return error due to nil database
 	_, err := service.GetActiveOpportunities(context.Background(), 10)
@@ -2016,7 +2016,7 @@ func TestArbitrageService_Stop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockConfig := &config.Config{}
 			calculator := NewSpotArbitrageCalculator()
-			service := NewArbitrageService(nil, mockConfig, calculator)
+			service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 			tt.setupService(service)
 
@@ -2042,7 +2042,7 @@ func TestArbitrageService_Stop_Concurrent(t *testing.T) {
 
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Set service as running
 	service.isRunning = true
@@ -2074,7 +2074,7 @@ func TestArbitrageService_Stop_ContextCancellation(t *testing.T) {
 
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create a context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2106,7 +2106,7 @@ func TestArbitrageService_Stop_MutexBehavior(t *testing.T) {
 
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Test concurrent access to Stop
 	var wg sync.WaitGroup
@@ -2135,7 +2135,7 @@ func TestArbitrageService_storeOpportunityBatch_Success(t *testing.T) {
 	calculator := NewSpotArbitrageCalculator()
 
 	// Use nil database for now, we'll test the batch logic directly
-	service := NewArbitrageService(nil, cfg, calculator)
+	service := NewArbitrageService(nil, cfg, calculator, nil)
 
 	// Create test opportunities
 	opportunities := []models.ArbitrageOpportunity{
@@ -2180,7 +2180,7 @@ func TestArbitrageService_storeOpportunityBatch_EmptyBatch(t *testing.T) {
 	// Setup service with nil database
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Execute with empty batch
 	err := service.storeOpportunityBatch([]models.ArbitrageOpportunity{})
@@ -2195,7 +2195,7 @@ func TestArbitrageService_storeOpportunityBatch_BeginTransactionError(t *testing
 	// Setup service with nil database
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
@@ -2225,7 +2225,7 @@ func TestArbitrageService_storeOpportunityBatch_InsertError(t *testing.T) {
 	// Setup service with nil database
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
@@ -2255,7 +2255,7 @@ func TestArbitrageService_storeOpportunityBatch_CommitError(t *testing.T) {
 	// Setup service with nil database
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunity
 	opportunities := []models.ArbitrageOpportunity{
@@ -2285,7 +2285,7 @@ func TestArbitrageService_storeOpportunityBatch_EmptyID(t *testing.T) {
 	// Setup service with nil database
 	mockConfig := &config.Config{}
 	calculator := NewSpotArbitrageCalculator()
-	service := NewArbitrageService(nil, mockConfig, calculator)
+	service := NewArbitrageService(nil, mockConfig, calculator, nil)
 
 	// Create test opportunity with empty ID
 	opportunity := models.ArbitrageOpportunity{

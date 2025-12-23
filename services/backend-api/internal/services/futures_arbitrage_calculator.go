@@ -6,7 +6,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/shopspring/decimal"
 )
 
@@ -16,6 +18,8 @@ type FuturesArbitrageCalculator struct {
 	DefaultFundingInterval  int             // Hours between funding payments (usually 8)
 	RiskFreeRate            decimal.Decimal // Annual risk-free rate for calculations
 	DefaultVolatilityWindow int             // Days for volatility calculation
+	feeProvider             FeeProvider
+	defaultTakerFee         decimal.Decimal
 }
 
 // NewFuturesArbitrageCalculator creates a new calculator instance.
@@ -28,7 +32,17 @@ func NewFuturesArbitrageCalculator() *FuturesArbitrageCalculator {
 		DefaultFundingInterval:  8,
 		RiskFreeRate:            decimal.NewFromFloat(0.05), // 5% annual risk-free rate
 		DefaultVolatilityWindow: 30,
+		defaultTakerFee:         decimal.NewFromFloat(0.001),
 	}
+}
+
+// WithFeeProvider attaches a fee provider to the calculator.
+func (calc *FuturesArbitrageCalculator) WithFeeProvider(provider FeeProvider, defaultTakerFee decimal.Decimal) *FuturesArbitrageCalculator {
+	calc.feeProvider = provider
+	if !defaultTakerFee.IsZero() {
+		calc.defaultTakerFee = defaultTakerFee
+	}
+	return calc
 }
 
 // CalculateFuturesArbitrage calculates a complete futures arbitrage opportunity.
@@ -65,6 +79,13 @@ func (calc *FuturesArbitrageCalculator) CalculateFuturesArbitrage(
 	profitDaily := calc.calculatePeriodProfit(input.BaseAmount, hourlyRate, 24)
 	profitWeekly := calc.calculatePeriodProfit(input.BaseAmount, hourlyRate, 24*7)
 	profitMonthly := calc.calculatePeriodProfit(input.BaseAmount, hourlyRate, 24*30)
+
+	// Subtract estimated fees (entry + exit on both exchanges)
+	estimatedFees := calc.calculateFees(input.BaseAmount, input.LongExchange, input.ShortExchange, input.Symbol)
+	profit8h = profit8h.Sub(estimatedFees)
+	profitDaily = profitDaily.Sub(estimatedFees)
+	profitWeekly = profitWeekly.Sub(estimatedFees)
+	profitMonthly = profitMonthly.Sub(estimatedFees)
 
 	// Calculate risk metrics
 	riskScore := calc.CalculateRiskScore(input)
@@ -901,6 +922,12 @@ func (calc *FuturesArbitrageCalculator) CalculateArbitrageOpportunities(
 	ctx context.Context,
 	marketData map[string][]models.MarketData,
 ) ([]models.ArbitrageOpportunity, error) {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpArbitrage, "FuturesArbitrageCalculator.CalculateArbitrageOpportunities", map[string]string{
+		"exchange_count": fmt.Sprintf("%d", len(marketData)),
+	})
+	defer observability.FinishSpan(span, nil)
+
+	observability.AddBreadcrumb(spanCtx, "arbitrage_calculator", fmt.Sprintf("Calculating arbitrage opportunities across %d exchanges", len(marketData)), sentry.LevelInfo)
 
 	var opportunities []models.ArbitrageOpportunity
 
@@ -934,6 +961,8 @@ func (calc *FuturesArbitrageCalculator) CalculateArbitrageOpportunities(
 		symbolOpportunities := calc.calculateSymbolArbitrage(symbol, exchangeData)
 		opportunities = append(opportunities, symbolOpportunities...)
 	}
+
+	observability.AddBreadcrumb(spanCtx, "arbitrage_calculator", fmt.Sprintf("Found %d arbitrage opportunities", len(opportunities)), sentry.LevelInfo)
 
 	return opportunities, nil
 }
@@ -1072,7 +1101,7 @@ func (calc *FuturesArbitrageCalculator) GenerateCompleteStrategy(
 			opportunity.NetFundingRate,
 		),
 		MarginRequired: chosenSize.Div(opportunity.RecommendedLeverage),
-		EstimatedFees:  calc.calculateFees(chosenSize),
+		EstimatedFees:  calc.calculateFees(chosenSize, opportunity.LongExchange, opportunity.ShortExchange, opportunity.Symbol),
 	}
 
 	// Generate SHORT position details
@@ -1094,7 +1123,7 @@ func (calc *FuturesArbitrageCalculator) GenerateCompleteStrategy(
 			opportunity.NetFundingRate.Neg(),
 		),
 		MarginRequired: chosenSize.Div(opportunity.RecommendedLeverage),
-		EstimatedFees:  calc.calculateFees(chosenSize),
+		EstimatedFees:  calc.calculateFees(chosenSize, opportunity.LongExchange, opportunity.ShortExchange, opportunity.Symbol),
 	}
 
 	// Generate execution plan
@@ -1163,9 +1192,22 @@ func (calc *FuturesArbitrageCalculator) calculateTakeProfitPrice(
 	return entryPrice.Mul(decimal.NewFromInt(1).Sub(targetProfit))
 }
 
-func (calc *FuturesArbitrageCalculator) calculateFees(positionSize decimal.Decimal) decimal.Decimal {
-	// Typical taker fee 0.05% * 2 (entry + exit)
-	return positionSize.Mul(decimal.NewFromFloat(0.001))
+func (calc *FuturesArbitrageCalculator) calculateFees(positionSize decimal.Decimal, longExchange string, shortExchange string, symbol string) decimal.Decimal {
+	// Typical taker fee 0.05% * 2 (entry + exit) on both legs
+	longFee := calc.defaultTakerFee
+	shortFee := calc.defaultTakerFee
+
+	if calc.feeProvider != nil {
+		if fee, err := calc.feeProvider.GetTakerFee(context.Background(), longExchange, symbol); err == nil && !fee.IsZero() {
+			longFee = fee
+		}
+		if fee, err := calc.feeProvider.GetTakerFee(context.Background(), shortExchange, symbol); err == nil && !fee.IsZero() {
+			shortFee = fee
+		}
+	}
+
+	totalFeeRate := longFee.Add(shortFee).Mul(decimal.NewFromInt(2))
+	return positionSize.Mul(totalFeeRate)
 }
 
 func (calc *FuturesArbitrageCalculator) generateExecutionOrder(

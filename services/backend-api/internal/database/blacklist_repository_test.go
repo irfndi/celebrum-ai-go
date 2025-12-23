@@ -41,6 +41,10 @@ func (m *MockPoolAdapter) Query(ctx context.Context, sql string, args ...interfa
 	return m.mock.Query(ctx, sql, args...)
 }
 
+func (m *MockPoolAdapter) Begin(ctx context.Context) (pgx.Tx, error) {
+	return m.mock.Begin(ctx)
+}
+
 // TestBlacklistRepository_ExchangeBlacklistEntry tests the ExchangeBlacklistEntry struct
 func TestBlacklistRepository_ExchangeBlacklistEntry(t *testing.T) {
 	// Test ExchangeBlacklistEntry struct creation and validation

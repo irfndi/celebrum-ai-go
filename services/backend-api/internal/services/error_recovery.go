@@ -2,9 +2,12 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/sirupsen/logrus"
 )
 
@@ -278,6 +281,7 @@ func (erm *ErrorRecoveryManager) EnableDegradationMode() {
 	erm.mu.Lock()
 	defer erm.mu.Unlock()
 	erm.degradationMode = true
+	observability.AddBreadcrumb(context.Background(), "error_recovery", "Error recovery manager entered degradation mode", sentry.LevelWarning)
 	erm.logger.Warn("Error recovery manager entered degradation mode")
 }
 
@@ -286,6 +290,7 @@ func (erm *ErrorRecoveryManager) DisableDegradationMode() {
 	erm.mu.Lock()
 	defer erm.mu.Unlock()
 	erm.degradationMode = false
+	observability.AddBreadcrumb(context.Background(), "error_recovery", "Error recovery manager exited degradation mode", sentry.LevelInfo)
 	erm.logger.Info("Error recovery manager exited degradation mode")
 }
 
@@ -337,6 +342,11 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 	operationName string,
 	operation func() error,
 ) error {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpHTTPClient, fmt.Sprintf("ErrorRecoveryManager.ExecuteWithRetry[%s]", operationName), map[string]string{
+		"operation": operationName,
+	})
+	defer observability.FinishSpan(span, nil)
+
 	start := time.Now()
 
 	// Get retry policy
@@ -362,6 +372,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
+			observability.AddBreadcrumb(spanCtx, "error_recovery", fmt.Sprintf("Operation %s context cancelled", operationName), sentry.LevelWarning)
 			return ctx.Err()
 		default:
 		}
@@ -370,6 +381,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 		err := operation()
 		if err == nil {
 			if attempt > 0 {
+				observability.AddBreadcrumb(spanCtx, "error_recovery", fmt.Sprintf("Operation %s recovered after %d retries", operationName, attempt), sentry.LevelInfo)
 				erm.logger.WithFields(logrus.Fields{
 					"operation": operationName,
 					"attempts":  attempt + 1,
@@ -387,6 +399,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 		}
 
 		// Log retry attempt
+		observability.AddBreadcrumb(spanCtx, "error_recovery", fmt.Sprintf("Operation %s attempt %d failed, retrying", operationName, attempt+1), sentry.LevelWarning)
 		erm.logger.WithFields(logrus.Fields{
 			"operation": operationName,
 			"attempt":   attempt + 1,
@@ -403,6 +416,10 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 	}
 
 	// All retries failed
+	observability.CaptureExceptionWithContext(spanCtx, lastErr, operationName, map[string]interface{}{
+		"attempts": retryPolicy.MaxRetries + 1,
+		"duration": time.Since(start).String(),
+	})
 	erm.logger.WithFields(logrus.Fields{
 		"operation": operationName,
 		"attempts":  retryPolicy.MaxRetries + 1,

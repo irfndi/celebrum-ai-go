@@ -39,6 +39,10 @@ type Config struct {
 	Blacklist BlacklistConfig `mapstructure:"blacklist"`
 	// Auth holds configuration for authentication.
 	Auth AuthConfig `mapstructure:"auth"`
+	// Fees holds configuration for exchange fee defaults.
+	Fees FeesConfig `mapstructure:"fees"`
+	// Analytics holds configuration for analytics features.
+	Analytics AnalyticsConfig `mapstructure:"analytics"`
 }
 
 // ServerConfig defines the HTTP server settings.
@@ -255,6 +259,29 @@ type AuthConfig struct {
 	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
+// FeesConfig defines default fees used when exchange-specific data is missing.
+type FeesConfig struct {
+	// DefaultTakerFee is the fallback taker fee (decimal percent, e.g., 0.001 = 0.1%).
+	DefaultTakerFee float64 `mapstructure:"default_taker_fee"`
+	// DefaultMakerFee is the fallback maker fee (decimal percent).
+	DefaultMakerFee float64 `mapstructure:"default_maker_fee"`
+}
+
+// AnalyticsConfig defines settings for analytics features.
+type AnalyticsConfig struct {
+	EnableForecasting     bool    `mapstructure:"enable_forecasting"`
+	EnableCorrelation     bool    `mapstructure:"enable_correlation"`
+	EnableRegimeDetection bool    `mapstructure:"enable_regime_detection"`
+	ForecastLookback      int     `mapstructure:"forecast_lookback"`
+	ForecastHorizon       int     `mapstructure:"forecast_horizon"`
+	CorrelationWindow     int     `mapstructure:"correlation_window"`
+	CorrelationMinPoints  int     `mapstructure:"correlation_min_points"`
+	RegimeShortWindow     int     `mapstructure:"regime_short_window"`
+	RegimeLongWindow      int     `mapstructure:"regime_long_window"`
+	VolatilityHighThreshold float64 `mapstructure:"volatility_high_threshold"`
+	VolatilityLowThreshold  float64 `mapstructure:"volatility_low_threshold"`
+}
+
 // Load reads the configuration from the config file and environment variables.
 //
 // Returns:
@@ -416,6 +443,23 @@ func setDefaults() {
 
 	// Auth
 	viper.SetDefault("auth.jwt_secret", "")
+
+	// Fees
+	viper.SetDefault("fees.default_taker_fee", 0.001)
+	viper.SetDefault("fees.default_maker_fee", 0.001)
+
+	// Analytics
+	viper.SetDefault("analytics.enable_forecasting", true)
+	viper.SetDefault("analytics.enable_correlation", true)
+	viper.SetDefault("analytics.enable_regime_detection", true)
+	viper.SetDefault("analytics.forecast_lookback", 120)
+	viper.SetDefault("analytics.forecast_horizon", 8)
+	viper.SetDefault("analytics.correlation_window", 200)
+	viper.SetDefault("analytics.correlation_min_points", 30)
+	viper.SetDefault("analytics.regime_short_window", 20)
+	viper.SetDefault("analytics.regime_long_window", 60)
+	viper.SetDefault("analytics.volatility_high_threshold", 0.03)
+	viper.SetDefault("analytics.volatility_low_threshold", 0.005)
 }
 
 // GetServiceURL returns the CCXT service URL.

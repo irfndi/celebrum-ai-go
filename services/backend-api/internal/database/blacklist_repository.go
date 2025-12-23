@@ -37,6 +37,8 @@ type DatabasePool interface {
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 	// Query executes a query that returns rows.
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	// Begin starts a new transaction.
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // BlacklistRepository handles database operations for exchange blacklist.

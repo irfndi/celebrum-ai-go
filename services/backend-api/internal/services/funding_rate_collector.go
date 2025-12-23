@@ -7,10 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -81,6 +83,8 @@ func (c *FundingRateCollector) Start() error {
 
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.running = true
+
+	observability.AddBreadcrumb(c.ctx, "funding_rate_collector", fmt.Sprintf("Starting funding rate collector (interval: %v, exchanges: %v)", c.collectionInterval, c.targetExchanges), sentry.LevelInfo)
 
 	c.wg.Add(1)
 	go c.runCollector()
@@ -158,12 +162,18 @@ func (c *FundingRateCollector) runCleanup() {
 
 // collectFundingRates collects funding rates from all target exchanges.
 func (c *FundingRateCollector) collectFundingRates(ctx context.Context) error {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpMarketData, "FundingRateCollector.collectFundingRates", map[string]string{
+		"target_exchanges": fmt.Sprintf("%v", c.targetExchanges),
+	})
+	defer observability.FinishSpan(span, nil)
+
 	telemetry.Logger().Info("Starting funding rate collection")
 
 	var totalCollected int
 	for _, exchange := range c.targetExchanges {
-		collected, err := c.collectExchangeFundingRates(ctx, exchange)
+		collected, err := c.collectExchangeFundingRates(spanCtx, exchange)
 		if err != nil {
+			observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Failed to collect from %s: %v", exchange, err), sentry.LevelError)
 			telemetry.Logger().Error("Failed to collect funding rates",
 				"exchange", exchange, "error", err)
 			continue
@@ -171,6 +181,7 @@ func (c *FundingRateCollector) collectFundingRates(ctx context.Context) error {
 		totalCollected += collected
 	}
 
+	observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Collection completed: %d rates collected", totalCollected), sentry.LevelInfo)
 	telemetry.Logger().Info("Funding rate collection completed",
 		"total_collected", totalCollected)
 
@@ -179,8 +190,16 @@ func (c *FundingRateCollector) collectFundingRates(ctx context.Context) error {
 
 // collectExchangeFundingRates collects funding rates for a specific exchange.
 func (c *FundingRateCollector) collectExchangeFundingRates(ctx context.Context, exchange string) (int, error) {
-	rates, err := c.ccxtClient.GetFundingRates(ctx, exchange, nil)
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpMarketData, "FundingRateCollector.collectExchangeFundingRates", map[string]string{
+		"exchange": exchange,
+	})
+	defer observability.FinishSpan(span, nil)
+
+	rates, err := c.ccxtClient.GetFundingRates(spanCtx, exchange, nil)
 	if err != nil {
+		observability.CaptureExceptionWithContext(spanCtx, err, "collectExchangeFundingRates", map[string]interface{}{
+			"exchange": exchange,
+		})
 		return 0, fmt.Errorf("failed to get funding rates from %s: %w", exchange, err)
 	}
 
@@ -191,7 +210,7 @@ func (c *FundingRateCollector) collectExchangeFundingRates(ctx context.Context, 
 	// Store each funding rate
 	stored := 0
 	for _, rate := range rates {
-		if err := c.storeFundingRate(ctx, exchange, &rate); err != nil {
+		if err := c.storeFundingRate(spanCtx, exchange, &rate); err != nil {
 			telemetry.Logger().Warn("Failed to store funding rate",
 				"exchange", exchange, "symbol", rate.Symbol, "error", err)
 			continue
@@ -265,6 +284,8 @@ func (c *FundingRateCollector) cleanupOldData(ctx context.Context) error {
 }
 
 // GetFundingRateStats calculates statistical analysis for a symbol's funding rates.
+// Note: Forecasting models (e.g., ARIMA/GARCH) are intentionally not implemented; this uses rolling stats.
+// See docs/architecture/ADVANCED_ANALYTICS.md.
 func (c *FundingRateCollector) GetFundingRateStats(
 	ctx context.Context,
 	symbol string,

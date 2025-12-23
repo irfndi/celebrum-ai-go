@@ -14,6 +14,7 @@ import (
 	"github.com/cinar/indicator/v2/helper"
 	"github.com/cinar/indicator/v2/momentum"
 	"github.com/cinar/indicator/v2/trend"
+	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
@@ -21,6 +22,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
 
 // SignalType represents the type of trading signal
@@ -153,6 +155,16 @@ func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger *lo
 // Returns:
 //   - A slice of aggregated signals, or an error if aggregation fails.
 func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input ArbitrageSignalInput) ([]*AggregatedSignal, error) {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpSignalProcessing, "SignalAggregator.AggregateArbitrageSignals", map[string]string{
+		"signal_type":  "arbitrage",
+		"input_count":  fmt.Sprintf("%d", len(input.Opportunities)),
+		"min_volume":   input.MinVolume.String(),
+		"base_amount":  input.BaseAmount.String(),
+	})
+	defer observability.FinishSpan(span, nil)
+
+	observability.AddBreadcrumb(spanCtx, "signal_aggregator", "Starting arbitrage signal aggregation", sentry.LevelInfo)
+
 	// Stub telemetry - log arbitrage signal aggregation
 	sa.logger.WithFields(logrus.Fields{
 		"operation_type": "signal_aggregation",
@@ -269,6 +281,17 @@ func (sa *SignalAggregator) AggregateArbitrageSignals(ctx context.Context, input
 // Returns:
 //   - A slice of aggregated signals based on technical indicators, or an error if processing fails.
 func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input TechnicalSignalInput) ([]*AggregatedSignal, error) {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpSignalProcessing, "SignalAggregator.AggregateTechnicalSignals", map[string]string{
+		"signal_type":   "technical",
+		"symbol":        input.Symbol,
+		"exchange":      input.Exchange,
+		"prices_count":  fmt.Sprintf("%d", len(input.Prices)),
+		"volumes_count": fmt.Sprintf("%d", len(input.Volumes)),
+	})
+	defer observability.FinishSpan(span, nil)
+
+	observability.AddBreadcrumb(spanCtx, "signal_aggregator", "Starting technical signal aggregation", sentry.LevelInfo)
+
 	// Stub telemetry - log technical signal aggregation
 	sa.logger.WithFields(logrus.Fields{
 		"operation_type": "signal_aggregation",
@@ -287,7 +310,9 @@ func (sa *SignalAggregator) AggregateTechnicalSignals(ctx context.Context, input
 			"required_points": 20,
 			"actual_points":   len(input.Prices),
 		}).Error("Insufficient price data for technical analysis")
-		return nil, fmt.Errorf("insufficient price data for technical analysis: need at least 20 points, got %d", len(input.Prices))
+		err := fmt.Errorf("insufficient price data for technical analysis: need at least 20 points, got %d", len(input.Prices))
+		observability.AddBreadcrumb(spanCtx, "signal_aggregator", "Insufficient data for analysis", sentry.LevelWarning)
+		return nil, err
 	}
 
 	// Convert decimal prices to float64 for cinar/indicator

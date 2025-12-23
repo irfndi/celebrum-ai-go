@@ -52,7 +52,7 @@ type Services struct {
 //	signalAggregator: Service for aggregating trading signals.
 //	telegramConfig: Configuration for Telegram notifications.
 //	authMiddleware: Middleware for handling authentication.
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, analyticsService *services.AnalyticsService, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()
 
@@ -82,7 +82,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
-	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
+	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService, analyticsService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
@@ -144,6 +144,9 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			analysis.GET("/indicators", analysisHandler.GetTechnicalIndicators)
 			analysis.GET("/signals", analysisHandler.GetTradingSignals)
+			analysis.GET("/correlation", analysisHandler.GetCorrelationMatrix)
+			analysis.GET("/regime", analysisHandler.GetMarketRegime)
+			analysis.GET("/forecast", analysisHandler.GetForecast)
 		}
 
 		// Telegram routes have been moved to telegram-service

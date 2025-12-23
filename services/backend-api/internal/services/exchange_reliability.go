@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -72,6 +74,15 @@ func NewExchangeReliabilityTracker(
 
 // RecordAPICall records an API call result for reliability tracking.
 func (t *ExchangeReliabilityTracker) RecordAPICall(result APICallResult) error {
+	ctx := context.Background()
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpMarketData, "ExchangeReliabilityTracker.RecordAPICall", map[string]string{
+		"exchange":   result.Exchange,
+		"endpoint":   result.Endpoint,
+		"success":    fmt.Sprintf("%t", result.Success),
+		"latency_ms": fmt.Sprintf("%d", result.LatencyMs),
+	})
+	defer observability.FinishSpan(span, nil)
+
 	t.mu.Lock()
 	counters, exists := t.counters[result.Exchange]
 	if !exists {
@@ -94,6 +105,7 @@ func (t *ExchangeReliabilityTracker) RecordAPICall(result APICallResult) error {
 		counters.failureCount24h++
 		counters.lastFailure = &result.Timestamp
 		counters.consecutiveFails++
+		observability.AddBreadcrumb(spanCtx, "exchange_reliability", fmt.Sprintf("API call to %s failed: %s", result.Exchange, result.ErrorMsg), sentry.LevelWarning)
 	}
 
 	// Store in Redis for persistence (optional)
@@ -275,6 +287,7 @@ func (t *ExchangeReliabilityTracker) ResetAllCounters() {
 
 // StartPeriodicReset starts a goroutine that resets counters periodically.
 func (t *ExchangeReliabilityTracker) StartPeriodicReset(ctx context.Context) {
+	observability.AddBreadcrumb(ctx, "exchange_reliability", "Starting periodic counter reset (24h interval)", sentry.LevelInfo)
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -282,9 +295,11 @@ func (t *ExchangeReliabilityTracker) StartPeriodicReset(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
+				observability.AddBreadcrumb(ctx, "exchange_reliability", "Periodic reset goroutine stopped", sentry.LevelInfo)
 				return
 			case <-ticker.C:
 				t.ResetAllCounters()
+				observability.AddBreadcrumb(ctx, "exchange_reliability", "Reset exchange reliability counters", sentry.LevelInfo)
 				telemetry.Logger().Info("Reset exchange reliability counters")
 			}
 		}

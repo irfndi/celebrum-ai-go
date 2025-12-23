@@ -22,6 +22,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/services"
 	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 )
 
@@ -162,8 +163,17 @@ func run() error {
 	// Initialize futures arbitrage calculator
 	arbitrageCalculator := services.NewFuturesArbitrageCalculator()
 
+	// Initialize fee provider for exchange-specific fees
+	feeProvider := services.NewDBFeeProvider(
+		db,
+		decimal.NewFromFloat(cfg.Fees.DefaultTakerFee),
+		decimal.NewFromFloat(cfg.Fees.DefaultMakerFee),
+	)
+
+	arbitrageCalculator.WithFeeProvider(feeProvider, decimal.NewFromFloat(cfg.Fees.DefaultTakerFee))
+
 	// Initialize regular arbitrage service
-	arbitrageService := services.NewArbitrageService(db, cfg, arbitrageCalculator)
+	arbitrageService := services.NewArbitrageService(db, cfg, arbitrageCalculator, feeProvider)
 	if err := arbitrageService.Start(); err != nil {
 		logrusLogger.WithError(err).Fatal("Failed to start arbitrage service")
 	}
@@ -178,6 +188,9 @@ func run() error {
 
 	// Initialize signal aggregator service
 	signalAggregator := services.NewSignalAggregator(cfg, db, logrusLogger)
+
+	// Initialize analytics service
+	analyticsService := services.NewAnalyticsService(db, cfg.Analytics)
 
 	// Initialize technical analysis service
 	technicalAnalysisService := services.NewTechnicalAnalysisService(
@@ -252,7 +265,7 @@ func run() error {
 	// REMOVED: router.Use(otelgin.Middleware("github.com/irfandi/celebrum-ai-go"))
 
 	// Setup routes
-	api.SetupRoutes(router, db, redisClient, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, &cfg.Telegram, authMiddleware)
+	api.SetupRoutes(router, db, redisClient, ccxtService, collectorService, cleanupService, cacheAnalyticsService, signalAggregator, analyticsService, &cfg.Telegram, authMiddleware)
 
 	// Create HTTP server with security timeouts
 	srv := &http.Server{
