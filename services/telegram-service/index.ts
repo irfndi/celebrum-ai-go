@@ -39,42 +39,52 @@ type TelegramConfig = {
   adminApiKey: string;
 };
 
-const loadConfig = Effect.try((): TelegramConfig => {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN environment variable must be set");
-  }
+type TelegramConfigPartial = TelegramConfig & {
+  botTokenMissing: boolean;
+  configError: string | null;
+};
+
+const loadConfig = (): TelegramConfigPartial => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || "";
+  const botTokenMissing = !botToken;
 
   const adminApiKey = process.env.ADMIN_API_KEY || "";
   const isProduction =
     process.env.NODE_ENV === "production" ||
     process.env.SENTRY_ENVIRONMENT === "production";
 
+  let configError: string | null = null;
+
   // Validate ADMIN_API_KEY only in production
   if (isProduction) {
     if (!adminApiKey) {
-      throw new Error(
-        "ADMIN_API_KEY environment variable must be set in production",
-      );
-    }
-
-    if (
+      configError =
+        "ADMIN_API_KEY environment variable must be set in production";
+    } else if (
       adminApiKey === "admin-secret-key-change-me" ||
       adminApiKey === "admin-dev-key-change-in-production"
     ) {
-      throw new Error(
-        "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.",
-      );
-    }
-
-    if (adminApiKey.length < 32) {
-      throw new Error(
-        "ADMIN_API_KEY must be at least 32 characters long for security",
-      );
+      configError =
+        "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.";
+    } else if (adminApiKey.length < 32) {
+      configError =
+        "ADMIN_API_KEY must be at least 32 characters long for security";
     }
   } else if (!adminApiKey) {
     console.warn(
       "⚠️ WARNING: ADMIN_API_KEY is not set. Admin endpoints will be disabled.",
+    );
+  }
+
+  if (botTokenMissing) {
+    console.error(
+      "❌ CRITICAL: TELEGRAM_BOT_TOKEN environment variable is not set!",
+    );
+    console.error(
+      "   The service will start in degraded mode (health check only).",
+    );
+    console.error(
+      "   Bot functionality will be disabled until the token is configured.",
     );
   }
 
@@ -97,6 +107,8 @@ const loadConfig = Effect.try((): TelegramConfig => {
 
   return {
     botToken,
+    botTokenMissing,
+    configError,
     webhookUrl,
     webhookPath: resolvedWebhookPath.startsWith("/")
       ? resolvedWebhookPath
@@ -107,11 +119,12 @@ const loadConfig = Effect.try((): TelegramConfig => {
     apiBaseUrl,
     adminApiKey,
   };
-});
+};
 
-const config = Effect.runSync(loadConfig);
+const config = loadConfig();
 
-const bot = new Bot(config.botToken);
+// Only create bot if token is available
+const bot = config.botTokenMissing ? null : new Bot(config.botToken);
 
 const apiFetch = <T>(
   path: string,
@@ -207,7 +220,9 @@ const formatOpportunitiesMessage = (opps: any[]) => {
   return lines.join("\n");
 };
 
-bot.command("start", async (ctx) => {
+// Only register bot commands if bot is available
+if (bot) {
+  bot.command("start", async (ctx) => {
   const chatId = ctx.chat?.id;
   const userId = ctx.from?.id;
 
@@ -461,6 +476,7 @@ bot.catch((err) => {
     console.error("Unknown error:", error);
   }
 });
+} // End of if (bot) block
 
 const app = new Hono();
 app.use("*", secureHeaders());
@@ -471,10 +487,46 @@ if (isSentryEnabled) {
 }
 
 app.get("/health", (c) => {
-  return c.json({ status: "healthy", service: "telegram-service" }, 200);
+  // Return degraded status if bot is not configured
+  if (config.botTokenMissing) {
+    return c.json(
+      {
+        status: "degraded",
+        service: "telegram-service",
+        error: "TELEGRAM_BOT_TOKEN not configured",
+        bot_active: false,
+      },
+      200, // Still return 200 so container doesn't restart in a loop
+    );
+  }
+
+  if (config.configError) {
+    return c.json(
+      {
+        status: "degraded",
+        service: "telegram-service",
+        error: config.configError,
+        bot_active: !!bot,
+      },
+      200,
+    );
+  }
+
+  return c.json(
+    { status: "healthy", service: "telegram-service", bot_active: true },
+    200,
+  );
 });
 
 app.post("/send-message", async (c) => {
+  // If bot is not configured, return service unavailable
+  if (!bot) {
+    return c.json(
+      { error: "Bot not available (TELEGRAM_BOT_TOKEN not configured)" },
+      503,
+    );
+  }
+
   // If ADMIN_API_KEY is not configured, disable admin endpoints
   if (!config.adminApiKey) {
     return c.json(
@@ -507,8 +559,15 @@ app.post("/send-message", async (c) => {
   }
 });
 
-if (!config.usePolling) {
+if (!config.usePolling && bot) {
   app.post(config.webhookPath, async (c) => {
+    if (!bot) {
+      return c.json(
+        { error: "Bot not available (TELEGRAM_BOT_TOKEN not configured)" },
+        503,
+      );
+    }
+
     if (config.webhookSecret) {
       const provided = c.req.header("X-Telegram-Bot-Api-Secret-Token");
       if (!provided || provided !== config.webhookSecret) {
@@ -544,9 +603,18 @@ if (isSentryEnabled) {
 const grpcPort = process.env.TELEGRAM_GRPC_PORT
   ? parseInt(process.env.TELEGRAM_GRPC_PORT)
   : 50052;
-const grpcServer = startGrpcServer(bot, grpcPort);
+
+// Only start gRPC server if bot is available
+const grpcServer = bot ? startGrpcServer(bot, grpcPort) : null;
 
 const startBot = async () => {
+  // Skip bot startup if token is not configured
+  if (!bot) {
+    console.warn("⚠️ Bot startup skipped: TELEGRAM_BOT_TOKEN not configured");
+    console.warn("   Service running in degraded mode (health check only)");
+    return;
+  }
+
   if (config.usePolling) {
     console.log("Starting Telegram bot in polling mode");
     if (isSentryEnabled) {
@@ -572,7 +640,10 @@ const startBot = async () => {
 
 startBot().catch((error) => {
   console.error("Failed to start Telegram bot:", error);
-  process.exit(1);
+  // Don't exit if bot fails to start - keep health check running
+  if (bot) {
+    console.error("Bot failed to start but service will continue running");
+  }
 });
 
 process.on("SIGTERM", async () => {
@@ -582,7 +653,9 @@ process.on("SIGTERM", async () => {
     await sentryFlush(2000);
   }
   server.stop();
-  grpcServer.forceShutdown();
+  if (grpcServer) {
+    grpcServer.forceShutdown();
+  }
   process.exit(0);
 });
 
@@ -593,6 +666,8 @@ process.on("SIGINT", async () => {
     await sentryFlush(2000);
   }
   server.stop();
-  grpcServer.forceShutdown();
+  if (grpcServer) {
+    grpcServer.forceShutdown();
+  }
   process.exit(0);
 });
