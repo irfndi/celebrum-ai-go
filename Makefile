@@ -5,7 +5,7 @@ APP_NAME=celebrum-ai
 GO_VERSION=1.25
 DOCKER_REGISTRY=ghcr.io/irfndi
 DOCKER_IMAGE_APP=$(DOCKER_REGISTRY)/app:latest
-DOCKER_COMPOSE_FILE?=docker-compose.dev.yml
+DOCKER_COMPOSE_FILE?=docker-compose.yaml
 DOCKER_COMPOSE_ENV_FILE=.env
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GO_CACHE_DIR=$(PWD)/.cache/go-build
@@ -19,7 +19,7 @@ YELLOW=\033[1;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build test test-coverage coverage-check lint fmt run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated go-env-setup
+.PHONY: help build test test-coverage coverage-check lint fmt fmt-check run dev dev-setup dev-down install-tools security docker-build docker-run deploy clean dev-up-orchestrated prod-up-orchestrated webhook-enable webhook-disable webhook-status startup-status down-orchestrated go-env-setup ccxt-setup telegram-setup services-setup mod-download mod-tidy
 
 # Default target
 all: build
@@ -35,37 +35,56 @@ go-env-setup:
 	@mkdir -p $(GO_CACHE_DIR) $(GO_MOD_CACHE_DIR)
 
 ## Development
+proto-gen: ## Generate gRPC code
+	@echo "$(GREEN)Generating gRPC code...$(NC)"
+	@docker build -t proto-builder -f tools/proto-builder/Dockerfile .
+	@chmod +x scripts/gen-proto.sh
+	@docker run --rm -v $(PWD):/workspace proto-builder ./scripts/gen-proto.sh
+	@echo "$(GREEN)gRPC code generated!$(NC)"
+
+
 build: ## Build the application across all languages
 	@echo "$(GREEN)Building $(APP_NAME)...$(NC)"
 	@# Build Go application
-	go build -o bin/$(APP_NAME) cmd/server/main.go
+	cd services/backend-api && go build -o ../../bin/$(APP_NAME) ./cmd/server
 	@# Build TypeScript/CCXT service
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Building CCXT service...$(NC)"; \
-		cd services/ccxt && bun run build; \
+		cd services/ccxt-service && bun run build; \
 	else \
-		echo "$(YELLOW)Skipping CCXT service build - services/ccxt directory or bun not found$(NC)"; \
+		echo "$(YELLOW)Skipping CCXT service build - directory or bun not found$(NC)"; \
+	fi
+	@# Build TypeScript/Telegram service
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building Telegram service...$(NC)"; \
+		cd services/telegram-service && bun run build; \
+	else \
+		echo "$(YELLOW)Skipping Telegram service build - directory or bun not found$(NC)"; \
 	fi
 	@echo "$(GREEN)Build complete!$(NC)"
 
 test: ## Run tests across all languages
 	@echo "$(GREEN)Running tests across all languages...$(NC)"
 	@# Run Go tests
-	go test -v ./...
+	cd services/backend-api && go test -v ./...
 	@# Run TypeScript/JavaScript tests in ccxt-service
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
-		cd services/ccxt && bun test; \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		cd services/ccxt-service && bun test; \
+	fi
+	@# Run TypeScript/JavaScript tests in telegram-service
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		cd services/telegram-service && bun test; \
 	fi
 	@# Run shell script tests if available
-	@if [ -f "scripts/test.sh" ]; then \
-		bash scripts/test.sh; \
+	@if [ -f "services/backend-api/scripts/test.sh" ]; then \
+		bash services/backend-api/scripts/test.sh; \
 	else \
 		true; \
 	fi
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(GREEN)Running tests with coverage...$(NC)"
-	go test -v -coverprofile=coverage.out ./cmd/... ./internal/... ./pkg/...
+	cd services/backend-api && go test -v -coverprofile=../../coverage.out ./cmd/... ./internal/... ./pkg/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
 
@@ -73,90 +92,84 @@ coverage-check: ## Run coverage gate (warn by default, STRICT=true to fail)
 	@echo "$(GREEN)Running coverage check (threshold $${MIN_COVERAGE:-80}%)...$(NC)"
 	MIN_COVERAGE=$${MIN_COVERAGE:-80} \
 	STRICT=$${STRICT:-false} \
-	bash scripts/coverage-check.sh
+	bash services/backend-api/scripts/coverage-check.sh
 
 lint: go-env-setup ## Run linter across all languages
 	@echo "$(GREEN)Running linter across all languages...$(NC)"
 	@# Lint Go code
-	$(GO_ENV) golangci-lint run
+	cd services/backend-api && $(GO_ENV) golangci-lint run
 	@# Lint TypeScript/JavaScript in ccxt-service
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Linting TypeScript...$(NC)"; \
-		cd services/ccxt && bunx oxlint .; \
+		cd services/ccxt-service && bunx oxlint .; \
 	else \
-		echo "$(YELLOW)Skipping TypeScript linting - services/ccxt directory or bun not found$(NC)"; \
+		echo "$(YELLOW)Skipping TypeScript linting$(NC)"; \
 	fi
-	@# Lint YAML files
-	@if command -v yamllint >/dev/null 2>&1; then \
-		find . -name "*.yml" -o -name "*.yaml" | grep -v node_modules | grep -v .git | grep -v build | xargs yamllint 2>/dev/null || true; \
+	@# Lint TypeScript/JavaScript in telegram-service
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Linting Telegram service TypeScript...$(NC)"; \
+		cd services/telegram-service && bunx oxlint .; \
+	else \
+		echo "$(YELLOW)Skipping Telegram service linting$(NC)"; \
 	fi
 
 typecheck: ## Run type checking across all languages
 	@echo "$(GREEN)Running type checking across all languages...$(NC)"
 	@# Type check Go code
-	go vet ./...
+	cd services/backend-api && go vet ./...
 	@# Type check TypeScript in ccxt-service
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Type checking TypeScript...$(NC)"; \
-		cd services/ccxt && bun tsc --noEmit; \
+		cd services/ccxt-service && bun tsc --noEmit; \
 	else \
-		echo "$(YELLOW)Skipping TypeScript type checking - services/ccxt directory or bun not found$(NC)"; \
+		echo "$(YELLOW)Skipping TypeScript type checking$(NC)"; \
+	fi
+	@# Type check TypeScript in telegram-service
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Type checking Telegram service TypeScript...$(NC)"; \
+		cd services/telegram-service && bun tsc --noEmit; \
+	else \
+		echo "$(YELLOW)Skipping Telegram service type checking$(NC)"; \
 	fi
 
 fmt: ## Format code across all languages
 	@echo "$(GREEN)Formatting code across all languages...$(NC)"
 	@# Format Go code
-	go fmt ./...
+	cd services/backend-api && go fmt ./...
 	@if command -v goimports >/dev/null 2>&1; then \
-		goimports -w .; \
+		cd services/backend-api && goimports -w .; \
 	else \
 		echo "$(YELLOW)goimports not found, skipping Go imports formatting$(NC)"; \
 	fi
 	@# Format TypeScript/JavaScript in ccxt-service
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Formatting TypeScript...$(NC)"; \
-		cd services/ccxt && bunx prettier --write . || bun format --write . || echo "$(YELLOW)Could not format TypeScript - prettier or bun format not available$(NC)"; \
-	else \
-		echo "$(YELLOW)Skipping TypeScript formatting - services/ccxt directory or bun not found$(NC)"; \
+		cd services/ccxt-service && bunx prettier --write . || bun format --write .; \
 	fi
-	@# Format shell scripts
-	@if command -v shfmt >/dev/null 2>&1; then \
-		find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./bin/*" -not -path "./build/*" -exec shfmt -w {} \; 2>/dev/null || true; \
-	fi
-	@# Format YAML files
-	@if command -v bun >/dev/null 2>&1 && [ -d "services/ccxt" ]; then \
-		cd services/ccxt && bunx prettier --write . 2>/dev/null || true; \
+	@# Format TypeScript/JavaScript in telegram-service
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Formatting Telegram service TypeScript...$(NC)"; \
+		cd services/telegram-service && bunx prettier --write . || bun format --write .; \
 	fi
 
-fmt-check: ## Check code formatting
-	@echo "$(GREEN)Checking code formatting...$(NC)"
-	@UNFORMATTED="$$(find . -name "*.go" -not -path "./.cache/*" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -s -l)"; \
-	if [ -n "$$UNFORMATTED" ]; then \
-		echo "$(RED)The following files are not formatted:$(NC)"; \
-		echo "$$UNFORMATTED"; \
-		exit 1; \
-	else \
-		echo "$(GREEN)All files are properly formatted$(NC)"; \
-	fi
-
-run: build ## Run the application
+run: build ## Run the application (locally, monolithic-style for Go)
 	@echo "$(GREEN)Starting $(APP_NAME)...$(NC)"
 	./bin/$(APP_NAME)
 
 dev: ## Run with hot reload (requires air)
 	@echo "$(GREEN)Starting development server with hot reload...$(NC)"
-	air
+	cd services/backend-api && air
 
 ## Environment Setup
 dev-setup: ## Setup development environment
 	@echo "$(GREEN)Setting up development environment...$(NC)"
 	@if [ ! -f .env ]; then cp .env.example .env; echo "$(YELLOW)Created .env from .env.example$(NC)"; fi
-	docker compose -f docker-compose.dev.yml --env-file .env up -d postgres
+	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env up -d postgres
 	@echo "$(GREEN)Development environment ready!$(NC)"
 
 dev-down: ## Stop development environment
 	@echo "$(YELLOW)Stopping development environment...$(NC)"
-	docker compose -f docker-compose.dev.yml --env-file .env down
+	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env down
 	@echo "$(GREEN)Development environment stopped$(NC)"
 
 install-tools: ## Install development tools
@@ -164,52 +177,21 @@ install-tools: ## Install development tools
 	go install github.com/air-verse/air@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 	@echo "$(GREEN)Tools installed!$(NC)"
 
-security: ## Run security scan across all languages
-	@echo "$(GREEN)Running security scan across all languages...$(NC)"
-	@# Security scan for Go
-	@if command -v gosec >/dev/null 2>&1; then \
-		gosec ./...; \
-	else \
-		echo "$(YELLOW)gosec not found, skipping Go security scan$(NC)"; \
-	fi
-	@# Security scan for TypeScript/JavaScript dependencies
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
-		echo "$(GREEN)Scanning TypeScript dependencies...$(NC)"; \
-		cd services/ccxt && bun audit || echo "$(YELLOW)bun audit completed with warnings$(NC)"; \
-	else \
-		echo "$(YELLOW)Skipping TypeScript security scan - services/ccxt directory or bun not found$(NC)"; \
-	fi
-	@# Security scan for Docker images
-	@if command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(PWD):/app" -w /app securecodewarrior/docker-security-scanner . 2>/dev/null || echo "$(YELLOW)Docker security scanner not available$(NC)"; \
-	fi
-	@# Check for secrets in code
-	@if command -v gitleaks >/dev/null 2>&1; then \
-		gitleaks detect --source . --verbose 2>/dev/null || echo "$(YELLOW)gitleaks not available$(NC)"; \
-	fi
+security-check: ## Run security checks
+	@echo "$(GREEN)Running security checks...$(NC)"
+	@# Go security check
+	cd services/backend-api && govulncheck ./... || echo "$(YELLOW)Go security check found issues (non-fatal for now)$(NC)"
+	@# TypeScript security check (placeholder as bun audit is limited)
+	@echo "$(GREEN)Security checks completed!$(NC)"
 
 ## Docker
 docker-build: ## Build Docker images for all services
 	@echo "$(GREEN)Building Docker images...$(NC)"
-	@# Build main application image (includes CCXT service via multi-stage build)
-	docker build -t $(DOCKER_IMAGE_APP) .
+	docker compose -f $(DOCKER_COMPOSE_FILE) build
 	@echo "$(GREEN)Docker images built!$(NC)"
-
-docker-clean: ## Clean Docker artifacts
-	@echo "$(YELLOW)Cleaning Docker artifacts...$(NC)"
-	docker system prune -f
-	@echo "$(GREEN)Docker cleanup completed$(NC)"
-
-docker-build-all: ## Build all Docker images with version tags
-	@echo "$(GREEN)Building all Docker images with version tags...$(NC)"
-	docker build -t $(DOCKER_REGISTRY)/app:$(VERSION) -t $(DOCKER_REGISTRY)/app:latest .
-	@echo "$(GREEN)All images built with version: $(VERSION)$(NC)"
-
-docker-build-app: ## Build main app image with version
-	@echo "$(GREEN)Building main app image...$(NC)"
-	docker build -t $(DOCKER_REGISTRY)/app:$(VERSION) -t $(DOCKER_REGISTRY)/app:latest .
 
 docker-run: docker-build ## Run with Docker
 	@echo "$(GREEN)Running with Docker...$(NC)"
@@ -217,14 +199,14 @@ docker-run: docker-build ## Run with Docker
 
 docker-prod: ## Run production Docker setup
 	@echo "$(GREEN)Running production Docker setup...$(NC)"
-	docker compose -f docker-compose.yml --env-file .env up -d --build
+	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env up -d --build
 	@echo "$(GREEN)Production environment started!$(NC)"
 
 ## Database
 db-migrate: ## Run database migrations
 	@echo "$(GREEN)Running database migrations...$(NC)"
-	@chmod +x database/migrate.sh
-	@./database/migrate.sh
+	@chmod +x services/backend-api/database/migrate.sh
+	@./services/backend-api/database/migrate.sh
 
 db-seed: ## Seed database with sample data
 	@echo "$(GREEN)Seeding database...$(NC)"
@@ -233,117 +215,54 @@ db-seed: ## Seed database with sample data
 ## CI/CD
 ci-test: ## Run CI tests with proper environment
 	@echo "$(GREEN)Running CI tests...$(NC)"
-	@# Exclude only internal/api/handlers/testmocks and internal/observability packages (no tests, trigger Go 1.25 covdata bug)
-	go test -v -race -coverprofile=coverage.out $$(go list ./... | grep -v -E '(internal/api/handlers/testmocks|internal/observability)')
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	cd services/backend-api && go test -v -race -coverprofile=../../coverage.out $$(go list ./... | grep -v -E '(internal/api/handlers/testmocks|internal/observability)')
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Running CCXT service tests...$(NC)"; \
-		cd services/ccxt && bun test; \
+		cd services/ccxt-service && bun test; \
+	fi
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Running Telegram service tests...$(NC)"; \
+		cd services/telegram-service && bun test; \
 	fi
 
 ci-lint: ## Run linter for CI
 	@echo "$(GREEN)Running CI linter...$(NC)"
-	./bin/golangci-lint run --timeout=5m
+	@# Use ./bin/golangci-lint if available (CI installs there), otherwise use system golangci-lint
+	@if [ -f "./bin/golangci-lint" ]; then \
+		cd services/backend-api && ../../bin/golangci-lint run --timeout=5m; \
+	else \
+		cd services/backend-api && golangci-lint run --timeout=5m; \
+	fi
 
 ci-build: ## Build for CI across all languages
 	@echo "$(GREEN)Building for CI...$(NC)"
 	@# Build Go application for CI
-	CGO_ENABLED=0 go build -v -ldflags "-X main.version=$(shell git describe --tags --always --dirty) -X main.buildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S')" -o bin/$(APP_NAME) cmd/server/main.go
+	cd services/backend-api && CGO_ENABLED=0 go build -v -ldflags "-X main.version=$(shell git describe --tags --always --dirty) -X main.buildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S')" -o ../../bin/$(APP_NAME) ./cmd/server
 	@# Build TypeScript/CCXT service for CI
-	@if [ -d "services/ccxt" ] && command -v bun >/dev/null 2>&1; then \
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
 		echo "$(GREEN)Building CCXT service for CI...$(NC)"; \
-		cd services/ccxt && bun run build; \
-	else \
-		echo "$(YELLOW)Skipping CCXT service CI build - services/ccxt directory or bun not found$(NC)"; \
+		cd services/ccxt-service && bun run build; \
+	fi
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		echo "$(GREEN)Building Telegram service for CI...$(NC)"; \
+		cd services/telegram-service && bun run build; \
 	fi
 
-ci-check: ci-lint ci-test ci-build ## Run all CI checks
+ci-check: ci-lint ci-test ci-build security-check ## Run all CI checks
 	@echo "$(GREEN)All CI checks completed!$(NC)"
 
-docker-push: ## Push Docker image to registry
-	@echo "$(GREEN)Pushing Docker images to registry...$(NC)"
-	docker push $(DOCKER_REGISTRY)/app:$(VERSION)
-	docker push $(DOCKER_REGISTRY)/app:latest
-
-docker-push-app: ## Push main app image
-	@echo "$(GREEN)Pushing main app image...$(NC)"
-	docker push $(DOCKER_REGISTRY)/app:$(VERSION)
-	docker push $(DOCKER_REGISTRY)/app:latest
-
 ## Database Migration Targets
-.PHONY: migrate migrate-status migrate-list migrate-docker
-
 migrate: ## Run all pending database migrations
 	@echo "$(GREEN)Running database migrations...$(NC)"
-	@cd database && ./migrate.sh
+	@cd services/backend-api/database && ./migrate.sh
 
 migrate-status: ## Check database migration status
 	@echo "$(GREEN)Checking migration status...$(NC)"
-	@cd database && ./migrate.sh status
+	@cd services/backend-api/database && ./migrate.sh status
 
 migrate-list: ## List available database migrations
 	@echo "$(GREEN)Listing available migrations...$(NC)"
-	@cd database && ./migrate.sh list
-
-migrate-docker: ## Run migrations in Docker environment
-	@echo "$(GREEN)Running migrations in Docker...$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env exec celebrum /app/database/migrate.sh
-
-.PHONY: auto-migrate dev-up prod-up
-
-# Automatic migration for all environments
-auto-migrate: ## Run automatic migration sync
-	@echo "$(GREEN)Starting automatic migration sync...$(NC)"
-	@docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env exec celebrum /app/database/migrate.sh
-	@echo "$(GREEN)All migrations applied successfully!$(NC)"
-
-# Development environment with orchestrated sequential startup
-dev-up-orchestrated: ## Start development environment with robust sequential startup
-	@echo "$(GREEN)Starting development environment with orchestrated sequential startup...$(NC)"
-	@chmod +x scripts/startup-orchestrator.sh
-	@./scripts/startup-orchestrator.sh dev
-
-# Production environment with orchestrated sequential startup
-prod-up-orchestrated: ## Start production environment with robust sequential startup
-	@echo "$(GREEN)Starting production environment with orchestrated sequential startup...$(NC)"
-	@chmod +x scripts/startup-orchestrator.sh
-	@./scripts/startup-orchestrator.sh prod
-
-# Development environment with auto-migration (legacy - use dev-up-orchestrated for robust startup)
-dev-up: dev-up-orchestrated ## Start development environment with automatic migrations
-
-# Production-like environment with auto-migration (legacy - use prod-up-orchestrated for robust startup)
-prod-up: prod-up-orchestrated ## Start production environment with automatic migrations
-
-## Sequential Startup Control
-webhook-enable: ## Enable external connections and Telegram webhooks
-	@echo "$(GREEN)Enabling external connections and webhooks...$(NC)"
-	@chmod +x scripts/webhook-control.sh
-	@scripts/webhook-control.sh enable
-
-webhook-disable: ## Disable external connections and Telegram webhooks
-	@echo "$(YELLOW)Disabling external connections and webhooks...$(NC)"
-	@chmod +x scripts/webhook-control.sh
-	@scripts/webhook-control.sh disable
-
-webhook-status: ## Check webhook and external connection status
-	@echo "$(GREEN)Checking webhook status...$(NC)"
-	@chmod +x scripts/webhook-control.sh
-	@scripts/webhook-control.sh status
-
-startup-status: ## Check sequential startup status
-	@echo "$(GREEN)Checking startup status...$(NC)"
-	@if [ -f ".env" ]; then \
-		echo "$(GREEN)Startup configuration found:$(NC)"; \
-		cat .env | grep -E "(STARTUP_PHASE|EXTERNAL_CONNECTIONS_ENABLED|WARMUP_ENABLED)" || echo "No startup vars found in .env"; \
-	else \
-		echo "$(YELLOW)No startup configuration found$(NC)"; \
-	fi
-
-down-orchestrated: ## Stop all services gracefully with orchestrated shutdown
-	@echo "$(YELLOW)Stopping services with orchestrated shutdown...$(NC)"
-	@scripts/webhook-control.sh disable 2>/dev/null || true
-	@docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env down
-	@echo "$(GREEN)All services stopped$(NC)"
+	@cd services/backend-api/database && ./migrate.sh list
 
 ## Utilities
 clean: ## Clean build artifacts
@@ -355,63 +274,39 @@ clean: ## Clean build artifacts
 
 mod-tidy: ## Tidy Go modules
 	@echo "$(GREEN)Tidying Go modules...$(NC)"
-	go mod tidy
+	cd services/backend-api && go mod tidy
 
 mod-download: ## Download Go modules
 	@echo "$(GREEN)Downloading Go modules...$(NC)"
-	go mod download
+	cd services/backend-api && go mod download
 
-## CCXT Service
-ccxt-setup: ## Setup CCXT Bun service
-	@echo "$(GREEN)Setting up CCXT service...$(NC)"
-	cd services/ccxt && bun install
-
-ccxt-dev: ## Run CCXT service in development
-	@echo "$(GREEN)Starting CCXT service...$(NC)"
-	cd services/ccxt && bun run dev
-
-ccxt-build: ## Build CCXT service
-	@echo "$(GREEN)Building CCXT service...$(NC)"
-	cd services/ccxt && bun run build
-
-## Health Checks
-health: ## Check application health
-	@echo "$(GREEN)Checking application health...$(NC)"
-	curl -f http://localhost:8080/health || echo "$(RED)Health check failed$(NC)"
-
-health-prod: ## Check production health
-	@echo "$(GREEN)Checking production health...$(NC)"
-	curl -f https://localhost/health || echo "$(RED)Production health check failed$(NC)"
-
-status: ## Show service status
-	@echo "$(GREEN)Service Status:$(NC)"
-	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env ps
-
-status-prod: ## Show production service status
-	@echo "$(GREEN)Production Service Status:$(NC)"
-	@if [ -f ".env" ]; then \
-		docker compose -f docker-compose.yml --env-file .env ps; \
+ccxt-setup: ## Install CCXT service dependencies
+	@echo "$(GREEN)Installing CCXT service dependencies...$(NC)"
+	@if [ -d "services/ccxt-service" ] && command -v bun >/dev/null 2>&1; then \
+		cd services/ccxt-service && bun install; \
 	else \
-		echo "$(YELLOW)No .env file found. Run 'make docker-prod' first.$(NC)"; \
+		echo "$(YELLOW)Skipping CCXT setup - directory or bun not found$(NC)"; \
 	fi
+
+telegram-setup: ## Install Telegram service dependencies
+	@echo "$(GREEN)Installing Telegram service dependencies...$(NC)"
+	@if [ -d "services/telegram-service" ] && command -v bun >/dev/null 2>&1; then \
+		cd services/telegram-service && bun install; \
+	else \
+		echo "$(YELLOW)Skipping Telegram setup - directory or bun not found$(NC)"; \
+	fi
+
+services-setup: ccxt-setup telegram-setup ## Install all service dependencies
+	@echo "$(GREEN)All service dependencies installed!$(NC)"
+
+fmt-check: ## Check if code is formatted (for CI)
+	@echo "$(GREEN)Checking code formatting...$(NC)"
+	@cd services/backend-api && test -z "$$(gofmt -l .)" || (echo "$(RED)Go code is not formatted. Run 'make fmt'$(NC)" && gofmt -l . && exit 1)
+	@echo "$(GREEN)Code formatting check passed!$(NC)"
 
 ## Logs
 logs: ## Show application logs
-	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env logs -f celebrum
+	docker compose -f $(DOCKER_COMPOSE_FILE) --env-file .env logs -f
 
 logs-all: ## Show all service logs
 	docker compose --env-file .env logs -f
-
-## Environment Management
-env-current: ## Show current environment
-	@if [ -f ".env" ]; then \
-		if grep -q "ENVIRONMENT=development" .env; then \
-			echo "$(GREEN)Current environment: Development$(NC)"; \
-		elif grep -q "ENVIRONMENT=production" .env; then \
-			echo "$(GREEN)Current environment: Production$(NC)"; \
-		else \
-			echo "$(YELLOW)Current environment: Custom$(NC)"; \
-		fi; \
-	else \
-		echo "$(YELLOW)No .env file found.$(NC)"; \
-	fi

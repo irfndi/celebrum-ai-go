@@ -58,7 +58,7 @@ goimports -w .
 golangci-lint run --fix
 
 # Fix TypeScript/JavaScript
-cd services/ccxt
+cd ccxt-service
 bunx prettier --write .
 bunx oxlint --fix .
 

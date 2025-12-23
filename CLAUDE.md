@@ -47,39 +47,31 @@ make health-prod              # Check production health
 
 ## Architecture Overview
 
+This is a **monorepo** with all services organized under the `services/` directory.
+
 ### Core Components
 
-1. **Main Application** (`cmd/server/main.go`)
-   - Entry point for the Go application
-   - Initializes configuration, database, and services
-   - Sets up HTTP routes and middleware
+1. **Backend API Service** (`services/backend-api/`)
+   - Go backend service with Gin web framework
+   - `cmd/server/main.go`: Entry point for the Go application
+   - `internal/api/`: HTTP handlers for REST API endpoints
+   - `internal/services/`: Business logic (arbitrage, analysis, signals)
+   - `internal/models/`: Database entities and data structures
+   - `internal/database/`: PostgreSQL and Redis integration
 
-2. **API Layer** (`internal/api/`)
-   - HTTP handlers for REST API endpoints
-   - Telegram bot integration
-   - Authentication and authorization middleware
-   - Market data, analysis, and arbitrage endpoints
-
-3. **Services Layer** (`internal/services/`)
-   - Business logic for arbitrage detection
-   - Technical analysis calculations
-   - Market data collection and processing
-   - Signal aggregation and processing
-
-4. **Data Models** (`internal/models/`)
-   - Database entities and data structures
-   - Exchange, market data, and arbitrage models
-   - Technical indicator models
-
-5. **Database Layer** (`internal/database/`)
-   - PostgreSQL connection and operations
-   - Redis caching integration
-   - Database migrations and seeding
-
-6. **CCXT Service** (`ccxt-service/`)
+2. **CCXT Service** (`services/ccxt-service/`)
    - Bun/TypeScript service for exchange integration
-   - Real-time market data collection
-   - WebSocket connections for live data
+   - Real-time market data collection via CCXT library
+   - Supports 100+ cryptocurrency exchanges
+
+3. **Telegram Service** (`services/telegram-service/`)
+   - Bun/TypeScript bot service using grammY
+   - Real-time alerts for arbitrage opportunities
+   - Supports polling and webhook modes
+
+4. **Shared Components**
+   - `protos/`: Protocol Buffer definitions for gRPC communication
+   - `docs/`: Project documentation
 
 ### Key Design Patterns
 
@@ -114,15 +106,22 @@ git clone https://github.com/irfndi/celebrum-ai-go.git
 cd celebrum-ai-go
 cp .env.example .env
 
-# Start development environment
+# Start development environment (PostgreSQL, Redis)
 make dev-setup
 
-# Install dependencies
-go mod download
-make ccxt-setup
+# Install Go dependencies
+cd services/backend-api && go mod download && cd ../..
 
-# Run the application
+# Install TypeScript dependencies (if using bun)
+cd services/ccxt-service && bun install && cd ../..
+cd services/telegram-service && bun install && cd ../..
+
+# Build and run the application
+make build
 make run
+
+# Or run with Docker Compose (recommended)
+make docker-run
 ```
 
 ## Testing Strategy
@@ -135,17 +134,21 @@ make run
 
 ### Running Tests
 ```bash
-# Run all tests
+# Run all tests (Go + TypeScript)
 make test
 
 # Run with coverage
 make test-coverage
 
-# Run specific package
-go test -v ./internal/services/...
+# Run specific Go package
+cd services/backend-api && go test -v ./internal/services/...
 
 # Run with race detection
-go test -race ./...
+cd services/backend-api && go test -race ./...
+
+# Run TypeScript tests
+cd services/ccxt-service && bun test
+cd services/telegram-service && bun test
 ```
 
 ## Configuration Management
@@ -168,8 +171,10 @@ go test -race ./...
 The project uses Coolify for deployment management:
 
 1. **Automated Deployment**: Pushing to the repository triggers deployment via Coolify webhooks.
-2. **Single Dockerfile**: The root `Dockerfile` builds both the Go backend and CCXT service.
-3. **Environment Management**: Managed through Coolify's UI.
+2. **Unified Dockerfile**: The root `Dockerfile` builds all services (Backend API, CCXT, Telegram).
+3. **Split Deployment**: Each service also has its own `Dockerfile` in `services/<service>/Dockerfile`.
+4. **Environment Management**: Managed through Coolify's UI or `.env` file.
+5. **Docker Compose**: `docker-compose.yaml` orchestrates all services for local development.
 
 
 ## Observability and Monitoring

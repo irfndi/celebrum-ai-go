@@ -14,9 +14,9 @@ bin/
 coverage*.html
 coverage.out
 
-# Binary executables
-main
-server
+# Binary executables (root level only)
+/main
+/server
 
 # Test and build output files
 build.log

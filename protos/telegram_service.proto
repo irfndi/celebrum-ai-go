@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package telegram;
+option go_package = "github.com/irfandi/celebrum-ai-go/services/backend-api/pkg/pb/telegram";
+
+service TelegramService {
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message SendMessageRequest {
+  string chat_id = 1;
+  string text = 2;
+  string parse_mode = 3;
+}
+
+message SendMessageResponse {
+  bool ok = 1;
+  string message_id = 2;
+  string error = 3;
+}
+
+message HealthCheckRequest {}
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+  string service = 3;
+}

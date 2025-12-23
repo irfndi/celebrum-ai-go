@@ -8,7 +8,7 @@ This document provides instructions for re-enabling Sentry monitoring in the CCX
 
 **Status**: Disabled
 **Reason**: Bun.serve instrumentation compatibility issue
-**Location**: `services/ccxt/sentry.ts:30`
+**Location**: `ccxt-service/sentry.ts:30`
 **Date Disabled**: [To be determined from git history]
 
 ## Issue Description
@@ -26,7 +26,7 @@ Before re-enabling Sentry, ensure the following conditions are met:
 
 2. **Sentry SDK Version**: Check for updates to `@sentry/bun` package
    ```bash
-   cd services/ccxt
+   cd ccxt-service
    bun outdated | grep sentry
    ```
 
@@ -41,13 +41,13 @@ Before re-enabling Sentry, ensure the following conditions are met:
 Update Sentry packages to the latest version:
 
 ```bash
-cd services/ccxt
+cd ccxt-service
 bun update @sentry/bun @sentry/node
 ```
 
 ### Step 2: Review Configuration
 
-Check the Sentry configuration in `services/ccxt/sentry.ts`:
+Check the Sentry configuration in `ccxt-service/sentry.ts`:
 
 ```typescript
 import * as Sentry from '@sentry/bun';
@@ -68,7 +68,7 @@ export function initSentry() {
 
 ### Step 3: Uncomment Sentry Initialization
 
-In `services/ccxt/sentry.ts` (line 30 or nearby):
+In `ccxt-service/sentry.ts` (line 30 or nearby):
 
 ```typescript
 // Before (commented out):
@@ -103,7 +103,7 @@ environment:
 
 1. Start the CCXT service locally:
    ```bash
-   cd services/ccxt
+   cd ccxt-service
    bun run dev
    ```
 
@@ -136,7 +136,7 @@ Once verified in staging:
 Create a test endpoint to verify Sentry is working:
 
 ```typescript
-// In services/ccxt/index.ts or routes file
+// In ccxt-service/index.ts or routes file
 app.get('/test-sentry', () => {
   throw new Error('Test error for Sentry');
 });

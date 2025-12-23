@@ -62,6 +62,13 @@ docker-compose up -d
 | `PORT` | `3001` | CCXT service port |
 | `CCXT_SERVICE_URL` | `http://localhost:3001` | CCXT service URL |
 | `TELEGRAM_BOT_TOKEN` | - | Telegram bot token |
+| `TELEGRAM_WEBHOOK_URL` | - | Telegram webhook URL (if using webhooks) |
+| `TELEGRAM_WEBHOOK_SECRET` | - | Telegram webhook secret token |
+| `TELEGRAM_USE_POLLING` | `true` | Use polling instead of webhooks |
+| `TELEGRAM_PORT` | `3002` | Telegram service port |
+| `TELEGRAM_API_BASE_URL` | `http://localhost:8080` | Base URL for the Go API |
+| `RUN_TELEGRAM_SERVICE` | `true` | Start Telegram service in unified container |
+| `TELEGRAM_EXTERNAL_SERVICE` | `true` | Disable Go bot when Telegram runs separately |
 | `REDIS_PASSWORD` | - | Redis password |
 
 ## 🐳 Docker Configuration
