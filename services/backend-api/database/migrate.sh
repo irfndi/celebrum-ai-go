@@ -36,8 +36,13 @@ log_error() {
 }
 
 # run_psql executes psql with the appropriate connection parameters
+# Prioritizes individual DATABASE_* vars over DATABASE_URL to avoid hostname conflicts
 run_psql() {
-  if [ -n "$DATABASE_URL" ]; then
+  # Use individual vars if DATABASE_HOST is explicitly set (not default localhost)
+  # This handles cases where DATABASE_URL has a different hostname than DATABASE_HOST
+  if [ -n "$DATABASE_HOST" ] && [ "$DATABASE_HOST" != "localhost" ]; then
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$@"
+  elif [ -n "$DATABASE_URL" ]; then
     psql "$DATABASE_URL" "$@"
   else
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$@"
