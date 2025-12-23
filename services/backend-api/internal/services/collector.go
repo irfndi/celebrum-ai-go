@@ -852,8 +852,8 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	// Track consecutive failures for graceful degradation
 	consecutiveFailures := 0
 	maxConsecutiveFailures := 3
-	intervalIncreased := false            // Track if interval was doubled due to failures
-	degradationStartTime := time.Time{}   // Track when degradation started
+	intervalIncreased := false          // Track if interval was doubled due to failures
+	degradationStartTime := time.Time{} // Track when degradation started
 
 	for {
 		select {
