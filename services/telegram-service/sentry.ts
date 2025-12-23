@@ -4,7 +4,7 @@ import type { MiddlewareHandler } from "hono";
 const sentryDsn = process.env.SENTRY_DSN || "";
 const sentryEnvironment =
   process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
-const sentryRelease = process.env.SENTRY_RELEASE || "ccxt-service@1.0.0";
+const sentryRelease = process.env.SENTRY_RELEASE || "telegram-service@1.0.0";
 const tracesSampleRate = Number(
   process.env.SENTRY_TRACES_SAMPLE_RATE || "0.2"
 );
@@ -53,7 +53,7 @@ export async function initializeSentry(): Promise<boolean> {
         // Add service context to all events
         event.tags = {
           ...event.tags,
-          service: "ccxt-service",
+          service: "telegram-service",
           runtime: "bun",
         };
         return event;
@@ -62,7 +62,7 @@ export async function initializeSentry(): Promise<boolean> {
 
     sentryInitialized = true;
     console.log(
-      `✓ Sentry initialized for ccxt-service (environment: ${sentryEnvironment})`
+      `✓ Sentry initialized for telegram-service (environment: ${sentryEnvironment})`
     );
     return true;
   } catch (error) {
@@ -226,7 +226,6 @@ export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
   // Add breadcrumb for the request
   addBreadcrumb("http", `${requestMethod} ${requestPath}`, "info", {
     url: c.req.url,
-    headers: Object.fromEntries(c.req.raw.headers.entries()),
   });
 
   try {
@@ -258,7 +257,6 @@ export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
         method: requestMethod,
         url: c.req.url,
         path: requestPath,
-        headers: Object.fromEntries(c.req.raw.headers.entries()),
       },
       duration_ms: Date.now() - startTime,
     });
@@ -269,12 +267,12 @@ export const sentryMiddleware: MiddlewareHandler = async (c, next) => {
 };
 
 /**
- * Wrapper for tracing exchange operations.
+ * Wrapper for tracing bot command operations.
  */
-export async function traceExchangeOperation<T>(
-  exchangeId: string,
-  operation: string,
-  symbol: string | undefined,
+export async function traceBotCommand<T>(
+  command: string,
+  chatId: number | string,
+  userId: number | string | undefined,
   fn: () => Promise<T>
 ): Promise<T> {
   if (!Sentry || !sentryInitialized) {
@@ -283,34 +281,34 @@ export async function traceExchangeOperation<T>(
 
   return Sentry.startSpan(
     {
-      name: `${exchangeId}.${operation}`,
-      op: "exchange.operation",
+      name: `bot.command.${command}`,
+      op: "bot.command",
       attributes: {
-        "exchange.id": exchangeId,
-        "exchange.operation": operation,
-        ...(symbol && { "exchange.symbol": symbol }),
+        "bot.command": command,
+        "bot.chat_id": String(chatId),
+        ...(userId && { "bot.user_id": String(userId) }),
       },
     },
     async () => {
       try {
         const result = await fn();
-        addBreadcrumb("exchange", `${exchangeId}.${operation} succeeded`, "info", {
-          exchange: exchangeId,
-          operation,
-          symbol,
+        addBreadcrumb("bot", `Command /${command} succeeded`, "info", {
+          command,
+          chat_id: chatId,
+          user_id: userId,
         });
         return result;
       } catch (error) {
-        addBreadcrumb("exchange", `${exchangeId}.${operation} failed`, "error", {
-          exchange: exchangeId,
-          operation,
-          symbol,
+        addBreadcrumb("bot", `Command /${command} failed`, "error", {
+          command,
+          chat_id: chatId,
+          user_id: userId,
           error: error instanceof Error ? error.message : String(error),
         });
         captureException(error, {
-          exchange: exchangeId,
-          operation,
-          symbol,
+          command,
+          chat_id: chatId,
+          user_id: userId,
         });
         throw error;
       }
@@ -319,34 +317,45 @@ export async function traceExchangeOperation<T>(
 }
 
 /**
- * Track exchange health and availability.
+ * Track message delivery status.
  */
-export function trackExchangeHealth(
-  exchangeId: string,
-  status: "healthy" | "degraded" | "unavailable",
-  metrics?: {
-    latency_ms?: number;
-    error_rate?: number;
-    last_success?: string;
-  }
+export function trackMessageDelivery(
+  chatId: number | string,
+  success: boolean,
+  messageType: string,
+  error?: string
 ): void {
   if (!Sentry || !sentryInitialized) {
     return;
   }
 
-  setTag(`exchange.${exchangeId}.status`, status);
-
-  if (status !== "healthy") {
-    captureMessage(`Exchange ${exchangeId} is ${status}`, "warning", {
-      exchange: exchangeId,
-      status,
-      ...metrics,
+  if (success) {
+    addBreadcrumb("bot.message", `Delivered ${messageType}`, "info", {
+      chat_id: chatId,
+      message_type: messageType,
+    });
+  } else {
+    addBreadcrumb("bot.message", `Failed to deliver ${messageType}`, "error", {
+      chat_id: chatId,
+      message_type: messageType,
+      error,
+    });
+    captureMessage(`Message delivery failed: ${messageType}`, "warning", {
+      chat_id: chatId,
+      message_type: messageType,
+      error,
     });
   }
+}
 
-  addBreadcrumb("exchange.health", `${exchangeId}: ${status}`, "info", {
-    exchange: exchangeId,
-    status,
-    ...metrics,
-  });
+/**
+ * Track webhook vs polling mode.
+ */
+export function trackBotMode(mode: "webhook" | "polling"): void {
+  if (!Sentry || !sentryInitialized) {
+    return;
+  }
+
+  setTag("bot.mode", mode);
+  addBreadcrumb("bot", `Bot running in ${mode} mode`, "info");
 }

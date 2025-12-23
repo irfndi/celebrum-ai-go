@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
@@ -14,6 +15,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
 
 // ArbitrageCalculator defines the interface for calculating arbitrage opportunities.
@@ -207,11 +209,12 @@ func (s *ArbitrageService) Start() error {
 	s.isRunning = true
 	s.mu.Unlock()
 
-	s.logger.Info("Starting arbitrage service",
-		"interval_seconds", s.arbitrageConfig.IntervalSeconds,
-		"min_profit", s.arbitrageConfig.MinProfit,
-		"max_age_minutes", s.arbitrageConfig.MaxAgeMinutes,
-		"batch_size", s.arbitrageConfig.BatchSize)
+	s.logger.WithFields(logrus.Fields{
+		"interval_seconds": s.arbitrageConfig.IntervalSeconds,
+		"min_profit":       s.arbitrageConfig.MinProfit,
+		"max_age_minutes":  s.arbitrageConfig.MaxAgeMinutes,
+		"batch_size":       s.arbitrageConfig.BatchSize,
+	}).Info("Starting arbitrage service")
 
 	// Start the main calculation loop
 	s.wg.Add(1)
@@ -292,37 +295,84 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 	startTime := time.Now()
 	s.logger.Info("Starting arbitrage opportunity calculation")
 
+	// Start Sentry span for the entire calculation cycle
+	ctx, span := observability.StartSpan(s.ctx, observability.SpanOpArbitrage, "arbitrage_calculation_cycle")
+	defer observability.FinishSpan(span, nil)
+
+	span.SetTag("service", "arbitrage")
+	span.SetData("min_profit_threshold", s.arbitrageConfig.MinProfit)
+
+	// Add breadcrumb for tracking
+	observability.AddBreadcrumb(ctx, "arbitrage", "Starting arbitrage calculation cycle", sentry.LevelInfo)
+
 	// Step 1: Clean up old opportunities
+	_, cleanupSpan := observability.StartSpan(ctx, "arbitrage.cleanup", "cleanup_old_opportunities")
 	if err := s.cleanupOldOpportunities(); err != nil {
 		s.logger.WithError(err).Warn("Failed to cleanup old opportunities")
+		observability.AddBreadcrumb(ctx, "arbitrage", "Cleanup warning: "+err.Error(), sentry.LevelWarning)
 	}
+	observability.FinishSpan(cleanupSpan, nil)
 
 	// Step 2: Get latest market data for all exchanges
+	_, dataSpan := observability.StartSpan(ctx, observability.SpanOpMarketData, "get_market_data")
 	marketData, err := s.getLatestMarketData()
 	if err != nil {
+		observability.FinishSpan(dataSpan, err)
+		observability.CaptureExceptionWithContext(ctx, err, "get_market_data", map[string]interface{}{
+			"service": "arbitrage",
+		})
 		return fmt.Errorf("failed to get market data: %w", err)
 	}
+	dataSpan.SetData("exchanges_count", len(marketData))
+	dataSpan.SetData("total_pairs", s.countTotalTradingPairs(marketData))
+	observability.FinishSpan(dataSpan, nil)
 
 	if len(marketData) == 0 {
 		s.logger.Warn("No market data available for arbitrage calculation")
+		span.SetTag("result", "no_data")
+		observability.AddBreadcrumb(ctx, "arbitrage", "No market data available", sentry.LevelWarning)
 		return nil
 	}
 
-	s.logger.Info("Retrieved market data", "exchanges", len(marketData), "total_pairs", s.countTotalTradingPairs(marketData))
+	s.logger.WithFields(logrus.Fields{
+		"exchanges":   len(marketData),
+		"total_pairs": s.countTotalTradingPairs(marketData),
+	}).Info("Retrieved market data")
 
 	// Step 3: Calculate arbitrage opportunities
+	_, calcSpan := observability.StartSpan(ctx, observability.SpanOpArbitrage, "calculate_opportunities")
 	opportunities, err := s.calculator.CalculateArbitrageOpportunities(s.ctx, marketData)
 	if err != nil {
+		observability.FinishSpan(calcSpan, err)
+		observability.CaptureExceptionWithContext(ctx, err, "calculate_opportunities", map[string]interface{}{
+			"exchanges_count": len(marketData),
+			"service":         "arbitrage",
+		})
 		return fmt.Errorf("failed to calculate arbitrage opportunities: %w", err)
 	}
+	calcSpan.SetData("opportunities_calculated", len(opportunities))
+	observability.FinishSpan(calcSpan, nil)
 
 	// Step 4: Filter opportunities by minimum profit threshold
+	_, filterSpan := observability.StartSpan(ctx, "arbitrage.filter", "filter_opportunities")
 	validOpportunities := s.filterOpportunities(opportunities)
+	filterSpan.SetData("opportunities_before", len(opportunities))
+	filterSpan.SetData("opportunities_after", len(validOpportunities))
+	filterSpan.SetData("min_profit", s.arbitrageConfig.MinProfit)
+	observability.FinishSpan(filterSpan, nil)
 
 	// Step 5: Store valid opportunities in database
+	_, storeSpan := observability.StartSpan(ctx, "db.sql.batch", "store_opportunities")
 	if err := s.storeOpportunities(validOpportunities); err != nil {
+		observability.FinishSpan(storeSpan, err)
+		observability.CaptureExceptionWithContext(ctx, err, "store_opportunities", map[string]interface{}{
+			"opportunities_count": len(validOpportunities),
+			"service":             "arbitrage",
+		})
 		return fmt.Errorf("failed to store opportunities: %w", err)
 	}
+	storeSpan.SetData("opportunities_stored", len(validOpportunities))
+	observability.FinishSpan(storeSpan, nil)
 
 	// Update status
 	s.mu.Lock()
@@ -331,14 +381,29 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 	s.mu.Unlock()
 
 	duration := time.Since(startTime)
-	s.logger.Info("Arbitrage calculation completed",
-		"duration_ms", duration.Milliseconds(),
-		"opportunities_found", len(validOpportunities),
-		"total_calculated", len(opportunities),
-		"min_profit_threshold", s.arbitrageConfig.MinProfit)
+
+	// Update main span with final metrics
+	span.SetData("duration_ms", duration.Milliseconds())
+	span.SetData("opportunities_found", len(validOpportunities))
+	span.SetData("total_calculated", len(opportunities))
+	span.SetTag("result", "success")
+
+	// Add completion breadcrumb
+	observability.AddBreadcrumbWithData(ctx, "arbitrage", "Calculation completed", sentry.LevelInfo, map[string]interface{}{
+		"duration_ms":         duration.Milliseconds(),
+		"opportunities_found": len(validOpportunities),
+	})
+
+	s.logger.WithFields(logrus.Fields{
+		"duration_ms":          duration.Milliseconds(),
+		"opportunities_found":  len(validOpportunities),
+		"total_calculated":     len(opportunities),
+		"min_profit_threshold": s.arbitrageConfig.MinProfit,
+	}).Info("Arbitrage calculation completed")
 
 	return nil
 }
+
 
 // getLatestMarketData retrieves the latest market data for all exchanges
 func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData, error) {
@@ -394,9 +459,12 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 		return nil, fmt.Errorf("error iterating market data rows: %w", err)
 	}
 
-	s.logger.Info("Market data retrieved", "exchanges", len(marketData))
+	s.logger.WithField("exchanges", len(marketData)).Info("Market data retrieved")
 	for exchange, data := range marketData {
-		s.logger.Debug("Exchange data", "exchange", exchange, "pairs", len(data))
+		s.logger.WithFields(logrus.Fields{
+			"exchange": exchange,
+			"pairs":    len(data),
+		}).Debug("Exchange data")
 	}
 
 	return marketData, nil
@@ -422,7 +490,10 @@ func (s *ArbitrageService) filterOpportunities(opportunities []models.ArbitrageO
 		filtered = append(filtered, opp)
 	}
 
-	s.logger.Info("Filtered opportunities", "original", len(opportunities), "filtered", len(filtered))
+	s.logger.WithFields(logrus.Fields{
+		"original": len(opportunities),
+		"filtered": len(filtered),
+	}).Info("Filtered opportunities")
 	return filtered
 }
 
@@ -447,7 +518,7 @@ func (s *ArbitrageService) storeOpportunities(opportunities []models.ArbitrageOp
 		}
 	}
 
-	s.logger.Info("Stored opportunities", "count", len(opportunities))
+	s.logger.WithField("count", len(opportunities)).Info("Stored opportunities")
 	return nil
 }
 
@@ -463,7 +534,7 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 	}
 	defer func() {
 		if err := tx.Rollback(s.ctx); err != nil && err != pgx.ErrTxClosed {
-			s.logger.Error("Failed to rollback transaction", "error", err)
+			s.logger.WithError(err).Error("Failed to rollback transaction")
 		}
 	}()
 
@@ -536,7 +607,7 @@ func (s *ArbitrageService) cleanupOldOpportunities() error {
 	}
 
 	if expiredCount > 0 {
-		s.logger.Info("Found expired opportunities", "count", expiredCount)
+		s.logger.WithField("count", expiredCount).Info("Found expired opportunities")
 	}
 
 	return nil

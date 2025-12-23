@@ -7,9 +7,6 @@ Worker utilities note (Bun >= 1.2.21):
 - If you need metadata, consider sending a small metadata message separately, or keep the large payload
   as a top-level string field to preserve fast-path benefits.
 */
-// NOTE: @sentry/bun import removed because it auto-instruments Bun.serve() on import,
-// causing EADDRINUSE errors. Re-enable when Sentry Bun compatibility is resolved.
-// import * as Sentry from "@sentry/bun";
 
 import { Effect } from "effect";
 import { Hono } from "hono";
@@ -22,7 +19,14 @@ import { validator } from "hono/validator";
 import ccxt from "ccxt";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
-import { isSentryEnabled, sentryMiddleware } from "./sentry";
+import {
+  isSentryEnabled,
+  sentryMiddleware,
+  initializeSentry,
+  captureException,
+  flush as sentryFlush,
+  traceExchangeOperation,
+} from "./sentry";
 import { startGrpcServer } from "./grpc-server";
 import type {
   HealthResponse,
@@ -142,10 +146,14 @@ if (isSentryEnabled) {
 }
 
 app.onError((err, c) => {
-  // Sentry disabled - captureException removed to avoid @sentry/bun import
-  // if (isSentryEnabled) {
-  //   Sentry.captureException(err);
-  // }
+  // Capture exception to Sentry if enabled
+  if (isSentryEnabled) {
+    captureException(err, {
+      path: c.req.path,
+      method: c.req.method,
+      url: c.req.url,
+    });
+  }
   console.error("Application error:", err);
   return c.json(
     {
@@ -1205,16 +1213,29 @@ if (shouldAutoServe) {
         `✅ CCXT Service successfully started on port ${server.port}`,
       );
 
+      // Initialize Sentry AFTER server startup to avoid auto-instrumentation conflicts
+      if (isSentryEnabled) {
+        await initializeSentry();
+      }
+
       // Handle graceful shutdown
-      process.on("SIGTERM", () => {
+      process.on("SIGTERM", async () => {
         console.log("SIGTERM received, shutting down gracefully...");
+        // Flush Sentry events before shutdown
+        if (isSentryEnabled) {
+          await sentryFlush(2000);
+        }
         server.stop();
         grpcServer.forceShutdown();
         process.exit(0);
       });
 
-      process.on("SIGINT", () => {
+      process.on("SIGINT", async () => {
         console.log("SIGINT received, shutting down gracefully...");
+        // Flush Sentry events before shutdown
+        if (isSentryEnabled) {
+          await sentryFlush(2000);
+        }
         server.stop();
         grpcServer.forceShutdown();
         process.exit(0);
@@ -1238,6 +1259,10 @@ if (shouldAutoServe) {
         process.exit(1);
       } else {
         console.error(`❌ Failed to start CCXT service:`, error);
+        // Capture startup error to Sentry if possible
+        if (isSentryEnabled) {
+          captureException(error, { phase: "startup" });
+        }
         throw error;
       }
     }

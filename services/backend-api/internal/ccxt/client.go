@@ -783,3 +783,228 @@ func (c *Client) convertGrpcFundingRate(r *pb.FundingRate) *FundingRate {
 		Timestamp:        UnixTimestamp(time.UnixMilli(r.Timestamp)),
 	}
 }
+
+// CalculateOrderBookMetrics computes liquidity metrics from raw order book data.
+// This provides bid-ask spread, depth analysis, and slippage estimates.
+func (c *Client) CalculateOrderBookMetrics(resp *OrderBookResponse) *OrderBookMetrics {
+	if resp == nil || len(resp.OrderBook.Bids) == 0 || len(resp.OrderBook.Asks) == 0 {
+		return nil
+	}
+
+	ob := resp.OrderBook
+	metrics := &OrderBookMetrics{
+		Exchange:          resp.Exchange,
+		Symbol:            resp.Symbol,
+		BidLevels:         len(ob.Bids),
+		AskLevels:         len(ob.Asks),
+		Timestamp:         ob.Timestamp,
+		SlippageEstimates: make(map[string]SlippageEstimate),
+	}
+
+	// Best bid and ask
+	metrics.BestBid = ob.Bids[0].Price
+	metrics.BestAsk = ob.Asks[0].Price
+
+	// Mid price
+	metrics.MidPrice = metrics.BestBid.Add(metrics.BestAsk).Div(decimal.NewFromInt(2))
+
+	// Bid-ask spread as percentage
+	if !metrics.MidPrice.IsZero() {
+		spread := metrics.BestAsk.Sub(metrics.BestBid)
+		metrics.BidAskSpread = spread.Div(metrics.MidPrice).Mul(decimal.NewFromInt(100))
+	}
+
+	// Calculate depth within 1% and 2% of mid price
+	onePercent := metrics.MidPrice.Mul(decimal.NewFromFloat(0.01))
+	twoPercent := metrics.MidPrice.Mul(decimal.NewFromFloat(0.02))
+
+	bidDepth1 := decimal.Zero
+	bidDepth2 := decimal.Zero
+	for _, bid := range ob.Bids {
+		priceDiff := metrics.MidPrice.Sub(bid.Price)
+		value := bid.Price.Mul(bid.Amount)
+		if priceDiff.LessThanOrEqual(onePercent) {
+			bidDepth1 = bidDepth1.Add(value)
+		}
+		if priceDiff.LessThanOrEqual(twoPercent) {
+			bidDepth2 = bidDepth2.Add(value)
+		}
+	}
+	metrics.BidDepth1Pct = bidDepth1
+	metrics.BidDepth2Pct = bidDepth2
+
+	askDepth1 := decimal.Zero
+	askDepth2 := decimal.Zero
+	for _, ask := range ob.Asks {
+		priceDiff := ask.Price.Sub(metrics.MidPrice)
+		value := ask.Price.Mul(ask.Amount)
+		if priceDiff.LessThanOrEqual(onePercent) {
+			askDepth1 = askDepth1.Add(value)
+		}
+		if priceDiff.LessThanOrEqual(twoPercent) {
+			askDepth2 = askDepth2.Add(value)
+		}
+	}
+	metrics.AskDepth1Pct = askDepth1
+	metrics.AskDepth2Pct = askDepth2
+
+	// Calculate imbalance
+	totalDepth1 := bidDepth1.Add(askDepth1)
+	if !totalDepth1.IsZero() {
+		metrics.Imbalance1Pct = bidDepth1.Sub(askDepth1).Div(totalDepth1)
+	}
+
+	totalDepth2 := bidDepth2.Add(askDepth2)
+	if !totalDepth2.IsZero() {
+		metrics.Imbalance2Pct = bidDepth2.Sub(askDepth2).Div(totalDepth2)
+	}
+
+	// Calculate slippage estimates for common position sizes
+	positionSizes := []decimal.Decimal{
+		decimal.NewFromInt(10000),  // $10k
+		decimal.NewFromInt(50000),  // $50k
+		decimal.NewFromInt(100000), // $100k
+	}
+
+	for _, size := range positionSizes {
+		buySlippage := c.calculateSlippage(ob.Asks, size, metrics.MidPrice)
+		sellSlippage := c.calculateSlippage(ob.Bids, size, metrics.MidPrice)
+
+		metrics.SlippageEstimates[size.String()] = SlippageEstimate{
+			PositionSize: size,
+			BuySlippage:  buySlippage.Slippage,
+			SellSlippage: sellSlippage.Slippage,
+			AvgBuyPrice:  buySlippage.AvgPrice,
+			AvgSellPrice: sellSlippage.AvgPrice,
+			IsFillable:   buySlippage.IsFillable && sellSlippage.IsFillable,
+		}
+	}
+
+	// Calculate liquidity score (0-100)
+	metrics.LiquidityScore = c.calculateLiquidityScore(metrics)
+
+	return metrics
+}
+
+// slippageResult holds the result of a slippage calculation.
+type slippageResult struct {
+	Slippage   decimal.Decimal
+	AvgPrice   decimal.Decimal
+	IsFillable bool
+}
+
+// calculateSlippage walks through order book levels to estimate slippage.
+func (c *Client) calculateSlippage(levels []OrderBookEntry, positionSize decimal.Decimal, midPrice decimal.Decimal) slippageResult {
+	if len(levels) == 0 || positionSize.IsZero() || midPrice.IsZero() {
+		return slippageResult{IsFillable: false}
+	}
+
+	remaining := positionSize
+	totalCost := decimal.Zero
+	totalQuantity := decimal.Zero
+
+	for _, level := range levels {
+		levelValue := level.Price.Mul(level.Amount)
+
+		if levelValue.GreaterThanOrEqual(remaining) {
+			// This level can fill the rest
+			quantity := remaining.Div(level.Price)
+			totalCost = totalCost.Add(remaining)
+			totalQuantity = totalQuantity.Add(quantity)
+			remaining = decimal.Zero
+			break
+		}
+
+		// Consume entire level
+		totalCost = totalCost.Add(levelValue)
+		totalQuantity = totalQuantity.Add(level.Amount)
+		remaining = remaining.Sub(levelValue)
+	}
+
+	if totalQuantity.IsZero() {
+		return slippageResult{IsFillable: false}
+	}
+
+	avgPrice := totalCost.Div(totalQuantity)
+	slippage := avgPrice.Sub(midPrice).Div(midPrice).Abs().Mul(decimal.NewFromInt(100))
+
+	return slippageResult{
+		Slippage:   slippage,
+		AvgPrice:   avgPrice,
+		IsFillable: remaining.IsZero(),
+	}
+}
+
+// calculateLiquidityScore computes an overall liquidity score (0-100).
+func (c *Client) calculateLiquidityScore(metrics *OrderBookMetrics) decimal.Decimal {
+	if metrics == nil {
+		return decimal.Zero
+	}
+
+	// Spread score: lower spread = higher score
+	// 0.01% spread = 100, 1% spread = 0
+	spreadScore := decimal.NewFromInt(100).Sub(metrics.BidAskSpread.Mul(decimal.NewFromInt(100)))
+	if spreadScore.LessThan(decimal.Zero) {
+		spreadScore = decimal.Zero
+	}
+
+	// Depth score: more depth = higher score
+	// $1M depth = 100, $10k depth = 10
+	totalDepth := metrics.BidDepth1Pct.Add(metrics.AskDepth1Pct)
+	depthScore := totalDepth.Div(decimal.NewFromInt(10000)).Mul(decimal.NewFromInt(10))
+	if depthScore.GreaterThan(decimal.NewFromInt(100)) {
+		depthScore = decimal.NewFromInt(100)
+	}
+
+	// Imbalance penalty: higher imbalance = lower score
+	imbalancePenalty := metrics.Imbalance1Pct.Abs().Mul(decimal.NewFromInt(20))
+
+	// Weighted average
+	score := spreadScore.Mul(decimal.NewFromFloat(0.4)).
+		Add(depthScore.Mul(decimal.NewFromFloat(0.5))).
+		Sub(imbalancePenalty.Mul(decimal.NewFromFloat(0.1)))
+
+	if score.LessThan(decimal.Zero) {
+		score = decimal.Zero
+	}
+	if score.GreaterThan(decimal.NewFromInt(100)) {
+		score = decimal.NewFromInt(100)
+	}
+
+	return score
+}
+
+// OrderBookMetrics contains calculated metrics derived from raw order book data.
+type OrderBookMetrics struct {
+	Exchange     string          `json:"exchange"`
+	Symbol       string          `json:"symbol"`
+	BidAskSpread decimal.Decimal `json:"bid_ask_spread"`
+	MidPrice     decimal.Decimal `json:"mid_price"`
+	BestBid      decimal.Decimal `json:"best_bid"`
+	BestAsk      decimal.Decimal `json:"best_ask"`
+
+	BidDepth1Pct decimal.Decimal `json:"bid_depth_1pct"`
+	AskDepth1Pct decimal.Decimal `json:"ask_depth_1pct"`
+	BidDepth2Pct decimal.Decimal `json:"bid_depth_2pct"`
+	AskDepth2Pct decimal.Decimal `json:"ask_depth_2pct"`
+
+	Imbalance1Pct decimal.Decimal `json:"imbalance_1pct"`
+	Imbalance2Pct decimal.Decimal `json:"imbalance_2pct"`
+
+	SlippageEstimates map[string]SlippageEstimate `json:"slippage_estimates"`
+	LiquidityScore    decimal.Decimal             `json:"liquidity_score"`
+
+	BidLevels int       `json:"bid_levels"`
+	AskLevels int       `json:"ask_levels"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// SlippageEstimate represents estimated slippage for a given position size.
+type SlippageEstimate struct {
+	PositionSize decimal.Decimal `json:"position_size"`
+	BuySlippage  decimal.Decimal `json:"buy_slippage"`
+	SellSlippage decimal.Decimal `json:"sell_slippage"`
+	AvgBuyPrice  decimal.Decimal `json:"avg_buy_price"`
+	AvgSellPrice decimal.Decimal `json:"avg_sell_price"`
+	IsFillable   bool            `json:"is_fillable"`
+}

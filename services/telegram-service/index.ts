@@ -5,6 +5,16 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { startGrpcServer } from "./grpc-server";
+import {
+  isSentryEnabled,
+  sentryMiddleware,
+  initializeSentry,
+  captureException,
+  flush as sentryFlush,
+  traceBotCommand,
+  trackBotMode,
+  addBreadcrumb,
+} from "./sentry";
 
 const resolvePort = (raw: string | undefined, fallback: number) => {
   if (!raw) {
@@ -400,6 +410,23 @@ bot.catch((err) => {
   const ctx = err.ctx;
   console.error(`Error while handling update ${ctx.update.update_id}:`);
   const error = err.error;
+
+  // Capture error to Sentry with context
+  if (isSentryEnabled) {
+    captureException(error, {
+      update_id: ctx.update.update_id,
+      chat_id: ctx.chat?.id,
+      user_id: ctx.from?.id,
+      message_text: ctx.message?.text,
+      error_type:
+        error instanceof GrammyError
+          ? "GrammyError"
+          : error instanceof HttpError
+            ? "HttpError"
+            : "UnknownError",
+    });
+  }
+
   if (error instanceof GrammyError) {
     console.error("Error in request:", error.description);
   } else if (error instanceof HttpError) {
@@ -413,6 +440,9 @@ const app = new Hono();
 app.use("*", secureHeaders());
 app.use("*", cors());
 app.use("*", logger());
+if (isSentryEnabled) {
+  app.use("*", sentryMiddleware);
+}
 
 app.get("/health", (c) => {
   return c.json({ status: "healthy", service: "telegram-service" }, 200);
@@ -476,6 +506,15 @@ const server = Bun.serve({
 
 console.log(`🤖 Telegram service listening on port ${server.port}`);
 
+// Initialize Sentry AFTER server startup to avoid auto-instrumentation conflicts
+if (isSentryEnabled) {
+  initializeSentry().then((initialized) => {
+    if (initialized) {
+      console.log("✓ Sentry initialized for telegram-service");
+    }
+  });
+}
+
 const grpcPort = process.env.TELEGRAM_GRPC_PORT
   ? parseInt(process.env.TELEGRAM_GRPC_PORT)
   : 50052;
@@ -484,6 +523,9 @@ const grpcServer = startGrpcServer(bot, grpcPort);
 const startBot = async () => {
   if (config.usePolling) {
     console.log("Starting Telegram bot in polling mode");
+    if (isSentryEnabled) {
+      trackBotMode("polling");
+    }
     await bot.api.deleteWebhook({ drop_pending_updates: true });
     bot.start();
     return;
@@ -494,6 +536,9 @@ const startBot = async () => {
   }
 
   console.log(`Setting Telegram webhook to ${config.webhookUrl}`);
+  if (isSentryEnabled) {
+    trackBotMode("webhook");
+  }
   await bot.api.setWebhook(config.webhookUrl, {
     secret_token: config.webhookSecret || undefined,
   });
@@ -504,15 +549,23 @@ startBot().catch((error) => {
   process.exit(1);
 });
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("SIGTERM received, shutting down...");
+  // Flush Sentry events before shutdown
+  if (isSentryEnabled) {
+    await sentryFlush(2000);
+  }
   server.stop();
   grpcServer.forceShutdown();
   process.exit(0);
 });
 
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("SIGINT received, shutting down...");
+  // Flush Sentry events before shutdown
+  if (isSentryEnabled) {
+    await sentryFlush(2000);
+  }
   server.stop();
   grpcServer.forceShutdown();
   process.exit(0);
