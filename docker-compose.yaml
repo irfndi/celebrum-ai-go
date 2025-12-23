@@ -60,7 +60,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: local-dev-password-only
       POSTGRES_DB: ${DATABASE_DBNAME:-celebrum}
     volumes:
       - postgres_data:/var/lib/postgresql/data
