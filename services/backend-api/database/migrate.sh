@@ -6,12 +6,12 @@
 
 set -e
 
-# Configuration
-DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-celebrum_ai}"
-DB_USER="${DB_USER:-celebrum_ai_user}"
-DB_PASSWORD="${DB_PASSWORD:-}"
+# Configuration - Support both DB_* and DATABASE_* env var naming conventions
+DB_HOST="${DATABASE_HOST:-${DB_HOST:-localhost}}"
+DB_PORT="${DATABASE_PORT:-${DB_PORT:-5432}}"
+DB_NAME="${DATABASE_DBNAME:-${DB_NAME:-celebrum_ai}}"
+DB_USER="${DATABASE_USER:-${DB_USER:-celebrum_ai_user}}"
+DB_PASSWORD="${DATABASE_PASSWORD:-${DB_PASSWORD:-}}"
 MIGRATIONS_DIR="$(dirname "$0")/migrations"
 
 # Colors for output
