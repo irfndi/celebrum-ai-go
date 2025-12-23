@@ -754,6 +754,129 @@ func TestClient_Close(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestClient_SymbolNotFoundError(t *testing.T) {
+	server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if _, err := fmt.Fprint(w, `{"error":"hibachi does not have market symbol PUMP/USDT:USDT","timestamp":"2024-01-01T00:00:00Z"}`); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	_, err := client.GetTicker(ctx, "hibachi", "PUMP/USDT:USDT")
+
+	require.Error(t, err)
+	assert.True(t, ccxt.IsSymbolNotFoundError(err), "Expected SymbolNotFoundError, got: %T", err)
+
+	var symbolErr *ccxt.SymbolNotFoundError
+	assert.ErrorAs(t, err, &symbolErr)
+	assert.Equal(t, "hibachi", symbolErr.Exchange)
+	assert.Contains(t, symbolErr.Symbol, "PUMP")
+}
+
+func TestClient_ExchangeUnavailableError(t *testing.T) {
+	server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		if _, err := fmt.Fprint(w, `{"error":"Exchange temporarily unavailable","timestamp":"2024-01-01T00:00:00Z"}`); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	_, err := client.GetTicker(ctx, "binance", "BTC/USDT")
+
+	require.Error(t, err)
+	assert.True(t, ccxt.IsExchangeUnavailableError(err), "Expected ExchangeUnavailableError, got: %T", err)
+
+	var unavailableErr *ccxt.ExchangeUnavailableError
+	assert.ErrorAs(t, err, &unavailableErr)
+	assert.Equal(t, "binance", unavailableErr.Exchange)
+}
+
+func TestClient_GenericHTTPError(t *testing.T) {
+	server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, err := fmt.Fprint(w, `{"error":"Internal Server Error","timestamp":"2024-01-01T00:00:00Z"}`); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.CCXTConfig{
+		ServiceURL: server.URL,
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	ctx := context.Background()
+	_, err := client.GetTicker(ctx, "binance", "BTC/USDT")
+
+	require.Error(t, err)
+	// Should NOT be a SymbolNotFoundError or ExchangeUnavailableError
+	assert.False(t, ccxt.IsSymbolNotFoundError(err), "Should not be SymbolNotFoundError")
+	assert.False(t, ccxt.IsExchangeUnavailableError(err), "Should not be ExchangeUnavailableError")
+	assert.Contains(t, err.Error(), "500")
+}
+
+func TestClient_ExtractExchangeSymbolFromPath(t *testing.T) {
+	cfg := &config.CCXTConfig{
+		ServiceURL: "http://localhost:3001",
+		Timeout:    30,
+	}
+	client := ccxt.NewClient(cfg)
+
+	tests := []struct {
+		name             string
+		path             string
+		expectedExchange string
+		expectedSymbol   string
+	}{
+		{
+			name:             "ticker path",
+			path:             "/api/ticker/binance/BTCUSDT",
+			expectedExchange: "binance",
+			expectedSymbol:   "BTCUSDT",
+		},
+		{
+			name:             "ticker path with slash in symbol",
+			path:             "/api/ticker/binance/BTC/USDT",
+			expectedExchange: "binance",
+			expectedSymbol:   "BTC/USDT",
+		},
+		{
+			name:             "short path",
+			path:             "/api/exchanges",
+			expectedExchange: "",
+			expectedSymbol:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exchange, symbol := client.ExtractExchangeSymbolFromPath(tt.path)
+			assert.Equal(t, tt.expectedExchange, exchange)
+			assert.Equal(t, tt.expectedSymbol, symbol)
+		})
+	}
+}
+
 // newTestServerOrSkip starts a httptest.Server and skips the test if binding is not permitted.
 func newTestServerOrSkip(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()

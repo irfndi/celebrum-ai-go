@@ -437,14 +437,42 @@ console.log(
 );
 console.log(`Active exchanges:`, Object.keys(exchanges).sort().join(", "));
 
-// Health check endpoint
-app.get("/health", (c) => {
-  const response: HealthResponse = {
-    status: "healthy",
+// Health check endpoint - verifies actual service functionality
+app.get("/health", async (c) => {
+  const activeExchangeCount = Object.keys(exchanges).length;
+  const isHealthy = activeExchangeCount > 0;
+
+  // Optionally verify at least one priority exchange can respond
+  let exchangeConnectivity = "unknown";
+  if (isHealthy) {
+    // Quick sanity check on a priority exchange (binance is usually reliable)
+    const testExchange = exchanges["binance"] || Object.values(exchanges)[0];
+    if (testExchange) {
+      try {
+        // Just check if exchange object is valid, don't make external call for health check
+        exchangeConnectivity = testExchange.id ? "configured" : "misconfigured";
+      } catch {
+        exchangeConnectivity = "error";
+      }
+    }
+  }
+
+  const response: HealthResponse & {
+    exchanges_count: number;
+    exchange_connectivity: string;
+  } = {
+    status: isHealthy ? "healthy" : "unhealthy",
     timestamp: new Date().toISOString(),
     service: "ccxt-service",
     version: "1.0.0",
+    exchanges_count: activeExchangeCount,
+    exchange_connectivity: exchangeConnectivity,
   };
+
+  if (!isHealthy) {
+    return c.json(response, 503);
+  }
+
   return c.json(response);
 });
 
@@ -489,7 +517,7 @@ app.get("/api/ticker/:exchange/*", async (c) => {
 
     // Add retry logic for Binance
     let retries = exchange === "binance" ? 3 : 1;
-    let lastError;
+    let lastError: any;
 
     for (let i = 0; i < retries; i++) {
       try {
@@ -513,11 +541,37 @@ app.get("/api/ticker/:exchange/*", async (c) => {
     }
 
     throw lastError;
-  } catch (error) {
+  } catch (error: any) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const errorResponse: ErrorResponse = {
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
       timestamp: new Date().toISOString(),
     };
+
+    // Return 404 for symbol not found errors (BadSymbol, market not found, etc.)
+    if (
+      errorMessage.includes("does not have market symbol") ||
+      errorMessage.includes("market not found") ||
+      errorMessage.includes("BadSymbol") ||
+      errorMessage.includes("symbol not found") ||
+      errorMessage.includes("invalid symbol") ||
+      error?.constructor?.name === "BadSymbol"
+    ) {
+      return c.json(errorResponse, 404);
+    }
+
+    // Return 503 for exchange unavailable errors
+    if (
+      errorMessage.includes("ExchangeNotAvailable") ||
+      errorMessage.includes("RequestTimeout") ||
+      errorMessage.includes("NetworkError") ||
+      error?.constructor?.name === "ExchangeNotAvailable" ||
+      error?.constructor?.name === "RequestTimeout" ||
+      error?.constructor?.name === "NetworkError"
+    ) {
+      return c.json(errorResponse, 503);
+    }
+
     return c.json(errorResponse, 500);
   }
 });

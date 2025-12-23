@@ -21,6 +21,47 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// SymbolNotFoundError represents an error when a symbol is not found on an exchange.
+// This error should not be retried as the symbol doesn't exist.
+type SymbolNotFoundError struct {
+	Exchange string
+	Symbol   string
+	Message  string
+}
+
+func (e *SymbolNotFoundError) Error() string {
+	return fmt.Sprintf("symbol %s not found on %s: %s", e.Symbol, e.Exchange, e.Message)
+}
+
+// IsSymbolNotFoundError returns true if the error is a symbol not found error.
+func IsSymbolNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*SymbolNotFoundError)
+	return ok
+}
+
+// ExchangeUnavailableError represents an error when an exchange is temporarily unavailable.
+// This error can potentially be retried.
+type ExchangeUnavailableError struct {
+	Exchange string
+	Message  string
+}
+
+func (e *ExchangeUnavailableError) Error() string {
+	return fmt.Sprintf("exchange %s unavailable: %s", e.Exchange, e.Message)
+}
+
+// IsExchangeUnavailableError returns true if the error is an exchange unavailable error.
+func IsExchangeUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*ExchangeUnavailableError)
+	return ok
+}
+
 // Client represents the CCXT HTTP client.
 type Client struct {
 	HTTPClient *http.Client
@@ -485,7 +526,7 @@ func (c *Client) formatSymbolForExchange(exchange, symbol string) string {
 
 // makeRequest is a helper method to make HTTP requests to the CCXT service
 func (c *Client) makeRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	url := c.baseURL + path
+	reqURL := c.baseURL + path
 
 	var reqBody io.Reader
 	if body != nil {
@@ -496,7 +537,7 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, reqBody)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -524,10 +565,32 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 
 	if resp.StatusCode >= 400 {
 		var errorResp ErrorResponse
-		if err := json.Unmarshal(respBody, &errorResp); err == nil {
-			return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, errorResp.Error)
+		errorMsg := string(respBody)
+		if jsonErr := json.Unmarshal(respBody, &errorResp); jsonErr == nil {
+			errorMsg = errorResp.Error
 		}
-		return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, string(respBody))
+
+		// Extract exchange and symbol from path for typed errors
+		exchange, symbol := c.extractExchangeSymbolFromPath(path)
+
+		// Return typed errors based on HTTP status code
+		switch resp.StatusCode {
+		case http.StatusNotFound:
+			// Symbol not found - don't retry
+			return &SymbolNotFoundError{
+				Exchange: exchange,
+				Symbol:   symbol,
+				Message:  errorMsg,
+			}
+		case http.StatusServiceUnavailable:
+			// Exchange temporarily unavailable - can retry
+			return &ExchangeUnavailableError{
+				Exchange: exchange,
+				Message:  errorMsg,
+			}
+		default:
+			return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, errorMsg)
+		}
 	}
 
 	if result != nil {
@@ -537,6 +600,23 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 	}
 
 	return nil
+}
+
+// extractExchangeSymbolFromPath extracts exchange and symbol from API paths like /api/ticker/binance/BTCUSDT
+func (c *Client) extractExchangeSymbolFromPath(path string) (exchange, symbol string) {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) >= 3 {
+		exchange = parts[2]
+		if len(parts) >= 4 {
+			symbol = strings.Join(parts[3:], "/")
+		}
+	}
+	return
+}
+
+// ExtractExchangeSymbolFromPath is an exported version for testing.
+func (c *Client) ExtractExchangeSymbolFromPath(path string) (exchange, symbol string) {
+	return c.extractExchangeSymbolFromPath(path)
 }
 
 // Close closes the HTTP client (if needed for cleanup).

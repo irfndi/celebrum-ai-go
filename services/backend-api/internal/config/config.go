@@ -308,6 +308,14 @@ func Load() (*Config, error) {
 	// Bind standard DATABASE_URL
 	_ = viper.BindEnv("database.database_url", "DATABASE_URL")
 
+	// Bind CCXT service environment variables
+	_ = viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL")
+	_ = viper.BindEnv("ccxt.grpc_address", "CCXT_GRPC_ADDRESS")
+
+	// Bind Telegram service environment variables
+	_ = viper.BindEnv("telegram.service_url", "TELEGRAM_SERVICE_URL")
+	_ = viper.BindEnv("telegram.grpc_address", "TELEGRAM_GRPC_ADDRESS")
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables

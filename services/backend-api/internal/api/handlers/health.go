@@ -200,6 +200,16 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CCXTHealthResponse represents the detailed health response from CCXT service.
+type CCXTHealthResponse struct {
+	Status              string `json:"status"`
+	Timestamp           string `json:"timestamp"`
+	Service             string `json:"service"`
+	Version             string `json:"version"`
+	ExchangesCount      int    `json:"exchanges_count"`
+	ExchangeConnectivity string `json:"exchange_connectivity"`
+}
+
 func (h *HealthHandler) checkCCXTService() error {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
@@ -207,7 +217,7 @@ func (h *HealthHandler) checkCCXTService() error {
 
 	resp, err := client.Get(h.ccxtURL + "/health")
 	if err != nil {
-		return err
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -215,6 +225,14 @@ func (h *HealthHandler) checkCCXTService() error {
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("CCXT service returned status: %d", resp.StatusCode)
+	}
+
+	// Optionally parse the response to check detailed health
+	var healthResp CCXTHealthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err == nil {
+		if healthResp.ExchangesCount == 0 {
+			return fmt.Errorf("CCXT service has no active exchanges")
+		}
 	}
 
 	return nil

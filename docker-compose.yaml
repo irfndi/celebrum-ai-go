@@ -35,7 +35,9 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PORT=8080
       - CCXT_SERVICE_URL=http://ccxt-service:3001
+      - CCXT_GRPC_ADDRESS=ccxt-service:50051
       - TELEGRAM_SERVICE_URL=http://telegram-service:3002
+      - TELEGRAM_GRPC_ADDRESS=telegram-service:50052
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_EXTERNAL_SERVICE=true
