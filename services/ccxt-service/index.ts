@@ -7,7 +7,9 @@ Worker utilities note (Bun >= 1.2.21):
 - If you need metadata, consider sending a small metadata message separately, or keep the large payload
   as a top-level string field to preserve fast-path benefits.
 */
-import * as Sentry from "@sentry/bun";
+// NOTE: @sentry/bun import removed because it auto-instruments Bun.serve() on import,
+// causing EADDRINUSE errors. Re-enable when Sentry Bun compatibility is resolved.
+// import * as Sentry from "@sentry/bun";
 
 import { Effect } from "effect";
 import { Hono } from "hono";
@@ -140,9 +142,11 @@ if (isSentryEnabled) {
 }
 
 app.onError((err, c) => {
-  if (isSentryEnabled) {
-    Sentry.captureException(err);
-  }
+  // Sentry disabled - captureException removed to avoid @sentry/bun import
+  // if (isSentryEnabled) {
+  //   Sentry.captureException(err);
+  // }
+  console.error("Application error:", err);
   return c.json(
     {
       error: "Internal Server Error",
