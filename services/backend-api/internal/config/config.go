@@ -112,6 +112,8 @@ type CCXTConfig struct {
 	GrpcAddress string `mapstructure:"grpc_address"`
 	// Timeout is the request timeout in seconds.
 	Timeout int `mapstructure:"timeout"`
+	// AdminAPIKey is the API key for authenticating with admin endpoints.
+	AdminAPIKey string `mapstructure:"admin_api_key"`
 }
 
 // TelegramConfig defines settings for the Telegram notification bot.
@@ -311,6 +313,7 @@ func Load() (*Config, error) {
 	// Bind CCXT service environment variables
 	_ = viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL")
 	_ = viper.BindEnv("ccxt.grpc_address", "CCXT_GRPC_ADDRESS")
+	_ = viper.BindEnv("ccxt.admin_api_key", "ADMIN_API_KEY")
 
 	// Bind Telegram service environment variables
 	_ = viper.BindEnv("telegram.service_url", "TELEGRAM_SERVICE_URL")

@@ -877,6 +877,97 @@ func TestClient_ExtractExchangeSymbolFromPath(t *testing.T) {
 	}
 }
 
+func TestClient_AdminAPIKeyHeader(t *testing.T) {
+	t.Run("admin endpoints include X-API-Key header when configured", func(t *testing.T) {
+		expectedAPIKey := "test-admin-api-key-12345"
+
+		server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify X-API-Key header is present for admin endpoint
+			assert.Equal(t, expectedAPIKey, r.Header.Get("X-API-Key"), "X-API-Key header should be set for admin endpoints")
+			assert.Equal(t, "/api/admin/exchanges/config", r.URL.Path)
+			assert.Equal(t, "GET", r.Method)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(ccxt.ExchangeConfigResponse{
+				ActiveExchanges: []string{"binance"},
+			}); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL:  server.URL,
+			Timeout:     30,
+			AdminAPIKey: expectedAPIKey,
+		}
+		client := ccxt.NewClient(cfg)
+		ctx := context.Background()
+
+		resp, err := client.GetExchangeConfig(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	})
+
+	t.Run("non-admin endpoints do not include X-API-Key header", func(t *testing.T) {
+		server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify X-API-Key header is NOT present for non-admin endpoint
+			assert.Empty(t, r.Header.Get("X-API-Key"), "X-API-Key header should not be set for non-admin endpoints")
+			assert.Equal(t, "/api/exchanges", r.URL.Path)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(ccxt.ExchangesResponse{
+				Exchanges: []ccxt.ExchangeInfo{{ID: "binance"}},
+			}); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL:  server.URL,
+			Timeout:     30,
+			AdminAPIKey: "some-api-key",
+		}
+		client := ccxt.NewClient(cfg)
+		ctx := context.Background()
+
+		resp, err := client.GetExchanges(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	})
+
+	t.Run("admin endpoints without API key configured", func(t *testing.T) {
+		server := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify X-API-Key header is NOT present when not configured
+			assert.Empty(t, r.Header.Get("X-API-Key"), "X-API-Key header should not be set when AdminAPIKey is empty")
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(ccxt.ExchangeConfigResponse{
+				ActiveExchanges: []string{"binance"},
+			}); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		cfg := &config.CCXTConfig{
+			ServiceURL:  server.URL,
+			Timeout:     30,
+			AdminAPIKey: "", // No API key configured
+		}
+		client := ccxt.NewClient(cfg)
+		ctx := context.Background()
+
+		resp, err := client.GetExchangeConfig(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	})
+}
+
 // newTestServerOrSkip starts a httptest.Server and skips the test if binding is not permitted.
 func newTestServerOrSkip(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()

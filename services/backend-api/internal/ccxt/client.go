@@ -64,11 +64,12 @@ func IsExchangeUnavailableError(err error) bool {
 
 // Client represents the CCXT HTTP client.
 type Client struct {
-	HTTPClient *http.Client
-	baseURL    string
-	grpcClient pb.CcxtServiceClient
-	grpcConn   *grpc.ClientConn
-	timeout    time.Duration
+	HTTPClient  *http.Client
+	baseURL     string
+	grpcClient  pb.CcxtServiceClient
+	grpcConn    *grpc.ClientConn
+	timeout     time.Duration
+	adminAPIKey string
 }
 
 // NewClient creates a new CCXT client instance.
@@ -93,8 +94,9 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 		HTTPClient: &http.Client{
 			Timeout: timeout,
 		},
-		baseURL: strings.TrimSuffix(cfg.ServiceURL, "/"),
-		timeout: timeout,
+		baseURL:     strings.TrimSuffix(cfg.ServiceURL, "/"),
+		timeout:     timeout,
+		adminAPIKey: cfg.AdminAPIKey,
 	}
 
 	if cfg.GrpcAddress != "" {
@@ -547,6 +549,11 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Celebrum-AI-Go/1.0")
+
+	// Add API key for admin endpoints
+	if strings.Contains(path, "/admin/") && c.adminAPIKey != "" {
+		req.Header.Set("X-API-Key", c.adminAPIKey)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
