@@ -11,9 +11,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	pb "github.com/irfandi/celebrum-ai-go/pkg/pb/telegram"
 
@@ -151,16 +153,25 @@ func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient
 
 // sendTelegramMessage sends a message via the Telegram Service.
 func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID int64, text string) error {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpNotification, "NotificationService.sendTelegramMessage", map[string]string{
+		"chat_id": fmt.Sprintf("%d", chatID),
+	})
+	defer observability.FinishSpan(span, nil)
+
 	// Try gRPC first
 	if ns.grpcClient != nil {
-		_, err := ns.grpcClient.SendMessage(ctx, &pb.SendMessageRequest{
+		grpcCtx, grpcSpan := observability.StartSpan(spanCtx, observability.SpanOpGRPC, "telegram.SendMessage")
+		_, err := ns.grpcClient.SendMessage(grpcCtx, &pb.SendMessageRequest{
 			ChatId: fmt.Sprintf("%d", chatID),
 			Text:   text,
 		})
+		observability.FinishSpan(grpcSpan, err)
 		if err == nil {
+			observability.AddBreadcrumb(spanCtx, "notification", "Telegram message sent via gRPC", sentry.LevelInfo)
 			return nil
 		}
 		ns.logger.Warn("Failed to send Telegram message via gRPC, falling back to HTTP", "error", err)
+		observability.AddBreadcrumb(spanCtx, "notification", "gRPC failed, falling back to HTTP", sentry.LevelWarning)
 	}
 
 	if ns.telegramServiceURL == "" {
@@ -177,11 +188,14 @@ func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID i
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
+		observability.CaptureException(spanCtx, err)
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", ns.telegramServiceURL+"/send-message", bytes.NewBuffer(jsonData))
+	httpCtx, httpSpan := observability.StartSpan(spanCtx, observability.SpanOpHTTPClient, "POST /send-message")
+	req, err := http.NewRequestWithContext(httpCtx, "POST", ns.telegramServiceURL+"/send-message", bytes.NewBuffer(jsonData))
 	if err != nil {
+		observability.FinishSpan(httpSpan, err)
 		return err
 	}
 
@@ -193,14 +207,23 @@ func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID i
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		observability.FinishSpan(httpSpan, err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "telegram_http_send", map[string]interface{}{
+			"chat_id": chatID,
+		})
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	httpSpan.SetData("http.status_code", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("telegram service returned status: %d", resp.StatusCode)
+		err := fmt.Errorf("telegram service returned status: %d", resp.StatusCode)
+		observability.FinishSpan(httpSpan, err)
+		return err
 	}
 
+	observability.FinishSpan(httpSpan, nil)
+	observability.AddBreadcrumb(spanCtx, "notification", "Telegram message sent via HTTP", sentry.LevelInfo)
 	return nil
 }
 
@@ -267,15 +290,23 @@ func (ns *NotificationService) GetCacheStats(ctx context.Context) map[string]int
 //
 //	error: Error if notification fails.
 func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context, opportunities []ArbitrageOpportunity) error {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpNotification, "NotificationService.NotifyArbitrageOpportunities", map[string]string{
+		"opportunity_count": fmt.Sprintf("%d", len(opportunities)),
+	})
+	defer observability.FinishSpan(span, nil)
+
+	observability.AddBreadcrumb(spanCtx, "notification", "Starting arbitrage opportunity notifications", sentry.LevelInfo)
+
 	// Cache opportunities for faster subsequent access
-	ns.cacheArbitrageOpportunities(ctx, opportunities)
+	ns.cacheArbitrageOpportunities(spanCtx, opportunities)
 
 	// Publish opportunities for real-time updates
-	ns.PublishOpportunityUpdate(ctx, opportunities)
+	ns.PublishOpportunityUpdate(spanCtx, opportunities)
 
 	// Get eligible users (those with Telegram chat IDs and arbitrage alerts enabled)
-	users, err := ns.getEligibleUsers(ctx)
+	users, err := ns.getEligibleUsers(spanCtx)
 	if err != nil {
+		observability.CaptureExceptionWithContext(spanCtx, err, "get_eligible_users", nil)
 		return fmt.Errorf("failed to get eligible users: %w", err)
 	}
 
@@ -283,6 +314,8 @@ func (ns *NotificationService) NotifyArbitrageOpportunities(ctx context.Context,
 		telemetry.Logger().Info("No eligible users found for arbitrage notifications")
 		return nil
 	}
+
+	span.SetData("eligible_users", len(users))
 
 	// Group opportunities by type
 	arbitrageOpps := make([]ArbitrageOpportunity, 0)

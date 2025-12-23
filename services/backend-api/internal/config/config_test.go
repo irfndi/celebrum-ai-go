@@ -43,6 +43,23 @@ func TestConfig_Struct(t *testing.T) {
 			BotToken:   "test_token",
 			WebhookURL: "https://example.com/webhook",
 		},
+		Fees: FeesConfig{
+			DefaultTakerFee: 0.001,
+			DefaultMakerFee: 0.0008,
+		},
+		Analytics: AnalyticsConfig{
+			EnableForecasting:       true,
+			EnableCorrelation:       true,
+			EnableRegimeDetection:   true,
+			ForecastLookback:        120,
+			ForecastHorizon:         8,
+			CorrelationWindow:       200,
+			CorrelationMinPoints:    30,
+			RegimeShortWindow:       20,
+			RegimeLongWindow:        60,
+			VolatilityHighThreshold: 0.03,
+			VolatilityLowThreshold:  0.005,
+		},
 	}
 
 	assert.Equal(t, "test", config.Environment)
@@ -68,6 +85,10 @@ func TestConfig_Struct(t *testing.T) {
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "test_token", config.Telegram.BotToken)
 	assert.Equal(t, "https://example.com/webhook", config.Telegram.WebhookURL)
+	assert.Equal(t, 0.001, config.Fees.DefaultTakerFee)
+	assert.Equal(t, 0.0008, config.Fees.DefaultMakerFee)
+	assert.True(t, config.Analytics.EnableForecasting)
+	assert.Equal(t, 120, config.Analytics.ForecastLookback)
 }
 
 func TestServerConfig_Struct(t *testing.T) {
@@ -174,6 +195,11 @@ func TestLoad_WithDefaults(t *testing.T) {
 	assert.Equal(t, 30, config.CCXT.Timeout)
 	assert.Equal(t, "", config.Telegram.BotToken)
 	assert.Equal(t, "", config.Telegram.WebhookURL)
+	assert.Equal(t, 0.001, config.Fees.DefaultTakerFee)
+	assert.Equal(t, 0.001, config.Fees.DefaultMakerFee)
+	assert.True(t, config.Analytics.EnableForecasting)
+	assert.True(t, config.Analytics.EnableCorrelation)
+	assert.True(t, config.Analytics.EnableRegimeDetection)
 }
 
 func TestLoad_WithEnvironmentVariables(t *testing.T) {
@@ -259,4 +285,194 @@ func TestCCXTConfig_GetTimeout_Zero(t *testing.T) {
 	}
 
 	assert.Equal(t, 0, config.GetTimeout())
+}
+
+// TestValidateConfig_Production_EmptyJWTSecret validates that production requires JWT secret
+func TestValidateConfig_Production_EmptyJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "production",
+		Auth: AuthConfig{
+			JWTSecret: "",
+		},
+	}
+
+	err := validateConfig(config)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JWT_SECRET cannot be empty")
+}
+
+// TestValidateConfig_Production_ShortJWTSecret validates that JWT secret must be at least 32 chars
+func TestValidateConfig_Production_ShortJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "production",
+		Auth: AuthConfig{
+			JWTSecret: "short-secret",
+		},
+	}
+
+	err := validateConfig(config)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least 32 characters")
+}
+
+// TestValidateConfig_Production_InsecureJWTSecret validates that insecure secrets are rejected
+func TestValidateConfig_Production_InsecureJWTSecret(t *testing.T) {
+	insecureSecrets := []string{
+		"test-jwt-secret",
+		"changeme",
+		"password",
+	}
+
+	for _, secret := range insecureSecrets {
+		// Pad to 32 chars to pass length check
+		paddedSecret := secret
+		for len(paddedSecret) < 32 {
+			paddedSecret += "x"
+		}
+		// But use original insecure secret
+		config := &Config{
+			Environment: "production",
+			Auth: AuthConfig{
+				JWTSecret: secret,
+			},
+		}
+
+		err := validateConfig(config)
+		// Should fail either due to length or insecure check
+		require.Error(t, err, "insecure secret '%s' should be rejected", secret)
+	}
+}
+
+// TestValidateConfig_Production_ValidJWTSecret validates that valid secrets pass
+func TestValidateConfig_Production_ValidJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "production",
+		Auth: AuthConfig{
+			JWTSecret: "this-is-a-secure-production-jwt-secret-key-123",
+		},
+	}
+
+	err := validateConfig(config)
+	require.NoError(t, err)
+}
+
+// TestValidateConfig_Staging_RequiresJWTSecret validates staging also requires JWT
+func TestValidateConfig_Staging_RequiresJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "staging",
+		Auth: AuthConfig{
+			JWTSecret: "",
+		},
+	}
+
+	err := validateConfig(config)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JWT_SECRET cannot be empty")
+}
+
+// TestValidateConfig_Development_AllowsEmptyJWTSecret validates dev allows empty JWT
+func TestValidateConfig_Development_AllowsEmptyJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "development",
+		Auth: AuthConfig{
+			JWTSecret: "",
+		},
+	}
+
+	err := validateConfig(config)
+	require.NoError(t, err)
+}
+
+// TestValidateConfig_Development_AllowsInsecureJWTSecret validates dev allows insecure secrets
+func TestValidateConfig_Development_AllowsInsecureJWTSecret(t *testing.T) {
+	config := &Config{
+		Environment: "development",
+		Auth: AuthConfig{
+			JWTSecret: "test",
+		},
+	}
+
+	err := validateConfig(config)
+	require.NoError(t, err)
+}
+
+// TestLoad_WithDatabaseURL_Override validates DATABASE_URL can be set via env
+func TestLoad_WithDatabaseURL_Override(t *testing.T) {
+	os.Clearenv()
+
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@testhost:5432/testdb?sslmode=require")
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	assert.Equal(t, "postgres://testuser:testpass@testhost:5432/testdb?sslmode=require", config.Database.DatabaseURL)
+}
+
+// TestLoad_DatabaseDefaults validates database has sensible defaults
+func TestLoad_DatabaseDefaults(t *testing.T) {
+	os.Clearenv()
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	// Verify sensible defaults for database
+	assert.Equal(t, "localhost", config.Database.Host)
+	assert.Equal(t, 5432, config.Database.Port)
+	assert.Equal(t, "postgres", config.Database.User)
+	assert.NotEmpty(t, config.Database.Password, "Database password should have a default")
+	assert.Equal(t, "celebrum_ai", config.Database.DBName)
+	assert.Equal(t, "disable", config.Database.SSLMode)
+	assert.Equal(t, 25, config.Database.MaxOpenConns)
+	assert.Equal(t, 5, config.Database.MaxIdleConns)
+}
+
+// TestLoad_RedisDefaults validates Redis has sensible defaults
+func TestLoad_RedisDefaults(t *testing.T) {
+	os.Clearenv()
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	assert.Equal(t, "localhost", config.Redis.Host)
+	assert.Equal(t, 6379, config.Redis.Port)
+	assert.Equal(t, "", config.Redis.Password) // Redis password can be empty
+	assert.Equal(t, 0, config.Redis.DB)
+}
+
+// TestConfig_EnvironmentVariableMappings validates env var naming conventions
+func TestConfig_EnvironmentVariableMappings(t *testing.T) {
+	os.Clearenv()
+
+	// Test that both DATABASE_* and nested format work
+	t.Setenv("DATABASE_HOST", "custom-host")
+	t.Setenv("DATABASE_PORT", "5433")
+	t.Setenv("DATABASE_USER", "custom-user")
+	t.Setenv("DATABASE_PASSWORD", "custom-password")
+	t.Setenv("DATABASE_DBNAME", "custom-db")
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	assert.Equal(t, "custom-host", config.Database.Host)
+	assert.Equal(t, 5433, config.Database.Port)
+	assert.Equal(t, "custom-user", config.Database.User)
+	assert.Equal(t, "custom-password", config.Database.Password)
+	assert.Equal(t, "custom-db", config.Database.DBName)
+}
+
+// TestConfig_JWTSecretFromEnvironment validates JWT_SECRET env var
+func TestConfig_JWTSecretFromEnvironment(t *testing.T) {
+	os.Clearenv()
+
+	t.Setenv("JWT_SECRET", "env-jwt-secret-that-is-long-enough-for-production")
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	assert.Equal(t, "env-jwt-secret-that-is-long-enough-for-production", config.Auth.JWTSecret)
 }

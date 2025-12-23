@@ -1,9 +1,7 @@
 package api
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +50,7 @@ type Services struct {
 //	signalAggregator: Service for aggregating trading signals.
 //	telegramConfig: Configuration for Telegram notifications.
 //	authMiddleware: Middleware for handling authentication.
-func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
+func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.RedisClient, ccxtService ccxt.CCXTService, collectorService *services.CollectorService, cleanupService *services.CleanupService, cacheAnalyticsService *services.CacheAnalyticsService, signalAggregator *services.SignalAggregator, analyticsService *services.AnalyticsService, telegramConfig *config.TelegramConfig, authMiddleware *middleware.AuthMiddleware) {
 	// Initialize admin middleware
 	adminMiddleware := middleware.NewAdminMiddleware()
 
@@ -82,8 +80,10 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
 
-	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService)
+	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService, analyticsService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
+	alertHandler := handlers.NewAlertHandler(db)
+	telegramInternalHandler := handlers.NewTelegramInternalHandler(db, userHandler)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
 	cacheHandler := handlers.NewCacheHandler(cacheAnalyticsService)
@@ -144,9 +144,19 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		{
 			analysis.GET("/indicators", analysisHandler.GetTechnicalIndicators)
 			analysis.GET("/signals", analysisHandler.GetTradingSignals)
+			analysis.GET("/correlation", analysisHandler.GetCorrelationMatrix)
+			analysis.GET("/regime", analysisHandler.GetMarketRegime)
+			analysis.GET("/forecast", analysisHandler.GetForecast)
 		}
 
-		// Telegram routes have been moved to telegram-service
+		// Telegram inter-service routes (secured by Admin API Key via middleware)
+		telegram := v1.Group("/telegram")
+		telegram.Use(adminMiddleware.RequireAdminAuth())
+		{
+			telegram.GET("/internal/users/:id", telegramInternalHandler.GetUserByChatID)
+			telegram.GET("/internal/notifications/:userId", telegramInternalHandler.GetNotificationPreferences)
+			telegram.POST("/internal/notifications/:userId", telegramInternalHandler.SetNotificationPreferences)
+		}
 
 		// User management
 		users := v1.Group("/users")
@@ -160,10 +170,10 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		alerts := v1.Group("/alerts")
 		alerts.Use(authMiddleware.RequireAuth())
 		{
-			alerts.GET("/", getUserAlerts)
-			alerts.POST("/", createAlert)
-			alerts.PUT("/:id", updateAlert)
-			alerts.DELETE("/:id", deleteAlert)
+			alerts.GET("/", alertHandler.GetUserAlerts)
+			alerts.POST("/", alertHandler.CreateAlert)
+			alerts.PUT("/:id", alertHandler.UpdateAlert)
+			alerts.DELETE("/:id", alertHandler.DeleteAlert)
 		}
 
 		// Data management
@@ -210,38 +220,4 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 
 // Arbitrage handlers are now implemented in handlers/arbitrage.go
 // Technical analysis handlers are now implemented in handlers/analysis.go
-
-func getUserAlerts(c *gin.Context) {
-	// TODO: Implement actual database retrieval
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"data":    []string{}, // Return empty list for now
-		"message": "Alerts retrieval implemented (mock)",
-	})
-}
-
-func createAlert(c *gin.Context) {
-	// TODO: Implement actual database creation
-	c.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Alert created successfully (mock)",
-	})
-}
-
-func updateAlert(c *gin.Context) {
-	id := c.Param("id")
-	// TODO: Implement actual database update
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": fmt.Sprintf("Alert %s updated successfully (mock)", id),
-	})
-}
-
-func deleteAlert(c *gin.Context) {
-	id := c.Param("id")
-	// TODO: Implement actual database deletion
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": fmt.Sprintf("Alert %s deleted successfully (mock)", id),
-	})
-}
+// Alert handlers are now implemented in handlers/alert.go

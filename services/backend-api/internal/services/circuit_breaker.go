@@ -3,9 +3,12 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/sirupsen/logrus"
 )
 
@@ -114,6 +117,12 @@ func NewCircuitBreaker(name string, config CircuitBreakerConfig, logger *logrus.
 //
 //	error: Error from function or circuit breaker.
 func (cb *CircuitBreaker) Execute(ctx context.Context, fn func(context.Context) error) error {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpHTTPClient, fmt.Sprintf("CircuitBreaker.Execute[%s]", cb.name), map[string]string{
+		"circuit_breaker": cb.name,
+		"state":           cb.getStateName(),
+	})
+	defer observability.FinishSpan(span, nil)
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -121,6 +130,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func(context.Context) 
 
 	// Check if circuit breaker should allow the request
 	if !cb.canExecute() {
+		observability.AddBreadcrumb(spanCtx, "circuit_breaker", fmt.Sprintf("Circuit breaker %s is open, rejecting request", cb.name), sentry.LevelWarning)
 		cb.logger.WithFields(logrus.Fields{
 			"circuit_breaker": cb.name,
 			"state":           cb.getStateName(),
@@ -131,14 +141,16 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func(context.Context) 
 
 	// Execute the function
 	start := time.Now()
-	err := fn(ctx)
+	err := fn(spanCtx)
 	duration := time.Since(start)
 
 	// Record the result
 	if err != nil {
 		cb.onFailure(err, duration)
+		observability.AddBreadcrumb(spanCtx, "circuit_breaker", fmt.Sprintf("Circuit breaker %s: execution failed", cb.name), sentry.LevelError)
 	} else {
 		cb.onSuccess(duration)
+		observability.AddBreadcrumb(spanCtx, "circuit_breaker", fmt.Sprintf("Circuit breaker %s: execution succeeded", cb.name), sentry.LevelDebug)
 	}
 
 	return err
@@ -240,6 +252,11 @@ func (cb *CircuitBreaker) setState(newState CircuitBreakerState) {
 		cb.state = newState
 		cb.lastStateChange = time.Now()
 		cb.stats.StateChanges++
+
+		// Capture state change in Sentry
+		observability.AddBreadcrumb(context.Background(), "circuit_breaker",
+			fmt.Sprintf("Circuit breaker %s state changed: %s -> %s", cb.name, cb.getStateNameForState(oldState), cb.getStateName()),
+			sentry.LevelInfo)
 
 		cb.logger.WithFields(logrus.Fields{
 			"circuit_breaker": cb.name,

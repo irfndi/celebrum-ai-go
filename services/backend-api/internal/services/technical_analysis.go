@@ -6,9 +6,12 @@ import (
 	"math"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 
 	"github.com/cinar/indicator/v2/asset"
 	"github.com/cinar/indicator/v2/helper"
@@ -150,6 +153,16 @@ func (tas *TechnicalAnalysisService) GetDefaultIndicatorConfig() *IndicatorConfi
 // Returns:
 //   - A TechnicalAnalysisResult containing all calculated data, or an error if analysis fails.
 func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, exchange string, config *IndicatorConfig) (*TechnicalAnalysisResult, error) {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpTechnicalAnalys, "TechnicalAnalysisService.AnalyzeSymbol", map[string]string{
+		"symbol":   symbol,
+		"exchange": exchange,
+	})
+	defer func() {
+		observability.RecoverAndCapture(spanCtx, "AnalyzeSymbol")
+	}()
+
+	observability.AddBreadcrumb(spanCtx, "technical_analysis", "Starting technical analysis", sentry.LevelInfo)
+
 	// Log analysis start with structured logging
 	tas.logger.WithFields(logrus.Fields{
 		"symbol":    symbol,
@@ -169,7 +182,7 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 	}()
 
 	// Create timeout context for analysis
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	analysisCtx, cancel := context.WithTimeout(spanCtx, 5*time.Minute)
 	defer cancel()
 
 	tas.logger.WithFields(logrus.Fields{
@@ -179,17 +192,23 @@ func (tas *TechnicalAnalysisService) AnalyzeSymbol(ctx context.Context, symbol, 
 
 	// Fetch price data from database with error recovery
 	var priceData *PriceData
-	err := tas.errorRecoveryManager.ExecuteWithRetry(ctx, "fetch_price_data", func() error {
+	err := tas.errorRecoveryManager.ExecuteWithRetry(analysisCtx, "fetch_price_data", func() error {
 		var err error
-		priceData, err = tas.fetchPriceData(ctx, symbol, exchange)
+		priceData, err = tas.fetchPriceData(analysisCtx, symbol, exchange)
 		return err
 	})
 	if err != nil {
+		observability.CaptureExceptionWithContext(spanCtx, err, "fetch_price_data", map[string]interface{}{
+			"symbol":   symbol,
+			"exchange": exchange,
+		})
+		observability.FinishSpan(span, err)
 		return nil, fmt.Errorf("failed to fetch price data: %w", err)
 	}
 
 	if len(priceData.Close) < 50 {
 		dataErr := fmt.Errorf("insufficient price data: need at least 50 points, got %d", len(priceData.Close))
+		observability.AddBreadcrumb(spanCtx, "technical_analysis", "Insufficient price data", sentry.LevelWarning)
 		// Log insufficient data error with structured logging
 		tas.logger.WithFields(logrus.Fields{
 			"symbol":          symbol,

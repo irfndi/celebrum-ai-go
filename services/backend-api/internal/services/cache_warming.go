@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 )
@@ -55,53 +57,83 @@ func NewCacheWarmingService(redisClient *redis.Client, ccxtService ccxt.CCXTServ
 //
 //	error: Error if warming fails (partially or fully).
 func (c *CacheWarmingService) WarmCache(ctx context.Context) error {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm", "CacheWarmingService.WarmCache")
+	defer observability.FinishSpan(span, nil)
+
 	c.logger.Info("Starting cache warming")
+	observability.AddBreadcrumb(spanCtx, "cache_warming", "Starting cache warming", sentry.LevelInfo)
 	start := time.Now()
 
 	// Warm exchange configuration cache
-	if err := c.warmExchangeConfig(ctx); err != nil {
+	if err := c.warmExchangeConfig(spanCtx); err != nil {
 		c.logger.Warn("Failed to warm exchange config cache", "error", err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "warm_exchange_config", map[string]interface{}{
+			"step": "exchange_config",
+		})
 	}
 
 	// Warm supported exchanges cache
-	if err := c.warmSupportedExchanges(ctx); err != nil {
+	if err := c.warmSupportedExchanges(spanCtx); err != nil {
 		c.logger.Warn("Failed to warm supported exchanges cache", "error", err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "warm_supported_exchanges", map[string]interface{}{
+			"step": "supported_exchanges",
+		})
 	}
 
 	// Warm trading pairs cache
-	if err := c.warmTradingPairs(ctx); err != nil {
+	if err := c.warmTradingPairs(spanCtx); err != nil {
 		c.logger.Warn("Failed to warm trading pairs cache", "error", err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "warm_trading_pairs", map[string]interface{}{
+			"step": "trading_pairs",
+		})
 	}
 
 	// Warm exchange data cache
-	if err := c.warmExchanges(ctx); err != nil {
+	if err := c.warmExchanges(spanCtx); err != nil {
 		c.logger.Warn("Failed to warm exchanges cache", "error", err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "warm_exchanges", map[string]interface{}{
+			"step": "exchanges",
+		})
 	}
 
 	// Warm funding rates cache
-	if err := c.warmFundingRates(ctx); err != nil {
+	if err := c.warmFundingRates(spanCtx); err != nil {
 		c.logger.Warn("Failed to warm funding rates cache", "error", err)
+		observability.CaptureExceptionWithContext(spanCtx, err, "warm_funding_rates", map[string]interface{}{
+			"step": "funding_rates",
+		})
 	}
 
 	duration := time.Since(start)
 	c.logger.Info("Cache warming completed", "duration_ms", duration.Milliseconds())
+	span.SetData("duration_ms", duration.Milliseconds())
+	observability.AddBreadcrumbWithData(spanCtx, "cache_warming", "Cache warming completed", sentry.LevelInfo, map[string]interface{}{
+		"duration_ms": duration.Milliseconds(),
+	})
 	return nil
 }
 
 // warmExchangeConfig warms the exchange configuration cache
-func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
+func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) (err error) {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm.exchange_config", "CacheWarmingService.warmExchangeConfig")
+	defer func() {
+		observability.FinishSpan(span, err)
+	}()
+
 	c.logger.Info("Warming exchange configuration cache")
 
 	// Check for nil dependencies
 	if c.ccxtService == nil {
-		return fmt.Errorf("ccxt service is nil")
+		err = fmt.Errorf("ccxt service is nil")
+		return err
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
+		err = fmt.Errorf("redis client is nil")
+		return err
 	}
 
 	// Get exchange config from CCXT service
-	config, err := c.ccxtService.GetExchangeConfig(ctx)
+	config, err := c.ccxtService.GetExchangeConfig(spanCtx)
 	if err != nil {
 		return err
 	}
@@ -113,7 +145,7 @@ func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
 	}
 
 	// Cache with 1 hour TTL
-	err = c.redisClient.Set(ctx, "exchange:config", configJSON, time.Hour).Err()
+	err = c.redisClient.Set(spanCtx, "exchange:config", configJSON, time.Hour).Err()
 	if err != nil {
 		return err
 	}
@@ -123,15 +155,22 @@ func (c *CacheWarmingService) warmExchangeConfig(ctx context.Context) error {
 }
 
 // warmSupportedExchanges warms the supported exchanges cache
-func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error {
+func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) (err error) {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm.supported_exchanges", "CacheWarmingService.warmSupportedExchanges")
+	defer func() {
+		observability.FinishSpan(span, err)
+	}()
+
 	c.logger.Info("Warming supported exchanges cache")
 
 	// Check for nil dependencies
 	if c.ccxtService == nil {
-		return fmt.Errorf("ccxt service is nil")
+		err = fmt.Errorf("ccxt service is nil")
+		return err
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
+		err = fmt.Errorf("redis client is nil")
+		return err
 	}
 
 	// Get supported exchanges from CCXT service
@@ -144,7 +183,7 @@ func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error 
 	}
 
 	// Cache with 30 minutes TTL
-	err = c.redisClient.Set(ctx, "exchange:supported", exchangesJSON, 30*time.Minute).Err()
+	err = c.redisClient.Set(spanCtx, "exchange:supported", exchangesJSON, 30*time.Minute).Err()
 	if err != nil {
 		return err
 	}
@@ -154,30 +193,41 @@ func (c *CacheWarmingService) warmSupportedExchanges(ctx context.Context) error 
 }
 
 // warmTradingPairs warms the trading pairs cache
-func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
+func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) (err error) {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm.trading_pairs", "CacheWarmingService.warmTradingPairs")
+	defer func() {
+		observability.FinishSpan(span, err)
+	}()
+
 	c.logger.Info("Warming trading pairs cache")
 
 	// Check for nil dependencies
 	if c.db == nil {
-		return fmt.Errorf("database is nil")
+		err = fmt.Errorf("database is nil")
+		return err
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
+		err = fmt.Errorf("redis client is nil")
+		return err
 	}
 
 	// Get all trading pairs from database
 	query := `SELECT id, symbol, base_currency, quote_currency FROM trading_pairs LIMIT 1000`
-	rows, err := c.db.Pool.Query(ctx, query)
+	rows, err := c.db.Pool.Query(spanCtx, query)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	count := 0
+	scanErrors := 0
+	marshalErrors := 0
+	setErrors := 0
 	for rows.Next() {
 		var id int
 		var symbol, baseCurrency, quoteCurrency string
 		if scanErr := rows.Scan(&id, &symbol, &baseCurrency, &quoteCurrency); scanErr != nil {
+			scanErrors++
 			continue
 		}
 
@@ -192,76 +242,117 @@ func (c *CacheWarmingService) warmTradingPairs(ctx context.Context) error {
 
 		pairJSON, marshalErr := json.Marshal(pairData)
 		if marshalErr != nil {
+			marshalErrors++
 			continue
 		}
 
-		setErr := c.redisClient.Set(ctx, cacheKey, pairJSON, 24*time.Hour).Err()
+		setErr := c.redisClient.Set(spanCtx, cacheKey, pairJSON, 24*time.Hour).Err()
 		if setErr != nil {
+			setErrors++
 			continue
 		}
 
 		count++
 	}
 
+	span.SetData("cached_count", count)
+	span.SetData("scan_errors", scanErrors)
+	span.SetData("marshal_errors", marshalErrors)
+	span.SetData("set_errors", setErrors)
+	if scanErrors > 0 || marshalErrors > 0 || setErrors > 0 {
+		observability.AddBreadcrumbWithData(spanCtx, "cache_warming", "Trading pairs cache warming encountered errors", sentry.LevelWarning, map[string]interface{}{
+			"scan_errors":    scanErrors,
+			"marshal_errors": marshalErrors,
+			"set_errors":     setErrors,
+		})
+	}
 	c.logger.Info("Trading pairs cache warmed successfully", "count", count)
 	return nil
 }
 
 // warmExchanges warms the exchanges cache
-func (c *CacheWarmingService) warmExchanges(ctx context.Context) error {
+func (c *CacheWarmingService) warmExchanges(ctx context.Context) (err error) {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm.exchanges", "CacheWarmingService.warmExchanges")
+	defer func() {
+		observability.FinishSpan(span, err)
+	}()
+
 	c.logger.Info("Warming exchanges cache")
 
 	// Check for nil dependencies
 	if c.db == nil {
-		return fmt.Errorf("database is nil")
+		err = fmt.Errorf("database is nil")
+		return err
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
+		err = fmt.Errorf("redis client is nil")
+		return err
 	}
 
 	// Get all exchanges from database
 	query := `SELECT id, name FROM exchanges LIMIT 100`
-	rows, err := c.db.Pool.Query(ctx, query)
+	rows, err := c.db.Pool.Query(spanCtx, query)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	count := 0
+	scanErrors := 0
+	setErrors := 0
 	for rows.Next() {
 		var id int
 		var name string
 		if scanErr := rows.Scan(&id, &name); scanErr != nil {
+			scanErrors++
 			continue
 		}
 
 		// Cache exchange ID by name with 24 hour TTL
 		cacheKey := "exchange:" + name
-		setErr := c.redisClient.Set(ctx, cacheKey, id, 24*time.Hour).Err()
+		setErr := c.redisClient.Set(spanCtx, cacheKey, id, 24*time.Hour).Err()
 		if setErr != nil {
+			setErrors++
 			continue
 		}
 
 		count++
 	}
 
+	span.SetData("cached_count", count)
+	span.SetData("scan_errors", scanErrors)
+	span.SetData("set_errors", setErrors)
+	if scanErrors > 0 || setErrors > 0 {
+		observability.AddBreadcrumbWithData(spanCtx, "cache_warming", "Exchanges cache warming encountered errors", sentry.LevelWarning, map[string]interface{}{
+			"scan_errors": scanErrors,
+			"set_errors":  setErrors,
+		})
+	}
 	c.logger.Info("Exchanges cache warmed successfully", "count", count)
 	return nil
 }
 
 // warmFundingRates warms the funding rates cache
-func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
+func (c *CacheWarmingService) warmFundingRates(ctx context.Context) (err error) {
+	spanCtx, span := observability.StartSpan(ctx, "cache.warm.funding_rates", "CacheWarmingService.warmFundingRates")
+	defer func() {
+		observability.FinishSpan(span, err)
+	}()
+
 	c.logger.Info("Warming funding rates cache")
 
 	// Check for nil dependencies
 	if c.db == nil {
-		return fmt.Errorf("database is nil")
+		err = fmt.Errorf("database is nil")
+		return err
 	}
 	if c.db.Pool == nil {
-		return fmt.Errorf("database pool is not available")
+		err = fmt.Errorf("database pool is not available")
+		return err
 	}
 	if c.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
+		err = fmt.Errorf("redis client is nil")
+		return err
 	}
 
 	// Get latest funding rates from database for each exchange-symbol combination
@@ -280,19 +371,23 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 		LIMIT 1000
 	`
 
-	rows, err := c.db.Pool.Query(ctx, query)
+	rows, err := c.db.Pool.Query(spanCtx, query)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	count := 0
+	scanErrors := 0
+	marshalErrors := 0
+	setErrors := 0
 	for rows.Next() {
 		var exchangeName, symbol string
 		var fundingRate float64
 		var nextFundingTime, timestamp time.Time
 
 		if scanErr := rows.Scan(&exchangeName, &symbol, &fundingRate, &nextFundingTime, &timestamp); scanErr != nil {
+			scanErrors++
 			continue
 		}
 
@@ -308,17 +403,30 @@ func (c *CacheWarmingService) warmFundingRates(ctx context.Context) error {
 
 		fundingJSON, marshalErr := json.Marshal(fundingData)
 		if marshalErr != nil {
+			marshalErrors++
 			continue
 		}
 
-		setErr := c.redisClient.Set(ctx, cacheKey, fundingJSON, time.Minute).Err()
+		setErr := c.redisClient.Set(spanCtx, cacheKey, fundingJSON, time.Minute).Err()
 		if setErr != nil {
+			setErrors++
 			continue
 		}
 
 		count++
 	}
 
+	span.SetData("cached_count", count)
+	span.SetData("scan_errors", scanErrors)
+	span.SetData("marshal_errors", marshalErrors)
+	span.SetData("set_errors", setErrors)
+	if scanErrors > 0 || marshalErrors > 0 || setErrors > 0 {
+		observability.AddBreadcrumbWithData(spanCtx, "cache_warming", "Funding rates cache warming encountered errors", sentry.LevelWarning, map[string]interface{}{
+			"scan_errors":    scanErrors,
+			"marshal_errors": marshalErrors,
+			"set_errors":     setErrors,
+		})
+	}
 	c.logger.Info("Funding rates cache warmed successfully", "count", count)
 	return nil
 }

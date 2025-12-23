@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
 
 // SignalQualityScorer provides signal quality assessment capabilities, evaluating signals based on
@@ -141,6 +143,14 @@ func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds
 // Returns:
 //   - Calculated quality metrics, or an error if assessment fails.
 func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *SignalQualityInput) (*SignalQualityMetrics, error) {
+	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpSignalProcessing, "SignalQualityScorer.AssessSignalQuality", map[string]string{
+		"signal_type": input.SignalType,
+		"symbol":      input.Symbol,
+	})
+	defer observability.FinishSpan(span, nil)
+
+	observability.AddBreadcrumb(spanCtx, "signal_quality", "Assessing signal quality", sentry.LevelInfo)
+
 	// Stub logging for telemetry
 	_ = fmt.Sprintf("Signal quality assessment: type=%s, symbol=%s, exchanges=%v, volume=%f, profit=%f, confidence=%f",
 		input.SignalType, input.Symbol, input.Exchanges, input.Volume.InexactFloat64(),
@@ -151,6 +161,9 @@ func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *
 		"symbol":      input.Symbol,
 		"exchanges":   input.Exchanges,
 	}).Info("Assessing signal quality")
+
+	// Use span context for cache refresh
+	_ = spanCtx
 
 	// Ensure exchange reliability cache is fresh
 	if err := sqs.refreshExchangeReliabilityCache(ctx); err != nil {

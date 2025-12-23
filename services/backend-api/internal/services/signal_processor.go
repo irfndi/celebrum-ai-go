@@ -12,9 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/shopspring/decimal"
 
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
 
 // SignalProcessorConfig holds configuration settings for the signal processor service.
@@ -142,6 +144,9 @@ func NewSignalProcessor(
 // Returns:
 //   - An error if the processor is already running.
 func (sp *SignalProcessor) Start() error {
+	ctx, span := observability.StartSpan(sp.ctx, observability.SpanOpSignalProcessing, "SignalProcessor.Start")
+	defer observability.FinishSpan(span, nil)
+
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
@@ -154,6 +159,12 @@ func (sp *SignalProcessor) Start() error {
 		"interval", sp.config.ProcessingInterval,
 		"batch_size", sp.config.BatchSize,
 		"workers", sp.config.MaxConcurrentBatch)
+
+	observability.AddBreadcrumbWithData(ctx, "signal_processor", "Starting signal processor", sentry.LevelInfo, map[string]interface{}{
+		"interval":   sp.config.ProcessingInterval.String(),
+		"batch_size": sp.config.BatchSize,
+		"workers":    sp.config.MaxConcurrentBatch,
+	})
 
 	// Start the main processing loop
 	sp.wg.Add(1)
@@ -232,11 +243,14 @@ func (sp *SignalProcessor) processingLoop() {
 // Returns:
 //   - An error if the batch processing fails or the circuit breaker is open.
 func (sp *SignalProcessor) processSignalBatch() error {
-	// Stub logging for telemetry
-	_ = fmt.Sprintf("Signal batch processing: batch_size=%d, max_concurrent=%d, quality_threshold=%f",
-		sp.config.BatchSize, sp.config.MaxConcurrentBatch, sp.config.QualityThreshold)
-
-	ctx := sp.ctx
+	ctx, span := observability.StartSpanWithTags(sp.ctx, observability.SpanOpSignalProcessing, "SignalProcessor.processSignalBatch", map[string]string{
+		"batch_size":        fmt.Sprintf("%d", sp.config.BatchSize),
+		"max_concurrent":    fmt.Sprintf("%d", sp.config.MaxConcurrentBatch),
+		"quality_threshold": fmt.Sprintf("%.2f", sp.config.QualityThreshold),
+	})
+	defer func() {
+		observability.RecoverAndCapture(ctx, "processSignalBatch")
+	}()
 
 	startTime := time.Now()
 	sp.lastRun = startTime
@@ -247,14 +261,17 @@ func (sp *SignalProcessor) processSignalBatch() error {
 	})
 
 	if err != nil {
-		// Stub logging for error
-		_ = fmt.Sprintf("Signal batch processing error: %v", err)
+		observability.CaptureExceptionWithContext(ctx, err, "signal_batch_processing", map[string]interface{}{
+			"batch_size":     sp.config.BatchSize,
+			"max_concurrent": sp.config.MaxConcurrentBatch,
+			"duration_ms":    time.Since(startTime).Milliseconds(),
+		})
+		observability.FinishSpan(span, err)
 		return err
 	}
 
-	// Stub logging for success
-	_ = fmt.Sprintf("Signal batch processing success: duration_ms=%d", time.Since(startTime).Milliseconds())
-
+	span.SetData("duration_ms", time.Since(startTime).Milliseconds())
+	observability.FinishSpan(span, nil)
 	return nil
 }
 
@@ -1096,14 +1113,13 @@ func (sp *SignalProcessor) storeAggregatedSignal(result ProcessingResult) error 
 
 // sendSignalNotification triggers a notification for high-quality signals.
 func (sp *SignalProcessor) sendSignalNotification(result ProcessingResult) error {
-	_, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
+	aggregatedSignal, ok := result.Metadata["aggregated_signal"].(*AggregatedSignal)
 	if !ok {
 		return fmt.Errorf("invalid aggregated signal in result metadata")
 	}
 
-	// Convert to notification format and send (placeholder - implement based on notification service interface)
-	// return sp.notificationService.NotifyAggregatedSignal(aggregatedSignal)
-	return nil // Temporary placeholder
+	// Send notification using the notification service
+	return sp.notificationService.NotifyAggregatedSignals(sp.ctx, []*AggregatedSignal{aggregatedSignal})
 }
 
 // metricsLoop periodically updates internal throughput metrics.

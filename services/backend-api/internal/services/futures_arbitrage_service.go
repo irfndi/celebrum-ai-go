@@ -10,11 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
+	"github.com/getsentry/sentry-go"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
+	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
@@ -91,6 +93,7 @@ func (s *FuturesArbitrageService) Start() error {
 	go s.runOpportunityCalculator()
 
 	telemetry.Logger().Info("Futures arbitrage service started")
+	observability.AddBreadcrumb(s.ctx, "futures_arbitrage", "Futures arbitrage service started", sentry.LevelInfo)
 	return nil
 }
 
@@ -161,9 +164,13 @@ func (s *FuturesArbitrageService) runOpportunityCalculator() {
 
 // calculateAndStoreOpportunities fetches funding rates and calculates arbitrage opportunities
 func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Context) error {
-	telemetry.Logger().Info("Starting futures arbitrage opportunity calculation", "operation", "arbitrage_detection", "service", "futures_arbitrage")
+	spanCtx, span := observability.StartSpan(ctx, observability.SpanOpArbitrage, "FuturesArbitrageService.calculateAndStoreOpportunities")
+	defer func() {
+		observability.RecoverAndCapture(spanCtx, "calculateAndStoreOpportunities")
+	}()
 
-	telemetry.Logger().Info("Starting futures arbitrage opportunity calculation")
+	telemetry.Logger().Info("Starting futures arbitrage opportunity calculation", "operation", "arbitrage_detection", "service", "futures_arbitrage")
+	observability.AddBreadcrumb(spanCtx, "arbitrage", "Starting opportunity calculation", sentry.LevelInfo)
 
 	// Clean up expired opportunities first with error recovery
 	err := s.errorRecoveryManager.ExecuteWithRetry(ctx, "cleanup_opportunities", func() error {
@@ -261,6 +268,11 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 
 	telemetry.Logger().Info("Opportunity calculation completed",
 		"calculated_count", opportunitiesCalculated, "stored_count", opportunitiesStored, "symbol_count", len(fundingRateMap))
+
+	span.SetData("opportunities_calculated", opportunitiesCalculated)
+	span.SetData("opportunities_stored", opportunitiesStored)
+	span.SetData("symbol_count", len(fundingRateMap))
+	observability.FinishSpan(span, nil)
 
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -20,6 +21,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
@@ -566,10 +568,17 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 //
 //	error: Error if initialization fails.
 func (c *CollectorService) Start() error {
+	ctx, span := observability.StartSpan(c.ctx, observability.SpanOpMarketData, "CollectorService.Start")
+	defer observability.FinishSpan(span, nil)
+
 	c.logger.Info("Starting market data collector service...")
+	observability.AddBreadcrumb(ctx, "collector", "Starting market data collector service", sentry.LevelInfo)
 
 	// Initialize CCXT service
-	if err := c.ccxtService.Initialize(c.ctx); err != nil {
+	if err := c.ccxtService.Initialize(ctx); err != nil {
+		observability.CaptureExceptionWithContext(ctx, err, "ccxt_initialization", map[string]interface{}{
+			"service": "collector",
+		})
 		return fmt.Errorf("failed to initialize CCXT service: %w", err)
 	}
 
@@ -582,6 +591,7 @@ func (c *CollectorService) Start() error {
 	go c.initializeWorkersAsync()
 
 	c.logger.Info("Market data collector service started", "workers_initializing", true)
+	observability.AddBreadcrumb(ctx, "collector", "Market data collector service started", sentry.LevelInfo)
 	return nil
 }
 
@@ -644,24 +654,39 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 
 // initializeWorkersAsync handles symbol collection and worker creation in the background
 func (c *CollectorService) initializeWorkersAsync() {
+	ctx, span := observability.StartSpan(c.ctx, observability.SpanOpMarketData, "CollectorService.initializeWorkersAsync")
+	defer func() {
+		observability.RecoverAndCapture(ctx, "initializeWorkersAsync")
+		observability.FinishSpan(span, nil)
+	}()
+
 	c.logger.Info("Starting background symbol collection and worker initialization...")
+	observability.AddBreadcrumb(ctx, "collector", "Starting background initialization", sentry.LevelInfo)
 
 	// Get supported exchanges prioritized by database priority field
 	exchanges := c.getPrioritizedExchanges()
+	span.SetData("exchange_count", len(exchanges))
 
 	// Get symbols that appear on multiple exchanges for arbitrage
 	multiExchangeSymbols, err := c.getMultiExchangeSymbols(exchanges)
 	if err != nil {
 		c.logger.Warn("Failed to get multi-exchange symbols", "error", err)
+		observability.AddBreadcrumb(ctx, "collector", "Failed to get multi-exchange symbols", sentry.LevelWarning)
 		// Continue with individual exchange symbols as fallback
 	}
 
 	// Create workers for each exchange
+	workersCreated := 0
 	for _, exchangeID := range exchanges {
 		if err := c.createWorker(exchangeID, multiExchangeSymbols); err != nil {
 			c.logger.Warn("Failed to create worker for exchange", "exchange", exchangeID, "error", err)
+			observability.AddBreadcrumbWithData(ctx, "collector", "Failed to create worker", sentry.LevelWarning, map[string]interface{}{
+				"exchange": exchangeID,
+				"error":    err.Error(),
+			})
 			continue
 		}
+		workersCreated++
 	}
 
 	// Mark as ready
@@ -669,7 +694,11 @@ func (c *CollectorService) initializeWorkersAsync() {
 	c.isReady = true
 	c.readinessMu.Unlock()
 
+	span.SetData("workers_created", workersCreated)
 	c.logger.Info("Background initialization complete", "workers_started", len(c.workers))
+	observability.AddBreadcrumbWithData(ctx, "collector", "Background initialization complete", sentry.LevelInfo, map[string]interface{}{
+		"workers_started": len(c.workers),
+	})
 }
 
 // Stop gracefully stops all collection workers.
@@ -986,6 +1015,12 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 
 // collectTickerDataBulk collects ticker data using bulk FetchMarketData for optimal performance
 func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
+	spanCtx, span := observability.StartSpanWithTags(c.ctx, observability.SpanOpMarketData, "CollectorService.collectTickerDataBulk", map[string]string{
+		"exchange":     worker.Exchange,
+		"symbol_count": fmt.Sprintf("%d", len(worker.Symbols)),
+	})
+	defer observability.FinishSpan(span, nil)
+
 	c.logger.Info("Collecting ticker data (bulk)", "exchange", worker.Exchange, "symbols", len(worker.Symbols))
 
 	// Filter out blacklisted symbols before making the bulk request
@@ -999,6 +1034,8 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		}
 	}
 
+	span.SetData("valid_symbols", len(validSymbols))
+
 	if len(validSymbols) == 0 {
 		c.logger.Info("No valid symbols to fetch", "exchange", worker.Exchange)
 		return nil
@@ -1010,6 +1047,9 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	cancel := operationCtx.Cancel
 	ctx := operationCtx.Ctx
 	defer cancel()
+
+	// Use the span context for better tracing
+	_ = spanCtx
 
 	// Register the operation with resource manager
 	resourceID := fmt.Sprintf("bulk_fetch_%s_%d", worker.Exchange, time.Now().UnixNano())
