@@ -15,6 +15,12 @@ import (
 func TestHealthHandler_CurlHealthcheckCompatibility(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
 	mockCacheAnalytics := NewMockCacheAnalyticsService()
@@ -24,7 +30,7 @@ func TestHealthHandler_CurlHealthcheckCompatibility(t *testing.T) {
 	mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
 	mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
 
-	handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+	handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -39,24 +45,41 @@ func TestHealthHandler_CCXTServiceConnectivity(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
 	tests := []struct {
-		name          string
-		ccxtURL       string
+		name            string
+		setupServer     func() *httptest.Server
+		useBadURL       bool
 		expectUnhealthy bool
 	}{
 		{
-			name:          "ccxt_reachable",
-			ccxtURL:       "http://localhost:3001",
+			name: "ccxt_reachable",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				}))
+			},
+			useBadURL:       false,
 			expectUnhealthy: false,
 		},
 		{
-			name:          "ccxt_unreachable",
-			ccxtURL:       "http://localhost:9999",
+			name:            "ccxt_unreachable",
+			setupServer:     nil,
+			useBadURL:       true,
 			expectUnhealthy: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var url string
+			if tt.setupServer != nil {
+				ts := tt.setupServer()
+				defer ts.Close()
+				url = ts.URL
+			}
+			if tt.useBadURL {
+				url = "http://localhost:9999" // intentionally unreachable
+			}
+
 			mockDB := &MockDatabase{}
 			mockRedis := &MockRedisHealthClient{}
 			mockCacheAnalytics := NewMockCacheAnalyticsService()
@@ -66,7 +89,7 @@ func TestHealthHandler_CCXTServiceConnectivity(t *testing.T) {
 			mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
 			mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
 
-			handler := NewHealthHandler(mockDB, mockRedis, tt.ccxtURL, mockCacheAnalytics)
+			handler := NewHealthHandler(mockDB, mockRedis, url, mockCacheAnalytics)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", "/health", nil)
@@ -87,6 +110,12 @@ func TestHealthHandler_CCXTServiceConnectivity(t *testing.T) {
 }
 
 func TestHealthHandler_MissingTelegramToken(t *testing.T) {
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
 	tests := []struct {
 		name           string
 		telegramToken  string
@@ -117,7 +146,7 @@ func TestHealthHandler_MissingTelegramToken(t *testing.T) {
 
 			t.Setenv("TELEGRAM_BOT_TOKEN", tt.telegramToken)
 
-			handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+			handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", "/health", nil)
@@ -136,6 +165,12 @@ func TestHealthHandler_MissingTelegramToken(t *testing.T) {
 func TestHealthHandler_ServiceUnhealthyStatus(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
 	mockCacheAnalytics := NewMockCacheAnalyticsService()
@@ -145,7 +180,7 @@ func TestHealthHandler_ServiceUnhealthyStatus(t *testing.T) {
 	mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
 	mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
 
-	handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+	handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -165,13 +200,19 @@ func TestHealthHandler_ServiceUnhealthyStatus(t *testing.T) {
 func TestHealthHandler_ReadinessWithDBError(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
 	mockCacheAnalytics := NewMockCacheAnalyticsService()
 
 	mockDB.On("HealthCheck", mock.Anything).Return(assert.AnError)
 
-	handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+	handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/ready", nil)
@@ -183,10 +224,15 @@ func TestHealthHandler_ReadinessWithDBError(t *testing.T) {
 
 	mockDB.AssertExpectations(t)
 }
-}
 
 func TestHealthHandler_ContextTimeout(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
 
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
@@ -197,7 +243,7 @@ func TestHealthHandler_ContextTimeout(t *testing.T) {
 	mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
 	mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
 
-	handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+	handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -222,6 +268,12 @@ func TestHealthHandler_LivenessAlwaysHealthy(t *testing.T) {
 func TestHealthHandler_AllServicesHealthy(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
+	// Start a mock CCXT service
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
 	mockDB := &MockDatabase{}
 	mockRedis := &MockRedisHealthClient{}
 	mockCacheAnalytics := NewMockCacheAnalyticsService()
@@ -231,7 +283,7 @@ func TestHealthHandler_AllServicesHealthy(t *testing.T) {
 	mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
 	mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
 
-	handler := NewHealthHandler(mockDB, mockRedis, "http://localhost:3001", mockCacheAnalytics)
+	handler := NewHealthHandler(mockDB, mockRedis, ts.URL, mockCacheAnalytics)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/health", nil)
