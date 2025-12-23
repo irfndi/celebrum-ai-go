@@ -1190,7 +1190,9 @@ if (shouldAutoServe) {
       const server = Bun.serve({
         fetch: app.fetch,
         port: Number(PORT),
-        reusePort: true, // Enable SO_REUSEPORT for graceful restarts
+        // reusePort can cause EADDRINUSE on some Linux configurations
+        // Only enable if explicitly requested via environment variable
+        reusePort: process.env.BUN_REUSE_PORT === "true",
       });
       console.log(
         `✅ CCXT Service successfully started on port ${server.port}`,
