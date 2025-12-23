@@ -156,7 +156,11 @@ const getUserByChatId = (chatId: string) =>
   }>(`/api/v1/telegram/internal/users/${encodeURIComponent(chatId)}`, {}, true);
 
 const getNotificationPreference = (userId: string) =>
-  apiFetch<{ enabled: boolean; profit_threshold: number; alert_frequency: string }>(
+  apiFetch<{
+    enabled: boolean;
+    profit_threshold: number;
+    alert_frequency: string;
+  }>(
     `/api/v1/telegram/internal/notifications/${encodeURIComponent(userId)}`,
     {},
     true,
@@ -297,10 +301,18 @@ bot.command("status", async (ctx) => {
   const preference = userId
     ? await Effect.runPromise(
         Effect.catchAll(getNotificationPreference(String(userId)), () =>
-          Effect.succeed({ enabled: true, profit_threshold: 0.5, alert_frequency: "Every 5 minutes" }),
+          Effect.succeed({
+            enabled: true,
+            profit_threshold: 0.5,
+            alert_frequency: "Every 5 minutes",
+          }),
         ),
       )
-    : { enabled: true, profit_threshold: 0.5, alert_frequency: "Every 5 minutes" };
+    : {
+        enabled: true,
+        profit_threshold: 0.5,
+        alert_frequency: "Every 5 minutes",
+      };
 
   const createdAt = new Date(userResult.user.created_at).toLocaleDateString();
   const tier = userResult.user.subscription_tier;
@@ -325,19 +337,26 @@ bot.command("settings", async (ctx) => {
 
   // Fetch user for subscription tier
   const userResult = await Effect.runPromise(
-    Effect.catchAll(getUserByChatId(String(chatId)), () => Effect.succeed(null)),
+    Effect.catchAll(getUserByChatId(String(chatId)), () =>
+      Effect.succeed(null),
+    ),
   );
 
   const preference = await Effect.runPromise(
     Effect.catchAll(getNotificationPreference(String(userId)), () =>
-      Effect.succeed({ enabled: true, profit_threshold: 0.5, alert_frequency: "Immediate (Periodic Scan 5m)" }),
+      Effect.succeed({
+        enabled: true,
+        profit_threshold: 0.5,
+        alert_frequency: "Immediate (Periodic Scan 5m)",
+      }),
     ),
   );
 
   const statusIcon = preference.enabled ? "✅" : "❌";
   const statusText = preference.enabled ? "ON" : "OFF";
   const threshold = preference.profit_threshold ?? 0.5;
-  const frequency = preference.alert_frequency ?? "Immediate (Periodic Scan 5m)";
+  const frequency =
+    preference.alert_frequency ?? "Immediate (Periodic Scan 5m)";
   const tier = userResult?.user?.subscription_tier ?? "Free Tier";
 
   const msg =
