@@ -116,11 +116,12 @@ func (rm *ResourceManager) RegisterResource(id string, resourceType ResourceType
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
+	now := time.Now()
 	resource := &Resource{
 		ID:          id,
 		Type:        resourceType,
-		CreatedAt:   time.Now(),
-		LastUsed:    time.Now(),
+		CreatedAt:   now,
+		LastUsed:    now,
 		CleanupFunc: cleanupFunc,
 		Metadata:    metadata,
 	}
