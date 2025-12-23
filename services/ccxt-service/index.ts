@@ -72,23 +72,36 @@ type RuntimeConfig = {
 };
 
 const loadRuntimeConfig = Effect.try((): RuntimeConfig => {
-  const adminApiKey = process.env.ADMIN_API_KEY;
-  if (!adminApiKey) {
-    throw new Error("ADMIN_API_KEY environment variable must be set");
-  }
+  const adminApiKey = process.env.ADMIN_API_KEY || "";
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.env.SENTRY_ENVIRONMENT === "production";
 
-  if (
-    adminApiKey === "admin-secret-key-change-me" ||
-    adminApiKey === "admin-dev-key-change-in-production"
-  ) {
-    throw new Error(
-      "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.",
-    );
-  }
+  // Validate ADMIN_API_KEY only in production
+  if (isProduction) {
+    if (!adminApiKey) {
+      throw new Error(
+        "ADMIN_API_KEY environment variable must be set in production",
+      );
+    }
 
-  if (adminApiKey.length < 32) {
-    throw new Error(
-      "ADMIN_API_KEY must be at least 32 characters long for security",
+    if (
+      adminApiKey === "admin-secret-key-change-me" ||
+      adminApiKey === "admin-dev-key-change-in-production"
+    ) {
+      throw new Error(
+        "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.",
+      );
+    }
+
+    if (adminApiKey.length < 32) {
+      throw new Error(
+        "ADMIN_API_KEY must be at least 32 characters long for security",
+      );
+    }
+  } else if (!adminApiKey) {
+    console.warn(
+      "⚠️ WARNING: ADMIN_API_KEY is not set. Admin endpoints will be disabled.",
     );
   }
 
@@ -143,6 +156,18 @@ app.onError((err, c) => {
 
 // Authentication middleware for admin endpoints
 const adminAuth = async (c: any, next: any) => {
+  // If ADMIN_API_KEY is not configured, disable admin endpoints
+  if (!ADMIN_API_KEY) {
+    return c.json(
+      {
+        error: "Service Unavailable",
+        message: "Admin endpoints are disabled (ADMIN_API_KEY not set)",
+        timestamp: new Date().toISOString(),
+      },
+      503,
+    );
+  }
+
   const authHeader = c.req.header("Authorization");
   const apiKey = c.req.header("X-API-Key");
 

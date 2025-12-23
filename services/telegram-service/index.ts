@@ -37,23 +37,36 @@ const loadConfig = Effect.try((): TelegramConfig => {
     throw new Error("TELEGRAM_BOT_TOKEN environment variable must be set");
   }
 
-  const adminApiKey = process.env.ADMIN_API_KEY;
-  if (!adminApiKey) {
-    throw new Error("ADMIN_API_KEY environment variable must be set");
-  }
+  const adminApiKey = process.env.ADMIN_API_KEY || "";
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.env.SENTRY_ENVIRONMENT === "production";
 
-  if (
-    adminApiKey === "admin-secret-key-change-me" ||
-    adminApiKey === "admin-dev-key-change-in-production"
-  ) {
-    throw new Error(
-      "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.",
-    );
-  }
+  // Validate ADMIN_API_KEY only in production
+  if (isProduction) {
+    if (!adminApiKey) {
+      throw new Error(
+        "ADMIN_API_KEY environment variable must be set in production",
+      );
+    }
 
-  if (adminApiKey.length < 32) {
-    throw new Error(
-      "ADMIN_API_KEY must be at least 32 characters long for security",
+    if (
+      adminApiKey === "admin-secret-key-change-me" ||
+      adminApiKey === "admin-dev-key-change-in-production"
+    ) {
+      throw new Error(
+        "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.",
+      );
+    }
+
+    if (adminApiKey.length < 32) {
+      throw new Error(
+        "ADMIN_API_KEY must be at least 32 characters long for security",
+      );
+    }
+  } else if (!adminApiKey) {
+    console.warn(
+      "⚠️ WARNING: ADMIN_API_KEY is not set. Admin endpoints will be disabled.",
     );
   }
 
@@ -406,6 +419,14 @@ app.get("/health", (c) => {
 });
 
 app.post("/send-message", async (c) => {
+  // If ADMIN_API_KEY is not configured, disable admin endpoints
+  if (!config.adminApiKey) {
+    return c.json(
+      { error: "Admin endpoints are disabled (ADMIN_API_KEY not set)" },
+      503,
+    );
+  }
+
   const apiKey = c.req.header("X-API-Key");
   if (!apiKey || apiKey !== config.adminApiKey) {
     return c.json({ error: "Unauthorized" }, 401);

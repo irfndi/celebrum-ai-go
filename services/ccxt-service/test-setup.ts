@@ -13,6 +13,9 @@ if (!process.env.ADMIN_API_KEY || process.env.ADMIN_API_KEY.length < 32) {
 mock.module("ccxt", () => {
   class MockBinance {
     id = "binance";
+    name = "Binance";
+    countries = ["JP"];
+    urls = { www: "https://binance.com" };
     has: Record<string, boolean> = {
       fetchFundingRates: true,
       fetchFundingRate: true,

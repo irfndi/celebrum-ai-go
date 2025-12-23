@@ -1,5 +1,22 @@
-# Celebrum AI - Docker Compose for Local Development
+# Celebrum AI - Docker Compose for Local Development and Production
 # All services are built from the services/ directory
+#
+# Usage:
+#   Local development (with local postgres/redis):
+#     docker-compose --profile local up
+#
+#   Production/Coolify (with external databases):
+#     docker-compose up
+#
+# Environment variables:
+#   - DATABASE_HOST: PostgreSQL host (required for production)
+#   - DATABASE_PORT: PostgreSQL port (default: 5432)
+#   - DATABASE_USER: PostgreSQL user (default: postgres)
+#   - DATABASE_PASSWORD: PostgreSQL password (required)
+#   - DATABASE_DBNAME: Database name (default: celebrum)
+#   - REDIS_HOST: Redis host (required for production)
+#   - REDIS_PORT: Redis port (default: 6379)
+#   - ADMIN_API_KEY: API key for admin endpoints (required for production, 32+ chars)
 
 services:
   backend-api:
@@ -8,13 +25,14 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - DATABASE_HOST=${DATABASE_HOST}
+      - DATABASE_HOST=${DATABASE_HOST:-postgres}
       - DATABASE_PORT=${DATABASE_PORT:-5432}
-      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_USER=${DATABASE_USER:-postgres}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - DATABASE_DBNAME=${DATABASE_DBNAME}
-      - REDIS_HOST=${REDIS_HOST}
+      - DATABASE_DBNAME=${DATABASE_DBNAME:-celebrum}
+      - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PORT=8080
       - CCXT_SERVICE_URL=http://ccxt-service:3001
       - TELEGRAM_SERVICE_URL=http://telegram-service:3002
@@ -22,18 +40,23 @@ services:
       - EXTERNAL_CONNECTIONS_ENABLED=${EXTERNAL_CONNECTIONS_ENABLED:-false}
       - TELEGRAM_EXTERNAL_SERVICE=true
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - NODE_ENV=${NODE_ENV:-development}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-development}
+      - SENTRY_DSN=${SENTRY_DSN:-}
     networks:
       - default
       - coolify
     depends_on:
-      - ccxt-service
-      - telegram-service
-      - postgres
-      - redis
+      ccxt-service:
+        condition: service_started
+      telegram-service:
+        condition: service_started
 
+  # Local development database - only started with --profile local
   postgres:
     image: postgres:16-alpine
+    profiles: ["local"]
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
@@ -46,9 +69,16 @@ services:
     networks:
       - default
       - coolify
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Local development redis - only started with --profile local
   redis:
     image: redis:7-alpine
+    profiles: ["local"]
     restart: always
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -57,6 +87,11 @@ services:
     networks:
       - default
       - coolify
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ccxt-service:
     build:
@@ -65,10 +100,19 @@ services:
     restart: always
     environment:
       - PORT=3001
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - NODE_ENV=${NODE_ENV:-development}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-development}
+      - SENTRY_DSN=${SENTRY_DSN:-}
     networks:
       - default
       - coolify
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   telegram-service:
     build:
@@ -77,16 +121,26 @@ services:
     restart: always
     environment:
       - PORT=3002
+      - TELEGRAM_PORT=3002
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
-      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
       - TELEGRAM_USE_POLLING=${TELEGRAM_USE_POLLING:-true}
       - TELEGRAM_WEBHOOK_PATH=${TELEGRAM_WEBHOOK_PATH:-/telegram/webhook}
       - TELEGRAM_API_BASE_URL=http://backend-api:8080
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - NODE_ENV=${NODE_ENV:-development}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-development}
+      - SENTRY_DSN=${SENTRY_DSN:-}
     networks:
       - default
       - coolify
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   coolify:
