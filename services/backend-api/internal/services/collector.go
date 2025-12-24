@@ -2122,6 +2122,43 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	return exchangeID, nil
 }
 
+// isValidSymbolFormat validates that a symbol has a valid format before processing.
+// This filters out malformed symbols like ":" that some exchanges return.
+func isValidSymbolFormat(symbol string) bool {
+	// Reject empty or whitespace-only symbols
+	symbol = strings.TrimSpace(symbol)
+	if symbol == "" {
+		return false
+	}
+
+	// Reject symbols that are just separators (no actual currency data)
+	if symbol == ":" || symbol == "/" || symbol == "_" || symbol == "-" {
+		return false
+	}
+
+	// Check if symbol contains a valid separator with content on both sides
+	separators := []string{"/", ":", "_", "-"}
+	for _, sep := range separators {
+		if strings.Contains(symbol, sep) {
+			parts := strings.SplitN(symbol, sep, 2)
+			if len(parts) == 2 {
+				// Both parts must have content (not just whitespace)
+				base := strings.TrimSpace(parts[0])
+				quote := strings.TrimSpace(parts[1])
+				if len(base) > 0 && len(quote) > 0 {
+					return true
+				}
+				// If separator exists but parts are empty, it's invalid
+				return false
+			}
+		}
+	}
+
+	// Allow symbols without separators (some exchanges use concatenated format like BTCUSDT)
+	// Must be at least 3 characters (minimum viable symbol length)
+	return len(symbol) >= 3
+}
+
 // parseSymbol parses a trading symbol into base and quote currencies
 // Improved version with more robust parsing logic to handle various symbol formats
 func (c *CollectorService) parseSymbol(symbol string) (string, string) {
@@ -2244,10 +2281,10 @@ func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, er
 	}
 
 	// Since markets.Symbols is a slice of strings, we assume CCXT returns only active symbols
-	// Filter out empty strings and invalid formats
+	// Filter out empty strings and invalid formats (like ":" which some exchanges return)
 	var activeSymbols []string
 	for _, symbol := range markets.Symbols {
-		if symbol == "" {
+		if !isValidSymbolFormat(symbol) {
 			continue
 		}
 		activeSymbols = append(activeSymbols, symbol)

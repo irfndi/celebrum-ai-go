@@ -1395,3 +1395,109 @@ func (m *MockMarketPriceInterface) GetVolume() float64 {
 func (m *MockMarketPriceInterface) GetTimestamp() time.Time {
 	return m.timestamp
 }
+
+// TestIsValidSymbolFormat tests the isValidSymbolFormat function
+// that filters malformed symbols returned by some exchanges
+func TestIsValidSymbolFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		symbol   string
+		expected bool
+	}{
+		// Valid symbols with separators
+		{name: "valid BTC/USDT", symbol: "BTC/USDT", expected: true},
+		{name: "valid ETH/BTC", symbol: "ETH/BTC", expected: true},
+		{name: "valid XRP:USD", symbol: "XRP:USD", expected: true},
+		{name: "valid BTC_USDT", symbol: "BTC_USDT", expected: true},
+		{name: "valid ETH-USD", symbol: "ETH-USD", expected: true},
+		{name: "valid with numbers SOL/USDT", symbol: "SOL/USDT", expected: true},
+		{name: "valid perpetual BTC/USDT:USDT", symbol: "BTC/USDT:USDT", expected: true},
+
+		// Valid symbols without separators (concatenated format)
+		{name: "valid concatenated BTCUSDT", symbol: "BTCUSDT", expected: true},
+		{name: "valid concatenated ETHBTC", symbol: "ETHBTC", expected: true},
+		{name: "valid short 3 char", symbol: "ABC", expected: true},
+
+		// Invalid - empty or whitespace
+		{name: "invalid empty", symbol: "", expected: false},
+		{name: "invalid space", symbol: " ", expected: false},
+		{name: "invalid spaces", symbol: "   ", expected: false},
+		{name: "invalid tab", symbol: "\t", expected: false},
+		{name: "invalid newline", symbol: "\n", expected: false},
+
+		// Invalid - just separators (the bug we're fixing)
+		{name: "invalid colon only", symbol: ":", expected: false},
+		{name: "invalid slash only", symbol: "/", expected: false},
+		{name: "invalid underscore only", symbol: "_", expected: false},
+		{name: "invalid hyphen only", symbol: "-", expected: false},
+
+		// Invalid - separator with empty parts
+		{name: "invalid BTC/", symbol: "BTC/", expected: false},
+		{name: "invalid /USDT", symbol: "/USDT", expected: false},
+		{name: "invalid BTC:", symbol: "BTC:", expected: false},
+		{name: "invalid :USDT", symbol: ":USDT", expected: false},
+		{name: "invalid _USDT", symbol: "_USDT", expected: false},
+		{name: "invalid BTC_", symbol: "BTC_", expected: false},
+		{name: "invalid -USD", symbol: "-USD", expected: false},
+		{name: "invalid BTC-", symbol: "BTC-", expected: false},
+
+		// Invalid - whitespace around separators
+		{name: "invalid space/USDT", symbol: " /USDT", expected: false},
+		{name: "invalid BTC/ space", symbol: "BTC/ ", expected: false},
+
+		// Invalid - too short without separator
+		{name: "invalid too short A", symbol: "A", expected: false},
+		{name: "invalid too short AB", symbol: "AB", expected: false},
+
+		// Edge cases
+		{name: "valid with whitespace trimmed", symbol: " BTC/USDT ", expected: true},
+		{name: "valid lowercase", symbol: "btc/usdt", expected: true},
+		{name: "valid mixed case", symbol: "BtC/UsDt", expected: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidSymbolFormat(tt.symbol)
+			assert.Equal(t, tt.expected, result, "isValidSymbolFormat(%q) = %v, want %v", tt.symbol, result, tt.expected)
+		})
+	}
+}
+
+// TestIsValidSymbolFormat_EdgeCases tests additional edge cases for symbol validation
+func TestIsValidSymbolFormat_EdgeCases(t *testing.T) {
+	// Test symbols seen in production logs
+	productionInvalidSymbols := []string{
+		":",        // Most common issue from some exchanges
+		"/",        // Also seen occasionally
+		"",         // Empty strings
+		" ",        // Whitespace
+		"BTC/",     // Missing quote currency
+		"/USDT",    // Missing base currency
+		"::",       // Double separator
+	}
+
+	for _, symbol := range productionInvalidSymbols {
+		t.Run(fmt.Sprintf("production_invalid_%q", symbol), func(t *testing.T) {
+			result := isValidSymbolFormat(symbol)
+			assert.False(t, result, "Symbol %q should be invalid", symbol)
+		})
+	}
+
+	// Test symbols that should always be valid
+	productionValidSymbols := []string{
+		"BTC/USDT",
+		"ETH/BTC",
+		"SOL/USD",
+		"DOGE/USDT",
+		"XRP/EUR",
+		"BTC/USDT:USDT", // Perpetual format
+		"BTCUSDT",       // Concatenated format
+	}
+
+	for _, symbol := range productionValidSymbols {
+		t.Run(fmt.Sprintf("production_valid_%s", symbol), func(t *testing.T) {
+			result := isValidSymbolFormat(symbol)
+			assert.True(t, result, "Symbol %q should be valid", symbol)
+		})
+	}
+}
