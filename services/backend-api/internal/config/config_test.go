@@ -511,6 +511,42 @@ func TestConfig_DockerEnvironmentDefaults(t *testing.T) {
 		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
 	})
 
+	t.Run("Coolify detection via COOLIFY_CONTAINER_NAME", func(t *testing.T) {
+		os.Clearenv()
+
+		// Coolify sets COOLIFY_CONTAINER_NAME but not COOLIFY=true
+		t.Setenv("COOLIFY_CONTAINER_NAME", "backend-api-mc88g0gcw8w4o8cok8kooc0w-pr-80")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names when COOLIFY_CONTAINER_NAME is set
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://telegram-service:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "telegram-service:50052", config.Telegram.GrpcAddress)
+	})
+
+	t.Run("Coolify detection via COOLIFY_RESOURCE_UUID", func(t *testing.T) {
+		os.Clearenv()
+
+		// Coolify also sets COOLIFY_RESOURCE_UUID
+		t.Setenv("COOLIFY_RESOURCE_UUID", "mc88g0gcw8w4o8cok8kooc0w")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names when COOLIFY_RESOURCE_UUID is set
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://telegram-service:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "telegram-service:50052", config.Telegram.GrpcAddress)
+	})
+
 	t.Run("Non-Docker environment uses localhost", func(t *testing.T) {
 		os.Clearenv()
 

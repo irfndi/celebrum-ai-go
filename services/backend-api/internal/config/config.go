@@ -385,7 +385,12 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT - Use Docker service names when running in Docker/Coolify
-	isDocker := os.Getenv("DOCKER_ENVIRONMENT") == "true" || os.Getenv("COOLIFY") == "true"
+	// Detect Coolify environment by checking for COOLIFY_* variables
+	// Coolify sets COOLIFY_CONTAINER_NAME, COOLIFY_RESOURCE_UUID, etc., not just COOLIFY=true
+	isCoolify := os.Getenv("COOLIFY_CONTAINER_NAME") != "" ||
+		os.Getenv("COOLIFY_RESOURCE_UUID") != "" ||
+		os.Getenv("COOLIFY") == "true"
+	isDocker := os.Getenv("DOCKER_ENVIRONMENT") == "true" || isCoolify
 	if isDocker {
 		viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
 		viper.SetDefault("ccxt.grpc_address", "ccxt-service:50051")
