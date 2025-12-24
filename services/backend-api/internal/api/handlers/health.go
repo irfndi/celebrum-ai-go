@@ -144,8 +144,12 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	servicesStatus["ccxt"] = ccxtStatus
 
-	// Check Telegram bot configuration
-	if os.Getenv("TELEGRAM_BOT_TOKEN") == "" {
+	// Check Telegram bot configuration - support both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if telegramToken == "" {
+		telegramToken = os.Getenv("TELEGRAM_TOKEN")
+	}
+	if telegramToken == "" {
 		servicesStatus["telegram"] = "unhealthy: TELEGRAM_BOT_TOKEN not set"
 		span.SetTag("telegram.status", "not_configured")
 	} else {

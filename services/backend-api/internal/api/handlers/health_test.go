@@ -277,6 +277,101 @@ func TestHealthHandler_CCXTServiceZeroExchanges(t *testing.T) {
 	assert.Contains(t, err.Error(), "no active exchanges")
 }
 
+func TestHealthHandler_TelegramTokenDetection(t *testing.T) {
+	// Test that Telegram health check supports both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN env vars
+
+	tests := []struct {
+		name           string
+		botToken       string
+		token          string
+		expectedStatus string
+	}{
+		{
+			name:           "TELEGRAM_BOT_TOKEN set",
+			botToken:       "test-bot-token",
+			token:          "",
+			expectedStatus: "healthy",
+		},
+		{
+			name:           "TELEGRAM_TOKEN set (fallback)",
+			botToken:       "",
+			token:          "test-fallback-token",
+			expectedStatus: "healthy",
+		},
+		{
+			name:           "both tokens set - BOT_TOKEN takes precedence",
+			botToken:       "primary-token",
+			token:          "fallback-token",
+			expectedStatus: "healthy",
+		},
+		{
+			name:           "no token set",
+			botToken:       "",
+			token:          "",
+			expectedStatus: "unhealthy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up mock CCXT server
+			mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":50,"exchange_connectivity":"configured"}`))
+			}))
+			if mockCCXTServer == nil {
+				return
+			}
+			defer mockCCXTServer.Close()
+
+			// Set environment variables for this test
+			if tt.botToken != "" {
+				t.Setenv("TELEGRAM_BOT_TOKEN", tt.botToken)
+			}
+			if tt.token != "" {
+				t.Setenv("TELEGRAM_TOKEN", tt.token)
+			}
+
+			mockDB := &MockDatabase{}
+			mockRedis := &MockRedisHealthClient{}
+			mockCacheAnalytics := NewMockCacheAnalyticsService()
+
+			mockDB.On("HealthCheck", mock.Anything).Return(nil)
+			mockRedis.On("HealthCheck", mock.Anything).Return(nil)
+			mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
+			mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
+
+			handler := NewHealthHandler(mockDB, mockRedis, mockCCXTServer.URL, mockCacheAnalytics)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/health", nil)
+
+			handler.HealthCheck(w, req)
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			assert.NoError(t, err)
+
+			services, ok := response["services"].(map[string]interface{})
+			assert.True(t, ok, "services should be a map")
+
+			telegramStatus, ok := services["telegram"].(string)
+			assert.True(t, ok, "telegram status should be a string")
+
+			if tt.expectedStatus == "healthy" {
+				assert.Equal(t, "healthy", telegramStatus, "telegram should be healthy when token is set")
+				assert.Equal(t, http.StatusOK, w.Code)
+			} else {
+				assert.Contains(t, telegramStatus, "unhealthy", "telegram should be unhealthy when no token is set")
+			}
+
+			mockDB.AssertExpectations(t)
+			mockRedis.AssertExpectations(t)
+			mockCacheAnalytics.AssertExpectations(t)
+		})
+	}
+}
+
 // newTestServerOrSkip starts an httptest.Server, skipping the test when binding is not permitted.
 func newTestServerOrSkip(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()
