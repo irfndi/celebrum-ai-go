@@ -47,14 +47,13 @@ type SignalProcessor struct {
 
 	// Processing state
 	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	running        bool
-	mu             sync.RWMutex
-	metrics        *ProcessingMetrics
-	lastRun        time.Time
-	errorCount     int
-	rateLimitCache map[string]time.Time
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	running    bool
+	mu         sync.RWMutex
+	metrics    *ProcessingMetrics
+	lastRun    time.Time
+	errorCount int
 }
 
 // ProcessingMetrics tracks performance statistics of the signal processing pipeline.
@@ -854,14 +853,15 @@ func (sp *SignalProcessor) extractExchanges(signal *AggregatedSignal) []string {
 }
 
 // handleProcessingResultsWithContext handles the results of signal processing (store in DB, notification, metrics)
-func (sp *SignalProcessor) handleProcessingResultsWithContext(ctx context.Context, results []ProcessingResult) error {
+func (sp *SignalProcessor) handleProcessingResultsWithContext(_ context.Context, results []ProcessingResult) error {
 	// Implement result handling logic (save to DB, notify if high quality)
-	// Placeholder stub
 	for _, result := range results {
 		if result.Processed && result.QualityScore > sp.config.QualityThreshold {
-			// Trigger notification
+			// TODO: Implement notification logic when notification service is ready
+			// For now, just log high-quality signals
 			if sp.config.NotificationEnabled && sp.notificationService != nil {
-				// sp.notificationService.SendSignalNotification(...)
+				sp.logger.Debug("High quality signal detected, notification would be sent",
+					"signal_id", result.SignalID, "symbol", result.Symbol, "quality", result.QualityScore)
 			}
 		}
 	}

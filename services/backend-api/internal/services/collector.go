@@ -1040,9 +1040,6 @@ func (c *CollectorService) runWorker(worker *Worker) {
 					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
 					intervalIncreased = true
 					degradationStartTime = time.Now()
-					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
-					intervalIncreased = true
-					degradationStartTime = time.Now()
 					c.logger.WithFields(map[string]interface{}{
 						"exchange":     worker.Exchange,
 						"new_interval": c.tickerInterval * 2,
@@ -1077,8 +1074,6 @@ func (c *CollectorService) runWorker(worker *Worker) {
 					ticker = time.NewTicker(c.tickerInterval)
 					intervalIncreased = false
 					degradationStartTime = time.Time{}
-					intervalIncreased = false
-					degradationStartTime = time.Time{}
 					c.logger.WithFields(map[string]interface{}{
 						"exchange": worker.Exchange,
 						"interval": c.tickerInterval,
@@ -1091,13 +1086,11 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				ticker.Stop()
 				ticker = time.NewTicker(c.tickerInterval)
 				intervalIncreased = false
-				ticker = time.NewTicker(c.tickerInterval)
-				intervalIncreased = false
+				degradationStartTime = time.Time{}
 				c.logger.WithFields(map[string]interface{}{
 					"exchange":          worker.Exchange,
 					"degraded_duration": time.Since(degradationStartTime),
 				}).Warn("Degradation timeout reached, forcing interval restoration")
-				degradationStartTime = time.Time{}
 			}
 
 			// Check if it's time to collect funding rates (separate interval)

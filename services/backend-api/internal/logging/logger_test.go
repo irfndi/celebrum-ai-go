@@ -170,10 +170,9 @@ func TestStandardLogger_WithMetrics(t *testing.T) {
 	metricMap, ok := fields["metrics"].(map[string]interface{})
 	if ok {
 		assert.Equal(t, 150, metricMap["duration_ms"])
-	} else {
-		// Can fail if zap encodes differently (e.g. strict JSON).
-		// ContextMap tries to unmarshal.
 	}
+	// Note: Test may not assert if zap encodes differently (e.g. strict JSON).
+	// ContextMap tries to unmarshal. We only check if the cast succeeds.
 }
 
 func TestStandardLogger_LogStartup(t *testing.T) {
