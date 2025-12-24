@@ -434,6 +434,20 @@ func initializeSymbolCache(redisClient *redis.Client, logger logging.Logger) Sym
 	return NewSymbolCache(1*time.Hour, logger)
 }
 
+// getExchangeCCXTCircuitBreaker returns a per-exchange circuit breaker for CCXT operations.
+// This prevents failures on one exchange from affecting all other exchanges.
+func (c *CollectorService) getExchangeCCXTCircuitBreaker(exchange string) *CircuitBreaker {
+	name := fmt.Sprintf("ccxt:%s", exchange)
+	config := CircuitBreakerConfig{
+		FailureThreshold: 20,             // Allow more failures per exchange before opening
+		SuccessThreshold: 3,              // Require 3 successes to close from half-open
+		Timeout:          30 * time.Second, // Wait 30s before trying half-open
+		MaxRequests:      10,             // Allow 10 requests in half-open state
+		ResetTimeout:     60 * time.Second, // Reset failure count after 60s of no failures
+	}
+	return c.circuitBreakerManager.GetOrCreate(name, config)
+}
+
 // NewCollectorService creates a new market data collector service.
 //
 // Parameters:
@@ -514,20 +528,22 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	// Get optimal concurrency settings
 	optimalConcurrency := resourceOptimizer.GetOptimalConcurrency()
 
-	// Configure circuit breakers with dynamic limits
+	// Configure circuit breakers with appropriate thresholds
+	// Note: CCXT uses per-exchange circuit breakers (see getExchangeCCXTCircuitBreaker),
+	// but we keep a global fallback with higher thresholds for safety
 	ccxtConfig := CircuitBreakerConfig{
-		FailureThreshold: 5,
-		SuccessThreshold: 2,
-		Timeout:          10 * time.Second,
+		FailureThreshold: 50,             // High threshold - per-exchange breakers handle individual exchanges
+		SuccessThreshold: 3,
+		Timeout:          30 * time.Second,
 		MaxRequests:      optimalConcurrency.MaxCircuitBreakerCalls,
-		ResetTimeout:     30 * time.Second,
+		ResetTimeout:     60 * time.Second,
 	}
 	redisConfig := CircuitBreakerConfig{
-		FailureThreshold: 3,
-		SuccessThreshold: 2,
-		Timeout:          5 * time.Second,
+		FailureThreshold: 10,             // Redis should have higher tolerance
+		SuccessThreshold: 3,
+		Timeout:          15 * time.Second,
 		MaxRequests:      optimalConcurrency.MaxCircuitBreakerCalls / 2,
-		ResetTimeout:     15 * time.Second,
+		ResetTimeout:     30 * time.Second,
 	}
 
 	circuitBreakerManager.GetOrCreate("ccxt", ccxtConfig)
@@ -1233,9 +1249,10 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
+	// Use per-exchange circuit breaker for CCXT service call with retry logic
+	// This prevents failures on one exchange from blocking all other exchanges
 	var marketData []models.MarketPrice
-	err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+	err := c.getExchangeCCXTCircuitBreaker(worker.Exchange).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_bulk_fetch", func() error {
 			// Fetch bulk market data for a single exchange across symbols
 			var fetchErr error
@@ -1363,8 +1380,8 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		default:
 		}
 
-		// Use circuit breaker for direct collection with retry logic
-		err := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+		// Use per-exchange circuit breaker for direct collection with retry logic
+		err := c.getExchangeCCXTCircuitBreaker(worker.Exchange).Execute(ctx, func(ctx context.Context) error {
 			return c.errorRecoveryManager.ExecuteWithRetry(ctx, "sequential_ticker_fetch", func() error {
 				return c.collectTickerDataDirect(worker.Exchange, symbol)
 			})
@@ -1584,9 +1601,9 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
+	// Use per-exchange circuit breaker for CCXT service call with retry logic
 	var ticker *models.MarketPrice
-	cbErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+	cbErr := c.getExchangeCCXTCircuitBreaker(exchange).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_single_fetch", func() error {
 			var retryErr error
 			var resp ccxt.MarketPriceInterface
@@ -1686,9 +1703,9 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 		}
 	}()
 
-	// Use circuit breaker for CCXT service call with retry logic
+	// Use per-exchange circuit breaker for CCXT service call with retry logic
 	var fundingRates []ccxt.FundingRate
-	fetchErr := c.circuitBreakerManager.GetOrCreate("ccxt", CircuitBreakerConfig{}).Execute(ctx, func(ctx context.Context) error {
+	fetchErr := c.getExchangeCCXTCircuitBreaker(worker.Exchange).Execute(ctx, func(ctx context.Context) error {
 		return c.errorRecoveryManager.ExecuteWithRetry(ctx, "ccxt_funding_rates", func() error {
 			var retryErr error
 			fundingRates, retryErr = c.ccxtService.FetchAllFundingRates(ctx, worker.Exchange)
