@@ -139,10 +139,27 @@ func run() error {
 
 	// Initialize collector service
 	collectorService := services.NewCollectorService(db, ccxtService, cfg, getRedisClient(), blacklistCache)
+
+	// Verify database has required seed data before starting collection
+	if err := collectorService.VerifyDatabaseSeeding(); err != nil {
+		logrusLogger.WithError(err).Warn("Database seeding verification failed - collection may not work correctly")
+		// Don't fail startup, but log warning - exchanges may be created dynamically
+	}
+
 	if err := collectorService.Start(); err != nil {
 		logrusLogger.WithError(err).Fatal("Failed to start collector service")
 	}
 	defer collectorService.Stop()
+
+	// Wait for first market data before starting dependent services
+	// This prevents arbitrage from running with no data (exchanges=0 issue)
+	logrusLogger.Info("Waiting for initial market data collection...")
+	if err := collectorService.WaitForFirstData(2 * time.Minute); err != nil {
+		logrusLogger.WithError(err).Warn("Timeout waiting for first market data - starting dependent services anyway")
+		// Don't fail startup, but log warning - services will retry on next collection
+	} else {
+		logrusLogger.Info("Initial market data collected successfully")
+	}
 
 	// Initialize support services for futures arbitrage and cleanup
 	resourceManager := services.NewResourceManager(logrusLogger)

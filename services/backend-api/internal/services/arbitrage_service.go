@@ -496,6 +496,12 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 	}
 
 	s.logger.WithField("exchanges", len(marketData)).Info("Market data retrieved")
+
+	// If no market data found, run diagnostics to understand why
+	if len(marketData) == 0 {
+		s.diagnoseNoMarketData()
+	}
+
 	for exchange, data := range marketData {
 		s.logger.WithFields(logrus.Fields{
 			"exchange": exchange,
@@ -504,6 +510,66 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 	}
 
 	return marketData, nil
+}
+
+// diagnoseNoMarketData logs diagnostic information when no market data is available.
+// This helps identify the root cause: missing data, stale data, or database seeding issues.
+func (s *ArbitrageService) diagnoseNoMarketData() {
+	var totalRows, freshRows, activeExchanges, activePairs int
+
+	// Check total market_data rows
+	err := s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM market_data").Scan(&totalRows)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count market_data rows")
+		totalRows = -1
+	}
+
+	// Check fresh market_data rows (within 10 minutes)
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM market_data WHERE timestamp >= NOW() - INTERVAL '10 minutes'").Scan(&freshRows)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count fresh market_data rows")
+		freshRows = -1
+	}
+
+	// Check active exchanges
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&activeExchanges)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count active exchanges")
+		activeExchanges = -1
+	}
+
+	// Check active trading pairs
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM trading_pairs WHERE is_active = true").Scan(&activePairs)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count active trading pairs")
+		activePairs = -1
+	}
+
+	// Log comprehensive diagnostic
+	s.logger.WithFields(logrus.Fields{
+		"total_market_data_rows":   totalRows,
+		"fresh_rows_10min":         freshRows,
+		"active_exchanges":         activeExchanges,
+		"active_trading_pairs":     activePairs,
+		"diagnostic_recommendation": s.getDiagnosticRecommendation(totalRows, freshRows, activeExchanges, activePairs),
+	}).Warn("Market data diagnostic - no data available for arbitrage")
+}
+
+// getDiagnosticRecommendation returns a human-readable recommendation based on the counts.
+func (s *ArbitrageService) getDiagnosticRecommendation(totalRows, freshRows, activeExchanges, activePairs int) string {
+	if activeExchanges == 0 {
+		return "No active exchanges in database - check migrations and seeding"
+	}
+	if activePairs == 0 {
+		return "No active trading pairs - collector may not have created pairs yet"
+	}
+	if totalRows == 0 {
+		return "No market data at all - collector has not saved any data yet"
+	}
+	if freshRows == 0 {
+		return "Market data exists but is stale (>10min old) - collector may be failing"
+	}
+	return "Unknown issue - data exists but query returned nothing"
 }
 
 // filterOpportunities filters arbitrage opportunities based on configuration thresholds

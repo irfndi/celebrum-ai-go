@@ -383,9 +383,11 @@ type CollectorService struct {
 	symbolRefreshInterval time.Duration
 	fundingRateInterval   time.Duration
 	// Readiness state
-	isInitialized bool
-	isReady       bool
-	readinessMu   sync.RWMutex
+	isInitialized      bool
+	isReady            bool
+	hasCollectedData   bool           // Tracks if first data has been collected
+	dataReadyChan      chan struct{}  // Signals when first data collection completes
+	readinessMu        sync.RWMutex
 	// Error recovery components
 	circuitBreakerManager *CircuitBreakerManager
 	errorRecoveryManager  *ErrorRecoveryManager
@@ -549,6 +551,8 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		tickerInterval:        tickerInterval,
 		symbolRefreshInterval: symbolRefreshInterval,
 		fundingRateInterval:   fundingRateInterval,
+		// Initialize data readiness signaling
+		dataReadyChan: make(chan struct{}),
 		// Initialize error recovery components
 		circuitBreakerManager: circuitBreakerManager,
 		errorRecoveryManager:  errorRecoveryManager,
@@ -741,6 +745,81 @@ func (c *CollectorService) GetReadinessStatus() (initialized bool, ready bool) {
 	c.readinessMu.RLock()
 	defer c.readinessMu.RUnlock()
 	return c.isInitialized, c.isReady
+}
+
+// WaitForFirstData blocks until the first market data is collected or timeout expires.
+// This should be called after Start() to ensure data is available before dependent services begin.
+//
+// Parameters:
+//
+//	timeout: Maximum time to wait for first data collection.
+//
+// Returns:
+//
+//	error: nil if data was collected, or an error if timeout/context cancelled.
+func (c *CollectorService) WaitForFirstData(timeout time.Duration) error {
+	c.logger.Info("Waiting for first market data collection...", "timeout", timeout)
+
+	select {
+	case <-c.dataReadyChan:
+		c.logger.Info("First market data collected successfully")
+		return nil
+	case <-time.After(timeout):
+		c.logger.Warn("Timeout waiting for first market data collection", "timeout", timeout)
+		return fmt.Errorf("timeout waiting for first data collection after %v", timeout)
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	}
+}
+
+// HasCollectedData returns true if any market data has been collected.
+func (c *CollectorService) HasCollectedData() bool {
+	c.readinessMu.RLock()
+	defer c.readinessMu.RUnlock()
+	return c.hasCollectedData
+}
+
+// VerifyDatabaseSeeding checks that the database has the required seed data for
+// market data collection and arbitrage calculations to work correctly.
+// This includes active exchanges and active trading pairs.
+//
+// Returns:
+//
+//	error: nil if database is properly seeded, or descriptive error otherwise.
+func (c *CollectorService) VerifyDatabaseSeeding() error {
+	var exchangeCount, tradingPairCount int
+
+	// Check exchanges with status='active'
+	err := c.db.Pool.QueryRow(c.ctx,
+		"SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&exchangeCount)
+	if err != nil {
+		c.logger.Error("Failed to query active exchanges", "error", err)
+		return fmt.Errorf("failed to query active exchanges: %w", err)
+	}
+
+	if exchangeCount == 0 {
+		c.logger.Error("No active exchanges in database - arbitrage will not work", "count", exchangeCount)
+		return fmt.Errorf("database not seeded: 0 active exchanges (need at least 1)")
+	}
+
+	// Check trading_pairs with is_active=true
+	err = c.db.Pool.QueryRow(c.ctx,
+		"SELECT COUNT(*) FROM trading_pairs WHERE is_active = true").Scan(&tradingPairCount)
+	if err != nil {
+		c.logger.Error("Failed to query active trading pairs", "error", err)
+		return fmt.Errorf("failed to query active trading pairs: %w", err)
+	}
+
+	// Trading pairs may be 0 on first startup (they get created during collection)
+	// This is a warning, not an error
+	if tradingPairCount == 0 {
+		c.logger.Warn("No active trading pairs in database yet - will be created during collection", "count", tradingPairCount)
+	}
+
+	c.logger.Info("Database seeding verified",
+		"active_exchanges", exchangeCount,
+		"active_trading_pairs", tradingPairCount)
+	return nil
 }
 
 // createWorker creates and starts a worker for a specific exchange
@@ -1308,9 +1387,9 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	// These fields are reserved for future implementation when order book data is integrated.
 	_, err = c.db.Pool.Exec(c.ctx,
 		`INSERT INTO market_data (
-			exchange_id, trading_pair_id, 
+			exchange_id, trading_pair_id,
 			bid, bid_volume, ask, ask_volume,
-			last_price, volume_24h, 
+			last_price, volume_24h,
 			timestamp, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		exchangeID, tradingPairID,
@@ -1320,6 +1399,18 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	if err != nil {
 		return fmt.Errorf("failed to save market data: %w", err)
 	}
+
+	// Signal first data collected (only once) - allows dependent services to start
+	c.readinessMu.Lock()
+	if !c.hasCollectedData {
+		c.hasCollectedData = true
+		close(c.dataReadyChan) // Signal all waiting goroutines
+		c.logger.Info("First market data saved successfully",
+			"exchange", ticker.ExchangeName,
+			"symbol", ticker.Symbol,
+			"price", ticker.Price)
+	}
+	c.readinessMu.Unlock()
 
 	return nil
 }
@@ -2215,28 +2306,77 @@ func (c *CollectorService) PerformBackfillIfNeeded() error {
 	return nil
 }
 
-// checkIfBackfillNeeded determines if backfill is required based on available data
+// checkIfBackfillNeeded determines if backfill is required based on available data.
+// It checks if any active exchange has recent market data (within the last hour).
+// This is more robust than just counting total records - it ensures each exchange has coverage.
 func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
-	thresholdTime := time.Now().Add(-time.Duration(c.backfillConfig.MinDataThresholdHours) * time.Hour)
-
-	// Check if we have recent market data within the threshold
-	var count int
+	// First, check if we have any active exchanges at all
+	var activeExchangeCount int
 	err := c.db.Pool.QueryRow(c.ctx,
-		"SELECT COUNT(*) FROM market_data WHERE timestamp >= $1",
-		thresholdTime).Scan(&count)
+		"SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&activeExchangeCount)
 	if err != nil {
-		return false, fmt.Errorf("failed to check market data count: %w", err)
+		c.logger.Warn("Failed to count active exchanges, assuming backfill needed", "error", err)
+		return true, nil // Assume backfill needed if we can't check
 	}
 
-	c.logger.Info("Market data availability check", "records_found", count, "threshold_hours", c.backfillConfig.MinDataThresholdHours, "threshold_time", thresholdTime.Format("2006-01-02 15:04"))
+	if activeExchangeCount == 0 {
+		c.logger.Info("No active exchanges in database, backfill will create them")
+		return true, nil
+	}
 
-	// If we have less than 100 records in the threshold period, we need backfill
+	// Check if ANY active exchange has data in the last hour
+	// This is more lenient than requiring ALL exchanges to have data
+	var exchangesWithRecentData int
+	err = c.db.Pool.QueryRow(c.ctx, `
+		SELECT COUNT(DISTINCT md.exchange_id)
+		FROM market_data md
+		JOIN exchanges e ON md.exchange_id = e.id
+		WHERE md.timestamp >= NOW() - INTERVAL '1 hour'
+		  AND e.status = 'active'
+	`).Scan(&exchangesWithRecentData)
+	if err != nil {
+		c.logger.Warn("Failed to check exchanges with recent data, assuming backfill needed", "error", err)
+		return true, nil
+	}
+
+	// Also check total records in threshold period for context
+	thresholdTime := time.Now().Add(-time.Duration(c.backfillConfig.MinDataThresholdHours) * time.Hour)
+	var totalRecords int
+	err = c.db.Pool.QueryRow(c.ctx,
+		"SELECT COUNT(*) FROM market_data WHERE timestamp >= $1",
+		thresholdTime).Scan(&totalRecords)
+	if err != nil {
+		c.logger.Warn("Failed to count market data records", "error", err)
+		totalRecords = 0
+	}
+
+	c.logger.Info("Market data availability check",
+		"active_exchanges", activeExchangeCount,
+		"exchanges_with_recent_data", exchangesWithRecentData,
+		"total_records_in_threshold", totalRecords,
+		"threshold_hours", c.backfillConfig.MinDataThresholdHours,
+		"threshold_time", thresholdTime.Format("2006-01-02 15:04"))
+
+	// Need backfill if:
+	// 1. No exchanges have any recent data (last hour), OR
+	// 2. Total records are below minimum threshold (for edge cases)
 	minRecordsThreshold := 100
-	needsBackfill := count < minRecordsThreshold
+	needsBackfill := exchangesWithRecentData == 0 || totalRecords < minRecordsThreshold
+
 	if needsBackfill {
-		c.logger.Info("Backfill required", "records_found", count, "minimum_required", minRecordsThreshold)
+		reason := "insufficient records"
+		if exchangesWithRecentData == 0 {
+			reason = "no exchanges with recent data"
+		}
+		c.logger.Info("Backfill required",
+			"reason", reason,
+			"exchanges_with_data", exchangesWithRecentData,
+			"total_records", totalRecords,
+			"minimum_required", minRecordsThreshold)
 	} else {
-		c.logger.Info("Sufficient data available", "records_found", count, "minimum_required", minRecordsThreshold)
+		c.logger.Info("Sufficient data available - skipping backfill",
+			"exchanges_with_data", exchangesWithRecentData,
+			"total_records", totalRecords)
 	}
 
 	return needsBackfill, nil
