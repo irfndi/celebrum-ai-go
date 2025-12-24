@@ -439,10 +439,10 @@ func initializeSymbolCache(redisClient *redis.Client, logger logging.Logger) Sym
 func (c *CollectorService) getExchangeCCXTCircuitBreaker(exchange string) *CircuitBreaker {
 	name := fmt.Sprintf("ccxt:%s", exchange)
 	config := CircuitBreakerConfig{
-		FailureThreshold: 20,             // Allow more failures per exchange before opening
-		SuccessThreshold: 3,              // Require 3 successes to close from half-open
+		FailureThreshold: 20,               // Allow more failures per exchange before opening
+		SuccessThreshold: 3,                // Require 3 successes to close from half-open
 		Timeout:          30 * time.Second, // Wait 30s before trying half-open
-		MaxRequests:      10,             // Allow 10 requests in half-open state
+		MaxRequests:      10,               // Allow 10 requests in half-open state
 		ResetTimeout:     60 * time.Second, // Reset failure count after 60s of no failures
 	}
 	return c.circuitBreakerManager.GetOrCreate(name, config)
@@ -532,14 +532,14 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	// Note: CCXT uses per-exchange circuit breakers (see getExchangeCCXTCircuitBreaker),
 	// but we keep a global fallback with higher thresholds for safety
 	ccxtConfig := CircuitBreakerConfig{
-		FailureThreshold: 50,             // High threshold - per-exchange breakers handle individual exchanges
+		FailureThreshold: 50, // High threshold - per-exchange breakers handle individual exchanges
 		SuccessThreshold: 3,
 		Timeout:          30 * time.Second,
 		MaxRequests:      optimalConcurrency.MaxCircuitBreakerCalls,
 		ResetTimeout:     60 * time.Second,
 	}
 	redisConfig := CircuitBreakerConfig{
-		FailureThreshold: 10,             // Redis should have higher tolerance
+		FailureThreshold: 10, // Redis should have higher tolerance
 		SuccessThreshold: 3,
 		Timeout:          15 * time.Second,
 		MaxRequests:      optimalConcurrency.MaxCircuitBreakerCalls / 2,
