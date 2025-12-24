@@ -1480,6 +1480,15 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 
 // saveBulkTickerData validates and saves ticker data from bulk fetch to database
 func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
+	// Early validation: skip malformed symbols before any processing
+	if !isValidSymbolFormat(ticker.Symbol) {
+		c.logger.WithFields(map[string]interface{}{
+			"symbol":   ticker.Symbol,
+			"exchange": ticker.ExchangeName,
+		}).Debug("Skipping malformed symbol")
+		return nil
+	}
+
 	// Check if symbol should be blacklisted based on data quality
 	if shouldBlacklist, reason := c.shouldBlacklistTicker(ticker); shouldBlacklist {
 		symbolKey := fmt.Sprintf("%s:%s", ticker.ExchangeName, ticker.Symbol)
@@ -1577,6 +1586,15 @@ func (c *CollectorService) shouldBlacklistTicker(ticker models.MarketPrice) (boo
 
 // collectTickerDataDirect collects ticker data without checking symbol activity (for worker symbols)
 func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) error {
+	// Early validation: skip malformed symbols before any processing
+	if !isValidSymbolFormat(symbol) {
+		c.logger.WithFields(map[string]interface{}{
+			"symbol":   symbol,
+			"exchange": exchange,
+		}).Debug("Skipping malformed symbol")
+		return nil
+	}
+
 	// Check if symbol is blacklisted before making API call
 	symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
 	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {

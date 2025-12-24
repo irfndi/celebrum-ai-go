@@ -1501,3 +1501,64 @@ func TestIsValidSymbolFormat_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestSaveBulkTickerData_SkipsMalformedSymbols(t *testing.T) {
+	// Setup mock services
+	mockCCXT := &testmocks.MockCCXTService{}
+	cfg := &config.Config{
+		Blacklist: config.BlacklistConfig{
+			TTL: "24h",
+		},
+	}
+
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, cfg, nil, blacklistCache)
+
+	// Test that malformed symbols are skipped silently
+	malformedTickers := []models.MarketPrice{
+		{Symbol: ":", ExchangeName: "binance"},
+		{Symbol: "/", ExchangeName: "binance"},
+		{Symbol: "", ExchangeName: "binance"},
+		{Symbol: "  ", ExchangeName: "binance"},
+	}
+
+	for _, ticker := range malformedTickers {
+		t.Run(fmt.Sprintf("symbol_%q", ticker.Symbol), func(t *testing.T) {
+			err := collector.saveBulkTickerData(ticker)
+			// Should return nil (skip) without error
+			assert.NoError(t, err, "Malformed symbol should be skipped without error")
+
+			// Verify symbol was NOT added to blacklist (we skip silently now)
+			symbolKey := fmt.Sprintf("%s:%s", ticker.ExchangeName, ticker.Symbol)
+			isBlacklisted, _ := blacklistCache.IsBlacklisted(symbolKey)
+			assert.False(t, isBlacklisted, "Malformed symbols should be skipped, not blacklisted")
+		})
+	}
+}
+
+func TestCollectTickerDataDirect_SkipsMalformedSymbols(t *testing.T) {
+	// Setup mock services
+	mockCCXT := &testmocks.MockCCXTService{}
+	cfg := &config.Config{
+		Blacklist: config.BlacklistConfig{
+			TTL: "24h",
+		},
+	}
+
+	blacklistCache := cache.NewInMemoryBlacklistCache()
+	collector := NewCollectorService(nil, mockCCXT, cfg, nil, blacklistCache)
+
+	// Test that malformed symbols are skipped silently
+	malformedSymbols := []string{":", "/", "", "  "}
+
+	for _, symbol := range malformedSymbols {
+		t.Run(fmt.Sprintf("symbol_%q", symbol), func(t *testing.T) {
+			err := collector.collectTickerDataDirect("binance", symbol)
+			// Should return nil (skip) without error
+			assert.NoError(t, err, "Malformed symbol should be skipped without error")
+
+			// Verify CCXT service was NOT called for malformed symbols
+			mockCCXT.AssertNotCalled(t, "FetchSingleTicker", mock.Anything, "binance", symbol)
+		})
+	}
+}
