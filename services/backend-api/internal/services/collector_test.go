@@ -1467,13 +1467,13 @@ func TestIsValidSymbolFormat(t *testing.T) {
 func TestIsValidSymbolFormat_EdgeCases(t *testing.T) {
 	// Test symbols seen in production logs
 	productionInvalidSymbols := []string{
-		":",        // Most common issue from some exchanges
-		"/",        // Also seen occasionally
-		"",         // Empty strings
-		" ",        // Whitespace
-		"BTC/",     // Missing quote currency
-		"/USDT",    // Missing base currency
-		"::",       // Double separator
+		":",     // Most common issue from some exchanges
+		"/",     // Also seen occasionally
+		"",      // Empty strings
+		" ",     // Whitespace
+		"BTC/",  // Missing quote currency
+		"/USDT", // Missing base currency
+		"::",    // Double separator
 	}
 
 	for _, symbol := range productionInvalidSymbols {
