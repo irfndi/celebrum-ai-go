@@ -15,7 +15,7 @@ const sendWithTimeout = <T>(promise: Promise<T>): Promise<T> => {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Telegram API timeout")), SEND_TIMEOUT)
+      setTimeout(() => reject(new Error("Telegram API timeout")), SEND_TIMEOUT),
     ),
   ]);
 };
@@ -47,7 +47,7 @@ export class TelegramGrpcServer {
     sendWithTimeout(
       this.bot.api.sendMessage(chatId, text, {
         parse_mode: parseMode as any,
-      })
+      }),
     )
       .then((sent) => {
         callback(null, {
