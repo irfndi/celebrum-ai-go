@@ -9,6 +9,17 @@ import {
 } from "./proto/telegram_service";
 import { Bot } from "grammy";
 
+const SEND_TIMEOUT = 30000;
+
+const sendWithTimeout = <T>(promise: Promise<T>): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Telegram API timeout")), SEND_TIMEOUT)
+    ),
+  ]);
+};
+
 export class TelegramGrpcServer {
   private bot: Bot;
 
@@ -33,10 +44,11 @@ export class TelegramGrpcServer {
       return;
     }
 
-    this.bot.api
-      .sendMessage(chatId, text, {
+    sendWithTimeout(
+      this.bot.api.sendMessage(chatId, text, {
         parse_mode: parseMode as any,
       })
+    )
       .then((sent) => {
         callback(null, {
           ok: true,
@@ -82,7 +94,7 @@ export function startGrpcServer(bot: Bot, port: number) {
     (err, port) => {
       if (err) {
         console.error(`Failed to bind gRPC server: ${err}`);
-        return;
+        throw err; // Propagate error to caller
       }
       console.log(`🚀 Telegram gRPC Service listening on ${bindAddr}`);
     },
