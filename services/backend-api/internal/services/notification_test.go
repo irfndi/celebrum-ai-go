@@ -555,7 +555,7 @@ func TestNotificationService_checkRateLimit(t *testing.T) {
 	ns := NewNotificationService(nil, nil, "", "", "")
 
 	allowed, err := ns.checkRateLimit(context.Background(), "testuser")
-	assert.Error(t, err) // Should return error when Redis is not available
+	assert.Error(t, err)     // Should return error when Redis is not available
 	assert.False(t, allowed) // Should deny when Redis is not available (fail-closed)
 }
 
