@@ -62,12 +62,55 @@ func IsExchangeUnavailableError(err error) bool {
 	return ok
 }
 
+// UnsupportedOperationError represents an error when an exchange doesn't support a specific operation.
+// This error should not be retried as the operation is not supported.
+type UnsupportedOperationError struct {
+	Exchange  string
+	Operation string
+	Message   string
+}
+
+func (e *UnsupportedOperationError) Error() string {
+	return fmt.Sprintf("exchange %s does not support %s: %s", e.Exchange, e.Operation, e.Message)
+}
+
+// IsUnsupportedOperationError returns true if the error is an unsupported operation error.
+func IsUnsupportedOperationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*UnsupportedOperationError)
+	return ok
+}
+
+// GRPCConnectionError represents a gRPC connection failure.
+// This error indicates gRPC is unavailable but HTTP fallback should be attempted.
+type GRPCConnectionError struct {
+	Address string
+	Message string
+}
+
+func (e *GRPCConnectionError) Error() string {
+	return fmt.Sprintf("gRPC connection failed to %s: %s", e.Address, e.Message)
+}
+
+// IsGRPCConnectionError returns true if the error is a gRPC connection error.
+func IsGRPCConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*GRPCConnectionError)
+	return ok
+}
+
 // Client represents the CCXT HTTP client.
 type Client struct {
 	HTTPClient  *http.Client
 	baseURL     string
 	grpcClient  pb.CcxtServiceClient
 	grpcConn    *grpc.ClientConn
+	grpcAddress string
+	grpcEnabled bool
 	timeout     time.Duration
 	adminAPIKey string
 }
@@ -95,24 +138,51 @@ func NewClient(cfg *config.CCXTConfig) *Client {
 			Timeout: timeout,
 		},
 		baseURL:     strings.TrimSuffix(cfg.ServiceURL, "/"),
+		grpcAddress: cfg.GrpcAddress,
+		grpcEnabled: false,
 		timeout:     timeout,
 		adminAPIKey: cfg.AdminAPIKey,
 	}
 
 	if cfg.GrpcAddress != "" {
-		// Use insecure credentials for internal communication
-		conn, err := grpc.NewClient(cfg.GrpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		// Use insecure credentials for internal communication with connection timeout
+		// Use non-blocking dial to avoid startup delays when gRPC service is unavailable
+		conn, err := grpc.NewClient(
+			cfg.GrpcAddress,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
 		if err != nil {
-			log.Printf("Failed to connect to CCXT gRPC service at %s: %v", cfg.GrpcAddress, err)
+			log.Printf("Failed to create CCXT gRPC client at %s: %v (HTTP fallback available)", cfg.GrpcAddress, err)
 		} else {
 			client.grpcClient = pb.NewCcxtServiceClient(conn)
 			client.grpcConn = conn
-			log.Printf("Connected to CCXT gRPC service at %s", cfg.GrpcAddress)
+			client.grpcEnabled = true
+			log.Printf("Created CCXT gRPC client for %s (connection will be established on first use)", cfg.GrpcAddress)
 		}
 	}
 
-	log.Printf("DEBUG: CCXT Client initialized with BaseURL: %s", client.BaseURL())
+	log.Printf("DEBUG: CCXT Client initialized with BaseURL: %s, gRPC: %v", client.BaseURL(), client.grpcEnabled)
 	return client
+}
+
+// IsGRPCEnabled returns whether the gRPC client is configured and enabled.
+func (c *Client) IsGRPCEnabled() bool {
+	return c.grpcEnabled && c.grpcClient != nil
+}
+
+// DisableGRPC disables gRPC and forces HTTP-only mode.
+// This is useful when gRPC is consistently failing.
+func (c *Client) DisableGRPC() {
+	c.grpcEnabled = false
+	log.Printf("CCXT gRPC disabled, using HTTP-only mode")
+}
+
+// EnableGRPC re-enables gRPC if the client was initialized with gRPC support.
+func (c *Client) EnableGRPC() {
+	if c.IsGRPCEnabled() {
+		c.grpcEnabled = true
+		log.Printf("CCXT gRPC re-enabled")
+	}
 }
 
 // HealthCheck checks if the CCXT service is healthy.
@@ -136,8 +206,8 @@ func (c *Client) HealthCheck(ctx context.Context) (*HealthResponse, error) {
 
 // GetExchanges retrieves all supported exchanges.
 func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
-	// Try gRPC first
-	if c.grpcClient != nil {
+	// Try gRPC first if enabled
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetExchanges(ctx, &pb.GetExchangesRequest{})
 		if err == nil && resp.Error == "" {
 			return c.convertGrpcExchangesResponse(resp), nil
@@ -156,8 +226,8 @@ func (c *Client) GetExchanges(ctx context.Context) (*ExchangesResponse, error) {
 
 // GetTicker retrieves ticker data for a specific exchange and symbol.
 func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*TickerResponse, error) {
-	// Try gRPC first
-	if c.grpcClient != nil {
+	// Try gRPC first if enabled
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetTicker(ctx, &pb.GetTickerRequest{
 			Exchange: exchange,
 			Symbol:   symbol,
@@ -182,8 +252,8 @@ func (c *Client) GetTicker(ctx context.Context, exchange, symbol string) (*Ticke
 
 // GetTickers retrieves multiple tickers in a single request.
 func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersResponse, error) {
-	// Try gRPC first
-	if c.grpcClient != nil {
+	// Try gRPC first if enabled
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetTickers(ctx, &pb.GetTickersRequest{
 			Symbols:   req.Symbols,
 			Exchanges: req.Exchanges,
@@ -206,7 +276,7 @@ func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersR
 // GetOrderBook retrieves order book data for a specific exchange and symbol.
 func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetOrderBook(ctx, &pb.GetOrderBookRequest{
 			Exchange: exchange,
 			Symbol:   symbol,
@@ -236,7 +306,7 @@ func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limi
 // GetTrades retrieves recent trades for a specific exchange and symbol.
 func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetTrades(ctx, &pb.GetTradesRequest{
 			Exchange: exchange,
 			Symbol:   symbol,
@@ -266,7 +336,7 @@ func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit i
 // GetOHLCV retrieves OHLCV data for a specific exchange and symbol.
 func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetOHLCV(ctx, &pb.GetOHLCVRequest{
 			Exchange:  exchange,
 			Symbol:    symbol,
@@ -304,7 +374,7 @@ func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe strin
 // GetMarkets retrieves all trading pairs for a specific exchange.
 func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsResponse, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetMarkets(ctx, &pb.GetMarketsRequest{
 			Exchange: exchange,
 		})
@@ -327,7 +397,7 @@ func (c *Client) GetMarkets(ctx context.Context, exchange string) (*MarketsRespo
 // GetFundingRate retrieves funding rate for a specific symbol on an exchange.
 func (c *Client) GetFundingRate(ctx context.Context, exchange, symbol string) (*FundingRate, error) {
 	// Try gRPC first for multiple/single rates
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetFundingRates(ctx, &pb.GetFundingRatesRequest{
 			Exchange: exchange,
 			Symbols:  []string{symbol},
@@ -352,7 +422,7 @@ func (c *Client) GetFundingRate(ctx context.Context, exchange, symbol string) (*
 // GetFundingRates retrieves funding rates for multiple symbols on an exchange.
 func (c *Client) GetFundingRates(ctx context.Context, exchange string, symbols []string) ([]FundingRate, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetFundingRates(ctx, &pb.GetFundingRatesRequest{
 			Exchange: exchange,
 			Symbols:  symbols,
@@ -396,7 +466,7 @@ func (c *Client) GetFundingRates(ctx context.Context, exchange string, symbols [
 // GetAllFundingRates retrieves all available funding rates for an exchange.
 func (c *Client) GetAllFundingRates(ctx context.Context, exchange string) ([]FundingRate, error) {
 	// Try gRPC first
-	if c.grpcClient != nil {
+	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetFundingRates(ctx, &pb.GetFundingRatesRequest{
 			Exchange: exchange,
 		})
@@ -580,6 +650,9 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 		// Extract exchange and symbol from path for typed errors
 		exchange, symbol := c.extractExchangeSymbolFromPath(path)
 
+		// Extract operation from path (e.g., "funding-rate", "ticker", "orderbook")
+		operation := c.extractOperationFromPath(path)
+
 		// Return typed errors based on HTTP status code
 		switch resp.StatusCode {
 		case http.StatusNotFound:
@@ -589,6 +662,27 @@ func (c *Client) makeRequest(ctx context.Context, method, path string, body inte
 				Symbol:   symbol,
 				Message:  errorMsg,
 			}
+		case http.StatusNotImplemented:
+			// Operation not supported by this exchange - don't retry
+			return &UnsupportedOperationError{
+				Exchange:  exchange,
+				Operation: operation,
+				Message:   errorMsg,
+			}
+		case http.StatusBadRequest:
+			// Check if error message indicates unsupported operation
+			errLower := strings.ToLower(errorMsg)
+			if strings.Contains(errLower, "not supported") ||
+				strings.Contains(errLower, "not implemented") ||
+				strings.Contains(errLower, "not available") ||
+				strings.Contains(errLower, "does not support") {
+				return &UnsupportedOperationError{
+					Exchange:  exchange,
+					Operation: operation,
+					Message:   errorMsg,
+				}
+			}
+			return fmt.Errorf("CCXT service error (%d): %s", resp.StatusCode, errorMsg)
 		case http.StatusServiceUnavailable:
 			// Exchange temporarily unavailable - can retry
 			return &ExchangeUnavailableError{
@@ -639,6 +733,27 @@ func (c *Client) extractExchangeSymbolFromPath(path string) (exchange, symbol st
 // Do not use in production code.
 func (c *Client) ExtractExchangeSymbolFromPath(path string) (exchange, symbol string) {
 	return c.extractExchangeSymbolFromPath(path)
+}
+
+// extractOperationFromPath extracts the operation type from API paths.
+//
+// Expected path formats:
+//   - /api/ticker/{exchange}/{symbol}       -> returns "ticker"
+//   - /api/orderbook/{exchange}/{symbol}    -> returns "orderbook"
+//   - /api/ohlcv/{exchange}/{symbol}        -> returns "ohlcv"
+//   - /api/trades/{exchange}/{symbol}       -> returns "trades"
+//   - /api/funding-rate/{exchange}/{symbol} -> returns "funding-rate"
+//   - /api/funding-rates/{exchange}         -> returns "funding-rates"
+//   - /api/markets/{exchange}               -> returns "markets"
+//   - /api/exchanges                        -> returns "exchanges"
+//
+// Returns "unknown" for paths that don't match the expected format.
+func (c *Client) extractOperationFromPath(path string) string {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) >= 2 && parts[0] == "api" {
+		return parts[1]
+	}
+	return "unknown"
 }
 
 // Close closes the HTTP client (if needed for cleanup).

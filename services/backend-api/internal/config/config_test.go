@@ -522,11 +522,11 @@ func TestConfig_DockerEnvironmentDefaults(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, config)
 
-		// Should use localhost
+		// Should use localhost for HTTP, 127.0.0.1 for gRPC (to avoid IPv6 issues)
 		assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
-		assert.Equal(t, "localhost:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "127.0.0.1:50051", config.CCXT.GrpcAddress)
 		assert.Equal(t, "http://localhost:3002", config.Telegram.ServiceURL)
-		assert.Equal(t, "localhost:50052", config.Telegram.GrpcAddress)
+		assert.Equal(t, "127.0.0.1:50052", config.Telegram.GrpcAddress)
 	})
 
 	t.Run("Empty environment uses localhost", func(t *testing.T) {
@@ -538,9 +538,9 @@ func TestConfig_DockerEnvironmentDefaults(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, config)
 
-		// Should use localhost by default
+		// Should use localhost for HTTP, 127.0.0.1 for gRPC (to avoid IPv6 issues)
 		assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
-		assert.Equal(t, "localhost:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "127.0.0.1:50051", config.CCXT.GrpcAddress)
 	})
 
 	t.Run("Explicit env vars override Docker defaults", func(t *testing.T) {

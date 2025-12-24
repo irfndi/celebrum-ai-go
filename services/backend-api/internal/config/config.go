@@ -391,7 +391,8 @@ func setDefaults() {
 		viper.SetDefault("ccxt.grpc_address", "ccxt-service:50051")
 	} else {
 		viper.SetDefault("ccxt.service_url", "http://localhost:3001")
-		viper.SetDefault("ccxt.grpc_address", "localhost:50051")
+		// Use explicit IPv4 address to avoid IPv6 resolution issues on some systems
+		viper.SetDefault("ccxt.grpc_address", "127.0.0.1:50051")
 	}
 	viper.SetDefault("ccxt.timeout", 30)
 
@@ -401,7 +402,8 @@ func setDefaults() {
 		viper.SetDefault("telegram.grpc_address", "telegram-service:50052")
 	} else {
 		viper.SetDefault("telegram.service_url", "http://localhost:3002")
-		viper.SetDefault("telegram.grpc_address", "localhost:50052")
+		// Use explicit IPv4 address to avoid IPv6 resolution issues on some systems
+		viper.SetDefault("telegram.grpc_address", "127.0.0.1:50052")
 	}
 	viper.SetDefault("telegram.admin_api_key", "")
 	viper.SetDefault("telegram.bot_token", "")

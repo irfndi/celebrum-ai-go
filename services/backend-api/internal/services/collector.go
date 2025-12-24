@@ -1932,6 +1932,69 @@ func (c *CollectorService) IsHealthy() bool {
 	return float64(runningWorkers)/float64(len(c.workers)) >= 0.5
 }
 
+// GetCircuitBreakerStats returns statistics for all circuit breakers.
+//
+// Returns:
+//
+//	map[string]CircuitBreakerStats: Map of breaker name to stats.
+func (c *CollectorService) GetCircuitBreakerStats() map[string]CircuitBreakerStats {
+	if c.circuitBreakerManager == nil {
+		return make(map[string]CircuitBreakerStats)
+	}
+	return c.circuitBreakerManager.GetAllStats()
+}
+
+// ResetCircuitBreaker resets a specific circuit breaker by name.
+//
+// Parameters:
+//
+//	name: The name of the circuit breaker to reset.
+//
+// Returns:
+//
+//	bool: True if the breaker was found and reset.
+func (c *CollectorService) ResetCircuitBreaker(name string) bool {
+	if c.circuitBreakerManager == nil {
+		return false
+	}
+	c.circuitBreakerManager.mu.RLock()
+	breaker, exists := c.circuitBreakerManager.breakers[name]
+	c.circuitBreakerManager.mu.RUnlock()
+	if !exists {
+		return false
+	}
+	breaker.Reset()
+	c.logger.Info("Circuit breaker manually reset", "name", name)
+	return true
+}
+
+// ResetAllCircuitBreakers resets all circuit breakers.
+func (c *CollectorService) ResetAllCircuitBreakers() {
+	if c.circuitBreakerManager == nil {
+		return
+	}
+	c.circuitBreakerManager.ResetAll()
+	c.logger.Info("All circuit breakers manually reset")
+}
+
+// GetCircuitBreakerNames returns the names of all registered circuit breakers.
+//
+// Returns:
+//
+//	[]string: List of circuit breaker names.
+func (c *CollectorService) GetCircuitBreakerNames() []string {
+	if c.circuitBreakerManager == nil {
+		return nil
+	}
+	c.circuitBreakerManager.mu.RLock()
+	defer c.circuitBreakerManager.mu.RUnlock()
+	names := make([]string, 0, len(c.circuitBreakerManager.breakers))
+	for name := range c.circuitBreakerManager.breakers {
+		names = append(names, name)
+	}
+	return names
+}
+
 // ensureTradingPairExists ensures a trading pair exists in the database
 func (c *CollectorService) ensureTradingPairExists(exchangeID int, symbol string) error {
 	_, err := c.getOrCreateTradingPair(exchangeID, symbol)

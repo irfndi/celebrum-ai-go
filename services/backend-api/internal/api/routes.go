@@ -79,6 +79,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
+	circuitBreakerHandler := handlers.NewCircuitBreakerHandler(collectorService)
 
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService, analyticsService)
 	userHandler := handlers.NewUserHandler(db, redis.Client)
@@ -212,6 +213,19 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			cache.POST("/stats/reset", cacheHandler.ResetCacheStats)
 			cache.POST("/hit", cacheHandler.RecordCacheHit)
 			cache.POST("/miss", cacheHandler.RecordCacheMiss)
+		}
+
+		// Admin endpoints (require admin authentication)
+		admin := v1.Group("/admin")
+		admin.Use(adminMiddleware.RequireAdminAuth())
+		{
+			// Circuit breaker management
+			circuitBreakers := admin.Group("/circuit-breakers")
+			{
+				circuitBreakers.GET("", circuitBreakerHandler.GetCircuitBreakerStats)
+				circuitBreakers.POST("/:name/reset", circuitBreakerHandler.ResetCircuitBreaker)
+				circuitBreakers.POST("/reset-all", circuitBreakerHandler.ResetAllCircuitBreakers)
+			}
 		}
 	}
 }
