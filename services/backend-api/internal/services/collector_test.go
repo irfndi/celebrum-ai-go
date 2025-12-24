@@ -13,12 +13,12 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/irfandi/celebrum-ai-go/test/testmocks"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
-	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -1048,7 +1048,7 @@ func TestSymbolCache_Set(t *testing.T) {
 // Test SymbolCache Stats methods (currently 0% coverage)
 func TestSymbolCache_GetStats(t *testing.T) {
 	logger := logging.NewStandardLogger("info", "test")
-	cache := NewSymbolCache(5 * time.Minute, logger)
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test initial stats
 	stats := cache.GetStats()
@@ -1072,7 +1072,7 @@ func TestSymbolCache_GetStats(t *testing.T) {
 // Test SymbolCache concurrent operations
 func TestSymbolCache_ConcurrentOperations(t *testing.T) {
 	logger := logging.NewStandardLogger("info", "test")
-	cache := NewSymbolCache(5 * time.Minute, logger)
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test concurrent Set operations
 	done := make(chan bool, 10)
@@ -1122,7 +1122,7 @@ func TestSymbolCache_ConcurrentOperations(t *testing.T) {
 // Test SymbolCache edge cases
 func TestSymbolCache_EdgeCases(t *testing.T) {
 	logger := logging.NewStandardLogger("info", "test")
-	cache := NewSymbolCache(5 * time.Minute, logger)
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test multiple updates to same key
 	cache.Set("binance", []string{"BTC/USDT"})
@@ -1167,7 +1167,7 @@ func TestSymbolCache_EdgeCases(t *testing.T) {
 // Test SymbolCache LogStats method (currently 0% coverage)
 func TestSymbolCache_LogStats(t *testing.T) {
 	logger := logging.NewStandardLogger("info", "test")
-	cache := NewSymbolCache(5 * time.Minute, logger)
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test LogStats doesn't panic and logs properly
 	// Since LogStats just logs to the logger, we just ensure it doesn't panic

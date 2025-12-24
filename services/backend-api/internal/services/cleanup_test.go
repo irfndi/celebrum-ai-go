@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pashagolub/pgxmock/v4"
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
+	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
