@@ -38,6 +38,8 @@ func (c *CollectorService) convertMarketPriceInterfacesToModels(interfaceData []
 			ExchangeName: item.GetExchangeName(),
 			Symbol:       item.GetSymbol(),
 			Price:        decimal.NewFromFloat(item.GetPrice()),
+			Bid:          decimal.NewFromFloat(item.GetBid()),
+			Ask:          decimal.NewFromFloat(item.GetAsk()),
 			Volume:       decimal.NewFromFloat(item.GetVolume()),
 			Timestamp:    item.GetTimestamp(),
 		})
@@ -55,6 +57,8 @@ func (c *CollectorService) convertMarketPriceInterfaceToModel(interfaceData ccxt
 		ExchangeName: interfaceData.GetExchangeName(),
 		Symbol:       interfaceData.GetSymbol(),
 		Price:        decimal.NewFromFloat(interfaceData.GetPrice()),
+		Bid:          decimal.NewFromFloat(interfaceData.GetBid()),
+		Ask:          decimal.NewFromFloat(interfaceData.GetAsk()),
 		Volume:       decimal.NewFromFloat(interfaceData.GetVolume()),
 		Timestamp:    interfaceData.GetTimestamp(),
 	}

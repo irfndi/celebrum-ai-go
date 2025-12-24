@@ -71,6 +71,16 @@ func (mp *MarketPrice) GetSymbol() string {
 	return mp.Symbol
 }
 
+// GetBid returns the best bid price as a float64.
+func (mp *MarketPrice) GetBid() float64 {
+	return mp.Bid.InexactFloat64()
+}
+
+// GetAsk returns the best ask price as a float64.
+func (mp *MarketPrice) GetAsk() float64 {
+	return mp.Ask.InexactFloat64()
+}
+
 // TickerData represents real-time ticker information retrieved from the CCXT library.
 type TickerData struct {
 	Symbol    string          `json:"symbol"`

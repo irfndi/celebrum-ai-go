@@ -1264,6 +1264,26 @@ func TestCollectorService_ConvertMarketPriceInterfacesToModels(t *testing.T) {
 	preciseResult := result[0]
 	assert.Equal(t, "50000.12345678", preciseResult.Price.String())
 	assert.Equal(t, "1000.98765432", preciseResult.Volume.String())
+
+	// Test bid/ask preservation - critical for arbitrage detection
+	bidAskItem := &MockMarketPriceInterface{
+		exchangeName: "binance",
+		symbol:       "BTC/USDT",
+		price:        50000.0,
+		bid:          49999.50,
+		ask:          50000.50,
+		volume:       1000.0,
+		timestamp:    time.Now(),
+	}
+
+	result = service.convertMarketPriceInterfacesToModels([]ccxt.MarketPriceInterface{bidAskItem})
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+
+	bidAskResult := result[0]
+	assert.Equal(t, "49999.5", bidAskResult.Bid.String(), "Bid should be preserved during conversion")
+	assert.Equal(t, "50000.5", bidAskResult.Ask.String(), "Ask should be preserved during conversion")
+	assert.Equal(t, "50000", bidAskResult.Price.String())
 }
 
 // TestCollectorService_ConvertMarketPriceInterfaceToModel tests the convertMarketPriceInterfaceToModel function
@@ -1339,6 +1359,23 @@ func TestCollectorService_ConvertMarketPriceInterfaceToModel(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, "999999999.999", result.Price.String())
 	assert.Equal(t, "888888888.888", result.Volume.String())
+
+	// Test bid/ask preservation - critical for arbitrage detection
+	bidAskInput := &MockMarketPriceInterface{
+		exchangeName: "binance",
+		symbol:       "BTC/USDT",
+		price:        50000.0,
+		bid:          49999.50,
+		ask:          50000.50,
+		volume:       1000.0,
+		timestamp:    time.Now(),
+	}
+
+	result = service.convertMarketPriceInterfaceToModel(bidAskInput)
+	assert.NotNil(t, result)
+	assert.Equal(t, "49999.5", result.Bid.String(), "Bid should be preserved during conversion")
+	assert.Equal(t, "50000.5", result.Ask.String(), "Ask should be preserved during conversion")
+	assert.Equal(t, "50000", result.Price.String())
 }
 
 // TestCollectorService_ConvertMarketPriceInterfaceToModel_FunctionalInterface tests with functional interface implementation
@@ -1372,6 +1409,8 @@ type MockMarketPriceInterface struct {
 	exchangeName string
 	symbol       string
 	price        float64
+	bid          float64
+	ask          float64
 	volume       float64
 	timestamp    time.Time
 }
@@ -1386,6 +1425,14 @@ func (m *MockMarketPriceInterface) GetSymbol() string {
 
 func (m *MockMarketPriceInterface) GetPrice() float64 {
 	return m.price
+}
+
+func (m *MockMarketPriceInterface) GetBid() float64 {
+	return m.bid
+}
+
+func (m *MockMarketPriceInterface) GetAsk() float64 {
+	return m.ask
 }
 
 func (m *MockMarketPriceInterface) GetVolume() float64 {
