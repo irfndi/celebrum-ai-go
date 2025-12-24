@@ -695,27 +695,35 @@ app.post(
       const { symbols, exchanges: requestedExchanges } = c.req.valid("json");
 
       const exchangesToQuery = requestedExchanges || Object.keys(exchanges);
-      const results: Record<string, Record<string, any>> = {};
+
+      // CRITICAL FIX: Return flat tickers array instead of nested results
+      // This matches what the Go client expects for JSON unmarshaling
+      const tickers: Array<any> = [];
 
       for (const exchangeId of exchangesToQuery) {
         if (!exchanges[exchangeId]) continue;
 
-        results[exchangeId] = {};
-
         for (const symbol of symbols) {
           try {
             const ticker = await exchanges[exchangeId].fetchTicker(symbol);
-            results[exchangeId][symbol] = ticker;
+            // Add exchange and symbol to each ticker for context
+            tickers.push({
+              ...ticker,
+              exchange: exchangeId,
+              symbol: symbol,
+            });
           } catch (error) {
-            results[exchangeId][symbol] = {
-              error: error instanceof Error ? error.message : "Unknown error",
-            };
+            // Skip errored symbols - don't include them in response
+            // The Go client doesn't need to know about individual symbol failures
+            console.warn(
+              `Failed to fetch ticker for ${exchangeId}:${symbol}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
           }
         }
       }
 
       const response: MultiTickerResponse = {
-        results,
+        tickers,
         timestamp: new Date().toISOString(),
       };
 

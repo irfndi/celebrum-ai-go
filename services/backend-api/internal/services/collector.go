@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,11 +19,10 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 )
 
 // convertMarketPriceInterfacesToModels converts CCXT MarketPriceInterface to models.MarketPrice
@@ -106,10 +104,11 @@ type SymbolCacheInterface interface {
 
 // SymbolCache manages cached active symbols for exchanges.
 type SymbolCache struct {
-	cache map[string]*SymbolCacheEntry
-	mu    sync.RWMutex
-	ttl   time.Duration
-	stats cache.SymbolCacheStats
+	cache  map[string]*SymbolCacheEntry
+	mu     sync.RWMutex
+	ttl    time.Duration
+	stats  cache.SymbolCacheStats
+	logger logging.Logger
 }
 
 // BlacklistCacheEntry represents a cached entry for blacklisted symbols
@@ -126,9 +125,10 @@ type ExchangeCapabilityEntry struct {
 
 // ExchangeCapabilityCache manages cached exchange capability information.
 type ExchangeCapabilityCache struct {
-	cache map[string]*ExchangeCapabilityEntry // key: exchange name
-	mu    sync.RWMutex
-	ttl   time.Duration
+	cache  map[string]*ExchangeCapabilityEntry // key: exchange name
+	mu     sync.RWMutex
+	ttl    time.Duration
+	logger logging.Logger
 }
 
 // NewSymbolCache creates a new symbol cache with specified TTL.
@@ -140,10 +140,11 @@ type ExchangeCapabilityCache struct {
 // Returns:
 //
 //	*SymbolCache: Initialized cache.
-func NewSymbolCache(ttl time.Duration) *SymbolCache {
+func NewSymbolCache(ttl time.Duration, logger logging.Logger) *SymbolCache {
 	return &SymbolCache{
-		cache: make(map[string]*SymbolCacheEntry),
-		ttl:   ttl,
+		cache:  make(map[string]*SymbolCacheEntry),
+		ttl:    ttl,
+		logger: logger,
 	}
 }
 
@@ -164,7 +165,7 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	entry, exists := sc.cache[exchangeID]
 	if !exists {
 		sc.stats.Misses++
-		telemetry.GetLogger().Debug("Cache MISS", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+		sc.logger.Debug("Cache MISS", "exchange", exchangeID)
 		return nil, false
 	}
 
@@ -172,12 +173,12 @@ func (sc *SymbolCache) Get(exchangeID string) ([]string, bool) {
 	if time.Now().After(entry.ExpiresAt) {
 		// Entry expired, treat as cache miss
 		sc.stats.Misses++
-		telemetry.GetLogger().Debug("Cache MISS (expired)", "exchange", exchangeID, "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+		sc.logger.Debug("Cache MISS (expired)", "exchange", exchangeID)
 		return nil, false
 	}
 
 	sc.stats.Hits++
-	telemetry.GetLogger().Debug("Cache HIT", "exchange", exchangeID, "symbols", len(entry.Symbols), "hits", sc.stats.Hits, "misses", sc.stats.Misses)
+	sc.logger.Debug("Cache HIT", "exchange", exchangeID, "symbols", len(entry.Symbols))
 
 	return entry.Symbols, true
 }
@@ -197,7 +198,7 @@ func (sc *SymbolCache) Set(exchangeID string, symbols []string) {
 		Symbols:   symbols,
 		ExpiresAt: time.Now().Add(sc.ttl),
 	}
-	telemetry.GetLogger().Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols), "sets", sc.stats.Sets)
+	sc.logger.Debug("Cache SET", "exchange", exchangeID, "symbols", len(symbols))
 }
 
 // GetStats returns current cache statistics.
@@ -226,11 +227,12 @@ func (sc *SymbolCache) LogStats() {
 		hitRate = float64(sc.stats.Hits) / float64(total) * 100
 	}
 
-	telemetry.GetLogger().Info("Symbol Cache Stats",
-		"hits", sc.stats.Hits,
-		"misses", sc.stats.Misses,
-		"sets", sc.stats.Sets,
-		"hit_rate_percent", hitRate)
+	sc.logger.WithFields(map[string]interface{}{
+		"hits":             sc.stats.Hits,
+		"misses":           sc.stats.Misses,
+		"sets":             sc.stats.Sets,
+		"hit_rate_percent": hitRate,
+	}).Info("Symbol Cache Stats")
 }
 
 // NewExchangeCapabilityCache creates a new exchange capability cache with specified TTL.
@@ -242,10 +244,11 @@ func (sc *SymbolCache) LogStats() {
 // Returns:
 //
 //	*ExchangeCapabilityCache: Initialized cache.
-func NewExchangeCapabilityCache(ttl time.Duration) *ExchangeCapabilityCache {
+func NewExchangeCapabilityCache(ttl time.Duration, logger logging.Logger) *ExchangeCapabilityCache {
 	return &ExchangeCapabilityCache{
-		cache: make(map[string]*ExchangeCapabilityEntry),
-		ttl:   ttl,
+		cache:  make(map[string]*ExchangeCapabilityEntry),
+		ttl:    ttl,
+		logger: logger,
 	}
 }
 
@@ -291,7 +294,10 @@ func (ecc *ExchangeCapabilityCache) SetFundingRateSupport(exchange string, suppo
 		LastChecked:          time.Now(),
 		ExpiresAt:            time.Now().Add(ecc.ttl),
 	}
-	telemetry.GetLogger().Debug("Exchange capability cached", "exchange", exchange, "supports_funding_rates", supports)
+	ecc.logger.WithFields(map[string]interface{}{
+		"exchange":               exchange,
+		"supports_funding_rates": supports,
+	}).Debug("Exchange capability cached")
 }
 
 // isBlacklistableError checks if an error indicates a symbol should be blacklisted
@@ -397,7 +403,7 @@ type CollectorService struct {
 	// Resource optimization
 	resourceOptimizer *ResourceOptimizer
 	// Logging
-	logger *slog.Logger
+	logger logging.Logger
 }
 
 // Worker represents a background worker for collecting data from a specific exchange.
@@ -419,16 +425,13 @@ type Worker struct {
 }
 
 // initializeSymbolCache creates either Redis-based or in-memory symbol cache
-func initializeSymbolCache(redisClient *redis.Client) SymbolCacheInterface {
-	// Initialize logger with fallback for tests
-	logger := telemetry.Logger()
-
+func initializeSymbolCache(redisClient *redis.Client, logger logging.Logger) SymbolCacheInterface {
 	if redisClient != nil {
 		logger.Info("Initializing Redis-based symbol cache")
 		return cache.NewRedisSymbolCache(redisClient, 1*time.Hour)
 	}
 	logger.Info("Redis client not available, using in-memory symbol cache")
-	return NewSymbolCache(1 * time.Hour)
+	return NewSymbolCache(1*time.Hour, logger)
 }
 
 // NewCollectorService creates a new market data collector service.
@@ -474,10 +477,12 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	symbolRefreshInterval := 1 * time.Hour                         // 1 hour for symbol refresh
 	fundingRateInterval := 15 * time.Minute                        // 15 minutes for funding rates
 
+	// Initialize logger
+	logger := logging.NewStandardLogger("info", "collector")
+
 	// Initialize error recovery components
-	logrusLogger := logrus.New()
-	circuitBreakerManager := NewCircuitBreakerManager(logrusLogger)
-	errorRecoveryManager := NewErrorRecoveryManager(logrusLogger)
+	circuitBreakerManager := NewCircuitBreakerManager(logger)
+	errorRecoveryManager := NewErrorRecoveryManager(logger)
 	timeoutConfig := &TimeoutConfig{
 		APICall:        10 * time.Second,
 		DatabaseQuery:  5 * time.Second,
@@ -488,11 +493,11 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		SymbolFetch:    20 * time.Second,
 		MarketData:     8 * time.Second,
 	}
-	timeoutManager := NewTimeoutManager(timeoutConfig, logrusLogger)
-	resourceManager := NewResourceManager(logrusLogger)
+	timeoutManager := NewTimeoutManager(timeoutConfig, logger)
+	resourceManager := NewResourceManager(logger)
 	// Note: PerformanceMonitor expects go-redis/redis/v8 client, but we have redis/go-redis/v9
 	// For now, we'll pass nil and handle Redis operations separately
-	performanceMonitor := NewPerformanceMonitor(logrusLogger, nil, ctx)
+	performanceMonitor := NewPerformanceMonitor(logger, nil, ctx)
 
 	// Initialize resource optimizer
 	resourceOptimizerConfig := ResourceOptimizerConfig{
@@ -528,9 +533,6 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	circuitBreakerManager.GetOrCreate("ccxt", ccxtConfig)
 	circuitBreakerManager.GetOrCreate("redis", redisConfig)
 
-	// Initialize logger with fallback for tests
-	logger := telemetry.Logger()
-
 	return &CollectorService{
 		db:              db,
 		ccxtService:     ccxtService,
@@ -541,9 +543,9 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 		ctx:             ctx,
 		cancel:          cancel,
 		// Initialize caching and timing controls
-		symbolCache:             initializeSymbolCache(redisClient),         // Redis or in-memory cache
+		symbolCache:             initializeSymbolCache(redisClient, logger), // Redis or in-memory cache
 		blacklistCache:          blacklistCache,                             // Use the provided blacklist cache with database persistence
-		exchangeCapabilityCache: NewExchangeCapabilityCache(24 * time.Hour), // 24 hour TTL for exchange capabilities
+		exchangeCapabilityCache: NewExchangeCapabilityCache(24*time.Hour, logger),
 		redisClient:             redisClient,
 		lastSymbolRefresh:       make(map[string]time.Time),
 		lastFundingCollection:   make(map[string]time.Time),
@@ -620,7 +622,7 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 
 	rows, err := c.db.Pool.Query(c.ctx, query, allExchanges)
 	if err != nil {
-		c.logger.Error("Failed to query prioritized exchanges", "error", err)
+		c.logger.WithError(err).Error("Failed to query prioritized exchanges")
 		return allExchanges // Fallback to all exchanges
 	}
 	defer rows.Close()
@@ -633,7 +635,7 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 		var ccxtID *string
 
 		if err := rows.Scan(&name, &priority, &isActive, &ccxtID); err != nil {
-			c.logger.Error("Failed to scan exchange row", "error", err)
+			c.logger.WithError(err).Error("Failed to scan exchange row")
 			continue
 		}
 
@@ -644,7 +646,10 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 		}
 
 		prioritizedExchanges = append(prioritizedExchanges, exchangeID)
-		c.logger.Debug("Added prioritized exchange", "exchange", exchangeID, "priority", priority)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": exchangeID,
+			"priority": priority,
+		}).Debug("Added prioritized exchange")
 	}
 
 	if len(prioritizedExchanges) == 0 {
@@ -652,7 +657,10 @@ func (c *CollectorService) getPrioritizedExchanges() []string {
 		return allExchanges
 	}
 
-	c.logger.Info("Using prioritized exchanges", "total", len(prioritizedExchanges), "priority_count", len(prioritizedExchanges))
+	c.logger.WithFields(map[string]interface{}{
+		"total":          len(prioritizedExchanges),
+		"priority_count": len(prioritizedExchanges),
+	}).Info("Using prioritized exchanges")
 	return prioritizedExchanges
 }
 
@@ -674,7 +682,7 @@ func (c *CollectorService) initializeWorkersAsync() {
 	// Get symbols that appear on multiple exchanges for arbitrage
 	multiExchangeSymbols, err := c.getMultiExchangeSymbols(exchanges)
 	if err != nil {
-		c.logger.Warn("Failed to get multi-exchange symbols", "error", err)
+		c.logger.WithError(err).Warn("Failed to get multi-exchange symbols")
 		observability.AddBreadcrumb(ctx, "collector", "Failed to get multi-exchange symbols", sentry.LevelWarning)
 		// Continue with individual exchange symbols as fallback
 	}
@@ -683,7 +691,9 @@ func (c *CollectorService) initializeWorkersAsync() {
 	workersCreated := 0
 	for _, exchangeID := range exchanges {
 		if err := c.createWorker(exchangeID, multiExchangeSymbols); err != nil {
-			c.logger.Warn("Failed to create worker for exchange", "exchange", exchangeID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchangeID,
+			}).WithError(err).Warn("Failed to create worker for exchange")
 			observability.AddBreadcrumbWithData(ctx, "collector", "Failed to create worker", sentry.LevelWarning, map[string]interface{}{
 				"exchange": exchangeID,
 				"error":    err.Error(),
@@ -699,7 +709,9 @@ func (c *CollectorService) initializeWorkersAsync() {
 	c.readinessMu.Unlock()
 
 	span.SetData("workers_created", workersCreated)
-	c.logger.Info("Background initialization complete", "workers_started", len(c.workers))
+	c.logger.WithFields(map[string]interface{}{
+		"workers_started": len(c.workers),
+	}).Info("Background initialization complete")
 	observability.AddBreadcrumbWithData(ctx, "collector", "Background initialization complete", sentry.LevelInfo, map[string]interface{}{
 		"workers_started": len(c.workers),
 	})
@@ -758,14 +770,14 @@ func (c *CollectorService) GetReadinessStatus() (initialized bool, ready bool) {
 //
 //	error: nil if data was collected, or an error if timeout/context cancelled.
 func (c *CollectorService) WaitForFirstData(timeout time.Duration) error {
-	c.logger.Info("Waiting for first market data collection...", "timeout", timeout)
+	c.logger.WithFields(map[string]interface{}{"timeout": timeout}).Info("Waiting for first market data collection...")
 
 	select {
 	case <-c.dataReadyChan:
 		c.logger.Info("First market data collected successfully")
 		return nil
 	case <-time.After(timeout):
-		c.logger.Warn("Timeout waiting for first market data collection", "timeout", timeout)
+		c.logger.WithFields(map[string]interface{}{"timeout": timeout}).Warn("Timeout waiting for first market data collection")
 		return fmt.Errorf("timeout waiting for first data collection after %v", timeout)
 	case <-c.ctx.Done():
 		return c.ctx.Err()
@@ -793,12 +805,12 @@ func (c *CollectorService) VerifyDatabaseSeeding() error {
 	err := c.db.Pool.QueryRow(c.ctx,
 		"SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&exchangeCount)
 	if err != nil {
-		c.logger.Error("Failed to query active exchanges", "error", err)
+		c.logger.WithError(err).Error("Failed to query active exchanges")
 		return fmt.Errorf("failed to query active exchanges: %w", err)
 	}
 
 	if exchangeCount == 0 {
-		c.logger.Error("No active exchanges in database - arbitrage will not work", "count", exchangeCount)
+		c.logger.WithFields(map[string]interface{}{"count": exchangeCount}).Error("No active exchanges in database - arbitrage will not work")
 		return fmt.Errorf("database not seeded: 0 active exchanges (need at least 1)")
 	}
 
@@ -806,19 +818,20 @@ func (c *CollectorService) VerifyDatabaseSeeding() error {
 	err = c.db.Pool.QueryRow(c.ctx,
 		"SELECT COUNT(*) FROM trading_pairs WHERE is_active = true").Scan(&tradingPairCount)
 	if err != nil {
-		c.logger.Error("Failed to query active trading pairs", "error", err)
+		c.logger.WithError(err).Error("Failed to query active trading pairs")
 		return fmt.Errorf("failed to query active trading pairs: %w", err)
 	}
 
 	// Trading pairs may be 0 on first startup (they get created during collection)
 	// This is a warning, not an error
 	if tradingPairCount == 0 {
-		c.logger.Warn("No active trading pairs in database yet - will be created during collection", "count", tradingPairCount)
+		c.logger.WithFields(map[string]interface{}{"count": tradingPairCount}).Warn("No active trading pairs in database yet - will be created during collection")
 	}
 
-	c.logger.Info("Database seeding verified",
-		"active_exchanges", exchangeCount,
-		"active_trading_pairs", tradingPairCount)
+	c.logger.WithFields(map[string]interface{}{
+		"active_exchanges":     exchangeCount,
+		"active_trading_pairs": tradingPairCount,
+	}).Info("Database seeding verified")
 	return nil
 }
 
@@ -832,10 +845,13 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 
 	if cached, found := c.symbolCache.Get(exchangeID); found {
 		activeSymbols = cached
-		c.logger.Info("Using cached symbols for exchange", "exchange", exchangeID, "symbol_count", len(activeSymbols))
+		c.logger.WithFields(map[string]interface{}{
+			"exchange":     exchangeID,
+			"symbol_count": len(activeSymbols),
+		}).Info("Using cached symbols for exchange")
 	} else {
 		// Cache should always be populated during startup, log error if not found
-		c.logger.Error("No cached symbols found during worker creation", "exchange", exchangeID)
+		c.logger.WithFields(map[string]interface{}{"exchange": exchangeID}).Error("No cached symbols found during worker creation")
 		return fmt.Errorf("no cached symbols found for exchange %s - cache should be populated during startup", exchangeID)
 	}
 
@@ -844,12 +860,16 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 
 	// Further filter to only include symbols that appear on multiple exchanges (for arbitrage)
 	arbitrageSymbols := c.filterArbitrageSymbols(validSymbols, multiExchangeSymbols)
-	c.logger.Info("Filtered arbitrage symbols", "exchange", exchangeID, "arbitrage_symbols", len(arbitrageSymbols), "valid_symbols", len(validSymbols))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":          exchangeID,
+		"arbitrage_symbols": len(arbitrageSymbols),
+		"valid_symbols":     len(validSymbols),
+	}).Info("Filtered arbitrage symbols")
 
 	// Use arbitrage symbols if available, otherwise fall back to valid active symbols
 	finalSymbols := arbitrageSymbols
 	if len(finalSymbols) == 0 {
-		c.logger.Info("No arbitrage symbols found, using all valid active symbols", "exchange", exchangeID)
+		c.logger.WithFields(map[string]interface{}{"exchange": exchangeID}).Info("No arbitrage symbols found, using all valid active symbols")
 		finalSymbols = validSymbols
 	}
 
@@ -862,12 +882,14 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 	// Ensure all trading pairs exist in database
 	for _, symbol := range finalSymbols {
 		if err := c.ensureTradingPairExists(exchangeDBID, symbol); err != nil {
-			c.logger.Warn("Failed to ensure trading pair exists", "symbol", symbol, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"symbol": symbol,
+			}).WithError(err).Warn("Failed to ensure trading pair exists")
 		}
 	}
 
 	if len(finalSymbols) == 0 {
-		c.logger.Info("No valid active trading pairs found, skipping worker creation", "exchange", exchangeID)
+		c.logger.WithFields(map[string]interface{}{"exchange": exchangeID}).Info("No valid active trading pairs found, skipping worker creation")
 		return nil
 	}
 
@@ -884,9 +906,13 @@ func (c *CollectorService) createWorker(exchangeID string, multiExchangeSymbols 
 
 	// Start worker goroutine
 	c.wg.Add(1)
+	c.wg.Add(1)
 	go c.runWorker(worker)
 
-	c.logger.Info("Created worker", "exchange", exchangeID, "symbol_count", len(finalSymbols))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":     exchangeID,
+		"symbol_count": len(finalSymbols),
+	}).Info("Created worker")
 	return nil
 }
 
@@ -895,9 +921,9 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	defer c.wg.Done()
 
 	// Register worker with resource manager for cleanup
-	workerID := fmt.Sprintf("worker_%s_%d", worker.Exchange, time.Now().UnixNano())
-	c.resourceManager.RegisterResource(workerID, GoroutineResource, func() error {
-		c.logger.Info("Cleaning up worker", "exchange", worker.Exchange)
+	senderID := fmt.Sprintf("worker_%s_%d", worker.Exchange, time.Now().UnixNano())
+	c.resourceManager.RegisterResource(senderID, GoroutineResource, func() error {
+		c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Cleaning up worker")
 		worker.IsRunning = false
 		return nil
 	}, map[string]interface{}{
@@ -905,8 +931,10 @@ func (c *CollectorService) runWorker(worker *Worker) {
 		"worker_type": "ticker_collector",
 	})
 	defer func() {
-		if err := c.resourceManager.CleanupResource(workerID); err != nil {
-			c.logger.Error("Failed to cleanup resource", "worker_id", workerID, "error", err)
+		if err := c.resourceManager.CleanupResource(senderID); err != nil {
+			c.logger.WithFields(map[string]interface{}{
+				"worker_id": senderID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
@@ -926,7 +954,12 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	resourceOptimizationTicker := time.NewTicker(2 * time.Minute)
 	defer resourceOptimizationTicker.Stop()
 
-	c.logger.Info("Worker started", "exchange", worker.Exchange, "symbols", len(worker.Symbols), "ticker_interval", c.tickerInterval, "funding_interval", c.fundingRateInterval)
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":         worker.Exchange,
+		"symbols":          len(worker.Symbols),
+		"ticker_interval":  c.tickerInterval,
+		"funding_interval": c.fundingRateInterval,
+	}).Info("Worker started")
 
 	// Track consecutive failures for graceful degradation
 	consecutiveFailures := 0
@@ -937,7 +970,7 @@ func (c *CollectorService) runWorker(worker *Worker) {
 	for {
 		select {
 		case <-c.ctx.Done():
-			c.logger.Info("Worker stopping due to context cancellation", "exchange", worker.Exchange)
+			c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Worker stopping due to context cancellation")
 			return
 		case <-cacheStatsTicker.C:
 			// Log cache statistics periodically
@@ -946,11 +979,16 @@ func (c *CollectorService) runWorker(worker *Worker) {
 		case <-healthCheckTicker.C:
 			// Perform health check and report status
 			c.performanceMonitor.RecordWorkerHealth(worker.Exchange, worker.IsRunning, worker.ErrorCount)
-			c.logger.Info("Health check", "exchange", worker.Exchange, "running", worker.IsRunning, "errors", worker.ErrorCount, "last_update", worker.LastUpdate)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange":    worker.Exchange,
+				"running":     worker.IsRunning,
+				"errors":      worker.ErrorCount,
+				"last_update": worker.LastUpdate,
+			}).Info("Health check")
 		case <-resourceOptimizationTicker.C:
 			// Update system metrics and trigger adaptive optimization
 			if err := c.resourceOptimizer.UpdateSystemMetrics(c.ctx); err != nil {
-				c.logger.Error("Failed to update system metrics", "error", err)
+				c.logger.WithError(err).Error("Failed to update system metrics")
 			}
 			// Check if optimization is needed
 			if c.resourceOptimizer.OptimizeIfNeeded(ResourceOptimizerConfig{
@@ -962,11 +1000,11 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				MinWorkers:           2,
 				MaxWorkers:           20,
 			}) {
-				c.logger.Info("Resource optimization applied", "exchange", worker.Exchange)
+				c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Resource optimization applied")
 			}
-			c.logger.Info("Resource optimization triggered", "exchange", worker.Exchange)
+			c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Resource optimization triggered")
 		case <-ticker.C:
-			c.logger.Info("Worker tick - starting collection cycle", "exchange", worker.Exchange)
+			c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Worker tick - starting collection cycle")
 
 			// Create operation context with timeout
 			operationID := fmt.Sprintf("worker_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -984,23 +1022,38 @@ func (c *CollectorService) runWorker(worker *Worker) {
 			if err != nil {
 				worker.ErrorCount++
 				consecutiveFailures++
-				c.logger.Error("Error collecting ticker data", "exchange", worker.Exchange, "error", err, "error_count", worker.ErrorCount, "consecutive_failures", consecutiveFailures)
+				c.logger.WithFields(map[string]interface{}{
+					"exchange":             worker.Exchange,
+					"error_count":          worker.ErrorCount,
+					"consecutive_failures": consecutiveFailures,
+				}).WithError(err).Error("Error collecting ticker data")
 
 				// Implement graceful degradation for consecutive failures
 				if consecutiveFailures >= maxConsecutiveFailures {
-					c.logger.Warn("Worker has consecutive failures, implementing graceful degradation",
-						"exchange", worker.Exchange, "consecutive_failures", consecutiveFailures)
+					c.logger.WithFields(map[string]interface{}{
+						"exchange":             worker.Exchange,
+						"consecutive_failures": consecutiveFailures,
+					}).Warn("Worker has consecutive failures, implementing graceful degradation")
 
 					// Increase interval temporarily to reduce load
 					ticker.Stop()
 					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
 					intervalIncreased = true
 					degradationStartTime = time.Now()
-					c.logger.Info("Temporarily increased collection interval", "exchange", worker.Exchange, "new_interval", c.tickerInterval*2)
+					ticker = time.NewTicker(c.tickerInterval * 2) // Double the interval
+					intervalIncreased = true
+					degradationStartTime = time.Now()
+					c.logger.WithFields(map[string]interface{}{
+						"exchange":     worker.Exchange,
+						"new_interval": c.tickerInterval * 2,
+					}).Info("Temporarily increased collection interval")
 				}
 
 				if worker.ErrorCount >= worker.MaxErrors {
-					c.logger.Error("Worker exceeded max errors, stopping", "exchange", worker.Exchange, "max_errors", worker.MaxErrors)
+					c.logger.WithFields(map[string]interface{}{
+						"exchange":   worker.Exchange,
+						"max_errors": worker.MaxErrors,
+					}).Error("Worker exceeded max errors, stopping")
 					worker.IsRunning = false
 					return
 				}
@@ -1024,8 +1077,12 @@ func (c *CollectorService) runWorker(worker *Worker) {
 					ticker = time.NewTicker(c.tickerInterval)
 					intervalIncreased = false
 					degradationStartTime = time.Time{}
-					c.logger.Info("Restored normal collection interval",
-						"exchange", worker.Exchange, "interval", c.tickerInterval)
+					intervalIncreased = false
+					degradationStartTime = time.Time{}
+					c.logger.WithFields(map[string]interface{}{
+						"exchange": worker.Exchange,
+						"interval": c.tickerInterval,
+					}).Info("Restored normal collection interval")
 				}
 			}
 
@@ -1034,8 +1091,12 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				ticker.Stop()
 				ticker = time.NewTicker(c.tickerInterval)
 				intervalIncreased = false
-				c.logger.Warn("Degradation timeout reached, forcing interval restoration",
-					"exchange", worker.Exchange, "degraded_duration", time.Since(degradationStartTime))
+				ticker = time.NewTicker(c.tickerInterval)
+				intervalIncreased = false
+				c.logger.WithFields(map[string]interface{}{
+					"exchange":          worker.Exchange,
+					"degraded_duration": time.Since(degradationStartTime),
+				}).Warn("Degradation timeout reached, forcing interval restoration")
 				degradationStartTime = time.Time{}
 			}
 
@@ -1045,7 +1106,10 @@ func (c *CollectorService) runWorker(worker *Worker) {
 			c.fundingCollectionMu.RUnlock()
 
 			if !exists || time.Since(lastFundingCollection) >= c.fundingRateInterval {
-				c.logger.Info("Collecting funding rates", "exchange", worker.Exchange, "interval", c.fundingRateInterval)
+				c.logger.WithFields(map[string]interface{}{
+					"exchange": worker.Exchange,
+					"interval": c.fundingRateInterval,
+				}).Info("Collecting funding rates")
 
 				// Create separate context for funding rate collection
 				fundingOperationID := fmt.Sprintf("funding_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -1060,7 +1124,9 @@ func (c *CollectorService) runWorker(worker *Worker) {
 				fundingCancel() // Clean up funding context
 
 				if err != nil {
-					c.logger.Warn("Failed to collect funding rates", "exchange", worker.Exchange, "error", err)
+					c.logger.WithFields(map[string]interface{}{
+						"exchange": worker.Exchange,
+					}).WithError(err).Warn("Failed to collect funding rates")
 				} else {
 					// Update last funding collection time
 					c.fundingCollectionMu.Lock()
@@ -1079,8 +1145,12 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 	var collectionMethod string
 	defer func() {
 		duration := time.Since(startTime)
-		c.logger.Info("Ticker collection completed",
-			"exchange", worker.Exchange, "method", collectionMethod, "duration_ms", duration.Milliseconds(), "symbol_count", len(worker.Symbols))
+		c.logger.WithFields(map[string]interface{}{
+			"exchange":     worker.Exchange,
+			"method":       collectionMethod,
+			"duration_ms":  duration.Milliseconds(),
+			"symbol_count": len(worker.Symbols),
+		}).Info("Ticker collection completed")
 
 		// Cache performance metrics in Redis for monitoring
 		if c.redisClient != nil {
@@ -1101,7 +1171,9 @@ func (c *CollectorService) collectTickerDataOnly(worker *Worker) error {
 	// Try bulk collection first, fallback to sequential if it fails
 	collectionMethod = "bulk"
 	if err := c.collectTickerDataBulk(worker); err != nil {
-		c.logger.Warn("Bulk ticker collection failed, falling back to sequential", "exchange", worker.Exchange, "error", err)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": worker.Exchange,
+		}).WithError(err).Warn("Bulk ticker collection failed, falling back to sequential")
 		collectionMethod = "sequential"
 		return c.collectTickerDataSequential(worker)
 	}
@@ -1116,7 +1188,12 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	})
 	defer observability.FinishSpan(span, nil)
 
-	c.logger.Info("Collecting ticker data (bulk)", "exchange", worker.Exchange, "symbols", len(worker.Symbols))
+	defer observability.FinishSpan(span, nil)
+
+	c.logger.WithFields(map[string]interface{}{
+		"exchange": worker.Exchange,
+		"symbols":  len(worker.Symbols),
+	}).Info("Collecting ticker data (bulk)")
 
 	// Filter out blacklisted symbols before making the bulk request
 	validSymbols := make([]string, 0, len(worker.Symbols))
@@ -1125,14 +1202,17 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
 			validSymbols = append(validSymbols, symbol)
 		} else {
-			c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
+			c.logger.WithFields(map[string]interface{}{
+				"symbol": symbolKey,
+				"reason": reason,
+			}).Info("Skipping blacklisted symbol")
 		}
 	}
 
 	span.SetData("valid_symbols", len(validSymbols))
 
 	if len(validSymbols) == 0 {
-		c.logger.Info("No valid symbols to fetch", "exchange", worker.Exchange)
+		c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("No valid symbols to fetch")
 		return nil
 	}
 
@@ -1154,7 +1234,9 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "bulk_fetch"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"resource": resourceID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
@@ -1196,7 +1278,10 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 
 			// Validate and save ticker data
 			if err := c.saveBulkTickerData(t); err != nil {
-				c.logger.Error("Failed to save ticker data", "exchange", t.ExchangeName, "symbol", t.Symbol, "error", err)
+				c.logger.WithFields(map[string]interface{}{
+					"exchange": t.ExchangeName,
+					"symbol":   t.Symbol,
+				}).WithError(err).Error("Failed to save ticker data")
 				errorChan <- err
 			} else {
 				successChan <- true
@@ -1219,7 +1304,11 @@ func (c *CollectorService) collectTickerDataBulk(worker *Worker) error {
 	// Cache bulk results for fast API responses (best-effort)
 	c.cacheBulkTickerData(worker.Exchange, marketData)
 
-	c.logger.Info("Successfully saved tickers", "exchange", worker.Exchange, "success_count", successCount, "total_count", len(marketData))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":      worker.Exchange,
+		"success_count": successCount,
+		"total_count":   len(marketData),
+	}).Info("Successfully saved tickers")
 	return nil
 }
 
@@ -1232,16 +1321,22 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); !isBlacklisted {
 			validSymbols = append(validSymbols, symbol)
 		} else {
-			c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
+			c.logger.WithFields(map[string]interface{}{
+				"symbol": symbolKey,
+				"reason": reason,
+			}).Info("Skipping blacklisted symbol")
 		}
 	}
 
 	if len(validSymbols) == 0 {
-		c.logger.Info("No valid symbols to fetch sequentially", "exchange", worker.Exchange)
+		c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("No valid symbols to fetch sequentially")
 		return nil
 	}
 
-	c.logger.Info("Collecting ticker data (sequential)", "exchange", worker.Exchange, "symbols", len(validSymbols))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange": worker.Exchange,
+		"symbols":  len(validSymbols),
+	}).Info("Collecting ticker data (sequential)")
 
 	// Create timeout context for the entire sequential operation
 	operationID := fmt.Sprintf("sequential_collection_%s_%d", worker.Exchange, time.Now().UnixNano())
@@ -1258,7 +1353,9 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "sequential_collection"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"resource": resourceID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
@@ -1281,7 +1378,10 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		})
 
 		if err != nil {
-			c.logger.Error("Failed to collect ticker data with error recovery", "exchange", worker.Exchange, "symbol", symbol, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": worker.Exchange,
+				"symbol":   symbol,
+			}).WithError(err).Error("Failed to collect ticker data with error recovery")
 			// Continue with other symbols even if one fails
 			continue
 		} else {
@@ -1294,7 +1394,11 @@ func (c *CollectorService) collectTickerDataSequential(worker *Worker) error {
 		}
 	}
 
-	c.logger.Info("Sequential collection completed", "exchange", worker.Exchange, "successful", successCount, "total", len(validSymbols))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":   worker.Exchange,
+		"successful": successCount,
+		"total":      len(validSymbols),
+	}).Info("Sequential collection completed")
 	return nil
 }
 
@@ -1307,7 +1411,7 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 	cacheKey := fmt.Sprintf("bulk_tickers:%s", exchange)
 	dataJSON, err := json.Marshal(marketData)
 	if err != nil {
-		c.logger.Error("Failed to marshal bulk ticker data for caching", "error", err)
+		c.logger.WithError(err).Error("Failed to marshal bulk ticker data for caching")
 		return
 	}
 
@@ -1326,9 +1430,13 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 	})
 
 	if err != nil {
-		c.logger.Error("Failed to cache bulk ticker data with error recovery", "exchange", exchange, "error", err)
+		c.logger.WithFields(map[string]interface{}{"exchange": exchange}).WithError(err).Error("Failed to cache bulk ticker data with error recovery")
 	} else {
-		c.logger.Info("Cached tickers in Redis", "count", len(marketData), "exchange", exchange, "ttl", "10s")
+		c.logger.WithFields(map[string]interface{}{
+			"count":    len(marketData),
+			"exchange": exchange,
+			"ttl":      "10s",
+		}).Info("Cached tickers in Redis")
 	}
 
 	// Also cache individual ticker data for quick lookups with error recovery
@@ -1346,7 +1454,9 @@ func (c *CollectorService) cacheBulkTickerData(exchange string, marketData []mod
 			})
 		}); err != nil {
 			// Log circuit breaker or caching failure but continue
-			c.logger.Error("Failed to cache individual ticker", "key", individualKey, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"key": individualKey,
+			}).WithError(err).Error("Failed to cache individual ticker")
 		}
 	}
 }
@@ -1358,7 +1468,10 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 		symbolKey := fmt.Sprintf("%s:%s", ticker.ExchangeName, ticker.Symbol)
 		ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
 		c.blacklistCache.Add(symbolKey, reason, ttl)
-		c.logger.Info("Added symbol to blacklist", "symbol", symbolKey, "reason", reason)
+		c.logger.WithFields(map[string]interface{}{
+			"symbol": symbolKey,
+			"reason": reason,
+		}).Info("Added symbol to blacklist")
 		return nil
 	}
 
@@ -1376,7 +1489,10 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 
 	// Validate price data before saving to database
 	if validationErr := c.validateMarketData(&ticker, ticker.ExchangeName, ticker.Symbol); validationErr != nil {
-		c.logger.Warn("Invalid market data", "exchange", ticker.ExchangeName, "symbol", ticker.Symbol, "error", validationErr)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": ticker.ExchangeName,
+			"symbol":   ticker.Symbol,
+		}).WithError(validationErr).Warn("Invalid market data")
 		return nil // Don't save invalid data, but don't fail the collection
 	}
 
@@ -1405,10 +1521,11 @@ func (c *CollectorService) saveBulkTickerData(ticker models.MarketPrice) error {
 	if !c.hasCollectedData {
 		c.hasCollectedData = true
 		close(c.dataReadyChan) // Signal all waiting goroutines
-		c.logger.Info("First market data saved successfully",
-			"exchange", ticker.ExchangeName,
-			"symbol", ticker.Symbol,
-			"price", ticker.Price)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": ticker.ExchangeName,
+			"symbol":   ticker.Symbol,
+			"price":    ticker.Price,
+		}).Info("First market data saved successfully")
 	}
 	c.readinessMu.Unlock()
 
@@ -1446,7 +1563,10 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	// Check if symbol is blacklisted before making API call
 	symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
 	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
-		c.logger.Info("Skipping blacklisted symbol", "symbol", symbolKey, "reason", reason)
+		c.logger.WithFields(map[string]interface{}{
+			"symbol": symbolKey,
+			"reason": reason,
+		}).Info("Skipping blacklisted symbol")
 		return nil
 	}
 
@@ -1465,7 +1585,9 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 	}, map[string]interface{}{"exchange": exchange, "symbol": symbol, "operation": "single_fetch"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"resource": resourceID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
@@ -1491,7 +1613,11 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 			symbolKey := fmt.Sprintf("%s:%s", exchange, symbol)
 			ttl, _ := time.ParseDuration(c.config.Blacklist.TTL)
 			c.blacklistCache.Add(symbolKey, reason, ttl)
-			c.logger.Info("Added symbol to blacklist with error", "symbol", symbolKey, "reason", reason, "error", cbErr)
+			c.logger.WithFields(map[string]interface{}{
+				"symbol": symbolKey,
+				"reason": reason,
+				"error":  cbErr,
+			}).Info("Added symbol to blacklist with error")
 			return nil
 		}
 		return fmt.Errorf("failed to fetch ticker data with circuit breaker: %w", cbErr)
@@ -1511,7 +1637,10 @@ func (c *CollectorService) collectTickerDataDirect(exchange, symbol string) erro
 
 	// Validate price data before saving to database
 	if validateErr := c.validateMarketData(ticker, exchange, symbol); validateErr != nil {
-		c.logger.Warn("Invalid market data", "exchange", exchange, "symbol", symbol, "error", validateErr)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": exchange,
+			"symbol":   symbol,
+		}).WithError(validateErr).Warn("Invalid market data")
 		return nil // Don't save invalid data, but don't fail the collection
 	}
 
@@ -1534,12 +1663,12 @@ func (c *CollectorService) collectFundingRates(worker *Worker) error {
 
 // collectFundingRatesBulk collects funding rates for futures markets using concurrent processing
 func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
-	c.logger.Info("Starting concurrent funding rate collection", "exchange", worker.Exchange)
+	c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Starting concurrent funding rate collection")
 
 	// Check if we already know this exchange doesn't support funding rates
 	supports, known := c.exchangeCapabilityCache.SupportsFundingRates(worker.Exchange)
 	if known && !supports {
-		c.logger.Info("Skipping funding rate collection - exchange does not support funding rates", "exchange", worker.Exchange)
+		c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Skipping funding rate collection - exchange does not support funding rates")
 		return nil
 	}
 
@@ -1558,7 +1687,9 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 	}, map[string]interface{}{"exchange": worker.Exchange, "operation": "funding_rates"})
 	defer func() {
 		if err := c.resourceManager.CleanupResource(resourceID); err != nil {
-			c.logger.Error("Failed to cleanup resource", "resource", resourceID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"resource": resourceID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
@@ -1575,7 +1706,7 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 	if fetchErr != nil {
 		// Check if this is a funding rate unsupported error
 		if isFundingRateUnsupportedError(fetchErr) {
-			c.logger.Info("Exchange does not support funding rates, caching this information", "exchange", worker.Exchange)
+			c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Exchange does not support funding rates, caching this information")
 			c.exchangeCapabilityCache.SetFundingRateSupport(worker.Exchange, false)
 			return nil // Don't treat this as an error
 		}
@@ -1584,11 +1715,14 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 
 	// If we successfully fetched funding rates, cache that this exchange supports them
 	if !known {
-		c.logger.Info("Exchange supports funding rates, caching this information", "exchange", worker.Exchange)
+		c.logger.WithFields(map[string]interface{}{"exchange": worker.Exchange}).Info("Exchange supports funding rates, caching this information")
 		c.exchangeCapabilityCache.SetFundingRateSupport(worker.Exchange, true)
 	}
 
-	c.logger.Info("Fetched funding rates", "exchange", worker.Exchange, "count", len(fundingRates))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange": worker.Exchange,
+		"count":    len(fundingRates),
+	}).Info("Fetched funding rates")
 
 	if len(fundingRates) == 0 {
 		return nil
@@ -1618,12 +1752,19 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 				defer func() { <-semaphore }()
 
 				if err := c.storeFundingRate(worker.Exchange, r); err != nil {
-					c.logger.Error("Failed to store funding rate", "exchange", worker.Exchange, "symbol", r.Symbol, "error", err)
+					c.logger.WithFields(map[string]interface{}{
+						"exchange": worker.Exchange,
+						"symbol":   r.Symbol,
+					}).WithError(err).Error("Failed to store funding rate")
 					mu.Lock()
 					errorCount++
 					mu.Unlock()
 				} else {
-					c.logger.Info("Successfully stored funding rate", "exchange", worker.Exchange, "symbol", r.Symbol, "rate", r.FundingRate)
+					c.logger.WithFields(map[string]interface{}{
+						"exchange": worker.Exchange,
+						"symbol":   r.Symbol,
+						"rate":     r.FundingRate,
+					}).Info("Successfully stored funding rate")
 					mu.Lock()
 					successCount++
 					mu.Unlock()
@@ -1635,7 +1776,11 @@ func (c *CollectorService) collectFundingRatesBulk(worker *Worker) error {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	c.logger.Info("Completed funding rate collection", "exchange", worker.Exchange, "successful", successCount, "errors", errorCount)
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":   worker.Exchange,
+		"successful": successCount,
+		"errors":     errorCount,
+	}).Info("Completed funding rate collection")
 	return nil
 }
 
@@ -1700,7 +1845,10 @@ func (c *CollectorService) storeFundingRate(exchange string, rate ccxt.FundingRa
 		latestFundingKey := "latest_funding_rates"
 		c.redisClient.Del(c.ctx, latestFundingKey)
 
-		c.logger.Info("Invalidated funding rate caches", "exchange", exchange, "trading_pair_id", tradingPairID)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange":        exchange,
+			"trading_pair_id": tradingPairID,
+		}).Info("Invalidated funding rate caches")
 	}
 
 	return nil
@@ -1756,7 +1904,7 @@ func (c *CollectorService) RestartWorker(exchangeID string) error {
 	c.wg.Add(1)
 	go c.runWorker(worker)
 
-	c.logger.Info("Restarted worker", "exchange", exchangeID)
+	c.logger.WithFields(map[string]interface{}{"exchange": exchangeID}).Info("Restarted worker")
 	return nil
 }
 
@@ -1835,7 +1983,11 @@ func (c *CollectorService) getOrCreateTradingPair(exchangeID int, symbol string)
 		c.redisClient.Set(c.ctx, cacheKey, tradingPairID, 24*time.Hour) // Cache for 24 hours
 	}
 
-	c.logger.Info("Created new trading pair", "symbol", symbol, "exchange_id", exchangeID, "trading_pair_id", tradingPairID)
+	c.logger.WithFields(map[string]interface{}{
+		"symbol":          symbol,
+		"exchange_id":     exchangeID,
+		"trading_pair_id": tradingPairID,
+	}).Info("Created new trading pair")
 	return tradingPairID, nil
 }
 
@@ -1862,7 +2014,10 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	name := strings.ToLower(ccxtID)
 	err = c.db.Pool.QueryRow(c.ctx, "SELECT id FROM exchanges WHERE name = $1", name).Scan(&exchangeID)
 	if err == nil {
-		c.logger.Info("Found existing exchange by name", "name", name, "exchange_id", exchangeID)
+		c.logger.WithFields(map[string]interface{}{
+			"name":        name,
+			"exchange_id": exchangeID,
+		}).Info("Found existing exchange by name")
 		// Cache the result
 		c.redisClient.Set(c.ctx, cacheKey, exchangeID, 24*time.Hour)
 		return exchangeID, nil
@@ -1885,7 +2040,10 @@ func (c *CollectorService) getOrCreateExchange(ccxtID string) (int, error) {
 	// Cache the newly created/updated exchange
 	c.redisClient.Set(c.ctx, cacheKey, exchangeID, 24*time.Hour)
 
-	c.logger.Info("Created or updated exchange", "ccxt_id", ccxtID, "exchange_id", exchangeID)
+	c.logger.WithFields(map[string]interface{}{
+		"ccxt_id":     ccxtID,
+		"exchange_id": exchangeID,
+	}).Info("Created or updated exchange")
 	return exchangeID, nil
 }
 
@@ -1995,7 +2153,7 @@ func (c *CollectorService) isInvalidSymbolFormat(symbol string) bool {
 
 // fetchAndCacheSymbols fetches symbols from CCXT service and populates cache (used during startup)
 func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, error) {
-	c.logger.Info("Fetching active markets", "exchange", exchangeID)
+	c.logger.WithFields(map[string]interface{}{"exchange": exchangeID}).Info("Fetching active markets")
 
 	// Add timeout context for better error handling
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
@@ -2004,7 +2162,9 @@ func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, er
 	markets, err := c.ccxtService.FetchMarkets(ctx, exchangeID)
 	if err != nil {
 		// Log warning but don't fail startup for individual exchange errors
-		c.logger.Warn("Failed to fetch markets - exchange may be unavailable", "exchange", exchangeID, "error", err)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": exchangeID,
+		}).WithError(err).Warn("Failed to fetch markets - exchange may be unavailable")
 		return []string{}, nil // Return empty slice instead of error
 	}
 
@@ -2026,7 +2186,10 @@ func (c *CollectorService) fetchAndCacheSymbols(exchangeID string) ([]string, er
 	c.lastSymbolRefresh[exchangeID] = time.Now()
 	c.symbolRefreshMu.Unlock()
 
-	c.logger.Info("Successfully fetched symbols", "exchange", exchangeID, "count", len(activeSymbols))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange": exchangeID,
+		"count":    len(activeSymbols),
+	}).Info("Successfully fetched symbols")
 	return activeSymbols, nil
 }
 
@@ -2047,7 +2210,11 @@ func (c *CollectorService) getMultiExchangeSymbolsConcurrent(exchanges []string)
 	optimalConcurrency := c.resourceOptimizer.GetOptimalConcurrency()
 	maxConcurrent := optimalConcurrency.MaxConcurrentSymbols
 
-	c.logger.Info("Collecting symbols from exchanges concurrently", "exchange_count", len(exchanges), "max_concurrent", maxConcurrent, "purpose", "arbitrage_filtering")
+	c.logger.WithFields(map[string]interface{}{
+		"exchange_count": len(exchanges),
+		"max_concurrent": maxConcurrent,
+		"purpose":        "arbitrage_filtering",
+	}).Info("Collecting symbols from exchanges concurrently")
 
 	// Create timeout context for the entire operation
 	ctx, cancel := context.WithTimeout(c.ctx, 2*time.Minute)
@@ -2056,7 +2223,7 @@ func (c *CollectorService) getMultiExchangeSymbolsConcurrent(exchanges []string)
 	// Try concurrent approach first
 	multiExchangeSymbols, err := c.tryGetSymbolsConcurrent(ctx, exchanges, symbolCount, minExchanges, maxConcurrent)
 	if err != nil {
-		c.logger.Warn("Concurrent symbol collection failed, falling back to sequential processing", "error", err)
+		c.logger.WithError(err).Warn("Concurrent symbol collection failed, falling back to sequential processing")
 		// Fallback to sequential processing
 		return c.getSymbolsSequential(exchanges, minExchanges)
 	}
@@ -2157,7 +2324,12 @@ func (c *CollectorService) tryGetSymbolsConcurrent(ctx context.Context, exchange
 		mu.Unlock()
 
 		successfulExchanges++
-		c.logger.Info("Found valid active symbols", "count", len(validSymbols), "exchange", result.exchangeID, "completed", successfulExchanges, "total", len(exchanges))
+		c.logger.WithFields(map[string]interface{}{
+			"count":     len(validSymbols),
+			"exchange":  result.exchangeID,
+			"completed": successfulExchanges,
+			"total":     len(exchanges),
+		}).Info("Found valid active symbols")
 	}
 
 	// Check if we have enough successful exchanges
@@ -2173,14 +2345,19 @@ func (c *CollectorService) tryGetSymbolsConcurrent(ctx context.Context, exchange
 		}
 	}
 
-	c.logger.Info("Concurrent symbol collection completed", "symbols_on_multiple_exchanges", len(multiExchangeSymbols), "min_exchanges", minExchanges, "total_unique_symbols", len(symbolCount), "successful_exchanges", successfulExchanges)
+	c.logger.WithFields(map[string]interface{}{
+		"symbols_on_multiple_exchanges": len(multiExchangeSymbols),
+		"min_exchanges":                 minExchanges,
+		"total_unique_symbols":          len(symbolCount),
+		"successful_exchanges":          successfulExchanges,
+	}).Info("Concurrent symbol collection completed")
 
 	return multiExchangeSymbols, nil
 }
 
 // getSymbolsSequential fallback method for sequential symbol collection
 func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges int) (map[string]int, error) {
-	c.logger.Info("Starting sequential symbol collection", "exchange_count", len(exchanges))
+	c.logger.WithFields(map[string]interface{}{"exchange_count": len(exchanges)}).Info("Starting sequential symbol collection")
 
 	symbolCount := make(map[string]int)
 	successfulExchanges := 0
@@ -2195,7 +2372,9 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		})
 
 		if err != nil {
-			c.logger.Warn("Failed to fetch symbols in sequential mode", "exchange", exchangeID, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchangeID,
+			}).WithError(err).Warn("Failed to fetch symbols in sequential mode")
 			continue
 		}
 
@@ -2208,7 +2387,12 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		}
 
 		successfulExchanges++
-		c.logger.Info("Sequential: Found valid symbols", "count", len(validSymbols), "exchange", exchangeID, "processed_exchanges", successfulExchanges, "total", len(exchanges))
+		c.logger.WithFields(map[string]interface{}{
+			"count":               len(validSymbols),
+			"exchange":            exchangeID,
+			"processed_exchanges": successfulExchanges,
+			"total":               len(exchanges),
+		}).Info("Sequential: Found valid symbols")
 	}
 
 	// Filter to only symbols that appear on multiple exchanges
@@ -2219,7 +2403,12 @@ func (c *CollectorService) getSymbolsSequential(exchanges []string, minExchanges
 		}
 	}
 
-	c.logger.Info("Sequential symbol collection completed", "symbols_on_multiple_exchanges", len(multiExchangeSymbols), "min_exchanges", minExchanges, "total_unique_symbols", len(symbolCount), "successful_exchanges", successfulExchanges)
+	c.logger.WithFields(map[string]interface{}{
+		"symbols_on_multiple_exchanges": len(multiExchangeSymbols),
+		"min_exchanges":                 minExchanges,
+		"total_unique_symbols":          len(symbolCount),
+		"successful_exchanges":          successfulExchanges,
+	}).Info("Sequential symbol collection completed")
 
 	return multiExchangeSymbols, nil
 }
@@ -2282,7 +2471,11 @@ func (c *CollectorService) PerformBackfillIfNeeded() error {
 		return nil
 	}
 
-	c.logger.Info("Checking if historical data backfill is needed", "backfill_hours", c.backfillConfig.BackfillHours, "threshold_hours", c.backfillConfig.MinDataThresholdHours, "batch_size", c.backfillConfig.BatchSize)
+	c.logger.WithFields(map[string]interface{}{
+		"backfill_hours":  c.backfillConfig.BackfillHours,
+		"threshold_hours": c.backfillConfig.MinDataThresholdHours,
+		"batch_size":      c.backfillConfig.BatchSize,
+	}).Info("Checking if historical data backfill is needed")
 
 	// Check if we have sufficient market data
 	needsBackfill, err := c.checkIfBackfillNeeded()
@@ -2291,18 +2484,18 @@ func (c *CollectorService) PerformBackfillIfNeeded() error {
 	}
 
 	if !needsBackfill {
-		c.logger.Info("Sufficient market data available, skipping backfill", "threshold_hours", c.backfillConfig.MinDataThresholdHours)
+		c.logger.WithFields(map[string]interface{}{"threshold_hours": c.backfillConfig.MinDataThresholdHours}).Info("Sufficient market data available, skipping backfill")
 		return nil
 	}
 
-	c.logger.Info("Insufficient market data detected, starting historical backfill", "backfill_hours", c.backfillConfig.BackfillHours)
+	c.logger.WithFields(map[string]interface{}{"backfill_hours": c.backfillConfig.BackfillHours}).Info("Insufficient market data detected, starting historical backfill")
 	startTime := time.Now()
 	err = c.performHistoricalBackfill()
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("Historical backfill process completed", "duration", time.Since(startTime))
+	c.logger.WithFields(map[string]interface{}{"duration": time.Since(startTime)}).Info("Historical backfill process completed")
 	return nil
 }
 
@@ -2315,7 +2508,7 @@ func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
 	err := c.db.Pool.QueryRow(c.ctx,
 		"SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&activeExchangeCount)
 	if err != nil {
-		c.logger.Warn("Failed to count active exchanges, assuming backfill needed", "error", err)
+		c.logger.WithError(err).Warn("Failed to count active exchanges, assuming backfill needed")
 		return true, nil // Assume backfill needed if we can't check
 	}
 
@@ -2335,7 +2528,7 @@ func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
 		  AND e.status = 'active'
 	`).Scan(&exchangesWithRecentData)
 	if err != nil {
-		c.logger.Warn("Failed to check exchanges with recent data, assuming backfill needed", "error", err)
+		c.logger.WithError(err).Warn("Failed to check exchanges with recent data, assuming backfill needed")
 		return true, nil
 	}
 
@@ -2346,16 +2539,17 @@ func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
 		"SELECT COUNT(*) FROM market_data WHERE timestamp >= $1",
 		thresholdTime).Scan(&totalRecords)
 	if err != nil {
-		c.logger.Warn("Failed to count market data records", "error", err)
+		c.logger.WithError(err).Warn("Failed to count market data records")
 		totalRecords = 0
 	}
 
-	c.logger.Info("Market data availability check",
-		"active_exchanges", activeExchangeCount,
-		"exchanges_with_recent_data", exchangesWithRecentData,
-		"total_records_in_threshold", totalRecords,
-		"threshold_hours", c.backfillConfig.MinDataThresholdHours,
-		"threshold_time", thresholdTime.Format("2006-01-02 15:04"))
+	c.logger.WithFields(map[string]interface{}{
+		"active_exchanges":           activeExchangeCount,
+		"exchanges_with_recent_data": exchangesWithRecentData,
+		"total_records_in_threshold": totalRecords,
+		"threshold_hours":            c.backfillConfig.MinDataThresholdHours,
+		"threshold_time":             thresholdTime.Format("2006-01-02 15:04"),
+	}).Info("Market data availability check")
 
 	// Need backfill if:
 	// 1. No exchanges have any recent data (last hour), OR
@@ -2368,15 +2562,17 @@ func (c *CollectorService) checkIfBackfillNeeded() (bool, error) {
 		if exchangesWithRecentData == 0 {
 			reason = "no exchanges with recent data"
 		}
-		c.logger.Info("Backfill required",
-			"reason", reason,
-			"exchanges_with_data", exchangesWithRecentData,
-			"total_records", totalRecords,
-			"minimum_required", minRecordsThreshold)
+		c.logger.WithFields(map[string]interface{}{
+			"reason":              reason,
+			"exchanges_with_data": exchangesWithRecentData,
+			"total_records":       totalRecords,
+			"minimum_required":    minRecordsThreshold,
+		}).Info("Backfill required")
 	} else {
-		c.logger.Info("Sufficient data available - skipping backfill",
-			"exchanges_with_data", exchangesWithRecentData,
-			"total_records", totalRecords)
+		c.logger.WithFields(map[string]interface{}{
+			"exchanges_with_data": exchangesWithRecentData,
+			"total_records":       totalRecords,
+		}).Info("Sufficient data available - skipping backfill")
 	}
 
 	return needsBackfill, nil
@@ -2389,7 +2585,7 @@ func (c *CollectorService) performHistoricalBackfill() error {
 
 // performHistoricalBackfillConcurrent collects historical data for active trading pairs using concurrent processing
 func (c *CollectorService) performHistoricalBackfillConcurrent() error {
-	c.logger.Info("Starting concurrent historical data backfill", "backfill_hours", c.backfillConfig.BackfillHours)
+	c.logger.WithFields(map[string]interface{}{"backfill_hours": c.backfillConfig.BackfillHours}).Info("Starting concurrent historical data backfill")
 	backfillStartTime := time.Now()
 
 	// Get all active exchanges and their symbols
@@ -2415,7 +2611,10 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 	failedExchanges := 0
 	var totalProcessingTime time.Duration
 
-	c.logger.Info("Processing exchanges concurrently", "exchange_count", len(exchanges), "max_concurrent", maxConcurrentBackfill)
+	c.logger.WithFields(map[string]interface{}{
+		"exchange_count": len(exchanges),
+		"max_concurrent": maxConcurrentBackfill,
+	}).Info("Processing exchanges concurrently")
 
 	// Process exchanges concurrently
 	for _, exchangeID := range exchanges {
@@ -2427,12 +2626,12 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			c.logger.Info("Starting backfill for exchange", "exchange", exchange)
+			c.logger.WithFields(map[string]interface{}{"exchange": exchange}).Info("Starting backfill for exchange")
 
 			// Get cached symbols for this exchange
 			symbols, found := c.symbolCache.Get(exchange)
 			if !found || len(symbols) == 0 {
-				c.logger.Warn("No cached symbols found, skipping backfill", "exchange", exchange)
+				c.logger.WithFields(map[string]interface{}{"exchange": exchange}).Warn("No cached symbols found, skipping backfill")
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2442,7 +2641,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			// Filter to valid symbols
 			validSymbols := c.filterValidSymbols(symbols)
 			if len(validSymbols) == 0 {
-				c.logger.Warn("No valid symbols found, skipping backfill", "exchange", exchange)
+				c.logger.WithFields(map[string]interface{}{"exchange": exchange}).Warn("No valid symbols found, skipping backfill")
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2453,10 +2652,17 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			maxSymbolsPerExchange := 20
 			if len(validSymbols) > maxSymbolsPerExchange {
 				validSymbols = validSymbols[:maxSymbolsPerExchange]
-				c.logger.Info("Limited backfill symbols", "exchange", exchange, "limited_count", maxSymbolsPerExchange, "total_count", len(symbols))
+				c.logger.WithFields(map[string]interface{}{
+					"exchange":      exchange,
+					"limited_count": maxSymbolsPerExchange,
+					"total_count":   len(symbols),
+				}).Info("Limited backfill symbols")
 			}
 
-			c.logger.Info("Starting backfill", "exchange", exchange, "symbol_count", len(validSymbols))
+			c.logger.WithFields(map[string]interface{}{
+				"exchange":     exchange,
+				"symbol_count": len(validSymbols),
+			}).Info("Starting backfill")
 
 			// Track processing time for this exchange
 			exchangeStartTime := time.Now()
@@ -2466,7 +2672,7 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 			exchangeProcessingTime := time.Since(exchangeStartTime)
 
 			if err != nil {
-				c.logger.Error("Error during backfill for exchange", "exchange", exchange, "error", err)
+				c.logger.WithFields(map[string]interface{}{"exchange": exchange}).WithError(err).Error("Error during backfill for exchange")
 				mu.Lock()
 				failedExchanges++
 				mu.Unlock()
@@ -2486,7 +2692,13 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 				c.warmBackfillCache(exchange, validSymbols[:successCount])
 			}
 
-			c.logger.Info("Completed backfill for exchange", "exchange", exchange, "successful_symbols", successCount, "total_symbols", len(validSymbols), "duration", exchangeProcessingTime, "symbols_per_sec", float64(successCount)/exchangeProcessingTime.Seconds())
+			c.logger.WithFields(map[string]interface{}{
+				"exchange":           exchange,
+				"successful_symbols": successCount,
+				"total_symbols":      len(validSymbols),
+				"duration":           exchangeProcessingTime,
+				"symbols_per_sec":    float64(successCount) / exchangeProcessingTime.Seconds(),
+			}).Info("Completed backfill for exchange")
 		}(exchangeID)
 	}
 
@@ -2503,17 +2715,18 @@ func (c *CollectorService) performHistoricalBackfillConcurrent() error {
 	overallThroughput := float64(successfulBackfills) / totalBackfillTime.Seconds()
 	successRate := float64(successfulBackfills) / float64(totalSymbols) * 100
 
-	c.logger.Info("Concurrent historical backfill completed",
-		"total_duration", totalBackfillTime,
-		"successful_symbols", successfulBackfills,
-		"total_symbols", totalSymbols,
-		"success_rate_percent", successRate,
-		"successful_exchanges", successfulExchanges,
-		"failed_exchanges", failedExchanges,
-		"total_exchanges", len(exchanges),
-		"overall_throughput_symbols_per_sec", overallThroughput,
-		"avg_processing_time_per_exchange_sec", avgProcessingTime.Seconds(),
-		"estimated_improvement_factor", float64(len(exchanges)*5))
+	c.logger.WithFields(map[string]interface{}{
+		"total_duration":                       totalBackfillTime,
+		"successful_symbols":                   successfulBackfills,
+		"total_symbols":                        totalSymbols,
+		"success_rate_percent":                 successRate,
+		"successful_exchanges":                 successfulExchanges,
+		"failed_exchanges":                     failedExchanges,
+		"total_exchanges":                      len(exchanges),
+		"overall_throughput_symbols_per_sec":   overallThroughput,
+		"avg_processing_time_per_exchange_sec": avgProcessingTime.Seconds(),
+		"estimated_improvement_factor":         float64(len(exchanges) * 5),
+	}).Info("Concurrent historical backfill completed")
 
 	return nil
 }
@@ -2531,14 +2744,16 @@ func (c *CollectorService) warmBackfillCache(exchangeID string, symbols []string
 	cacheKey := fmt.Sprintf("backfill:success:%s", exchangeID)
 	symbolsJSON, err := json.Marshal(symbols)
 	if err != nil {
-		c.logger.Error("Failed to marshal symbols for cache warming", "error", err)
+		c.logger.WithError(err).Error("Failed to marshal symbols for cache warming")
 		return
 	}
 
 	// Cache for 1 hour to help with subsequent operations
 	err = c.redisClient.Set(ctx, cacheKey, symbolsJSON, time.Hour).Err()
 	if err != nil {
-		c.logger.Error("Failed to warm backfill cache", "exchange", exchangeID, "error", err)
+		c.logger.WithFields(map[string]interface{}{
+			"exchange": exchangeID,
+		}).WithError(err).Error("Failed to warm backfill cache")
 		return
 	}
 
@@ -2548,7 +2763,10 @@ func (c *CollectorService) warmBackfillCache(exchangeID string, symbols []string
 		c.redisClient.Set(ctx, statusKey, "completed", time.Hour)
 	}
 
-	c.logger.Info("Warmed cache with successful backfill symbols", "symbol_count", len(symbols), "exchange", exchangeID)
+	c.logger.WithFields(map[string]interface{}{
+		"symbol_count": len(symbols),
+		"exchange":     exchangeID,
+	}).Info("Warmed cache with successful backfill symbols")
 }
 
 // BackfillJob represents a single symbol backfill task
@@ -2586,7 +2804,12 @@ func (c *CollectorService) backfillExchangeData(exchangeID string, symbols []str
 		}
 	}()
 
-	c.logger.Info("Starting concurrent backfill for exchange", "exchange", exchangeID, "symbol_count", len(symbols), "start_time", backfillStartTime.Format("2006-01-02 15:04"), "end_time", time.Now().Format("2006-01-02 15:04"))
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":     exchangeID,
+		"symbol_count": len(symbols),
+		"start_time":   backfillStartTime.Format("2006-01-02 15:04"),
+		"end_time":     time.Now().Format("2006-01-02 15:04"),
+	}).Info("Starting concurrent backfill for exchange")
 
 	// Get dynamic concurrency limit from resource optimizer
 	optimalConcurrency := c.resourceOptimizer.GetOptimalConcurrency()
@@ -2678,24 +2901,44 @@ func (c *CollectorService) backfillExchangeData(exchangeID string, symbols []str
 		// Log progress every 25% or every 10 symbols
 		if processedCount%10 == 0 || processedCount == totalSymbols {
 			progress := float64(processedCount) / float64(totalSymbols) * 100
-			c.logger.Info("Backfill progress", "exchange", exchangeID, "progress_percent", progress, "processed", processedCount, "total", totalSymbols, "successful", successCount, "failed", failedCount)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange":         exchangeID,
+				"progress_percent": progress,
+				"processed":        processedCount,
+				"total":            totalSymbols,
+				"successful":       successCount,
+				"failed":           failedCount,
+			}).Info("Backfill progress")
 		}
 	}
 
 	// Log any errors encountered
 	if len(errors) > 0 {
-		c.logger.Warn("Backfill errors encountered", "exchange", exchangeID, "error_count", len(errors))
+		c.logger.WithFields(map[string]interface{}{
+			"exchange":    exchangeID,
+			"error_count": len(errors),
+		}).Warn("Backfill errors encountered")
 		for i, err := range errors {
 			if i < 5 { // Log first 5 errors to avoid spam
-				c.logger.Error("Backfill error detail", "exchange", exchangeID, "error", err)
+				c.logger.WithFields(map[string]interface{}{
+					"exchange": exchangeID,
+				}).WithError(err).Error("Backfill error detail")
 			} else if i == 5 {
-				c.logger.Warn("Additional backfill errors suppressed", "exchange", exchangeID, "additional_errors", len(errors)-5)
+				c.logger.WithFields(map[string]interface{}{
+					"exchange":          exchangeID,
+					"additional_errors": len(errors) - 5,
+				}).Warn("Additional backfill errors suppressed")
 				break
 			}
 		}
 	}
 
-	c.logger.Info("Concurrent backfill completed for exchange", "exchange", exchangeID, "successful", successCount, "failed", failedCount, "total_symbols", totalSymbols)
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":      exchangeID,
+		"successful":    successCount,
+		"failed":        failedCount,
+		"total_symbols": totalSymbols,
+	}).Info("Concurrent backfill completed for exchange")
 	return successCount, nil
 }
 
@@ -2734,7 +2977,11 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	// Check if symbol is blacklisted
 	symbolKey := fmt.Sprintf("%s:%s", job.ExchangeID, job.Symbol)
 	if isBlacklisted, reason := c.blacklistCache.IsBlacklisted(symbolKey); isBlacklisted {
-		c.logger.Info("Skipping blacklisted symbol", "worker_id", workerID, "symbol", symbolKey, "reason", reason)
+		c.logger.WithFields(map[string]interface{}{
+			"worker_id": workerID,
+			"symbol":    symbolKey,
+			"reason":    reason,
+		}).Info("Skipping blacklisted symbol")
 		result.Error = fmt.Errorf("symbol blacklisted: %s", reason)
 		return result
 	}
@@ -2745,7 +2992,11 @@ func (c *CollectorService) processBackfillJob(job BackfillJob, workerID int, ctx
 	})
 
 	if err != nil {
-		c.logger.Error("Failed to backfill symbol", "worker_id", workerID, "exchange", job.ExchangeID, "symbol", job.Symbol, "error", err)
+		c.logger.WithFields(map[string]interface{}{
+			"worker_id": workerID,
+			"exchange":  job.ExchangeID,
+			"symbol":    job.Symbol,
+		}).WithError(err).Error("Failed to backfill symbol")
 		result.Error = err
 		return result
 	}
@@ -2790,7 +3041,13 @@ func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exc
 	baseVolume := ticker.Volume
 	dataPointsGenerated := 0
 
-	c.logger.Info("Generating historical data", "exchange", exchangeID, "symbol", symbol, "start_time", startTime.Format("2006-01-02 15:04"), "baseline_price", basePrice, "baseline_volume", baseVolume)
+	c.logger.WithFields(map[string]interface{}{
+		"exchange":        exchangeID,
+		"symbol":          symbol,
+		"start_time":      startTime.Format("2006-01-02 15:04"),
+		"baseline_price":  basePrice,
+		"baseline_volume": baseVolume,
+	}).Info("Generating historical data")
 
 	for currentTime.Before(time.Now().Add(-interval)) {
 		// Add some realistic price variation (±2%)
@@ -2817,6 +3074,11 @@ func (c *CollectorService) generateHistoricalDataPoints(ctx context.Context, exc
 		currentTime = currentTime.Add(interval)
 	}
 
-	c.logger.Info("Generated historical data points", "data_points", dataPointsGenerated, "exchange", exchangeID, "symbol", symbol, "interval", "30min")
+	c.logger.WithFields(map[string]interface{}{
+		"data_points": dataPointsGenerated,
+		"exchange":    exchangeID,
+		"symbol":      symbol,
+		"interval":    "30min",
+	}).Info("Generated historical data points")
 	return nil
 }

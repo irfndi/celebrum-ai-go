@@ -18,7 +18,7 @@ import (
 	"github.com/irfandi/celebrum-ai-go/test/testmocks"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -35,8 +35,8 @@ func TestMain(m *testing.M) {
 	}
 
 	// Initialize a basic logger to prevent nil pointer dereference in tests
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel)
+	logger := logging.NewStandardLogger("info", "test")
+	logger.SetLevel("error")
 
 	// Initialize telemetry with disabled export to prevent nil pointer dereference
 	// This is needed because ExchangeCapabilityCache tries to log via telemetry.Logger()
@@ -752,8 +752,8 @@ func TestCollectorService_CollectTickerDataDirect_CCXErrorWithBlacklist(t *testi
 // Test collectFundingRates function (wrapper for collectFundingRatesBulk)
 func TestCollectorService_CollectFundingRates(t *testing.T) {
 	// Initialize a basic logger for testing to prevent nil pointer dereference
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel) // Reduce log noise in tests
+	logger := logging.NewStandardLogger("info", "test")
+	logger.SetLevel("error") // Reduce log noise in tests
 
 	mockCCXT := &testmocks.MockCCXTService{}
 	config := &config.Config{}
@@ -972,7 +972,8 @@ func TestCollectorService_CollectFundingRatesBulk_Concurrent(t *testing.T) {
 
 // Test SymbolCache Get method (currently 0% coverage)
 func TestSymbolCache_Get(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test getting from empty cache
 	symbols, found := cache.Get("binance")
@@ -1000,7 +1001,8 @@ func TestSymbolCache_Get(t *testing.T) {
 
 // Test SymbolCache Set method (currently 0% coverage)
 func TestSymbolCache_Set(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5*time.Minute, logger)
 
 	// Test setting new data
 	cache.Set("binance", []string{"BTC/USDT", "ETH/USDT"})
@@ -1045,7 +1047,8 @@ func TestSymbolCache_Set(t *testing.T) {
 
 // Test SymbolCache Stats methods (currently 0% coverage)
 func TestSymbolCache_GetStats(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5 * time.Minute, logger)
 
 	// Test initial stats
 	stats := cache.GetStats()
@@ -1068,7 +1071,8 @@ func TestSymbolCache_GetStats(t *testing.T) {
 
 // Test SymbolCache concurrent operations
 func TestSymbolCache_ConcurrentOperations(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5 * time.Minute, logger)
 
 	// Test concurrent Set operations
 	done := make(chan bool, 10)
@@ -1117,7 +1121,8 @@ func TestSymbolCache_ConcurrentOperations(t *testing.T) {
 
 // Test SymbolCache edge cases
 func TestSymbolCache_EdgeCases(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5 * time.Minute, logger)
 
 	// Test multiple updates to same key
 	cache.Set("binance", []string{"BTC/USDT"})
@@ -1161,7 +1166,8 @@ func TestSymbolCache_EdgeCases(t *testing.T) {
 
 // Test SymbolCache LogStats method (currently 0% coverage)
 func TestSymbolCache_LogStats(t *testing.T) {
-	cache := NewSymbolCache(5 * time.Minute)
+	logger := logging.NewStandardLogger("info", "test")
+	cache := NewSymbolCache(5 * time.Minute, logger)
 
 	// Test LogStats doesn't panic and logs properly
 	// Since LogStats just logs to the logger, we just ensure it doesn't panic

@@ -6,14 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
+
+// Force update
 
 // MockTechnicalDatabase is a mock implementation of the database for technical analysis
 type MockTechnicalDatabase struct {
@@ -93,8 +95,7 @@ func generateTestPriceData(count int) *PriceData {
 
 func setupTestService() (*TechnicalAnalysisService, *MockTechnicalDatabase) {
 	cfg := &config.Config{}
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel) // Reduce noise in tests
+	logger := logging.NewStandardLogger("error", "test") // Reduce noise in tests
 
 	mockDB := &MockTechnicalDatabase{
 		PostgresDB: &MockGormDB{},
@@ -114,7 +115,7 @@ func setupTestService() (*TechnicalAnalysisService, *MockTechnicalDatabase) {
 func TestNewTechnicalAnalysisService(t *testing.T) {
 	cfg := &config.Config{}
 	db := &database.PostgresDB{}
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	// Create required dependencies
 	errorRecoveryManager := NewErrorRecoveryManager(logger)

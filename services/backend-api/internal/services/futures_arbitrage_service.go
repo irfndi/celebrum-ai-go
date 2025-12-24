@@ -14,9 +14,9 @@ import (
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
@@ -37,6 +37,7 @@ type FuturesArbitrageService struct {
 	errorRecoveryManager *ErrorRecoveryManager
 	resourceManager      *ResourceManager
 	performanceMonitor   *PerformanceMonitor
+	logger               logging.Logger
 }
 
 // NewFuturesArbitrageService creates a new futures arbitrage service.
@@ -60,6 +61,7 @@ func NewFuturesArbitrageService(
 	errorRecoveryManager *ErrorRecoveryManager,
 	resourceManager *ResourceManager,
 	performanceMonitor *PerformanceMonitor,
+	logger logging.Logger,
 ) *FuturesArbitrageService {
 	return &FuturesArbitrageService{
 		db:                   db,
@@ -69,6 +71,7 @@ func NewFuturesArbitrageService(
 		errorRecoveryManager: errorRecoveryManager,
 		resourceManager:      resourceManager,
 		performanceMonitor:   performanceMonitor,
+		logger:               logger,
 	}
 }
 
@@ -92,7 +95,7 @@ func (s *FuturesArbitrageService) Start() error {
 	s.wg.Add(1)
 	go s.runOpportunityCalculator()
 
-	telemetry.Logger().Info("Futures arbitrage service started")
+	s.logger.Info("Futures arbitrage service started")
 	observability.AddBreadcrumb(s.ctx, "futures_arbitrage", "Futures arbitrage service started", sentry.LevelInfo)
 	return nil
 }
@@ -110,7 +113,7 @@ func (s *FuturesArbitrageService) Stop() {
 	s.wg.Wait()
 	s.running = false
 
-	telemetry.Logger().Info("Futures arbitrage service stopped")
+	s.logger.Info("Futures arbitrage service stopped")
 }
 
 // runOpportunityCalculator runs the periodic opportunity calculation
@@ -124,19 +127,21 @@ func (s *FuturesArbitrageService) runOpportunityCalculator() {
 	}, map[string]interface{}{"operation": "periodic_calculation", "service": "futures_arbitrage"})
 	defer func() {
 		if err := s.resourceManager.CleanupResource(operationID); err != nil {
-			telemetry.Logger().Error("Failed to cleanup resource", "operation_id", operationID, "error", err)
+			s.logger.WithFields(map[string]interface{}{
+				"operation_id": operationID,
+			}).WithError(err).Error("Failed to cleanup resource")
 		}
 	}()
 
 	ticker := time.NewTicker(30 * time.Second) // Calculate every 30 seconds
 	defer ticker.Stop()
 
-	telemetry.Logger().Info("Futures arbitrage opportunity calculator started")
+	s.logger.Info("Futures arbitrage opportunity calculator started")
 
 	for {
 		select {
 		case <-s.ctx.Done():
-			telemetry.Logger().Info("Futures arbitrage opportunity calculator stopped")
+			s.logger.Info("Futures arbitrage opportunity calculator stopped")
 			return
 		case <-ticker.C:
 			// Create timeout context for each calculation cycle
@@ -148,7 +153,7 @@ func (s *FuturesArbitrageService) runOpportunityCalculator() {
 			})
 
 			if err != nil {
-				telemetry.Logger().Error("Error calculating opportunities", "error", err)
+				s.logger.WithError(err).Error("Error calculating opportunities")
 				// Record failure in performance monitor
 				if s.performanceMonitor != nil {
 					metrics := s.performanceMonitor.GetApplicationMetrics().CollectorMetrics
@@ -169,7 +174,10 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 		observability.RecoverAndCapture(spanCtx, "calculateAndStoreOpportunities")
 	}()
 
-	telemetry.Logger().Info("Starting futures arbitrage opportunity calculation", "operation", "arbitrage_detection", "service", "futures_arbitrage")
+	s.logger.WithFields(map[string]interface{}{
+		"operation": "arbitrage_detection",
+		"service":   "futures_arbitrage",
+	}).Info("Starting futures arbitrage opportunity calculation")
 	observability.AddBreadcrumb(spanCtx, "arbitrage", "Starting opportunity calculation", sentry.LevelInfo)
 
 	// Clean up expired opportunities first with error recovery
@@ -177,7 +185,7 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 		return s.cleanupExpiredOpportunities(ctx)
 	})
 	if err != nil {
-		telemetry.Logger().Warn("Failed to cleanup expired opportunities", "error", err)
+		s.logger.WithError(err).Warn("Failed to cleanup expired opportunities")
 	}
 
 	// Get latest funding rates grouped by symbol with error recovery
@@ -188,12 +196,12 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 		return retryErr
 	})
 	if err != nil {
-		telemetry.Logger().Error("Error getting funding rates", "error", err)
+		s.logger.WithError(err).Error("Error getting funding rates")
 		return fmt.Errorf("failed to get funding rates: %w", err)
 	}
 
 	if len(fundingRateMap) == 0 {
-		telemetry.Logger().Info("No funding rates available for opportunity calculation")
+		s.logger.Info("No funding rates available for opportunity calculation")
 		return nil
 	}
 
@@ -245,8 +253,11 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 				// Calculate opportunity
 				opportunity, err := s.calculator.CalculateFuturesArbitrage(input)
 				if err != nil {
-					telemetry.Logger().Error("Failed to calculate opportunity",
-						"symbol", symbol, "long_exchange", longRate.Exchange, "short_exchange", shortRate.Exchange, "error", err)
+					s.logger.WithFields(map[string]interface{}{
+						"symbol":         symbol,
+						"long_exchange":  longRate.Exchange,
+						"short_exchange": shortRate.Exchange,
+					}).WithError(err).Error("Failed to calculate opportunity")
 					continue
 				}
 
@@ -256,8 +267,11 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 						return s.storeOpportunity(ctx, opportunity)
 					})
 					if err != nil {
-						telemetry.Logger().Error("Failed to store opportunity",
-							"symbol", symbol, "long_exchange", longRate.Exchange, "short_exchange", shortRate.Exchange, "error", err)
+						s.logger.WithFields(map[string]interface{}{
+							"symbol":         symbol,
+							"long_exchange":  longRate.Exchange,
+							"short_exchange": shortRate.Exchange,
+						}).WithError(err).Error("Failed to store opportunity")
 						continue
 					}
 					opportunitiesStored++
@@ -266,8 +280,11 @@ func (s *FuturesArbitrageService) calculateAndStoreOpportunities(ctx context.Con
 		}
 	}
 
-	telemetry.Logger().Info("Opportunity calculation completed",
-		"calculated_count", opportunitiesCalculated, "stored_count", opportunitiesStored, "symbol_count", len(fundingRateMap))
+	s.logger.WithFields(map[string]interface{}{
+		"calculated_count": opportunitiesCalculated,
+		"stored_count":     opportunitiesStored,
+		"symbol_count":     len(fundingRateMap),
+	}).Info("Opportunity calculation completed")
 
 	span.SetData("opportunities_calculated", opportunitiesCalculated)
 	span.SetData("opportunities_stored", opportunitiesStored)
@@ -288,21 +305,21 @@ type FundingRateData struct {
 
 // getLatestFundingRates retrieves the latest funding rates grouped by symbol
 func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (map[string][]FundingRateData, error) {
-	telemetry.Logger().Info("Getting latest funding rates", "operation", "data_retrieval")
+	s.logger.WithFields(map[string]interface{}{"operation": "data_retrieval"}).Info("Getting latest funding rates")
 
 	cacheKey := "funding_rates:latest:all"
-	telemetry.Logger().Debug("Using cache key", "cache_key", cacheKey)
+	s.logger.WithFields(map[string]interface{}{"cache_key": cacheKey}).Debug("Using cache key")
 
 	// Check Redis cache first
 	if s.redisClient != nil {
 		if cachedData, err := s.redisClient.Get(ctx, cacheKey).Result(); err == nil {
 			var fundingRateMap map[string][]FundingRateData
 			if json.Unmarshal([]byte(cachedData), &fundingRateMap) == nil {
-				telemetry.Logger().Debug("Cache hit", "symbol_count", len(fundingRateMap))
+				s.logger.WithFields(map[string]interface{}{"symbol_count": len(fundingRateMap)}).Debug("Cache hit")
 				return fundingRateMap, nil
 			}
 		}
-		telemetry.Logger().Debug("Cache miss - querying database")
+		s.logger.Debug("Cache miss - querying database")
 	}
 
 	query := `
@@ -328,7 +345,7 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 
 	rows, err := s.db.Pool.Query(ctx, query)
 	if err != nil {
-		telemetry.Logger().Error("Database query failed", "error", err)
+		s.logger.WithError(err).Error("Database query failed")
 		return nil, fmt.Errorf("failed to query funding rates: %w", err)
 	}
 	defer rows.Close()
@@ -351,11 +368,11 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 	}
 
 	if err := rows.Err(); err != nil {
-		telemetry.Logger().Error("Error iterating funding rates", "error", err)
+		s.logger.WithError(err).Error("Error iterating funding rates")
 		return nil, fmt.Errorf("error iterating funding rates: %w", err)
 	}
 
-	telemetry.Logger().Debug("Retrieved symbols from database", "symbol_count", len(fundingRateMap))
+	s.logger.WithFields(map[string]interface{}{"symbol_count": len(fundingRateMap)}).Debug("Retrieved symbols from database")
 
 	// Cache the result with 1-minute TTL using error recovery
 	if s.redisClient != nil {
@@ -364,9 +381,12 @@ func (s *FuturesArbitrageService) getLatestFundingRates(ctx context.Context) (ma
 				return s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute).Err()
 			})
 			if err != nil {
-				telemetry.Logger().Error("Failed to cache funding rates", "error", err)
+				s.logger.WithError(err).Error("Failed to cache funding rates")
 			} else {
-				telemetry.Logger().Debug("Cached funding rates", "symbol_count", len(fundingRateMap), "ttl_minutes", 1)
+				s.logger.WithFields(map[string]interface{}{
+					"symbol_count": len(fundingRateMap),
+					"ttl_minutes":  1,
+				}).Debug("Cached funding rates")
 			}
 		}
 	}
@@ -380,9 +400,14 @@ func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportun
 		return fmt.Errorf("database pool is not available")
 	}
 
-	telemetry.Logger().Debug("Storing opportunity",
-		"symbol", opportunity.Symbol, "long_exchange", opportunity.LongExchange, "short_exchange", opportunity.ShortExchange,
-		"net_funding_rate", opportunity.NetFundingRate.String(), "apy", opportunity.APY.String(), "active", opportunity.IsActive)
+	s.logger.WithFields(map[string]interface{}{
+		"symbol":           opportunity.Symbol,
+		"long_exchange":    opportunity.LongExchange,
+		"short_exchange":   opportunity.ShortExchange,
+		"net_funding_rate": opportunity.NetFundingRate.String(),
+		"apy":              opportunity.APY.String(),
+		"active":           opportunity.IsActive,
+	}).Debug("Storing opportunity")
 	query := `
 		INSERT INTO futures_arbitrage_opportunities (
 			symbol, base_currency, quote_currency,
@@ -448,11 +473,11 @@ func (s *FuturesArbitrageService) storeOpportunity(ctx context.Context, opportun
 	)
 
 	if err != nil {
-		telemetry.Logger().Error("Failed to store opportunity", "error", err)
+		s.logger.WithError(err).Error("Failed to store opportunity")
 		return fmt.Errorf("failed to store opportunity: %w", err)
 	}
 
-	telemetry.Logger().Debug("Opportunity stored successfully")
+	s.logger.Debug("Opportunity stored successfully")
 	return nil
 }
 
@@ -462,11 +487,7 @@ func (s *FuturesArbitrageService) cleanupExpiredOpportunities(ctx context.Contex
 		return fmt.Errorf("database pool is not available")
 	}
 
-	logger := telemetry.Logger()
-	if logger == nil {
-		return fmt.Errorf("logger is not available")
-	}
-	logger.Info("Starting cleanup of expired opportunities")
+	s.logger.Info("Starting cleanup of expired opportunities")
 	query := `
 		DELETE FROM futures_arbitrage_opportunities 
 		WHERE expires_at < NOW() OR detected_at < NOW() - INTERVAL '1 hour'
@@ -474,15 +495,15 @@ func (s *FuturesArbitrageService) cleanupExpiredOpportunities(ctx context.Contex
 
 	result, err := s.db.Pool.Exec(ctx, query)
 	if err != nil {
-		telemetry.Logger().Error("Failed to cleanup expired opportunities", "error", err)
+		s.logger.WithError(err).Error("Failed to cleanup expired opportunities")
 		return fmt.Errorf("failed to cleanup expired opportunities: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
-	telemetry.Logger().Info("Cleanup completed successfully", "opportunities_cleaned", rowsAffected)
+	s.logger.WithFields(map[string]interface{}{"opportunities_cleaned": rowsAffected}).Info("Cleanup completed successfully")
 
 	if rowsAffected > 0 {
-		telemetry.Logger().Info("Cleaned up expired arbitrage opportunities", "count", rowsAffected)
+		s.logger.WithFields(map[string]interface{}{"count": rowsAffected}).Info("Cleaned up expired arbitrage opportunities")
 	}
 
 	return nil

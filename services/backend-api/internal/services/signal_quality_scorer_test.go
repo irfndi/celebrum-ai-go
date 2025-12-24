@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,10 +15,12 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/database"
 )
 
+// Force update
+
 func TestNewSignalQualityScorer(t *testing.T) {
 	cfg := &config.Config{}
 	db := &database.PostgresDB{}
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	scorer := NewSignalQualityScorer(cfg, db, logger)
 
@@ -715,8 +717,7 @@ func BenchmarkCalculateExchangeScore(b *testing.B) {
 func createTestScorer() *SignalQualityScorer {
 	cfg := &config.Config{}
 	db := &database.PostgresDB{}
-	logger := logrus.New()
-	logger.SetLevel(logrus.WarnLevel) // Reduce log noise in tests
+	logger := logging.NewStandardLogger("warn", "test") // Reduce log noise in tests
 
 	return NewSignalQualityScorer(cfg, db, logger)
 }

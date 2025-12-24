@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 )
 
 // ErrorRecoveryManager interface for dependency injection.
@@ -20,7 +20,7 @@ type ErrorRecoveryManager interface {
 // RedisClient wraps a Redis client with enhanced logging and error tracking.
 type RedisClient struct {
 	Client *redis.Client
-	logger *logrus.Logger
+	logger logging.Logger
 }
 
 // NewRedisConnection creates a new Redis connection.
@@ -49,7 +49,7 @@ func NewRedisConnection(cfg config.RedisConfig) (*RedisClient, error) {
 //	*RedisClient: The initialized client.
 //	error: Error if connection fails.
 func NewRedisConnectionWithRetry(cfg config.RedisConfig, errorRecoveryManager ErrorRecoveryManager) (*RedisClient, error) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "database")
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
@@ -93,15 +93,15 @@ func (r *RedisClient) Close() {
 		if err := r.Client.Close(); err != nil {
 			// Log error but don't return it since this is a cleanup function
 			if r.logger != nil {
-				r.logger.Errorf("Error closing Redis client: %v", err)
+				r.logger.WithError(err).Error("Error closing Redis client")
 			} else {
-				logrus.Errorf("Error closing Redis client: %v", err)
+				logging.NewStandardLogger("error", "database").WithError(err).Error("Error closing Redis client")
 			}
 		}
 		if r.logger != nil {
 			r.logger.Info("Redis connection closed")
 		} else {
-			logrus.Info("Redis connection closed")
+			logging.NewStandardLogger("info", "database").Info("Redis connection closed")
 		}
 	}
 }

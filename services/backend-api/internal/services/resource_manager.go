@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/sirupsen/logrus"
 )
 
 // ResourceType represents different types of resources.
@@ -45,7 +45,7 @@ type ResourceStats struct {
 
 // ResourceManager manages system resources and prevents leaks.
 type ResourceManager struct {
-	logger    *logrus.Logger
+	logger    logging.Logger
 	resources map[string]*Resource
 	stats     map[ResourceType]*ResourceStats
 	mu        sync.RWMutex
@@ -71,7 +71,7 @@ type ResourceManager struct {
 // Returns:
 //
 //	*ResourceManager: Initialized manager.
-func NewResourceManager(logger *logrus.Logger) *ResourceManager {
+func NewResourceManager(logger logging.Logger) *ResourceManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	rm := &ResourceManager{
@@ -130,7 +130,7 @@ func (rm *ResourceManager) RegisterResource(id string, resourceType ResourceType
 	atomic.AddInt64(&rm.stats[resourceType].TotalCreated, 1)
 	atomic.AddInt64(&rm.stats[resourceType].CurrentActive, 1)
 
-	rm.logger.WithFields(logrus.Fields{
+	rm.logger.WithFields(map[string]interface{}{
 		"resource_id":   id,
 		"resource_type": resourceType,
 		"metadata":      metadata,
@@ -138,7 +138,7 @@ func (rm *ResourceManager) RegisterResource(id string, resourceType ResourceType
 
 	// Check if we're approaching resource limits
 	if len(rm.resources) > rm.maxResources {
-		rm.logger.WithField("resource_count", len(rm.resources)).Warn("High resource count detected")
+		rm.logger.WithFields(map[string]interface{}{"resource_count": len(rm.resources)}).Warn("High resource count detected")
 		observability.AddBreadcrumbWithData(spanCtx, "resource_manager", "High resource count detected", sentry.LevelWarning, map[string]interface{}{
 			"resource_count": len(rm.resources),
 			"max_resources":  rm.maxResources,
@@ -188,7 +188,7 @@ func (rm *ResourceManager) CleanupResource(id string) (err error) {
 		err = resource.CleanupFunc()
 		if err != nil {
 			atomic.AddInt64(&rm.stats[resource.Type].CleanupErrors, 1)
-			rm.logger.WithFields(logrus.Fields{
+			rm.logger.WithFields(map[string]interface{}{
 				"resource_id":   id,
 				"resource_type": resource.Type,
 				"error":         err.Error(),
@@ -205,7 +205,7 @@ func (rm *ResourceManager) CleanupResource(id string) (err error) {
 	atomic.AddInt64(&rm.stats[resource.Type].CurrentActive, -1)
 	rm.stats[resource.Type].LastCleanupTime = time.Now()
 
-	rm.logger.WithFields(logrus.Fields{
+	rm.logger.WithFields(map[string]interface{}{
 		"resource_id":   id,
 		"resource_type": resource.Type,
 		"age":           time.Since(resource.CreatedAt),
@@ -240,7 +240,7 @@ func (rm *ResourceManager) CleanupIdleResources() {
 			if err != nil {
 				cleanupErrors++
 				atomic.AddInt64(&rm.stats[resource.Type].CleanupErrors, 1)
-				rm.logger.WithFields(logrus.Fields{
+				rm.logger.WithFields(map[string]interface{}{
 					"resource_id":   id,
 					"resource_type": resource.Type,
 					"error":         err.Error(),
@@ -257,7 +257,7 @@ func (rm *ResourceManager) CleanupIdleResources() {
 		atomic.AddInt64(&rm.stats[resource.Type].CurrentActive, -1)
 		rm.stats[resource.Type].LastCleanupTime = now
 
-		rm.logger.WithFields(logrus.Fields{
+		rm.logger.WithFields(map[string]interface{}{
 			"resource_id":   id,
 			"resource_type": resource.Type,
 			"idle_time":     now.Sub(resource.LastUsed),
@@ -265,7 +265,7 @@ func (rm *ResourceManager) CleanupIdleResources() {
 	}
 
 	if len(toCleanup) > 0 {
-		rm.logger.WithField("cleaned_count", len(toCleanup)).Info("Idle resource cleanup completed")
+		rm.logger.WithFields(map[string]interface{}{"cleaned_count": len(toCleanup)}).Info("Idle resource cleanup completed")
 		observability.AddBreadcrumbWithData(spanCtx, "resource_manager", "Idle resource cleanup completed", sentry.LevelInfo, map[string]interface{}{
 			"cleaned_count": len(toCleanup),
 			"error_count":   cleanupErrors,
@@ -293,7 +293,7 @@ func (rm *ResourceManager) DetectLeaks() {
 		if age > leakThreshold && idleTime > leakThreshold/2 {
 			atomic.AddInt64(&rm.stats[resource.Type].LeaksDetected, 1)
 			leakCount++
-			rm.logger.WithFields(logrus.Fields{
+			rm.logger.WithFields(map[string]interface{}{
 				"resource_id":   id,
 				"resource_type": resource.Type,
 				"age":           age,
@@ -387,7 +387,7 @@ func (rm *ResourceManager) logResourceStats() {
 	stats := rm.GetResourceStats()
 	systemStats := rm.GetSystemStats()
 
-	rm.logger.WithFields(logrus.Fields{
+	rm.logger.WithFields(map[string]interface{}{
 		"resource_stats": stats,
 		"system_stats":   systemStats,
 	}).Info("Resource manager statistics")
@@ -407,7 +407,7 @@ func (rm *ResourceManager) CleanupAll() {
 		if resource.CleanupFunc != nil {
 			if err := resource.CleanupFunc(); err != nil {
 				atomic.AddInt64(&rm.stats[resource.Type].CleanupErrors, 1)
-				rm.logger.WithFields(logrus.Fields{
+				rm.logger.WithFields(map[string]interface{}{
 					"resource_id":   id,
 					"resource_type": resource.Type,
 					"error":         err.Error(),

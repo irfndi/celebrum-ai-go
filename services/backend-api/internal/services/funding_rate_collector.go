@@ -11,9 +11,9 @@ import (
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
@@ -24,6 +24,7 @@ type FundingRateCollector struct {
 	redisClient *redis.Client
 	ccxtClient  *ccxt.Client
 	config      *config.Config
+	logger      logging.Logger
 
 	// Service lifecycle
 	ctx     context.Context
@@ -52,6 +53,7 @@ func NewFundingRateCollector(
 	ccxtClient *ccxt.Client,
 	cfg *config.Config,
 	collectorCfg *FundingRateCollectorConfig,
+	logger logging.Logger,
 ) *FundingRateCollector {
 	if collectorCfg == nil {
 		collectorCfg = &FundingRateCollectorConfig{
@@ -69,6 +71,7 @@ func NewFundingRateCollector(
 		retentionDays:      collectorCfg.RetentionDays,
 		collectionInterval: collectorCfg.CollectionInterval,
 		targetExchanges:    collectorCfg.TargetExchanges,
+		logger:             logger,
 	}
 }
 
@@ -92,10 +95,11 @@ func (c *FundingRateCollector) Start() error {
 	c.wg.Add(1)
 	go c.runCleanup()
 
-	telemetry.Logger().Info("Funding rate collector started",
-		"retention_days", c.retentionDays,
-		"collection_interval", c.collectionInterval,
-		"target_exchanges", c.targetExchanges)
+	c.logger.WithFields(map[string]interface{}{
+		"retention_days":      c.retentionDays,
+		"collection_interval": c.collectionInterval,
+		"target_exchanges":    c.targetExchanges,
+	}).Info("Funding rate collector started")
 
 	return nil
 }
@@ -113,7 +117,7 @@ func (c *FundingRateCollector) Stop() {
 	c.wg.Wait()
 	c.running = false
 
-	telemetry.Logger().Info("Funding rate collector stopped")
+	c.logger.Info("Funding rate collector stopped")
 }
 
 // runCollector runs the periodic funding rate collection.
@@ -125,7 +129,7 @@ func (c *FundingRateCollector) runCollector() {
 
 	// Run initial collection immediately
 	if err := c.collectFundingRates(c.ctx); err != nil {
-		telemetry.Logger().Error("Initial funding rate collection failed", "error", err)
+		c.logger.WithError(err).Error("Initial funding rate collection failed")
 	}
 
 	for {
@@ -134,7 +138,7 @@ func (c *FundingRateCollector) runCollector() {
 			return
 		case <-ticker.C:
 			if err := c.collectFundingRates(c.ctx); err != nil {
-				telemetry.Logger().Error("Funding rate collection failed", "error", err)
+				c.logger.WithError(err).Error("Funding rate collection failed")
 			}
 		}
 	}
@@ -154,7 +158,7 @@ func (c *FundingRateCollector) runCleanup() {
 			return
 		case <-ticker.C:
 			if err := c.cleanupOldData(c.ctx); err != nil {
-				telemetry.Logger().Error("Funding rate cleanup failed", "error", err)
+				c.logger.WithError(err).Error("Funding rate cleanup failed")
 			}
 		}
 	}
@@ -167,23 +171,27 @@ func (c *FundingRateCollector) collectFundingRates(ctx context.Context) error {
 	})
 	defer observability.FinishSpan(span, nil)
 
-	telemetry.Logger().Info("Starting funding rate collection")
+	c.logger.Info("Starting funding rate collection")
 
 	var totalCollected int
 	for _, exchange := range c.targetExchanges {
 		collected, err := c.collectExchangeFundingRates(spanCtx, exchange)
 		if err != nil {
 			observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Failed to collect from %s: %v", exchange, err), sentry.LevelError)
-			telemetry.Logger().Error("Failed to collect funding rates",
-				"exchange", exchange, "error", err)
+			observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Failed to collect from %s: %v", exchange, err), sentry.LevelError)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchange,
+			}).WithError(err).Error("Failed to collect funding rates")
 			continue
 		}
 		totalCollected += collected
 	}
 
 	observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Collection completed: %d rates collected", totalCollected), sentry.LevelInfo)
-	telemetry.Logger().Info("Funding rate collection completed",
-		"total_collected", totalCollected)
+	observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Collection completed: %d rates collected", totalCollected), sentry.LevelInfo)
+	c.logger.WithFields(map[string]interface{}{
+		"total_collected": totalCollected,
+	}).Info("Funding rate collection completed")
 
 	return nil
 }
@@ -211,8 +219,10 @@ func (c *FundingRateCollector) collectExchangeFundingRates(ctx context.Context, 
 	stored := 0
 	for _, rate := range rates {
 		if err := c.storeFundingRate(spanCtx, exchange, &rate); err != nil {
-			telemetry.Logger().Warn("Failed to store funding rate",
-				"exchange", exchange, "symbol", rate.Symbol, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchange,
+				"symbol":   rate.Symbol,
+			}).WithError(err).Warn("Failed to store funding rate")
 			continue
 		}
 		stored++
@@ -275,9 +285,10 @@ func (c *FundingRateCollector) cleanupOldData(ctx context.Context) error {
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected > 0 {
-		telemetry.Logger().Info("Cleaned up old funding rate data",
-			"rows_deleted", rowsAffected,
-			"retention_days", c.retentionDays)
+		c.logger.WithFields(map[string]interface{}{
+			"rows_deleted":   rowsAffected,
+			"retention_days": c.retentionDays,
+		}).Info("Cleaned up old funding rate data")
 	}
 
 	return nil

@@ -13,9 +13,9 @@ import (
 
 	// Package database provides PostgreSQL database connectivity and operations
 	// for the Celebrum AI application including connection pooling and health checks
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sirupsen/logrus"
 )
 
 // PostgresDB wraps a PostgreSQL connection pool.
@@ -71,7 +71,8 @@ func NewPostgresConnectionWithContext(ctx context.Context, cfg *config.DatabaseC
 		if err == nil {
 			break
 		}
-		logrus.Warnf("Database connection attempt %d failed: %v", attempts+1, err)
+		logger := logging.NewStandardLogger("warn", "database")
+		logger.Warn(fmt.Sprintf("Database connection attempt %d failed: %v", attempts+1, err))
 		if attempts < 2 {
 			// Exponential backoff with jitter
 			backoffDuration := time.Duration(1<<uint(attempts)) * time.Second
@@ -89,7 +90,8 @@ func NewPostgresConnectionWithContext(ctx context.Context, cfg *config.DatabaseC
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	logrus.Info("Successfully connected to PostgreSQL")
+	logger := logging.NewStandardLogger("info", "database")
+	logger.Info("Successfully connected to PostgreSQL")
 
 	return &PostgresDB{Pool: pool}, nil
 }
@@ -134,7 +136,7 @@ func createTestDatabaseConnection(poolConfig *pgxpool.Config) (*PostgresDB, erro
 func (db *PostgresDB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()
-		logrus.Info("PostgreSQL connection closed")
+		logging.NewStandardLogger("info", "database").Info("PostgreSQL connection closed")
 	}
 }
 
@@ -297,12 +299,12 @@ func clampToSafePoolSize(value int) int32 {
 	}
 
 	if requested > int64(math.MaxInt32) {
-		logrus.Warnf("Configured pool size %d exceeds int32 limit; clamping to %d", value, maxAllowedPoolConns)
+		logging.NewStandardLogger("warn", "database").Warn(fmt.Sprintf("Configured pool size %d exceeds int32 limit; clamping to %d", value, maxAllowedPoolConns))
 		return maxAllowedPoolConns
 	}
 
 	if requested > int64(maxAllowedPoolConns) {
-		logrus.Warnf("Configured pool size %d exceeds safe limit %d; clamping", value, maxAllowedPoolConns)
+		logging.NewStandardLogger("warn", "database").Warn(fmt.Sprintf("Configured pool size %d exceeds safe limit %d; clamping", value, maxAllowedPoolConns))
 		return maxAllowedPoolConns
 	}
 
