@@ -46,7 +46,7 @@ type SignalProcessor struct {
 	circuitBreaker      *CircuitBreaker
 
 	// Processing state
-	ctx            context.Context
+	ctx        context.Context
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	running    bool
