@@ -361,6 +361,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 	// Step 3b: Calculate multi-leg arbitrage opportunities (Triangular)
 	_, mlCalcSpan := observability.StartSpan(ctx, observability.SpanOpArbitrage, "calculate_multi_leg_opportunities")
 	var allMultiLegOps []models.MultiLegOpportunity
+	var multiLegErrors int
 	for exchangeName, tickers := range marketData {
 		tickerData := make([]TickerData, len(tickers))
 		for i, t := range tickers {
@@ -371,11 +372,15 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 			}
 		}
 		mlOps, err := s.multiLegCalculator.FindTriangularOpportunities(ctx, exchangeName, tickerData)
-		if err == nil {
+		if err != nil {
+			multiLegErrors++
+			s.logger.WithError(err).WithField("exchange", exchangeName).Warn("Failed to calculate multi-leg opportunities")
+		} else {
 			allMultiLegOps = append(allMultiLegOps, mlOps...)
 		}
 	}
 	mlCalcSpan.SetData("multi_leg_calculated", len(allMultiLegOps))
+	mlCalcSpan.SetData("multi_leg_errors", multiLegErrors)
 	observability.FinishSpan(mlCalcSpan, nil)
 
 	// Step 4: Filter opportunities by minimum profit threshold

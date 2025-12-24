@@ -551,29 +551,29 @@ func TestNotificationService_setCachedMessage(t *testing.T) {
 }
 
 func TestNotificationService_checkRateLimit(t *testing.T) {
-	// Test with nil Redis
+	// Test with nil Redis - should deny (fail-closed for security)
 	ns := NewNotificationService(nil, nil, "", "", "")
 
 	allowed, err := ns.checkRateLimit(context.Background(), "testuser")
-	assert.NoError(t, err)
-	assert.True(t, allowed) // Should allow when Redis is not available
+	assert.Error(t, err) // Should return error when Redis is not available
+	assert.False(t, allowed) // Should deny when Redis is not available (fail-closed)
 }
 
 // TestNotificationService_checkRateLimit_Comprehensive tests checkRateLimit with various scenarios
 func TestNotificationService_checkRateLimit_Comprehensive(t *testing.T) {
-	// Test with nil Redis - should always allow
+	// Test with nil Redis - should always deny (fail-closed for security)
 	t.Run("NilRedis", func(t *testing.T) {
 		ns := NewNotificationService(nil, nil, "", "", "")
 
-		// Multiple calls should all be allowed
+		// Multiple calls should all be denied when Redis is not available
 		for i := 0; i < 10; i++ {
 			allowed, err := ns.checkRateLimit(context.Background(), "testuser")
-			assert.NoError(t, err)
-			assert.True(t, allowed, "Call %d should be allowed", i)
+			assert.Error(t, err, "Call %d should return error", i)
+			assert.False(t, allowed, "Call %d should be denied (fail-closed)", i)
 		}
 	})
 
-	// Test with different user IDs
+	// Test with different user IDs - all should be denied without Redis
 	t.Run("DifferentUserIDs", func(t *testing.T) {
 		ns := NewNotificationService(nil, nil, "", "", "")
 
@@ -581,30 +581,30 @@ func TestNotificationService_checkRateLimit_Comprehensive(t *testing.T) {
 
 		for _, userID := range userIDs {
 			allowed, err := ns.checkRateLimit(context.Background(), userID)
-			assert.NoError(t, err)
-			assert.True(t, allowed, "User %s should be allowed", userID)
+			assert.Error(t, err, "User %s should return error", userID)
+			assert.False(t, allowed, "User %s should be denied (fail-closed)", userID)
 		}
 	})
 
-	// Test with different contexts
+	// Test with different contexts - all should be denied without Redis
 	t.Run("DifferentContexts", func(t *testing.T) {
 		ns := NewNotificationService(nil, nil, "", "", "")
 
 		// Test with background context
 		allowed, err := ns.checkRateLimit(context.Background(), "testuser")
-		assert.NoError(t, err)
-		assert.True(t, allowed)
+		assert.Error(t, err)
+		assert.False(t, allowed)
 
 		// Test with cancelled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		allowed, err = ns.checkRateLimit(ctx, "testuser")
-		assert.NoError(t, err)
-		assert.True(t, allowed) // Should still allow with nil Redis
+		assert.Error(t, err)
+		assert.False(t, allowed) // Should deny with nil Redis (fail-closed)
 	})
 
-	// Test with timeout context
+	// Test with timeout context - should be denied without Redis
 	t.Run("TimeoutContext", func(t *testing.T) {
 		ns := NewNotificationService(nil, nil, "", "", "")
 
@@ -612,11 +612,11 @@ func TestNotificationService_checkRateLimit_Comprehensive(t *testing.T) {
 		defer cancel()
 
 		allowed, err := ns.checkRateLimit(ctx, "testuser")
-		assert.NoError(t, err)
-		assert.True(t, allowed)
+		assert.Error(t, err)
+		assert.False(t, allowed)
 	})
 
-	// Test concurrent calls
+	// Test concurrent calls - all should be denied without Redis (fail-closed)
 	t.Run("ConcurrentCalls", func(t *testing.T) {
 		ns := NewNotificationService(nil, nil, "", "", "")
 
@@ -637,10 +637,10 @@ func TestNotificationService_checkRateLimit_Comprehensive(t *testing.T) {
 
 		wg.Wait()
 
-		// All should succeed and be allowed
+		// All should error and be denied (fail-closed for security)
 		for i := 0; i < 10; i++ {
-			assert.NoError(t, errors[i], "Call %d should not error", i)
-			assert.True(t, results[i], "Call %d should be allowed", i)
+			assert.Error(t, errors[i], "Call %d should error", i)
+			assert.False(t, results[i], "Call %d should be denied (fail-closed)", i)
 		}
 	})
 }

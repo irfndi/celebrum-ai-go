@@ -712,9 +712,11 @@ func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userMode
 }
 
 // checkRateLimit checks if a user has exceeded the notification rate limit (5 notifications per minute)
+// Uses fail-closed strategy: denies requests when Redis is unavailable to prevent abuse
 func (ns *NotificationService) checkRateLimit(ctx context.Context, userID string) (bool, error) {
 	if ns.redis == nil {
-		return true, nil // Allow if Redis is not available
+		ns.logger.Warn("Rate limit check denied: Redis not available", "user_id", userID)
+		return false, fmt.Errorf("rate limiting unavailable: Redis not configured")
 	}
 
 	// Use sliding window with Redis sorted set
@@ -725,13 +727,14 @@ func (ns *NotificationService) checkRateLimit(ctx context.Context, userID string
 	// Remove old entries (older than 1 minute)
 	if err := ns.redis.Client.ZRemRangeByScore(ctx, rateKey, "0", fmt.Sprintf("%d", oneMinuteAgo)).Err(); err != nil {
 		ns.logger.Error("Failed to clean old rate limit entries", "user_id", userID, "error", err)
+		// Continue - non-critical cleanup operation
 	}
 
 	// Count current notifications in the last minute
 	count, err := ns.redis.Client.ZCard(ctx, rateKey).Result()
 	if err != nil {
-		ns.logger.Error("Failed to get rate limit count", "user_id", userID, "error", err)
-		return true, nil // Allow if Redis operation fails
+		ns.logger.Error("Rate limit check denied: Redis operation failed", "user_id", userID, "error", err)
+		return false, fmt.Errorf("rate limiting unavailable: %w", err)
 	}
 
 	// Check if user has exceeded the limit (5 notifications per minute)

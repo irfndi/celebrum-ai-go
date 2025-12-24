@@ -119,6 +119,7 @@ func NewSignalProcessor(
 		NotificationEnabled: true,
 		RetryAttempts:       3,
 		RetryDelay:          30 * time.Second,
+		TimeoutDuration:     30 * time.Second, // Default timeout for database operations
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -544,7 +545,7 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 	since := time.Now().Add(-duration)
 
 	query := `
-		SELECT md.id, md.exchange_id, md.trading_pair_id, md.last_price, md.volume_24h, 
+		SELECT md.id, md.exchange_id, md.trading_pair_id, md.last_price, md.volume_24h,
 		       md.timestamp, md.created_at
 		FROM market_data md
 		JOIN trading_pairs tp ON md.trading_pair_id = tp.id
@@ -554,7 +555,11 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 		LIMIT 100
 	`
 
-	rows, err := sp.db.Query(context.Background(), query, symbol, exchange, since)
+	// Use processor context with timeout for database operations
+	ctx, cancel := context.WithTimeout(sp.ctx, sp.config.TimeoutDuration)
+	defer cancel()
+
+	rows, err := sp.db.Query(ctx, query, symbol, exchange, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query market data: %w", err)
 	}
@@ -589,7 +594,12 @@ func (sp *SignalProcessor) getRecentMarketDataFromDB(symbol, exchange string, du
 func (sp *SignalProcessor) getTradingPairSymbol(tradingPairID int) (string, error) {
 	var symbol string
 	query := `SELECT symbol FROM trading_pairs WHERE id = $1`
-	err := sp.db.QueryRow(context.Background(), query, tradingPairID).Scan(&symbol)
+
+	// Use processor context with timeout for database operations
+	ctx, cancel := context.WithTimeout(sp.ctx, sp.config.TimeoutDuration)
+	defer cancel()
+
+	err := sp.db.QueryRow(ctx, query, tradingPairID).Scan(&symbol)
 	if err != nil {
 		return "", fmt.Errorf("failed to get trading pair symbol: %w", err)
 	}
@@ -600,7 +610,12 @@ func (sp *SignalProcessor) getTradingPairSymbol(tradingPairID int) (string, erro
 func (sp *SignalProcessor) getExchangeName(exchangeID int) (string, error) {
 	var name string
 	query := `SELECT name FROM exchanges WHERE id = $1`
-	err := sp.db.QueryRow(context.Background(), query, exchangeID).Scan(&name)
+
+	// Use processor context with timeout for database operations
+	ctx, cancel := context.WithTimeout(sp.ctx, sp.config.TimeoutDuration)
+	defer cancel()
+
+	err := sp.db.QueryRow(ctx, query, exchangeID).Scan(&name)
 	if err != nil {
 		return "", fmt.Errorf("failed to get exchange name: %w", err)
 	}
