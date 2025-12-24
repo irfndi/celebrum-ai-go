@@ -547,10 +547,10 @@ func (s *ArbitrageService) diagnoseNoMarketData() {
 
 	// Log comprehensive diagnostic
 	s.logger.WithFields(logrus.Fields{
-		"total_market_data_rows":   totalRows,
-		"fresh_rows_10min":         freshRows,
-		"active_exchanges":         activeExchanges,
-		"active_trading_pairs":     activePairs,
+		"total_market_data_rows":    totalRows,
+		"fresh_rows_10min":          freshRows,
+		"active_exchanges":          activeExchanges,
+		"active_trading_pairs":      activePairs,
 		"diagnostic_recommendation": s.getDiagnosticRecommendation(totalRows, freshRows, activeExchanges, activePairs),
 	}).Warn("Market data diagnostic - no data available for arbitrage")
 }

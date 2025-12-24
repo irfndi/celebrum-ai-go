@@ -383,11 +383,11 @@ type CollectorService struct {
 	symbolRefreshInterval time.Duration
 	fundingRateInterval   time.Duration
 	// Readiness state
-	isInitialized      bool
-	isReady            bool
-	hasCollectedData   bool           // Tracks if first data has been collected
-	dataReadyChan      chan struct{}  // Signals when first data collection completes
-	readinessMu        sync.RWMutex
+	isInitialized    bool
+	isReady          bool
+	hasCollectedData bool          // Tracks if first data has been collected
+	dataReadyChan    chan struct{} // Signals when first data collection completes
+	readinessMu      sync.RWMutex
 	// Error recovery components
 	circuitBreakerManager *CircuitBreakerManager
 	errorRecoveryManager  *ErrorRecoveryManager
