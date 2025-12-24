@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -34,12 +35,13 @@ func (e *SymbolNotFoundError) Error() string {
 }
 
 // IsSymbolNotFoundError returns true if the error is a symbol not found error.
+// Uses errors.As to correctly handle wrapped errors.
 func IsSymbolNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(*SymbolNotFoundError)
-	return ok
+	var symbolErr *SymbolNotFoundError
+	return errors.As(err, &symbolErr)
 }
 
 // ExchangeUnavailableError represents an error when an exchange is temporarily unavailable.
@@ -54,12 +56,13 @@ func (e *ExchangeUnavailableError) Error() string {
 }
 
 // IsExchangeUnavailableError returns true if the error is an exchange unavailable error.
+// Uses errors.As to correctly handle wrapped errors.
 func IsExchangeUnavailableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(*ExchangeUnavailableError)
-	return ok
+	var exchangeErr *ExchangeUnavailableError
+	return errors.As(err, &exchangeErr)
 }
 
 // UnsupportedOperationError represents an error when an exchange doesn't support a specific operation.
@@ -75,12 +78,13 @@ func (e *UnsupportedOperationError) Error() string {
 }
 
 // IsUnsupportedOperationError returns true if the error is an unsupported operation error.
+// Uses errors.As to correctly handle wrapped errors.
 func IsUnsupportedOperationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(*UnsupportedOperationError)
-	return ok
+	var opErr *UnsupportedOperationError
+	return errors.As(err, &opErr)
 }
 
 // GRPCConnectionError represents a gRPC connection failure.
@@ -95,12 +99,13 @@ func (e *GRPCConnectionError) Error() string {
 }
 
 // IsGRPCConnectionError returns true if the error is a gRPC connection error.
+// Uses errors.As to correctly handle wrapped errors.
 func IsGRPCConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(*GRPCConnectionError)
-	return ok
+	var grpcErr *GRPCConnectionError
+	return errors.As(err, &grpcErr)
 }
 
 // Client represents the CCXT HTTP client.

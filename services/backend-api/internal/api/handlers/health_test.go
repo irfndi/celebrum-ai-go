@@ -256,25 +256,49 @@ func TestHealthHandler_CCXTServiceCheck(t *testing.T) {
 }
 
 func TestHealthHandler_CCXTServiceZeroExchanges(t *testing.T) {
-	// Test that health check fails when CCXT service has zero exchanges
-	mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":0,"exchange_connectivity":"unknown"}`))
-	}))
-	if mockCCXTServer == nil {
-		return
-	}
-	defer mockCCXTServer.Close()
+	// Test behavior when CCXT service has zero exchanges
+	// If status is "healthy", we don't fail even with 0 exchanges (backward-compatible, startup condition)
+	t.Run("zero exchanges with healthy status - no error (startup condition)", func(t *testing.T) {
+		mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":0,"exchange_connectivity":"unknown"}`))
+		}))
+		if mockCCXTServer == nil {
+			return
+		}
+		defer mockCCXTServer.Close()
 
-	mockDB := &MockDatabase{}
-	mockRedis := &MockRedisHealthClient{}
-	mockCacheAnalytics := NewMockCacheAnalyticsService()
+		mockDB := &MockDatabase{}
+		mockRedis := &MockRedisHealthClient{}
+		mockCacheAnalytics := NewMockCacheAnalyticsService()
 
-	handler := NewHealthHandler(mockDB, mockRedis, mockCCXTServer.URL, mockCacheAnalytics)
-	err := handler.checkCCXTService()
+		handler := NewHealthHandler(mockDB, mockRedis, mockCCXTServer.URL, mockCacheAnalytics)
+		err := handler.checkCCXTService()
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no active exchanges")
+		// No error when status is healthy (backward-compatible)
+		assert.NoError(t, err)
+	})
+
+	t.Run("zero exchanges with degraded status - error", func(t *testing.T) {
+		mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"degraded","exchanges_count":0,"exchange_connectivity":"failed"}`))
+		}))
+		if mockCCXTServer == nil {
+			return
+		}
+		defer mockCCXTServer.Close()
+
+		mockDB := &MockDatabase{}
+		mockRedis := &MockRedisHealthClient{}
+		mockCacheAnalytics := NewMockCacheAnalyticsService()
+
+		handler := NewHealthHandler(mockDB, mockRedis, mockCCXTServer.URL, mockCacheAnalytics)
+		err := handler.checkCCXTService()
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no active exchanges")
+	})
 }
 
 func TestHealthHandler_TelegramTokenDetection(t *testing.T) {

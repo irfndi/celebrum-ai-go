@@ -177,8 +177,15 @@ func NewArbitrageService(db database.DatabasePool, cfg *config.Config, calculato
 	}
 	arbitrageConfig.Enabled = cfg.Arbitrage.Enabled
 
-	// Initialize logger
-	logger := logging.NewStandardLogger("info", "arbitrage")
+	// Initialize logger with config-provided log level
+	logLevel := cfg.Telemetry.LogLevel
+	if logLevel == "" {
+		logLevel = cfg.LogLevel
+	}
+	if logLevel == "" {
+		logLevel = "info" // fallback default
+	}
+	logger := logging.NewStandardLogger(logLevel, cfg.Environment)
 
 	// Initialize multi-leg calculator
 	multiLegCalculator := NewMultiLegArbitrageCalculator(feeProvider, decimal.NewFromFloat(cfg.Fees.DefaultTakerFee))

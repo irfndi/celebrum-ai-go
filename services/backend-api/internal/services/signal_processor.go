@@ -246,6 +246,15 @@ func (sp *SignalProcessor) processSignalBatch() error {
 		"max_concurrent":    fmt.Sprintf("%d", sp.config.MaxConcurrentBatch),
 		"quality_threshold": fmt.Sprintf("%.2f", sp.config.QualityThreshold),
 	})
+
+	// Track error for span finishing
+	var batchErr error
+
+	// Defer order matters: recover runs first (LIFO), then span finish
+	// This ensures the span is properly closed even if there's a panic
+	defer func() {
+		observability.FinishSpan(span, batchErr)
+	}()
 	defer func() {
 		observability.RecoverAndCapture(ctx, "processSignalBatch")
 	}()
@@ -254,22 +263,20 @@ func (sp *SignalProcessor) processSignalBatch() error {
 	sp.lastRun = startTime
 
 	// Use circuit breaker to protect against cascading failures
-	err := sp.circuitBreaker.Execute(ctx, func(ctx context.Context) error {
+	batchErr = sp.circuitBreaker.Execute(ctx, func(ctx context.Context) error {
 		return sp.processSignalBatchWithRetry(ctx, startTime)
 	})
 
-	if err != nil {
-		observability.CaptureExceptionWithContext(ctx, err, "signal_batch_processing", map[string]interface{}{
+	if batchErr != nil {
+		observability.CaptureExceptionWithContext(ctx, batchErr, "signal_batch_processing", map[string]interface{}{
 			"batch_size":     sp.config.BatchSize,
 			"max_concurrent": sp.config.MaxConcurrentBatch,
 			"duration_ms":    time.Since(startTime).Milliseconds(),
 		})
-		observability.FinishSpan(span, err)
-		return err
+		return batchErr
 	}
 
 	span.SetData("duration_ms", time.Since(startTime).Milliseconds())
-	observability.FinishSpan(span, nil)
 	return nil
 }
 

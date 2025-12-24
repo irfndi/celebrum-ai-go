@@ -385,13 +385,20 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 
 	// CCXT - Use Docker service names when running in Docker/Coolify
+	// Note: These defaults can be overridden by explicit env vars (CCXT_SERVICE_URL, CCXT_GRPC_ADDRESS)
+	// which are bound via viper.BindEnv() in Load(). Viper prioritizes env vars over defaults.
+	//
 	// Detect Coolify environment by checking for COOLIFY_* variables
 	// Coolify sets COOLIFY_CONTAINER_NAME, COOLIFY_RESOURCE_UUID, etc., not just COOLIFY=true
 	isCoolify := os.Getenv("COOLIFY_CONTAINER_NAME") != "" ||
 		os.Getenv("COOLIFY_RESOURCE_UUID") != "" ||
 		os.Getenv("COOLIFY") == "true"
 	isDocker := os.Getenv("DOCKER_ENVIRONMENT") == "true" || isCoolify
+
+	// Log detection result for debugging (only if log package is available)
 	if isDocker {
+		log.Printf("INFO: Docker/Coolify environment detected (COOLIFY=%v, DOCKER_ENVIRONMENT=%s)",
+			isCoolify, os.Getenv("DOCKER_ENVIRONMENT"))
 		viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
 		viper.SetDefault("ccxt.grpc_address", "ccxt-service:50051")
 	} else {
@@ -402,6 +409,7 @@ func setDefaults() {
 	viper.SetDefault("ccxt.timeout", 30)
 
 	// Telegram - Use Docker service names when running in Docker/Coolify
+	// Note: These defaults can be overridden by explicit env vars (TELEGRAM_SERVICE_URL, TELEGRAM_GRPC_ADDRESS)
 	if isDocker {
 		viper.SetDefault("telegram.service_url", "http://telegram-service:3002")
 		viper.SetDefault("telegram.grpc_address", "telegram-service:50052")

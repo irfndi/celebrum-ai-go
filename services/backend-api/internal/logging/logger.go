@@ -70,7 +70,8 @@ type Logger interface {
 
 // StandardLogger provides a standardized logging interface.
 type StandardLogger struct {
-	logger *zap.Logger
+	logger      *zap.Logger
+	atomicLevel zap.AtomicLevel
 }
 
 // NewStandardLogger creates a new standardized logger based on configuration.
@@ -84,7 +85,8 @@ type StandardLogger struct {
 //
 //	*StandardLogger: The initialized logger.
 func NewStandardLogger(logLevel string, environment string) *StandardLogger {
-	level := getZapLevel(logLevel)
+	// Use AtomicLevel for dynamic level changes without recreating the logger
+	atomicLevel := zap.NewAtomicLevelAt(getZapLevel(logLevel))
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "timestamp"
@@ -95,22 +97,23 @@ func NewStandardLogger(logLevel string, environment string) *StandardLogger {
 	if environment == "development" {
 		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
-		core = zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), level)
+		core = zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), atomicLevel)
 	} else {
 		jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
-		core = zapcore.NewCore(jsonEncoder, zapcore.AddSync(os.Stdout), level)
+		core = zapcore.NewCore(jsonEncoder, zapcore.AddSync(os.Stdout), atomicLevel)
 	}
 
 	// Sentry Integration
 	// We assume Sentry is initialized globally via observability.InitSentry
 	// We add a core that sends Error and Fatal logs to Sentry
-	sentryCore := newSentryCore(level)
+	sentryCore := newSentryCore(atomicLevel)
 	core = zapcore.NewTee(core, sentryCore)
 
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 
 	return &StandardLogger{
-		logger: logger,
+		logger:      logger,
+		atomicLevel: atomicLevel,
 	}
 }
 
@@ -127,59 +130,56 @@ func (l *StandardLogger) Logger() *zap.Logger {
 	return l.logger
 }
 
-// SetLevel sets the log level for the logger.
-// Note: This recreates the logger with the new level.
+// SetLevel sets the log level for the logger dynamically.
+// This uses AtomicLevel for efficient level changes without recreating the logger.
 // Valid levels: "debug", "info", "warn", "error"
 func (l *StandardLogger) SetLevel(level string) {
-	// For zap, we need to rebuild the logger with the new level
-	// This is a simplified approach - in production you might use AtomicLevel
-	newLogger := NewStandardLogger(level, "production")
-	l.logger = newLogger.logger
+	l.atomicLevel.SetLevel(getZapLevel(level))
 }
 
 // WithService creates a logger with service context.
 func (l *StandardLogger) WithService(serviceName string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("service", serviceName))}
+	return &StandardLogger{logger: l.logger.With(zap.String("service", serviceName)), atomicLevel: l.atomicLevel}
 }
 
 // WithComponent creates a logger with component context.
 func (l *StandardLogger) WithComponent(componentName string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("component", componentName))}
+	return &StandardLogger{logger: l.logger.With(zap.String("component", componentName)), atomicLevel: l.atomicLevel}
 }
 
 // WithOperation creates a logger with operation context.
 func (l *StandardLogger) WithOperation(operationName string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("operation", operationName))}
+	return &StandardLogger{logger: l.logger.With(zap.String("operation", operationName)), atomicLevel: l.atomicLevel}
 }
 
 // WithRequestID creates a logger with request ID context.
 func (l *StandardLogger) WithRequestID(requestID string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("request_id", requestID))}
+	return &StandardLogger{logger: l.logger.With(zap.String("request_id", requestID)), atomicLevel: l.atomicLevel}
 }
 
 // WithUserID creates a logger with user ID context.
 func (l *StandardLogger) WithUserID(userID string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("user_id", userID))}
+	return &StandardLogger{logger: l.logger.With(zap.String("user_id", userID)), atomicLevel: l.atomicLevel}
 }
 
 // WithExchange creates a logger with exchange context.
 func (l *StandardLogger) WithExchange(exchange string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("exchange", exchange))}
+	return &StandardLogger{logger: l.logger.With(zap.String("exchange", exchange)), atomicLevel: l.atomicLevel}
 }
 
 // WithSymbol creates a logger with symbol context.
 func (l *StandardLogger) WithSymbol(symbol string) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.String("symbol", symbol))}
+	return &StandardLogger{logger: l.logger.With(zap.String("symbol", symbol)), atomicLevel: l.atomicLevel}
 }
 
 // WithError creates a logger with error context.
 func (l *StandardLogger) WithError(err error) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.Error(err))}
+	return &StandardLogger{logger: l.logger.With(zap.Error(err)), atomicLevel: l.atomicLevel}
 }
 
 // WithMetrics creates a logger with metrics context.
 func (l *StandardLogger) WithMetrics(metrics map[string]interface{}) Logger {
-	return &StandardLogger{logger: l.logger.With(zap.Any("metrics", metrics))}
+	return &StandardLogger{logger: l.logger.With(zap.Any("metrics", metrics)), atomicLevel: l.atomicLevel}
 }
 
 // WithFields adds multiple fields to the log context.
@@ -191,7 +191,7 @@ func (l *StandardLogger) WithFields(fields map[string]interface{}) Logger {
 	for k, v := range fields {
 		zapFields = append(zapFields, zap.Any(k, v))
 	}
-	return &StandardLogger{logger: l.logger.With(zapFields...)}
+	return &StandardLogger{logger: l.logger.With(zapFields...), atomicLevel: l.atomicLevel}
 }
 
 // Info logs an info-level message.
@@ -339,9 +339,9 @@ type sentryCore struct {
 	zapcore.LevelEnabler
 }
 
-func newSentryCore(minLevel zapcore.Level) *sentryCore {
+func newSentryCore(levelEnabler zapcore.LevelEnabler) *sentryCore {
 	return &sentryCore{
-		LevelEnabler: minLevel,
+		LevelEnabler: levelEnabler,
 	}
 }
 

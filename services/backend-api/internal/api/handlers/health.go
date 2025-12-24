@@ -234,14 +234,14 @@ func (h *HealthHandler) checkCCXTService() error {
 	// Parse the response to check detailed health
 	var healthResp CCXTHealthResponse
 	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
-		// Log the decode error but don't fail - the service returned 200 OK
-		// This could indicate a response format change that should be investigated
-		fmt.Printf("warning: failed to parse CCXT health response: %v\n", err)
-		return nil
+		// A 200 OK with an unparseable body is a contract violation and should be an error.
+		// This indicates either a response format change or a CCXT service issue.
+		return fmt.Errorf("failed to parse CCXT health response: %w", err)
 	}
 
-	// Verify CCXT service has active exchanges
-	if healthResp.ExchangesCount == 0 {
+	// Verify CCXT service has active exchanges (only if the field was present and parsed)
+	// If exchanges_count is 0 but status is "healthy", it could be a startup condition
+	if healthResp.ExchangesCount == 0 && healthResp.Status != "" && healthResp.Status != "healthy" {
 		return fmt.Errorf("CCXT service has no active exchanges")
 	}
 

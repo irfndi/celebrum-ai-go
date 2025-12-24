@@ -491,8 +491,15 @@ func NewCollectorService(db *database.PostgresDB, ccxtService ccxt.CCXTService, 
 	symbolRefreshInterval := 1 * time.Hour                         // 1 hour for symbol refresh
 	fundingRateInterval := 15 * time.Minute                        // 15 minutes for funding rates
 
-	// Initialize logger
-	logger := logging.NewStandardLogger("info", "collector")
+	// Initialize logger with config-provided log level
+	logLevel := cfg.Telemetry.LogLevel
+	if logLevel == "" {
+		logLevel = cfg.LogLevel
+	}
+	if logLevel == "" {
+		logLevel = "info" // fallback default
+	}
+	logger := logging.NewStandardLogger(logLevel, cfg.Environment)
 
 	// Initialize error recovery components
 	circuitBreakerManager := NewCircuitBreakerManager(logger)
