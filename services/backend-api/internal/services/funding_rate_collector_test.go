@@ -11,10 +11,10 @@ import (
 // TestNewFundingRateCollector tests the constructor
 func TestNewFundingRateCollector(t *testing.T) {
 	tests := []struct {
-		name           string
-		collectorCfg   *FundingRateCollectorConfig
-		expectedDays   int
-		expectedExch   []string
+		name         string
+		collectorCfg *FundingRateCollectorConfig
+		expectedDays int
+		expectedExch []string
 	}{
 		{
 			name:         "nil config uses defaults",

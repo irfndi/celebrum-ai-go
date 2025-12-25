@@ -259,8 +259,8 @@ func TestFitAR1(t *testing.T) {
 		{
 			name:        "constant series",
 			series:      []float64{5.0, 5.0, 5.0, 5.0},
-			expectedPhi: 0,     // no linear relationship
-			expectedC:   5.0,   // mean of series
+			expectedPhi: 0,   // no linear relationship
+			expectedC:   5.0, // mean of series
 		},
 		{
 			name:        "simple linear trend",
