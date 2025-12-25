@@ -130,7 +130,9 @@ export const handleStatus = (api: Api) => async (ctx: Context) => {
   }
 
   // Try to fetch user - with improved error detection
-  let userResult: { user: { id: string; subscription_tier: string; created_at: string } } | null = null;
+  let userResult: {
+    user: { id: string; subscription_tier: string; created_at: string };
+  } | null = null;
   let errorType: "auth_failed" | "not_found" | "error" | null = null;
   let errorMessage = "";
 
@@ -138,12 +140,18 @@ export const handleStatus = (api: Api) => async (ctx: Context) => {
     userResult = await Effect.runPromise(api.getUserByChatId(String(chatId)));
   } catch (error) {
     if (isApiError(error)) {
-      errorType = error.type === "auth_failed" ? "auth_failed" :
-                  error.type === "not_found" ? "not_found" : "error";
+      errorType =
+        error.type === "auth_failed"
+          ? "auth_failed"
+          : error.type === "not_found"
+            ? "not_found"
+            : "error";
       errorMessage = error.message;
 
       if (error.type === "auth_failed") {
-        console.error("[Status] Authentication failed - check ADMIN_API_KEY configuration");
+        console.error(
+          "[Status] Authentication failed - check ADMIN_API_KEY configuration",
+        );
       } else {
         console.error(`[Status] API error (${error.type}): ${error.message}`);
       }

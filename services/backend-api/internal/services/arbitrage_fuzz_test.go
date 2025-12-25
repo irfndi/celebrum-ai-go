@@ -13,12 +13,12 @@ import (
 // This tests the core profit calculation: (sellPrice - buyPrice) / buyPrice * 100
 func FuzzArbitrageProfitCalculation(f *testing.F) {
 	// Add seed corpus with various scenarios
-	f.Add(float64(100.0), float64(105.0))      // 5% profit
-	f.Add(float64(0.001), float64(0.00105))    // Small values
-	f.Add(float64(50000.0), float64(50250.0))  // Large BTC-like values
-	f.Add(float64(1.0), float64(1.0))          // No profit
-	f.Add(float64(100.0), float64(99.0))       // Negative profit (loss)
-	f.Add(float64(0.00001), float64(0.000011)) // Very small values (low-cap tokens)
+	f.Add(float64(100.0), float64(105.0))         // 5% profit
+	f.Add(float64(0.001), float64(0.00105))       // Small values
+	f.Add(float64(50000.0), float64(50250.0))     // Large BTC-like values
+	f.Add(float64(1.0), float64(1.0))             // No profit
+	f.Add(float64(100.0), float64(99.0))          // Negative profit (loss)
+	f.Add(float64(0.00001), float64(0.000011))    // Very small values (low-cap tokens)
 	f.Add(float64(1000000.0), float64(1001000.0)) // Very large values
 
 	f.Fuzz(func(t *testing.T, buyPrice, sellPrice float64) {
@@ -126,9 +126,9 @@ func FuzzDecimalOperations(f *testing.F) {
 // FuzzSpreadCalculation fuzzes the spread calculation used in arbitrage detection
 func FuzzSpreadCalculation(f *testing.F) {
 	// Add seed corpus with realistic bid/ask scenarios
-	f.Add(float64(100.0), float64(100.5)) // Normal spread
-	f.Add(float64(99.9), float64(100.0))  // Tight spread
-	f.Add(float64(100.0), float64(101.0)) // Wide spread
+	f.Add(float64(100.0), float64(100.5))  // Normal spread
+	f.Add(float64(99.9), float64(100.0))   // Tight spread
+	f.Add(float64(100.0), float64(101.0))  // Wide spread
 	f.Add(float64(0.001), float64(0.0011)) // Small value spread
 
 	f.Fuzz(func(t *testing.T, bid, ask float64) {

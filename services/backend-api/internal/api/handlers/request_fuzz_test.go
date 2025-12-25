@@ -24,7 +24,7 @@ func FuzzRegisterRequest(f *testing.F) {
 	f.Add(`{}`)
 	f.Add(`[]`)
 	f.Add(`null`)
-	f.Add(`{"email":"a@b.c","password":"12345678"}`) // Valid but minimal
+	f.Add(`{"email":"a@b.c","password":"12345678"}`)                                                                                                                           // Valid but minimal
 	f.Add(`{"email":"verylongemailaddressverylongemailaddressverylongemailaddressverylongemailaddress@verylongdomainverylongdomainverylongdomain.com","password":"12345678"}`) // Very long email
 
 	f.Fuzz(func(t *testing.T, input string) {
@@ -101,7 +101,7 @@ func FuzzJSONParsing(f *testing.F) {
 	f.Add(`{"threshold": "not a number"}`)
 	f.Add(`{"threshold": 999999999999999999999999999999}`) // Overflow
 	f.Add(`{"a":1,"a":2}`)                                 // Duplicate keys
-	f.Add(`{"unicode": "日本語"}`)                           // Unicode
+	f.Add(`{"unicode": "日本語"}`)                            // Unicode
 	f.Add(`{"escape": "\n\t\r"}`)                          // Escape sequences
 
 	f.Fuzz(func(t *testing.T, input string) {
@@ -198,10 +198,10 @@ func FuzzQueryParameters(f *testing.F) {
 	f.Add("limit=-1")
 	f.Add("limit=999999999999")
 	f.Add("invalid")
-	f.Add("a=1&a=2&a=3") // Repeated keys
+	f.Add("a=1&a=2&a=3")     // Repeated keys
 	f.Add("key=value&key2=") // Empty value
-	f.Add("=value")         // Empty key
-	f.Add("")               // Empty query
+	f.Add("=value")          // Empty key
+	f.Add("")                // Empty query
 
 	f.Fuzz(func(t *testing.T, query string) {
 		gin.SetMode(gin.TestMode)
@@ -232,7 +232,7 @@ func FuzzPathParameters(f *testing.F) {
 	f.Add("user@domain.com")
 	f.Add("with/slash")
 	f.Add("with%20encoded")
-	f.Add("../../../etc/passwd") // Path traversal attempt
+	f.Add("../../../etc/passwd")                                                                                                   // Path traversal attempt
 	f.Add("verylongparamverylongparamverylongparamverylongparamverylongparamverylongparamverylongparamverylongparamverylongparam") // Long param
 
 	f.Fuzz(func(t *testing.T, param string) {
