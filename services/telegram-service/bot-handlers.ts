@@ -1,6 +1,6 @@
 import { Context } from "grammy";
 import { Effect } from "effect";
-import { Api } from "./api";
+import { Api, isApiError } from "./api";
 
 export const formatOpportunitiesMessage = (opps: any[]) => {
   if (!opps || opps.length === 0) {
@@ -32,16 +32,49 @@ export const handleStart = (api: Api) => async (ctx: Context) => {
 
   const chatIdStr = String(chatId);
 
+  // Check if user exists (with proper error handling)
   const userResult = await Effect.runPromise(
-    Effect.catchAll(api.getUserByChatId(chatIdStr), () => Effect.succeed(null)),
+    Effect.catchAll(api.getUserByChatId(chatIdStr), (error) => {
+      if (isApiError(error)) {
+        if (error.type === "auth_failed") {
+          console.error(
+            "[Start] Authentication failed - ADMIN_API_KEY mismatch",
+          );
+          // Return special marker for auth error
+          return Effect.succeed({ _authError: true as const });
+        }
+        if (error.type === "not_found") {
+          // User doesn't exist, this is expected for new users
+          return Effect.succeed(null);
+        }
+      }
+      console.error("[Start] Unexpected error checking user:", error);
+      return Effect.succeed(null);
+    }),
   );
 
-  if (!userResult) {
-    await Effect.runPromise(
-      Effect.catchAll(api.registerTelegramUser(chatIdStr, userId), () =>
-        Effect.succeed(null),
-      ),
+  // Handle authentication configuration error
+  if (userResult && "_authError" in userResult) {
+    await ctx.reply(
+      "⚠️ Service configuration error. Please try again later or contact support.",
     );
+    return;
+  }
+
+  // Register new user if not found
+  if (!userResult) {
+    const registerResult = await Effect.runPromise(
+      Effect.catchAll(api.registerTelegramUser(chatIdStr, userId), (error) => {
+        if (isApiError(error)) {
+          console.error(`[Start] Registration failed: ${error.message}`);
+        }
+        return Effect.succeed(null);
+      }),
+    );
+
+    if (!registerResult) {
+      console.error("[Start] Failed to register user");
+    }
   }
 
   const welcomeMsg =
@@ -96,17 +129,52 @@ export const handleStatus = (api: Api) => async (ctx: Context) => {
     return;
   }
 
-  const userResult = await Effect.runPromise(
-    Effect.catchAll(api.getUserByChatId(String(chatId)), () =>
-      Effect.succeed(null),
-    ),
-  );
+  // Try to fetch user - with improved error detection
+  let userResult: { user: { id: string; subscription_tier: string; created_at: string } } | null = null;
+  let errorType: "auth_failed" | "not_found" | "error" | null = null;
+  let errorMessage = "";
 
-  if (!userResult) {
+  try {
+    userResult = await Effect.runPromise(api.getUserByChatId(String(chatId)));
+  } catch (error) {
+    if (isApiError(error)) {
+      errorType = error.type === "auth_failed" ? "auth_failed" :
+                  error.type === "not_found" ? "not_found" : "error";
+      errorMessage = error.message;
+
+      if (error.type === "auth_failed") {
+        console.error("[Status] Authentication failed - check ADMIN_API_KEY configuration");
+      } else {
+        console.error(`[Status] API error (${error.type}): ${error.message}`);
+      }
+    } else {
+      errorType = "error";
+      errorMessage = String(error);
+      console.error("[Status] Unexpected error:", error);
+    }
+  }
+
+  // Handle different error types with specific messages
+  if (errorType === "auth_failed") {
+    await ctx.reply(
+      "⚠️ Service temporarily unavailable. Please try again later.",
+    );
+    return;
+  }
+
+  if (errorType === "not_found" || !userResult) {
     await ctx.reply("User not found. Please use /start to register.");
     return;
   }
 
+  if (errorType === "error") {
+    await ctx.reply(
+      `❌ An error occurred: ${errorMessage}. Please try again later.`,
+    );
+    return;
+  }
+
+  // Success case - get notification preferences
   const preference = userId
     ? await Effect.runPromise(
         Effect.catchAll(api.getNotificationPreference(String(userId)), () =>
@@ -144,11 +212,14 @@ export const handleSettings = (api: Api) => async (ctx: Context) => {
     return;
   }
 
-  // Fetch user for subscription tier
+  // Fetch user for subscription tier (with improved error logging)
   const userResult = await Effect.runPromise(
-    Effect.catchAll(api.getUserByChatId(String(chatId)), () =>
-      Effect.succeed(null),
-    ),
+    Effect.catchAll(api.getUserByChatId(String(chatId)), (error) => {
+      if (isApiError(error) && error.type === "auth_failed") {
+        console.error("[Settings] Authentication failed - check ADMIN_API_KEY");
+      }
+      return Effect.succeed(null);
+    }),
   );
 
   const preference = await Effect.runPromise(

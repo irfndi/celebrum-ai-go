@@ -464,6 +464,8 @@ func (tas *TechnicalAnalysisService) calculateBollingerBands(prices []float64, p
 
 // calculateStandardDeviation computes the standard deviation for a given slice of prices.
 // Deprecated: used by old implementation, kept if needed but not used by talib BB
+//
+//nolint:unused // Kept for potential future use
 func (tas *TechnicalAnalysisService) calculateStandardDeviation(window []float64, mean float64) float64 {
 	if len(window) == 0 {
 		return 0

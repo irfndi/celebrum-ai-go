@@ -292,3 +292,71 @@ func TestGenerateSecureKey(t *testing.T) {
 		}
 	})
 }
+
+func TestAdminMiddleware_RequireAdminAuth_ErrorCode(t *testing.T) {
+	// Set up test environment with secure 32+ character key
+	t.Setenv("ADMIN_API_KEY", "test-admin-key-32-chars-minimum-length")
+
+	am := NewAdminMiddleware()
+	gin.SetMode(gin.TestMode)
+
+	// Create test router
+	createTestRouter := func() *gin.Engine {
+		router := gin.New()
+		router.Use(am.RequireAdminAuth())
+		router.GET("/admin/test", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
+		})
+		return router
+	}
+
+	t.Run("error response includes error code", func(t *testing.T) {
+		router := createTestRouter()
+		req := httptest.NewRequest("GET", "/admin/test", nil)
+		// No auth header - should fail
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "ADMIN_AUTH_FAILED")
+		assert.Contains(t, w.Body.String(), "Unauthorized")
+	})
+
+	t.Run("empty X-API-Key header returns error code", func(t *testing.T) {
+		router := createTestRouter()
+		req := httptest.NewRequest("GET", "/admin/test", nil)
+		req.Header.Set("X-API-Key", "")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "ADMIN_AUTH_FAILED")
+	})
+
+	t.Run("wrong key length returns error code", func(t *testing.T) {
+		router := createTestRouter()
+		req := httptest.NewRequest("GET", "/admin/test", nil)
+		req.Header.Set("X-API-Key", "wrong-key-different-length")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "ADMIN_AUTH_FAILED")
+	})
+
+	t.Run("successful auth does not include error code", func(t *testing.T) {
+		router := createTestRouter()
+		req := httptest.NewRequest("GET", "/admin/test", nil)
+		req.Header.Set("X-API-Key", "test-admin-key-32-chars-minimum-length")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), "ADMIN_AUTH_FAILED")
+		assert.Contains(t, w.Body.String(), "admin access granted")
+	})
+}

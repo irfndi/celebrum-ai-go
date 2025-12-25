@@ -88,6 +88,8 @@ func NewAdminMiddleware() *AdminMiddleware {
 //	gin.HandlerFunc: Gin handler.
 func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		requestPath := c.Request.URL.Path
+
 		// Check for API key in Authorization header (Bearer token)
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
@@ -97,6 +99,9 @@ func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 					c.Next()
 					return
 				}
+				// Log invalid Bearer token (without exposing actual keys)
+				log.Printf("WARN: Admin auth failed for %s - invalid Bearer token (token length: %d, expected: %d)",
+					requestPath, len(tokenParts[1]), len(am.apiKey))
 			}
 		}
 
@@ -107,6 +112,14 @@ func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 			return
 		}
 
+		// Log authentication failure with helpful debugging info
+		if apiKeyHeader == "" {
+			log.Printf("WARN: Admin auth failed for %s - no X-API-Key header provided", requestPath)
+		} else {
+			log.Printf("WARN: Admin auth failed for %s - X-API-Key mismatch (provided length: %d, expected: %d)",
+				requestPath, len(apiKeyHeader), len(am.apiKey))
+		}
+
 		// Query parameter authentication removed for security reasons
 		// API keys should only be passed via headers
 
@@ -114,6 +127,7 @@ func (am *AdminMiddleware) RequireAdminAuth() gin.HandlerFunc {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error":   "Unauthorized",
 			"message": "Valid admin API key required for this endpoint",
+			"code":    "ADMIN_AUTH_FAILED",
 		})
 		c.Abort()
 	}
