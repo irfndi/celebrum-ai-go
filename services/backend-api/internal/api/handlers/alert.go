@@ -7,17 +7,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
 // AlertHandler manages user alert endpoints.
 type AlertHandler struct {
-	db *database.PostgresDB
+	db services.DBPool
 }
 
 // NewAlertHandler creates a new instance of AlertHandler.
-func NewAlertHandler(db *database.PostgresDB) *AlertHandler {
+func NewAlertHandler(db services.DBPool) *AlertHandler {
 	return &AlertHandler{
 		db: db,
 	}
@@ -57,7 +57,7 @@ func (h *AlertHandler) GetUserAlerts(c *gin.Context) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := h.db.Pool.Query(c.Request.Context(), query, userID)
+	rows, err := h.db.Query(c.Request.Context(), query, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch alerts"})
 		return
@@ -104,7 +104,7 @@ func (h *AlertHandler) CreateAlert(c *gin.Context) {
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err := h.db.Pool.Exec(c.Request.Context(), query,
+	_, err := h.db.Exec(c.Request.Context(), query,
 		alert.ID, alert.UserID, alert.AlertType, alert.Conditions, alert.IsActive, alert.CreatedAt)
 
 	if err != nil {
@@ -141,7 +141,7 @@ func (h *AlertHandler) UpdateAlert(c *gin.Context) {
 	// First verify ownership
 	checkQuery := `SELECT user_id FROM user_alerts WHERE id = $1`
 	var ownerID string
-	err := h.db.Pool.QueryRow(c.Request.Context(), checkQuery, alertID).Scan(&ownerID)
+	err := h.db.QueryRow(c.Request.Context(), checkQuery, alertID).Scan(&ownerID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Alert not found"})
 		return
@@ -170,7 +170,7 @@ func (h *AlertHandler) UpdateAlert(c *gin.Context) {
 	// Let's assume full update or specific logic.
 	// Given the task is to remove mock, a "working" implementation is key.
 
-	_, err = h.db.Pool.Exec(c.Request.Context(), query, alertID, req.Conditions, req.IsActive)
+	_, err = h.db.Exec(c.Request.Context(), query, alertID, req.Conditions, req.IsActive)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update alert"})
 		return
@@ -194,7 +194,7 @@ func (h *AlertHandler) DeleteAlert(c *gin.Context) {
 	// Verify ownership
 	checkQuery := `SELECT user_id FROM user_alerts WHERE id = $1`
 	var ownerID string
-	err := h.db.Pool.QueryRow(c.Request.Context(), checkQuery, alertID).Scan(&ownerID)
+	err := h.db.QueryRow(c.Request.Context(), checkQuery, alertID).Scan(&ownerID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Alert not found"})
 		return
@@ -206,7 +206,7 @@ func (h *AlertHandler) DeleteAlert(c *gin.Context) {
 	}
 
 	query := `DELETE FROM user_alerts WHERE id = $1`
-	_, err = h.db.Pool.Exec(c.Request.Context(), query, alertID)
+	_, err = h.db.Exec(c.Request.Context(), query, alertID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete alert"})
 		return

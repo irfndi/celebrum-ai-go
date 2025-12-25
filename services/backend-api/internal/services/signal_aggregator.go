@@ -18,7 +18,6 @@ import (
 	"github.com/cinar/indicator/v2/trend"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
@@ -110,7 +109,7 @@ type SignalAggregatorConfig struct {
 // SignalAggregator handles the aggregation, processing, and deduplication of trading signals.
 type SignalAggregator struct {
 	config        *config.Config
-	db            *database.PostgresDB
+	db            DBPool
 	logger        logging.Logger
 	sigConfig     SignalAggregatorConfig
 	qualityScorer SignalQualityScorerInterface
@@ -126,7 +125,7 @@ type SignalAggregator struct {
 //
 // Returns:
 //   - A pointer to the initialized SignalAggregator.
-func NewSignalAggregator(cfg *config.Config, db *database.PostgresDB, logger logging.Logger) *SignalAggregator {
+func NewSignalAggregator(cfg *config.Config, db DBPool, logger logging.Logger) *SignalAggregator {
 	return &SignalAggregator{
 		config: cfg,
 		db:     db,

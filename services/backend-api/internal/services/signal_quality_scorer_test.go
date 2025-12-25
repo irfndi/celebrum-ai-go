@@ -39,7 +39,7 @@ func TestGetDefaultQualityThresholds(t *testing.T) {
 	assert.True(t, thresholds.MinOverallScore.Equal(decimal.NewFromFloat(0.6)))
 	assert.True(t, thresholds.MinExchangeScore.Equal(decimal.NewFromFloat(0.7)))
 	assert.True(t, thresholds.MinVolumeScore.Equal(decimal.NewFromFloat(0.5)))
-	assert.True(t, thresholds.MinLiquidityScore.Equal(decimal.NewFromFloat(0.6)))
+	assert.True(t, thresholds.MinLiquidityScore.Equal(decimal.NewFromFloat(0.5)))
 	assert.True(t, thresholds.MaxRiskScore.Equal(decimal.NewFromFloat(0.4)))
 	assert.Equal(t, 5*time.Minute, thresholds.MinDataFreshness)
 }

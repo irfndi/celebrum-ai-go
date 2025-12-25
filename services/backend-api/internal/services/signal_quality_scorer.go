@@ -9,7 +9,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
@@ -18,7 +17,7 @@ import (
 // exchange reliability, market conditions, and technical indicators.
 type SignalQualityScorer struct {
 	config *config.Config
-	db     *database.PostgresDB
+	db     DBPool
 	logger logging.Logger
 
 	// Cached exchange reliability scores
@@ -112,7 +111,7 @@ type QualityThresholds struct {
 //
 // Returns:
 //   - A pointer to the initialized SignalQualityScorer.
-func NewSignalQualityScorer(cfg *config.Config, db *database.PostgresDB, logger logging.Logger) *SignalQualityScorer {
+func NewSignalQualityScorer(cfg *config.Config, db DBPool, logger logging.Logger) *SignalQualityScorer {
 	return &SignalQualityScorer{
 		config:                   cfg,
 		db:                       db,
@@ -128,7 +127,7 @@ func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds
 		MinOverallScore:   decimal.NewFromFloat(0.6),
 		MinExchangeScore:  decimal.NewFromFloat(0.7),
 		MinVolumeScore:    decimal.NewFromFloat(0.5),
-		MinLiquidityScore: decimal.NewFromFloat(0.6),
+		MinLiquidityScore: decimal.NewFromFloat(0.5),
 		MaxRiskScore:      decimal.NewFromFloat(0.4),
 		MinDataFreshness:  5 * time.Minute,
 	}
