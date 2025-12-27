@@ -41,9 +41,13 @@ describe("classifyGrammyError", () => {
   test("classifies 403 errors as USER_BLOCKED", () => {
     const error = new GrammyError(
       "Forbidden: bot was blocked by the user",
-      { ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" },
+      {
+        ok: false,
+        error_code: 403,
+        description: "Forbidden: bot was blocked by the user",
+      },
       "sendMessage",
-      { chat_id: 123, text: "test" }
+      { chat_id: 123, text: "test" },
     );
 
     const result = classifyGrammyError(error);
@@ -54,9 +58,13 @@ describe("classifyGrammyError", () => {
   test("classifies 400 chat not found errors", () => {
     const error = new GrammyError(
       "Bad Request: chat not found",
-      { ok: false, error_code: 400, description: "Bad Request: chat not found" },
+      {
+        ok: false,
+        error_code: 400,
+        description: "Bad Request: chat not found",
+      },
       "sendMessage",
-      { chat_id: 123, text: "test" }
+      { chat_id: 123, text: "test" },
     );
 
     const result = classifyGrammyError(error);
@@ -71,10 +79,10 @@ describe("classifyGrammyError", () => {
         ok: false,
         error_code: 429,
         description: "Too Many Requests: retry after 60",
-        parameters: { retry_after: 60 }
+        parameters: { retry_after: 60 },
       },
       "sendMessage",
-      { chat_id: 123, text: "test" }
+      { chat_id: 123, text: "test" },
     );
 
     const result = classifyGrammyError(error);
@@ -88,7 +96,7 @@ describe("classifyGrammyError", () => {
       "Internal Server Error",
       { ok: false, error_code: 500, description: "Internal Server Error" },
       "sendMessage",
-      { chat_id: 123, text: "test" }
+      { chat_id: 123, text: "test" },
     );
 
     const result = classifyGrammyError(error);
@@ -99,9 +107,13 @@ describe("classifyGrammyError", () => {
   test("classifies 400 errors as INVALID_REQUEST", () => {
     const error = new GrammyError(
       "Bad Request: message text is empty",
-      { ok: false, error_code: 400, description: "Bad Request: message text is empty" },
+      {
+        ok: false,
+        error_code: 400,
+        description: "Bad Request: message text is empty",
+      },
       "sendMessage",
-      { chat_id: 123, text: "" }
+      { chat_id: 123, text: "" },
     );
 
     const result = classifyGrammyError(error);
@@ -114,9 +126,13 @@ describe("classifyError", () => {
   test("classifies GrammyError correctly", () => {
     const grammyError = new GrammyError(
       "Forbidden: bot was blocked by the user",
-      { ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" },
+      {
+        ok: false,
+        error_code: 403,
+        description: "Forbidden: bot was blocked by the user",
+      },
       "sendMessage",
-      { chat_id: 123, text: "test" }
+      { chat_id: 123, text: "test" },
     );
 
     const result = classifyError(grammyError);

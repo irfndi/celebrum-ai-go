@@ -1,5 +1,10 @@
 import { test, expect, describe, mock } from "bun:test";
-import { withRetry, RetryConfig, RetryResult, DEFAULT_RETRY_CONFIG } from "./retry";
+import {
+  withRetry,
+  RetryConfig,
+  RetryResult,
+  DEFAULT_RETRY_CONFIG,
+} from "./retry";
 import { TelegramErrorCode, TelegramErrorInfo } from "./telegram-errors";
 
 // Mock error classifier for testing
@@ -88,7 +93,9 @@ describe("withRetry", () => {
 
     expect(result.success).toBe(false);
     expect(result.attempts).toBe(1);
-    expect((result.error as TelegramErrorInfo).code).toBe(TelegramErrorCode.USER_BLOCKED);
+    expect((result.error as TelegramErrorInfo).code).toBe(
+      TelegramErrorCode.USER_BLOCKED,
+    );
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -102,7 +109,9 @@ describe("withRetry", () => {
 
     expect(result.success).toBe(false);
     expect(result.attempts).toBe(3); // Initial + 2 retries
-    expect((result.error as TelegramErrorInfo).code).toBe(TelegramErrorCode.NETWORK_ERROR);
+    expect((result.error as TelegramErrorInfo).code).toBe(
+      TelegramErrorCode.NETWORK_ERROR,
+    );
     expect(fn).toHaveBeenCalledTimes(3);
   });
 

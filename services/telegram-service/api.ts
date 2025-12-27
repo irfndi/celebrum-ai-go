@@ -204,13 +204,19 @@ export const createApi = (config: TelegramConfigPartial) => {
 
         // 404 is expected for a non-existent user, but indicates auth worked
         if (response.status === 404) {
-          return { valid: true, reason: "Auth successful (user not found is expected)" };
+          return {
+            valid: true,
+            reason: "Auth successful (user not found is expected)",
+          };
         }
 
         // 401 means auth failed
         if (response.status === 401) {
           console.error("[API] ADMIN_API_KEY validation failed - key mismatch");
-          return { valid: false, reason: "ADMIN_API_KEY mismatch with backend" };
+          return {
+            valid: false,
+            reason: "ADMIN_API_KEY mismatch with backend",
+          };
         }
 
         return { valid: true, status: response.status };

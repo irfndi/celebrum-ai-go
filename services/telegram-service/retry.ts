@@ -1,4 +1,8 @@
-import { TelegramErrorCode, TelegramErrorInfo, isRetryableError } from "./telegram-errors";
+import {
+  TelegramErrorCode,
+  TelegramErrorInfo,
+  isRetryableError,
+} from "./telegram-errors";
 
 /**
  * Configuration for retry behavior
@@ -108,7 +112,9 @@ export async function withRetry<T>(
 
       // Don't retry non-retryable errors
       if (!isRetryableError(lastError.code)) {
-        console.log(`[Retry] Error ${lastError.code} is not retryable, giving up`);
+        console.log(
+          `[Retry] Error ${lastError.code} is not retryable, giving up`,
+        );
         return {
           success: false,
           error: lastError,
@@ -156,5 +162,8 @@ export async function withRetryThrow<T>(
     return result.data;
   }
 
-  throw result.error?.originalError || new Error(result.error?.message || "Unknown error");
+  throw (
+    result.error?.originalError ||
+    new Error(result.error?.message || "Unknown error")
+  );
 }
