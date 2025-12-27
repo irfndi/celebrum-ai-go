@@ -8,6 +8,12 @@ import {
   HealthCheckResponse,
 } from "./proto/telegram_service";
 import { Bot } from "grammy";
+import {
+  classifyError,
+  TelegramErrorCode,
+  TelegramErrorInfo,
+} from "./telegram-errors";
+import { withRetry, RetryConfig } from "./retry";
 
 const SEND_TIMEOUT = 30000;
 
@@ -18,6 +24,13 @@ const sendWithTimeout = <T>(promise: Promise<T>): Promise<T> => {
       setTimeout(() => reject(new Error("Telegram API timeout")), SEND_TIMEOUT),
     ),
   ]);
+};
+
+// Retry configuration for gRPC message sending
+const GRPC_RETRY_CONFIG: Partial<RetryConfig> = {
+  maxRetries: 2,
+  initialDelayMs: 500,
+  maxDelayMs: 5000,
 };
 
 export class TelegramGrpcServer {
@@ -34,34 +47,62 @@ export class TelegramGrpcServer {
     const { chatId, text, parseMode } = call.request;
 
     if (!chatId || !text) {
-      callback(
-        {
-          code: grpc.status.INVALID_ARGUMENT,
-          details: "Chat ID and Text are required",
-        },
-        null,
-      );
+      callback(null, {
+        ok: false,
+        messageId: "",
+        error: "Chat ID and Text are required",
+        errorCode: TelegramErrorCode.INVALID_REQUEST,
+        retryAfter: 0,
+      });
       return;
     }
 
-    sendWithTimeout(
-      this.bot.api.sendMessage(chatId, text, {
-        parse_mode: parseMode as any,
-      }),
+    // Use retry logic for sending messages
+    withRetry(
+      () =>
+        sendWithTimeout(
+          this.bot.api.sendMessage(chatId, text, {
+            parse_mode: parseMode as any,
+          }),
+        ),
+      classifyError,
+      GRPC_RETRY_CONFIG,
     )
-      .then((sent) => {
-        callback(null, {
-          ok: true,
-          messageId: sent.message_id.toString(),
-          error: "",
-        });
+      .then((result) => {
+        if (result.success && result.data) {
+          callback(null, {
+            ok: true,
+            messageId: result.data.message_id.toString(),
+            error: "",
+            errorCode: "",
+            retryAfter: 0,
+          });
+        } else {
+          const errorInfo = result.error as TelegramErrorInfo;
+          console.error(
+            `[gRPC] Failed to send message after ${result.attempts} attempts:`,
+            errorInfo?.code,
+            errorInfo?.message,
+          );
+          callback(null, {
+            ok: false,
+            messageId: "",
+            error: errorInfo?.message || "Unknown error",
+            errorCode: errorInfo?.code || TelegramErrorCode.UNKNOWN,
+            retryAfter: errorInfo?.retryAfter || 0,
+          });
+        }
       })
       .catch((error) => {
-        console.error("Failed to send message via gRPC:", error);
+        // This shouldn't happen as withRetry doesn't throw, but handle just in case
+        console.error("[gRPC] Unexpected error in sendMessage:", error);
+        const errorInfo = classifyError(error);
         callback(null, {
           ok: false,
           messageId: "",
-          error: error.message || "Unknown error",
+          error: errorInfo.message,
+          errorCode: errorInfo.code,
+          retryAfter: errorInfo.retryAfter || 0,
         });
       });
   };

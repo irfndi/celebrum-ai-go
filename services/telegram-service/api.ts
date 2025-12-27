@@ -150,12 +150,84 @@ export const createApi = (config: TelegramConfigPartial) => {
       "/api/v1/arbitrage/opportunities?limit=5&min_profit=0.5",
     );
 
+  /**
+   * Health check to verify backend connectivity
+   * Returns true if backend is reachable and responding
+   */
+  const healthCheck = () =>
+    Effect.tryPromise(async () => {
+      try {
+        const response = await fetch(`${config.apiBaseUrl}/health`, {
+          method: "GET",
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!response.ok) {
+          console.error(
+            `[API] Backend health check failed with status ${response.status}`,
+          );
+          return { healthy: false, status: response.status };
+        }
+
+        const data = await response.json().catch(() => ({}));
+        return { healthy: true, status: response.status, data };
+      } catch (error) {
+        console.error("[API] Backend health check failed:", error);
+        return { healthy: false, error: String(error) };
+      }
+    });
+
+  /**
+   * Verify admin API key is configured and matches backend
+   * This helps diagnose configuration issues early
+   */
+  const verifyAdminAuth = () =>
+    Effect.tryPromise(async () => {
+      if (!config.adminApiKey) {
+        console.warn("[API] ADMIN_API_KEY is not configured");
+        return { valid: false, reason: "ADMIN_API_KEY not set" };
+      }
+
+      try {
+        // Try to make a simple authenticated request
+        const response = await fetch(
+          `${config.apiBaseUrl}/api/v1/telegram/internal/users/test`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": config.adminApiKey,
+            },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+
+        // 404 is expected for a non-existent user, but indicates auth worked
+        if (response.status === 404) {
+          return { valid: true, reason: "Auth successful (user not found is expected)" };
+        }
+
+        // 401 means auth failed
+        if (response.status === 401) {
+          console.error("[API] ADMIN_API_KEY validation failed - key mismatch");
+          return { valid: false, reason: "ADMIN_API_KEY mismatch with backend" };
+        }
+
+        return { valid: true, status: response.status };
+      } catch (error) {
+        console.error("[API] Admin auth verification failed:", error);
+        return { valid: false, error: String(error) };
+      }
+    });
+
   return {
     getUserByChatId,
     getNotificationPreference,
     setNotificationPreference,
     registerTelegramUser,
     getOpportunities,
+    healthCheck,
+    verifyAdminAuth,
   };
 };
 

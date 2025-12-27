@@ -14,6 +14,7 @@ export type TelegramConfig = {
 export type TelegramConfigPartial = TelegramConfig & {
   botTokenMissing: boolean;
   configError: string | null;
+  adminApiKeyMissing: boolean;
 };
 
 const resolvePort = (raw: string | undefined, fallback: number) => {
@@ -37,6 +38,7 @@ export const loadConfig = (): TelegramConfigPartial => {
   const botTokenMissing = !botToken;
 
   const adminApiKey = process.env.ADMIN_API_KEY || "";
+  const adminApiKeyMissing = !adminApiKey;
   const isProduction =
     process.env.NODE_ENV === "production" ||
     process.env.SENTRY_ENVIRONMENT === "production";
@@ -60,7 +62,10 @@ export const loadConfig = (): TelegramConfigPartial => {
     }
   } else if (!adminApiKey) {
     console.warn(
-      "⚠️ WARNING: ADMIN_API_KEY is not set. Admin endpoints will be disabled.",
+      "⚠️ WARNING: ADMIN_API_KEY is not set. Internal API calls to backend will fail.",
+    );
+    console.warn(
+      "   Set ADMIN_API_KEY to match the backend's ADMIN_API_KEY for user lookups to work.",
     );
   }
 
@@ -97,6 +102,7 @@ export const loadConfig = (): TelegramConfigPartial => {
     botToken,
     botTokenMissing,
     configError,
+    adminApiKeyMissing,
     webhookUrl,
     webhookPath: resolvedWebhookPath.startsWith("/")
       ? resolvedWebhookPath

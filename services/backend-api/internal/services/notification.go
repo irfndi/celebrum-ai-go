@@ -40,6 +40,7 @@ type NotificationService struct {
 	grpcConn           *grpc.ClientConn
 	adminAPIKey        string
 	logger             *slog.Logger
+	deadLetterService  *DeadLetterService
 }
 
 // ArbitrageOpportunity represents an arbitrage opportunity for notification.
@@ -134,6 +135,7 @@ func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient
 		telegramGrpcAddr:   telegramGrpcAddress,
 		adminAPIKey:        adminAPIKey,
 		logger:             telemetry.Logger(),
+		deadLetterService:  NewDeadLetterService(db),
 	}
 
 	if telegramGrpcAddress != "" {
@@ -151,8 +153,50 @@ func NewNotificationService(db *database.PostgresDB, redis *database.RedisClient
 	return ns
 }
 
+// TelegramErrorCode represents structured error codes from Telegram service
+type TelegramErrorCode string
+
+const (
+	TelegramErrorUserBlocked    TelegramErrorCode = "USER_BLOCKED"
+	TelegramErrorChatNotFound   TelegramErrorCode = "CHAT_NOT_FOUND"
+	TelegramErrorRateLimited    TelegramErrorCode = "RATE_LIMITED"
+	TelegramErrorInvalidRequest TelegramErrorCode = "INVALID_REQUEST"
+	TelegramErrorNetworkError   TelegramErrorCode = "NETWORK_ERROR"
+	TelegramErrorTimeout        TelegramErrorCode = "TIMEOUT"
+	TelegramErrorInternal       TelegramErrorCode = "INTERNAL_ERROR"
+	TelegramErrorUnknown        TelegramErrorCode = "UNKNOWN"
+)
+
+// TelegramSendResult represents the result of sending a Telegram message
+type TelegramSendResult struct {
+	OK         bool
+	MessageID  string
+	Error      string
+	ErrorCode  TelegramErrorCode
+	RetryAfter int32
+}
+
+// isRetryableError checks if an error code indicates a retryable error
+func isRetryableError(code TelegramErrorCode) bool {
+	switch code {
+	case TelegramErrorRateLimited, TelegramErrorNetworkError, TelegramErrorTimeout, TelegramErrorInternal:
+		return true
+	default:
+		return false
+	}
+}
+
 // sendTelegramMessage sends a message via the Telegram Service.
 func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID int64, text string) error {
+	result := ns.sendTelegramMessageWithResult(ctx, chatID, text)
+	if result.OK {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", result.ErrorCode, result.Error)
+}
+
+// sendTelegramMessageWithResult sends a message and returns structured result
+func (ns *NotificationService) sendTelegramMessageWithResult(ctx context.Context, chatID int64, text string) TelegramSendResult {
 	spanCtx, span := observability.StartSpanWithTags(ctx, observability.SpanOpNotification, "NotificationService.sendTelegramMessage", map[string]string{
 		"chat_id": fmt.Sprintf("%d", chatID),
 	})
@@ -161,23 +205,46 @@ func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID i
 	// Try gRPC first
 	if ns.grpcClient != nil {
 		grpcCtx, grpcSpan := observability.StartSpan(spanCtx, observability.SpanOpGRPC, "telegram.SendMessage")
-		_, err := ns.grpcClient.SendMessage(grpcCtx, &pb.SendMessageRequest{
+		resp, err := ns.grpcClient.SendMessage(grpcCtx, &pb.SendMessageRequest{
 			ChatId: fmt.Sprintf("%d", chatID),
 			Text:   text,
 		})
 		observability.FinishSpan(grpcSpan, err)
-		if err == nil {
-			observability.AddBreadcrumb(spanCtx, "notification", "Telegram message sent via gRPC", sentry.LevelInfo)
-			return nil
+
+		if err == nil && resp != nil {
+			if resp.Ok {
+				observability.AddBreadcrumb(spanCtx, "notification", "Telegram message sent via gRPC", sentry.LevelInfo)
+				return TelegramSendResult{
+					OK:        true,
+					MessageID: resp.MessageId,
+				}
+			}
+			// Message failed with structured error
+			errorCode := TelegramErrorCode(resp.GetErrorCode())
+			if errorCode == "" {
+				errorCode = TelegramErrorUnknown
+			}
+			return TelegramSendResult{
+				OK:         false,
+				Error:      resp.Error,
+				ErrorCode:  errorCode,
+				RetryAfter: resp.GetRetryAfter(),
+			}
 		}
-		ns.logger.Warn("Failed to send Telegram message via gRPC, falling back to HTTP", "error", err)
-		observability.AddBreadcrumb(spanCtx, "notification", "gRPC failed, falling back to HTTP", sentry.LevelWarning)
+
+		if err != nil {
+			ns.logger.Warn("Failed to send Telegram message via gRPC, falling back to HTTP", "error", err)
+			observability.AddBreadcrumb(spanCtx, "notification", "gRPC failed, falling back to HTTP", sentry.LevelWarning)
+		}
 	}
 
 	if ns.telegramServiceURL == "" {
-		// Log warning but don't fail hard if not configured, just skip
 		ns.logger.Warn("Telegram service URL not configured, skipping message")
-		return nil
+		return TelegramSendResult{
+			OK:        false,
+			Error:     "Telegram service URL not configured",
+			ErrorCode: TelegramErrorInvalidRequest,
+		}
 	}
 
 	payload := map[string]interface{}{
@@ -189,14 +256,22 @@ func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID i
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		observability.CaptureException(spanCtx, err)
-		return err
+		return TelegramSendResult{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: TelegramErrorInvalidRequest,
+		}
 	}
 
 	httpCtx, httpSpan := observability.StartSpan(spanCtx, observability.SpanOpHTTPClient, "POST /send-message")
 	req, err := http.NewRequestWithContext(httpCtx, "POST", ns.telegramServiceURL+"/send-message", bytes.NewBuffer(jsonData))
 	if err != nil {
 		observability.FinishSpan(httpSpan, err)
-		return err
+		return TelegramSendResult{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: TelegramErrorNetworkError,
+		}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -211,19 +286,157 @@ func (ns *NotificationService) sendTelegramMessage(ctx context.Context, chatID i
 		observability.CaptureExceptionWithContext(spanCtx, err, "telegram_http_send", map[string]interface{}{
 			"chat_id": chatID,
 		})
-		return err
+		return TelegramSendResult{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: TelegramErrorNetworkError,
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	httpSpan.SetData("http.status_code", resp.StatusCode)
-	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("telegram service returned status: %d", resp.StatusCode)
-		observability.FinishSpan(httpSpan, err)
-		return err
+
+	// Parse response body for error details
+	var respBody struct {
+		OK        bool   `json:"ok"`
+		Error     string `json:"error"`
+		ErrorCode string `json:"errorCode"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		// Couldn't parse response, but check status code
+		if resp.StatusCode != http.StatusOK {
+			err := fmt.Errorf("telegram service returned status: %d", resp.StatusCode)
+			observability.FinishSpan(httpSpan, err)
+			return TelegramSendResult{
+				OK:        false,
+				Error:     err.Error(),
+				ErrorCode: TelegramErrorUnknown,
+			}
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK || !respBody.OK {
+		errorCode := TelegramErrorCode(respBody.ErrorCode)
+		if errorCode == "" {
+			errorCode = TelegramErrorUnknown
+		}
+		observability.FinishSpan(httpSpan, fmt.Errorf("%s", respBody.Error))
+		return TelegramSendResult{
+			OK:        false,
+			Error:     respBody.Error,
+			ErrorCode: errorCode,
+		}
 	}
 
 	observability.FinishSpan(httpSpan, nil)
 	observability.AddBreadcrumb(spanCtx, "notification", "Telegram message sent via HTTP", sentry.LevelInfo)
+	return TelegramSendResult{OK: true}
+}
+
+// sendTelegramMessageWithRetry sends a message with retry logic for transient errors
+func (ns *NotificationService) sendTelegramMessageWithRetry(ctx context.Context, chatID int64, text string, userID string) error {
+	const maxRetries = 3
+	baseDelay := time.Second
+
+	var lastResult TelegramSendResult
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Calculate delay with exponential backoff and jitter
+			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			if lastResult.RetryAfter > 0 {
+				delay = time.Duration(lastResult.RetryAfter) * time.Second
+			}
+			// Add jitter (random factor 0.5-1.5)
+			jitter := 0.5 + (float64(time.Now().UnixNano()%1000) / 1000.0)
+			delay = time.Duration(float64(delay) * jitter)
+
+			ns.logger.Info("Retrying Telegram message", "attempt", attempt+1, "delay_ms", delay.Milliseconds(), "chat_id", chatID)
+			time.Sleep(delay)
+		}
+
+		lastResult = ns.sendTelegramMessageWithResult(ctx, chatID, text)
+
+		if lastResult.OK {
+			if attempt > 0 {
+				ns.logger.Info("Telegram message sent successfully after retry", "attempts", attempt+1, "chat_id", chatID)
+			}
+			return nil
+		}
+
+		// Handle non-retryable errors immediately
+		if !isRetryableError(lastResult.ErrorCode) {
+			ns.logger.Warn("Non-retryable Telegram error",
+				"error_code", lastResult.ErrorCode,
+				"error", lastResult.Error,
+				"chat_id", chatID,
+			)
+
+			// Handle blocked users - mark them in database
+			if lastResult.ErrorCode == TelegramErrorUserBlocked || lastResult.ErrorCode == TelegramErrorChatNotFound {
+				if userID != "" {
+					if err := ns.handleBlockedUser(ctx, userID, string(lastResult.ErrorCode)); err != nil {
+						ns.logger.Error("Failed to mark user as blocked", "user_id", userID, "error", err)
+					}
+				}
+			}
+
+			return fmt.Errorf("%s: %s", lastResult.ErrorCode, lastResult.Error)
+		}
+
+		ns.logger.Warn("Retryable Telegram error",
+			"attempt", attempt+1,
+			"max_retries", maxRetries,
+			"error_code", lastResult.ErrorCode,
+			"error", lastResult.Error,
+			"chat_id", chatID,
+		)
+	}
+
+	// Add to dead letter queue for later processing
+	if ns.deadLetterService != nil && userID != "" {
+		chatIDStr := fmt.Sprintf("%d", chatID)
+		_, dlqErr := ns.deadLetterService.AddToDeadLetter(
+			ctx,
+			userID,
+			chatIDStr,
+			"telegram_notification",
+			text,
+			string(lastResult.ErrorCode),
+			lastResult.Error,
+		)
+		if dlqErr != nil {
+			ns.logger.Error("Failed to add message to dead letter queue",
+				"user_id", userID,
+				"chat_id", chatID,
+				"error", dlqErr,
+			)
+		}
+	}
+
+	return fmt.Errorf("failed after %d retries: %s: %s", maxRetries, lastResult.ErrorCode, lastResult.Error)
+}
+
+// handleBlockedUser marks a user as blocked in the database
+func (ns *NotificationService) handleBlockedUser(ctx context.Context, userID, reason string) error {
+	ns.logger.Info("Marking user as blocked", "user_id", userID, "reason", reason)
+
+	query := `
+		UPDATE users
+		SET telegram_blocked = true,
+		    telegram_blocked_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+	_, err := ns.db.Pool.Exec(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user blocked status: %w", err)
+	}
+
+	// Invalidate cache
+	ns.InvalidateUserCache(ctx)
+
+	ns.logger.Info("User marked as blocked", "user_id", userID)
 	return nil
 }
 
@@ -664,15 +877,17 @@ func (ns *NotificationService) getEligibleUsers(ctx context.Context) ([]userMode
 	}
 
 	// Cache miss or Redis unavailable, query database
+	// Exclude blocked users (telegram_blocked = true)
 	query := `
 		SELECT id, email, telegram_chat_id, subscription_tier, created_at, updated_at
-		FROM users 
-		WHERE telegram_chat_id IS NOT NULL 
+		FROM users
+		WHERE telegram_chat_id IS NOT NULL
 		  AND telegram_chat_id != ''
+		  AND (telegram_blocked IS NULL OR telegram_blocked = false)
 		  AND id NOT IN (
-			  SELECT DISTINCT user_id 
-			  FROM user_alerts 
-			  WHERE alert_type = 'arbitrage' 
+			  SELECT DISTINCT user_id
+			  FROM user_alerts
+			  WHERE alert_type = 'arbitrage'
 			    AND is_active = false
 			    AND conditions->>'notifications_enabled' = 'false'
 		  )
@@ -852,8 +1067,8 @@ func (ns *NotificationService) sendArbitrageAlert(ctx context.Context, user user
 		ns.logger.Info("Formatted and cached new arbitrage message", "hash", oppHash[:8])
 	}
 
-	// Send the message
-	err = ns.sendTelegramMessage(ctx, chatID, message)
+	// Send the message with retry logic
+	err = ns.sendTelegramMessageWithRetry(ctx, chatID, message, user.ID)
 
 	if err != nil {
 		return fmt.Errorf("failed to send telegram message: %w", err)
@@ -909,8 +1124,8 @@ func (ns *NotificationService) sendEnhancedArbitrageAlert(ctx context.Context, u
 		ns.logger.Info("Formatted and cached new enhanced arbitrage message", "hash", signalHash[:8])
 	}
 
-	// Send the message
-	err = ns.sendTelegramMessage(ctx, chatID, message)
+	// Send the message with retry logic
+	err = ns.sendTelegramMessageWithRetry(ctx, chatID, message, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to send telegram message: %w", err)
 	}
@@ -1563,4 +1778,128 @@ func (ns *NotificationService) sendTechnicalAlert(ctx context.Context, user user
 	}
 
 	return nil
+}
+
+// ProcessDeadLetterQueue processes pending dead letter entries and retries sending them
+//
+// Parameters:
+//
+//	ctx: Context.
+//	batchSize: Maximum number of entries to process in this batch.
+//
+// Returns:
+//
+//	int: Number of successfully processed entries.
+//	int: Number of failed entries.
+//	error: Error if the operation fails.
+func (ns *NotificationService) ProcessDeadLetterQueue(ctx context.Context, batchSize int) (int, int, error) {
+	if ns.deadLetterService == nil {
+		return 0, 0, fmt.Errorf("dead letter service not initialized")
+	}
+
+	// Get pending messages
+	entries, err := ns.deadLetterService.GetPendingMessages(ctx, batchSize)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get pending messages: %w", err)
+	}
+
+	if len(entries) == 0 {
+		return 0, 0, nil
+	}
+
+	ns.logger.Info("Processing dead letter queue", "batch_size", len(entries))
+
+	successCount := 0
+	failCount := 0
+
+	for _, entry := range entries {
+		// Mark as retrying
+		if err := ns.deadLetterService.MarkAsRetrying(ctx, entry.ID); err != nil {
+			ns.logger.Error("Failed to mark entry as retrying", "id", entry.ID, "error", err)
+			continue
+		}
+
+		// Parse chat ID
+		chatID, parseErr := strconv.ParseInt(entry.ChatID, 10, 64)
+		if parseErr != nil {
+			ns.logger.Error("Invalid chat ID in dead letter entry", "id", entry.ID, "chat_id", entry.ChatID)
+			_ = ns.deadLetterService.UpdateDeadLetter(ctx, entry.ID, false, "INVALID_CHAT_ID", "Invalid chat ID format")
+			failCount++
+			continue
+		}
+
+		// Attempt to send the message
+		result := ns.sendTelegramMessageWithResult(ctx, chatID, entry.MessageContent)
+
+		if result.OK {
+			// Success - update the dead letter entry
+			if err := ns.deadLetterService.UpdateDeadLetter(ctx, entry.ID, true, "", ""); err != nil {
+				ns.logger.Error("Failed to mark dead letter as success", "id", entry.ID, "error", err)
+			}
+			successCount++
+			ns.logger.Info("Successfully resent dead letter message", "id", entry.ID, "chat_id", entry.ChatID)
+		} else {
+			// Failed - update with new error
+			if err := ns.deadLetterService.UpdateDeadLetter(ctx, entry.ID, false, string(result.ErrorCode), result.Error); err != nil {
+				ns.logger.Error("Failed to update dead letter error", "id", entry.ID, "error", err)
+			}
+
+			// Handle blocked users
+			if result.ErrorCode == TelegramErrorUserBlocked || result.ErrorCode == TelegramErrorChatNotFound {
+				if err := ns.handleBlockedUser(ctx, entry.UserID, string(result.ErrorCode)); err != nil {
+					ns.logger.Error("Failed to mark user as blocked", "user_id", entry.UserID, "error", err)
+				}
+			}
+
+			failCount++
+			ns.logger.Warn("Failed to resend dead letter message",
+				"id", entry.ID,
+				"error_code", result.ErrorCode,
+				"error", result.Error,
+			)
+		}
+	}
+
+	ns.logger.Info("Dead letter queue processing completed",
+		"processed", len(entries),
+		"success", successCount,
+		"failed", failCount,
+	)
+
+	return successCount, failCount, nil
+}
+
+// GetDeadLetterStats returns statistics about the dead letter queue
+//
+// Parameters:
+//
+//	ctx: Context.
+//
+// Returns:
+//
+//	*DeadLetterStats: Statistics about the queue.
+//	error: Error if the operation fails.
+func (ns *NotificationService) GetDeadLetterStats(ctx context.Context) (*DeadLetterStats, error) {
+	if ns.deadLetterService == nil {
+		return nil, fmt.Errorf("dead letter service not initialized")
+	}
+	return ns.deadLetterService.GetDeadLetterStats(ctx)
+}
+
+// CleanupDeadLetters removes old successful or failed dead letter entries
+//
+// Parameters:
+//
+//	ctx: Context.
+//	olderThan: Remove entries older than this duration.
+//
+// Returns:
+//
+//	int: Number of entries removed.
+//	error: Error if the operation fails.
+func (ns *NotificationService) CleanupDeadLetters(ctx context.Context, olderThan time.Duration) (int, error) {
+	if ns.deadLetterService == nil {
+		return 0, fmt.Errorf("dead letter service not initialized")
+	}
+	return ns.deadLetterService.CleanupOldEntries(ctx, olderThan)
 }

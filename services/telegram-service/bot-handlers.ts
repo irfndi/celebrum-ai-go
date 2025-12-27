@@ -164,20 +164,32 @@ export const handleStatus = (api: Api) => async (ctx: Context) => {
 
   // Handle different error types with specific messages
   if (errorType === "auth_failed") {
+    console.error(
+      "[Status] Backend auth failed - ADMIN_API_KEY may be misconfigured or empty",
+    );
     await ctx.reply(
-      "⚠️ Service temporarily unavailable. Please try again later.",
+      "⚠️ Service configuration issue detected.\n\n" +
+        "The bot cannot communicate with the backend server.\n" +
+        "This is likely a deployment configuration issue.\n\n" +
+        "Please contact the administrator.",
     );
     return;
   }
 
   if (errorType === "not_found" || !userResult) {
-    await ctx.reply("User not found. Please use /start to register.");
+    await ctx.reply(
+      "👤 User not found in our system.\n\n" +
+        "It looks like you haven't registered yet.\n" +
+        "Use /start to register and start receiving arbitrage alerts!",
+    );
     return;
   }
 
   if (errorType === "error") {
     await ctx.reply(
-      `❌ An error occurred: ${errorMessage}. Please try again later.`,
+      `❌ An error occurred while fetching your status.\n\n` +
+        `Error: ${errorMessage}\n\n` +
+        `Please try again later or use /start to re-register.`,
     );
     return;
   }

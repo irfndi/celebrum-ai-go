@@ -1052,3 +1052,152 @@ func TestNotificationService_getEligibleUsers_ContextCancellation(t *testing.T) 
 		_, _ = ns.getEligibleUsers(ctx)
 	})
 }
+
+// Test TelegramErrorCode constants
+func TestTelegramErrorCode_Constants(t *testing.T) {
+	assert.Equal(t, TelegramErrorCode("USER_BLOCKED"), TelegramErrorUserBlocked)
+	assert.Equal(t, TelegramErrorCode("CHAT_NOT_FOUND"), TelegramErrorChatNotFound)
+	assert.Equal(t, TelegramErrorCode("RATE_LIMITED"), TelegramErrorRateLimited)
+	assert.Equal(t, TelegramErrorCode("INVALID_REQUEST"), TelegramErrorInvalidRequest)
+	assert.Equal(t, TelegramErrorCode("NETWORK_ERROR"), TelegramErrorNetworkError)
+	assert.Equal(t, TelegramErrorCode("TIMEOUT"), TelegramErrorTimeout)
+	assert.Equal(t, TelegramErrorCode("INTERNAL_ERROR"), TelegramErrorInternal)
+	assert.Equal(t, TelegramErrorCode("UNKNOWN"), TelegramErrorUnknown)
+}
+
+// Test isRetryableError function
+func TestIsRetryableError(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     TelegramErrorCode
+		expected bool
+	}{
+		{
+			name:     "RATE_LIMITED is retryable",
+			code:     TelegramErrorRateLimited,
+			expected: true,
+		},
+		{
+			name:     "NETWORK_ERROR is retryable",
+			code:     TelegramErrorNetworkError,
+			expected: true,
+		},
+		{
+			name:     "TIMEOUT is retryable",
+			code:     TelegramErrorTimeout,
+			expected: true,
+		},
+		{
+			name:     "INTERNAL_ERROR is retryable",
+			code:     TelegramErrorInternal,
+			expected: true,
+		},
+		{
+			name:     "USER_BLOCKED is not retryable",
+			code:     TelegramErrorUserBlocked,
+			expected: false,
+		},
+		{
+			name:     "CHAT_NOT_FOUND is not retryable",
+			code:     TelegramErrorChatNotFound,
+			expected: false,
+		},
+		{
+			name:     "INVALID_REQUEST is not retryable",
+			code:     TelegramErrorInvalidRequest,
+			expected: false,
+		},
+		{
+			name:     "UNKNOWN is not retryable",
+			code:     TelegramErrorUnknown,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRetryableError(tt.code)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// Test TelegramSendResult struct
+func TestTelegramSendResult_Struct(t *testing.T) {
+	// Test successful result
+	successResult := TelegramSendResult{
+		OK:        true,
+		MessageID: "12345",
+	}
+	assert.True(t, successResult.OK)
+	assert.Equal(t, "12345", successResult.MessageID)
+	assert.Empty(t, successResult.Error)
+	assert.Empty(t, successResult.ErrorCode)
+	assert.Equal(t, int32(0), successResult.RetryAfter)
+
+	// Test failed result with error code
+	failedResult := TelegramSendResult{
+		OK:         false,
+		Error:      "User blocked the bot",
+		ErrorCode:  TelegramErrorUserBlocked,
+		RetryAfter: 0,
+	}
+	assert.False(t, failedResult.OK)
+	assert.Equal(t, "User blocked the bot", failedResult.Error)
+	assert.Equal(t, TelegramErrorUserBlocked, failedResult.ErrorCode)
+
+	// Test rate limited result
+	rateLimitedResult := TelegramSendResult{
+		OK:         false,
+		Error:      "Too many requests",
+		ErrorCode:  TelegramErrorRateLimited,
+		RetryAfter: 60,
+	}
+	assert.False(t, rateLimitedResult.OK)
+	assert.Equal(t, TelegramErrorRateLimited, rateLimitedResult.ErrorCode)
+	assert.Equal(t, int32(60), rateLimitedResult.RetryAfter)
+}
+
+// Test notification service initialization with dead letter service
+func TestNotificationService_DeadLetterServiceInitialization(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+	assert.NotNil(t, ns)
+	assert.NotNil(t, ns.deadLetterService)
+}
+
+// Test ProcessDeadLetterQueue with nil service
+func TestNotificationService_ProcessDeadLetterQueue_NilDB(t *testing.T) {
+	ns := &NotificationService{
+		deadLetterService: nil,
+	}
+
+	success, failed, err := ns.ProcessDeadLetterQueue(context.Background(), 10)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dead letter service not initialized")
+	assert.Equal(t, 0, success)
+	assert.Equal(t, 0, failed)
+}
+
+// Test GetDeadLetterStats with nil service
+func TestNotificationService_GetDeadLetterStats_NilService(t *testing.T) {
+	ns := &NotificationService{
+		deadLetterService: nil,
+	}
+
+	stats, err := ns.GetDeadLetterStats(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dead letter service not initialized")
+	assert.Nil(t, stats)
+}
+
+// Test CleanupDeadLetters with nil service
+func TestNotificationService_CleanupDeadLetters_NilService(t *testing.T) {
+	ns := &NotificationService{
+		deadLetterService: nil,
+	}
+
+	count, err := ns.CleanupDeadLetters(context.Background(), 24*time.Hour)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dead letter service not initialized")
+	assert.Equal(t, 0, count)
+}

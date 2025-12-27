@@ -18,6 +18,11 @@ message SendMessageResponse {
   bool ok = 1;
   string message_id = 2;
   string error = 3;
+  // Structured error code for programmatic handling
+  // Values: USER_BLOCKED, CHAT_NOT_FOUND, RATE_LIMITED, INVALID_REQUEST, NETWORK_ERROR, TIMEOUT, INTERNAL_ERROR, UNKNOWN
+  string error_code = 4;
+  // Seconds to wait before retrying (only set for RATE_LIMITED errors)
+  int32 retry_after = 5;
 }
 
 message HealthCheckRequest {}
