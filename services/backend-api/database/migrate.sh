@@ -60,8 +60,9 @@ migration_applied() {
     return 1
   fi
 
-  # Check if migration has been applied (using parameterized query to prevent SQL injection)
-  run_psql -v migration_name="$migration_name" -c "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
+  # Check if migration has been applied (escape single quotes in filename for SQL safety)
+  local safe_name="${migration_name//\'/\'\'}"
+  run_psql -c "SELECT 1 FROM schema_migrations WHERE filename = '$safe_name' AND applied = true" -t -A 2>/dev/null | grep -q 1
 }
 
 # apply_migration applies a SQL migration file to the configured database, records the migration in the `schema_migrations` table, skips the file if it is already recorded as applied, and exits with a non-zero status on failure.
@@ -81,8 +82,9 @@ apply_migration() {
   if run_psql -f "$migration_file"; then
     log "Successfully applied migration: $migration_name"
 
-    # Record migration in schema_migrations table (using parameterized query to prevent SQL injection)
-    run_psql -v migration_name="$migration_name" -c "INSERT INTO schema_migrations (filename, applied) VALUES (:'migration_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
+    # Record migration in schema_migrations table (escape single quotes in filename for SQL safety)
+    local safe_name="${migration_name//\'/\'\'}"
+    run_psql -c "INSERT INTO schema_migrations (filename, applied) VALUES ('$safe_name', true) ON CONFLICT (filename) DO UPDATE SET applied = true, applied_at = NOW()"
   else
     log_error "Failed to apply migration: $migration_name"
     exit 1

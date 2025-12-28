@@ -311,6 +311,14 @@ func Load() (*Config, error) {
 	// Bind standard DATABASE_URL
 	_ = viper.BindEnv("database.database_url", "DATABASE_URL")
 
+	// Bind database environment variables explicitly
+	_ = viper.BindEnv("database.host", "DATABASE_HOST")
+	_ = viper.BindEnv("database.port", "DATABASE_PORT")
+	_ = viper.BindEnv("database.user", "DATABASE_USER")
+	_ = viper.BindEnv("database.password", "DATABASE_PASSWORD")
+	_ = viper.BindEnv("database.dbname", "DATABASE_DBNAME")
+	_ = viper.BindEnv("database.sslmode", "DATABASE_SSLMODE")
+
 	// Bind CCXT service environment variables
 	_ = viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL")
 	_ = viper.BindEnv("ccxt.grpc_address", "CCXT_GRPC_ADDRESS")
