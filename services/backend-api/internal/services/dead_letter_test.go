@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -555,7 +556,7 @@ func TestDeadLetterService_Pow_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(
-			"pow_"+string(rune('0'+tt.base))+"_"+string(rune('0'+tt.exp)),
+			fmt.Sprintf("pow_%d_%d", tt.base, tt.exp),
 			func(t *testing.T) {
 				result := pow(tt.base, tt.exp)
 				assert.Equal(t, tt.expected, result)

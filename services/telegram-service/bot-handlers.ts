@@ -1,6 +1,6 @@
 import { Context } from "grammy";
 import { Effect } from "effect";
-import { Api, isApiError } from "./api";
+import { Api, isApiError, extractApiError, ApiException } from "./api";
 
 export const formatOpportunitiesMessage = (opps: any[]) => {
   if (!opps || opps.length === 0) {
@@ -70,20 +70,24 @@ export const handleStart = (api: Api) => async (ctx: Context) => {
       const registerResult = await Effect.runPromise(
         api.registerTelegramUser(chatIdStr, userId),
       );
-      if (registerResult) {
+      // Check for explicit success - registerResult !== null covers empty objects {}
+      // which indicate API returned successfully (even with empty response body)
+      if (registerResult !== null && registerResult !== undefined) {
         registrationSucceeded = true;
       }
     } catch (error) {
-      if (isApiError(error)) {
+      // Use extractApiError for cleaner error extraction
+      const apiError = extractApiError(error);
+      if (apiError) {
         console.error(
-          `[Start] Registration failed: ${error.type} - ${error.message}`,
+          `[Start] Registration failed: ${apiError.type} - ${apiError.message}`,
         );
         registrationError =
-          error.type === "network_error"
+          apiError.type === "network_error"
             ? "Unable to connect to the server. Please try again later."
-            : error.type === "server_error"
+            : apiError.type === "server_error"
               ? "Server is temporarily unavailable. Please try again in a few minutes."
-              : error.message;
+              : apiError.message;
       } else {
         console.error("[Start] Unexpected registration error:", error);
         registrationError =
@@ -133,16 +137,17 @@ export const handleOpportunities = (api: Api) => async (ctx: Context) => {
   } catch (error) {
     let errorMessage = "An unexpected error occurred.";
 
-    if (isApiError(error)) {
+    const apiError = extractApiError(error);
+    if (apiError) {
       console.error(
-        `[Opportunities] API error: ${error.type} - ${error.message}`,
+        `[Opportunities] API error: ${apiError.type} - ${apiError.message}`,
       );
       errorMessage =
-        error.type === "network_error"
+        apiError.type === "network_error"
           ? "Unable to connect to the server."
-          : error.type === "server_error"
+          : apiError.type === "server_error"
             ? "Server is temporarily unavailable."
-            : error.message;
+            : apiError.message;
     } else {
       console.error("[Opportunities] Unexpected error:", error);
     }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -288,7 +289,7 @@ func TestNotificationService_Concurrency(t *testing.T) {
 				`SELECT COUNT(*) FROM user_alerts WHERE user_id = $1`, userID).Scan(&count)
 			assert.NoError(t, err)
 			done <- true
-		}("user-" + string(rune('0'+i)))
+		}(fmt.Sprintf("user-%d", i))
 	}
 
 	// Wait for all goroutines

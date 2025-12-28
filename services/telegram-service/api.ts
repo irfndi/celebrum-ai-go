@@ -16,8 +16,30 @@ export interface ApiError {
   code?: string;
 }
 
+// Custom error class that preserves both ApiError info and stack trace
+export class ApiException extends Error {
+  readonly apiError: ApiError;
+
+  constructor(apiError: ApiError) {
+    super(apiError.message);
+    this.name = "ApiException";
+    this.apiError = apiError;
+    // Preserve stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ApiException);
+    }
+  }
+}
+
+// WeakMap to cache extracted ApiErrors - avoids mutation
+const extractedApiErrors = new WeakMap<object, ApiError>();
+
 // Type guard for ApiError - also handles Effect's wrapped errors
-export const isApiError = (error: unknown): error is ApiError => {
+// Uses immutable extraction with caching to avoid mutation
+export const isApiError = (
+  error: unknown,
+  visited: WeakSet<object> = new WeakSet(),
+): error is ApiError => {
   // Direct ApiError check
   if (
     typeof error === "object" &&
@@ -29,9 +51,21 @@ export const isApiError = (error: unknown): error is ApiError => {
     return true;
   }
 
+  // Check for ApiException
+  if (error instanceof ApiException) {
+    return true;
+  }
+
   // Check for Effect's wrapped error (UnknownException with cause)
   if (typeof error === "object" && error !== null && "cause" in error) {
+    // Prevent infinite recursion with circular references
+    if (visited.has(error)) {
+      return false;
+    }
+    visited.add(error);
+
     const cause = (error as { cause: unknown }).cause;
+
     // The cause might be an Error with message containing our ApiError JSON
     if (cause instanceof Error && cause.message) {
       try {
@@ -41,26 +75,65 @@ export const isApiError = (error: unknown): error is ApiError => {
           typeof parsed.type === "string" &&
           typeof parsed.message === "string"
         ) {
-          // Copy the parsed ApiError properties to the error object for easier access
-          Object.assign(error, parsed);
+          // Cache the parsed ApiError instead of mutating
+          extractedApiErrors.set(error, parsed as ApiError);
           return true;
         }
       } catch {
         // Not JSON, continue
       }
     }
-    // Direct ApiError in cause
-    return isApiError(cause);
+
+    // Check for ApiException in cause
+    if (cause instanceof ApiException) {
+      extractedApiErrors.set(error, cause.apiError);
+      return true;
+    }
+
+    // Recursive check with visited set to prevent infinite loops
+    if (typeof cause === "object" && cause !== null) {
+      return isApiError(cause, visited);
+    }
   }
 
   return false;
 };
 
-// Extract ApiError from potentially wrapped errors
+// Extract ApiError from potentially wrapped errors (immutable)
 export const extractApiError = (error: unknown): ApiError | null => {
-  if (isApiError(error)) {
+  // Direct ApiError
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "type" in error &&
+    "message" in error &&
+    typeof (error as ApiError).type === "string"
+  ) {
     return error as ApiError;
   }
+
+  // ApiException
+  if (error instanceof ApiException) {
+    return error.apiError;
+  }
+
+  // Check cache first
+  if (typeof error === "object" && error !== null) {
+    const cached = extractedApiErrors.get(error);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  // Try to extract (this will populate the cache)
+  if (isApiError(error)) {
+    // Check cache again after isApiError populated it
+    if (typeof error === "object" && error !== null) {
+      return extractedApiErrors.get(error) ?? (error as ApiError);
+    }
+    return error as ApiError;
+  }
+
   return null;
 };
 
@@ -91,12 +164,11 @@ export const createApi = (config: TelegramConfigPartial) => {
           `[API] Network error for ${path}:`,
           networkError instanceof Error ? networkError.message : networkError,
         );
-        const apiError: ApiError = {
+        // Throw ApiException to preserve stack trace and error info
+        throw new ApiException({
           type: "network_error",
           message: "Network error: Unable to connect to backend API",
-        };
-        // Throw as Error with JSON message for proper extraction from Effect wrapper
-        throw new Error(JSON.stringify(apiError));
+        });
       }
 
       const payload = await response
@@ -128,14 +200,13 @@ export const createApi = (config: TelegramConfigPartial) => {
           console.error(`[API] ${errorType}: ${response.status} for ${path}`);
         }
 
-        const apiError: ApiError = {
+        // Throw ApiException to preserve stack trace and error info
+        throw new ApiException({
           type: errorType,
           status: response.status,
           message,
           code: payload?.code,
-        };
-        // Throw as Error with JSON message for proper extraction from Effect wrapper
-        throw new Error(JSON.stringify(apiError));
+        });
       }
 
       return payload as T;
