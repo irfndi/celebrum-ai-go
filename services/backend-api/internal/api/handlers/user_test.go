@@ -2353,4 +2353,3 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 		assert.Nil(t, user)
 	})
 }
-
