@@ -30,7 +30,7 @@ services:
       - DATABASE_HOST=${DATABASE_HOST:-postgres}
       - DATABASE_PORT=${DATABASE_PORT:-5432}
       - DATABASE_USER=${DATABASE_USER:-postgres}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-changeme}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?DATABASE_PASSWORD environment variable is required}
       - DATABASE_DBNAME=${DATABASE_DBNAME:-celebrum}
       # Pass DATABASE_URL for compatibility, but entrypoint prefers individual vars
       - DATABASE_URL=${DATABASE_URL:-}
