@@ -67,6 +67,24 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 		healthGroup.GET("/live", gin.WrapF(healthHandler.LivenessCheck))
 	}
 
+	// Initialize user and telegram internal handlers early for internal routes
+	userHandler := handlers.NewUserHandler(db, redis.Client)
+	telegramInternalHandler := handlers.NewTelegramInternalHandler(db, userHandler)
+
+	// Internal service-to-service routes (no auth, network-isolated via Docker)
+	// These endpoints are only accessible within the Docker network
+	// Security: Relies on Docker network isolation - only internal services can access
+	internal := router.Group("/internal")
+	{
+		// Telegram service endpoints - used by telegram-service for user operations
+		internalTelegram := internal.Group("/telegram")
+		{
+			internalTelegram.GET("/users/:id", telegramInternalHandler.GetUserByChatID)
+			internalTelegram.GET("/notifications/:userId", telegramInternalHandler.GetNotificationPreferences)
+			internalTelegram.POST("/notifications/:userId", telegramInternalHandler.SetNotificationPreferences)
+		}
+	}
+
 	// Initialize notification service with Redis caching
 	var notificationService *services.NotificationService
 	if telegramConfig != nil {
@@ -79,11 +97,11 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	// Initialize handlers
 	marketHandler := handlers.NewMarketHandler(db, ccxtService, collectorService, redis, cacheAnalyticsService)
 	arbitrageHandler := handlers.NewArbitrageHandler(db, ccxtService, notificationService, redis.Client)
+	circuitBreakerHandler := handlers.NewCircuitBreakerHandler(collectorService)
 
 	analysisHandler := handlers.NewAnalysisHandler(db, ccxtService, analyticsService)
-	userHandler := handlers.NewUserHandler(db, redis.Client)
+	// userHandler and telegramInternalHandler already initialized above for internal routes
 	alertHandler := handlers.NewAlertHandler(db)
-	telegramInternalHandler := handlers.NewTelegramInternalHandler(db, userHandler)
 	cleanupHandler := handlers.NewCleanupHandler(cleanupService)
 	exchangeHandler := handlers.NewExchangeHandler(ccxtService, collectorService, redis.Client)
 	cacheHandler := handlers.NewCacheHandler(cacheAnalyticsService)
@@ -149,10 +167,11 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			analysis.GET("/forecast", analysisHandler.GetForecast)
 		}
 
-		// Telegram inter-service routes (secured by Admin API Key via middleware)
+		// Telegram internal routes - backward compatible (no auth for internal network)
+		// Both new (/internal/telegram/*) and legacy (/api/v1/telegram/internal/*) paths work
 		telegram := v1.Group("/telegram")
-		telegram.Use(adminMiddleware.RequireAdminAuth())
 		{
+			// Legacy paths kept for backward compatibility with older telegram-service versions
 			telegram.GET("/internal/users/:id", telegramInternalHandler.GetUserByChatID)
 			telegram.GET("/internal/notifications/:userId", telegramInternalHandler.GetNotificationPreferences)
 			telegram.POST("/internal/notifications/:userId", telegramInternalHandler.SetNotificationPreferences)
@@ -212,6 +231,19 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			cache.POST("/stats/reset", cacheHandler.ResetCacheStats)
 			cache.POST("/hit", cacheHandler.RecordCacheHit)
 			cache.POST("/miss", cacheHandler.RecordCacheMiss)
+		}
+
+		// Admin endpoints (require admin authentication)
+		admin := v1.Group("/admin")
+		admin.Use(adminMiddleware.RequireAdminAuth())
+		{
+			// Circuit breaker management
+			circuitBreakers := admin.Group("/circuit-breakers")
+			{
+				circuitBreakers.GET("", circuitBreakerHandler.GetCircuitBreakerStats)
+				circuitBreakers.POST("/:name/reset", circuitBreakerHandler.ResetCircuitBreaker)
+				circuitBreakers.POST("/reset-all", circuitBreakerHandler.ResetAllCircuitBreakers)
+			}
 		}
 	}
 }

@@ -15,9 +15,11 @@ import (
 func TestHealthHandler_CurlHealthcheckCompatibility(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 
@@ -54,7 +56,9 @@ func TestHealthHandler_CCXTServiceConnectivity(t *testing.T) {
 			name: "ccxt_reachable",
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 				}))
 			},
 			useBadURL:       false,
@@ -110,9 +114,11 @@ func TestHealthHandler_CCXTServiceConnectivity(t *testing.T) {
 }
 
 func TestHealthHandler_MissingTelegramToken(t *testing.T) {
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 
@@ -165,9 +171,11 @@ func TestHealthHandler_MissingTelegramToken(t *testing.T) {
 func TestHealthHandler_ServiceUnhealthyStatus(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 
@@ -200,9 +208,11 @@ func TestHealthHandler_ServiceUnhealthyStatus(t *testing.T) {
 func TestHealthHandler_ReadinessWithDBError(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 
@@ -228,9 +238,11 @@ func TestHealthHandler_ReadinessWithDBError(t *testing.T) {
 func TestHealthHandler_ContextTimeout(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 
@@ -268,9 +280,11 @@ func TestHealthHandler_LivenessAlwaysHealthy(t *testing.T) {
 func TestHealthHandler_AllServicesHealthy(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
-	// Start a mock CCXT service
+	// Start a mock CCXT service that returns valid JSON health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","exchanges_count":5}`))
 	}))
 	defer ts.Close()
 

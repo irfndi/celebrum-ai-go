@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCircuitBreaker_Basic(t *testing.T) {
 	// Test basic circuit breaker functionality
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -34,7 +34,7 @@ func TestCircuitBreaker_Basic(t *testing.T) {
 
 func TestCircuitBreaker_Execute(t *testing.T) {
 	// Test the Execute function with a simple callback
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -56,7 +56,7 @@ func TestCircuitBreaker_Execute(t *testing.T) {
 
 func TestCircuitBreaker_ExecuteWithError(t *testing.T) {
 	// Test the Execute function with a callback that returns an error
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -79,7 +79,7 @@ func TestCircuitBreaker_ExecuteWithError(t *testing.T) {
 
 func TestCircuitBreaker_GetState(t *testing.T) {
 	// Test getting the current state of the circuit breaker
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -98,7 +98,7 @@ func TestCircuitBreaker_GetState(t *testing.T) {
 
 func TestCircuitBreaker_GetStats(t *testing.T) {
 	// Test getting statistics from the circuit breaker
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -117,7 +117,7 @@ func TestCircuitBreaker_GetStats(t *testing.T) {
 
 func TestCircuitBreaker_IsOpen(t *testing.T) {
 	// Test checking if the circuit breaker is open
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -136,7 +136,7 @@ func TestCircuitBreaker_IsOpen(t *testing.T) {
 
 func TestCircuitBreaker_Reset(t *testing.T) {
 	// Test resetting the circuit breaker
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -157,7 +157,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 
 func TestCircuitBreaker_ConcurrentAccess(t *testing.T) {
 	// Test concurrent access to the circuit breaker
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 10,
@@ -187,7 +187,7 @@ func TestCircuitBreaker_ConcurrentAccess(t *testing.T) {
 
 func TestCircuitBreaker_ConfigDefaults(t *testing.T) {
 	// Test circuit breaker with default configuration
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 0, // Should use default
@@ -210,7 +210,7 @@ func TestCircuitBreaker_ConfigDefaults(t *testing.T) {
 
 func TestCircuitBreaker_ContextCancellation(t *testing.T) {
 	// Test circuit breaker with cancelled context
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -234,7 +234,7 @@ func TestCircuitBreaker_ContextCancellation(t *testing.T) {
 
 func TestCircuitBreaker_StateManagement(t *testing.T) {
 	// Test state management functionality
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
@@ -265,7 +265,7 @@ func TestCircuitBreaker_StateManagement(t *testing.T) {
 
 func TestCircuitBreaker_ErrorScenarios(t *testing.T) {
 	// Test various error scenarios
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	config := CircuitBreakerConfig{
 		FailureThreshold: 2,
@@ -288,7 +288,7 @@ func TestCircuitBreaker_ErrorScenarios(t *testing.T) {
 
 func TestCircuitBreakerManager_GetAllStats_Empty(t *testing.T) {
 	// Test GetAllStats with empty manager
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -300,7 +300,7 @@ func TestCircuitBreakerManager_GetAllStats_Empty(t *testing.T) {
 
 func TestCircuitBreakerManager_GetAllStats_WithBreakers(t *testing.T) {
 	// Test GetAllStats with multiple circuit breakers
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -354,7 +354,7 @@ func TestCircuitBreakerManager_GetAllStats_WithBreakers(t *testing.T) {
 
 func TestCircuitBreakerManager_GetAllStats_ConcurrentAccess(t *testing.T) {
 	// Test concurrent access to GetAllStats
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -403,7 +403,7 @@ func TestCircuitBreakerManager_GetAllStats_ConcurrentAccess(t *testing.T) {
 
 func TestCircuitBreakerManager_ResetAll_Empty(t *testing.T) {
 	// Test ResetAll with empty manager
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -417,7 +417,7 @@ func TestCircuitBreakerManager_ResetAll_Empty(t *testing.T) {
 
 func TestCircuitBreakerManager_ResetAll_WithBreakers(t *testing.T) {
 	// Test ResetAll with multiple circuit breakers
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -467,7 +467,7 @@ func TestCircuitBreakerManager_ResetAll_WithBreakers(t *testing.T) {
 
 func TestCircuitBreakerManager_ResetAll_ConcurrentAccess(t *testing.T) {
 	// Test concurrent access to ResetAll
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -507,7 +507,7 @@ func TestCircuitBreakerManager_ResetAll_ConcurrentAccess(t *testing.T) {
 
 func TestCircuitBreakerManager_GetAllStats_AfterReset(t *testing.T) {
 	// Test GetAllStats after ResetAll
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 
 	manager := NewCircuitBreakerManager(logger)
 
@@ -553,7 +553,7 @@ func TestCircuitBreakerManager_GetAllStats_AfterReset(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_ClosedState(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
 		SuccessThreshold: 2,
@@ -582,7 +582,7 @@ func TestCircuitBreaker_canExecute_ClosedState(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_OpenState(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
 		SuccessThreshold: 2,
@@ -614,7 +614,7 @@ func TestCircuitBreaker_canExecute_OpenState(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_HalfOpenState(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
 		SuccessThreshold: 2,
@@ -648,7 +648,7 @@ func TestCircuitBreaker_canExecute_HalfOpenState(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_ResetTimeout(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
 		SuccessThreshold: 2,
@@ -677,7 +677,7 @@ func TestCircuitBreaker_canExecute_ResetTimeout(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_UnknownState(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 3,
 		SuccessThreshold: 2,
@@ -696,7 +696,7 @@ func TestCircuitBreaker_canExecute_UnknownState(t *testing.T) {
 }
 
 func TestCircuitBreaker_canExecute_StateTransitions(t *testing.T) {
-	logger := logrus.New()
+	logger := logging.NewStandardLogger("info", "test")
 	config := CircuitBreakerConfig{
 		FailureThreshold: 2,
 		SuccessThreshold: 2,
@@ -734,8 +734,8 @@ func TestCircuitBreaker_canExecute_ConcurrentAccess(t *testing.T) {
 		Timeout:          5 * time.Millisecond,
 		MaxRequests:      1,
 	}
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel)
+	logger := logging.NewStandardLogger("info", "test")
+	logger.SetLevel("error")
 
 	breaker := NewCircuitBreaker("test-breaker", config, logger)
 	breaker.setState(HalfOpen)
@@ -770,5 +770,192 @@ func TestCircuitBreaker_canExecute_ConcurrentAccess(t *testing.T) {
 	// All should be false since requestCount >= MaxRequests
 	for i, result := range results {
 		assert.False(t, result, "Concurrent request %d should be rejected", i)
+	}
+}
+
+func TestCircuitBreakerManager_PerExchangeCircuitBreakers(t *testing.T) {
+	// Test per-exchange circuit breakers don't affect each other
+	logger := logging.NewStandardLogger("info", "test")
+	manager := NewCircuitBreakerManager(logger)
+
+	config := CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	// Create circuit breakers for different exchanges
+	binanceBreaker := manager.GetOrCreate("ccxt:binance", config)
+	bybitBreaker := manager.GetOrCreate("ccxt:bybit", config)
+	krakenBreaker := manager.GetOrCreate("ccxt:kraken", config)
+
+	// Fail binance breaker until it opens
+	for i := 0; i < 3; i++ {
+		_ = binanceBreaker.Execute(context.Background(), func(ctx context.Context) error {
+			return errors.New("binance error")
+		})
+	}
+
+	// Verify binance is open but others are closed
+	assert.True(t, binanceBreaker.IsOpen(), "Binance breaker should be open")
+	assert.False(t, bybitBreaker.IsOpen(), "Bybit breaker should still be closed")
+	assert.False(t, krakenBreaker.IsOpen(), "Kraken breaker should still be closed")
+
+	// Verify bybit and kraken can still execute
+	err := bybitBreaker.Execute(context.Background(), func(ctx context.Context) error {
+		return nil
+	})
+	assert.NoError(t, err, "Bybit should still allow execution")
+
+	err = krakenBreaker.Execute(context.Background(), func(ctx context.Context) error {
+		return nil
+	})
+	assert.NoError(t, err, "Kraken should still allow execution")
+
+	// Verify binance rejects
+	err = binanceBreaker.Execute(context.Background(), func(ctx context.Context) error {
+		return nil
+	})
+	assert.Error(t, err, "Binance should reject execution")
+	assert.Contains(t, err.Error(), "circuit breaker is open")
+}
+
+func TestCircuitBreakerManager_PerExchangeCircuitBreakers_Independence(t *testing.T) {
+	// Test that failures on one exchange don't count toward another
+	logger := logging.NewStandardLogger("info", "test")
+	manager := NewCircuitBreakerManager(logger)
+
+	config := CircuitBreakerConfig{
+		FailureThreshold: 5,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	// Create circuit breakers for different exchanges
+	exchanges := []string{"binance", "bybit", "kraken", "coinbase", "kucoin"}
+	breakers := make(map[string]*CircuitBreaker)
+
+	for _, exchange := range exchanges {
+		breakers[exchange] = manager.GetOrCreate(fmt.Sprintf("ccxt:%s", exchange), config)
+	}
+
+	// Fail 2 requests on each exchange (below threshold of 5)
+	for _, exchange := range exchanges {
+		for i := 0; i < 2; i++ {
+			_ = breakers[exchange].Execute(context.Background(), func(ctx context.Context) error {
+				return errors.New("test error")
+			})
+		}
+	}
+
+	// All breakers should still be closed (each has 2 failures, threshold is 5)
+	for _, exchange := range exchanges {
+		assert.False(t, breakers[exchange].IsOpen(), "%s breaker should be closed with 2 failures", exchange)
+	}
+
+	// Now fail 3 more on binance only (total 5, should trip)
+	for i := 0; i < 3; i++ {
+		_ = breakers["binance"].Execute(context.Background(), func(ctx context.Context) error {
+			return errors.New("test error")
+		})
+	}
+
+	// Only binance should be open
+	assert.True(t, breakers["binance"].IsOpen(), "Binance should be open with 5 failures")
+	for _, exchange := range exchanges[1:] {
+		assert.False(t, breakers[exchange].IsOpen(), "%s should still be closed", exchange)
+	}
+}
+
+func TestCircuitBreakerManager_PerExchangeCircuitBreakers_StatsIsolation(t *testing.T) {
+	// Test that stats are isolated per exchange
+	logger := logging.NewStandardLogger("info", "test")
+	manager := NewCircuitBreakerManager(logger)
+
+	config := CircuitBreakerConfig{
+		FailureThreshold: 10,
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      5,
+		ResetTimeout:     time.Minute,
+	}
+
+	binanceBreaker := manager.GetOrCreate("ccxt:binance", config)
+	bybitBreaker := manager.GetOrCreate("ccxt:bybit", config)
+
+	// Execute 5 successful requests on binance
+	for i := 0; i < 5; i++ {
+		_ = binanceBreaker.Execute(context.Background(), func(ctx context.Context) error {
+			return nil
+		})
+	}
+
+	// Execute 3 requests on bybit (2 success, 1 failure)
+	for i := 0; i < 2; i++ {
+		_ = bybitBreaker.Execute(context.Background(), func(ctx context.Context) error {
+			return nil
+		})
+	}
+	_ = bybitBreaker.Execute(context.Background(), func(ctx context.Context) error {
+		return errors.New("test error")
+	})
+
+	// Get all stats
+	stats := manager.GetAllStats()
+
+	// Verify stats are isolated
+	assert.Equal(t, int64(5), stats["ccxt:binance"].TotalRequests)
+	assert.Equal(t, int64(5), stats["ccxt:binance"].SuccessfulRequests)
+	assert.Equal(t, int64(0), stats["ccxt:binance"].FailedRequests)
+
+	assert.Equal(t, int64(3), stats["ccxt:bybit"].TotalRequests)
+	assert.Equal(t, int64(2), stats["ccxt:bybit"].SuccessfulRequests)
+	assert.Equal(t, int64(1), stats["ccxt:bybit"].FailedRequests)
+}
+
+func TestCircuitBreakerManager_PerExchangeCircuitBreakers_ConcurrentExchanges(t *testing.T) {
+	// Test concurrent access to different per-exchange circuit breakers
+	logger := logging.NewStandardLogger("info", "test")
+	manager := NewCircuitBreakerManager(logger)
+
+	config := CircuitBreakerConfig{
+		FailureThreshold: 100, // High threshold to avoid tripping
+		SuccessThreshold: 2,
+		Timeout:          time.Second,
+		MaxRequests:      50,
+		ResetTimeout:     time.Minute,
+	}
+
+	exchanges := []string{"binance", "bybit", "kraken", "coinbase", "kucoin", "huobi", "okx", "gate", "bitfinex", "gemini"}
+
+	var wg sync.WaitGroup
+
+	// Concurrently execute requests on all exchanges
+	for _, exchange := range exchanges {
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(exch string) {
+				defer wg.Done()
+				breaker := manager.GetOrCreate(fmt.Sprintf("ccxt:%s", exch), config)
+				_ = breaker.Execute(context.Background(), func(ctx context.Context) error {
+					return nil
+				})
+			}(exchange)
+		}
+	}
+
+	wg.Wait()
+
+	// Verify all exchanges have their own stats
+	stats := manager.GetAllStats()
+	for _, exchange := range exchanges {
+		key := fmt.Sprintf("ccxt:%s", exchange)
+		assert.Contains(t, stats, key, "Stats should contain %s", key)
+		assert.Equal(t, int64(10), stats[key].TotalRequests, "%s should have 10 requests", key)
+		assert.Equal(t, int64(10), stats[key].SuccessfulRequests, "%s should have 10 successes", key)
 	}
 }

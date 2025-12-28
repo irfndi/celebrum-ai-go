@@ -144,8 +144,12 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	servicesStatus["ccxt"] = ccxtStatus
 
-	// Check Telegram bot configuration
-	if os.Getenv("TELEGRAM_BOT_TOKEN") == "" {
+	// Check Telegram bot configuration - support both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if telegramToken == "" {
+		telegramToken = os.Getenv("TELEGRAM_TOKEN")
+	}
+	if telegramToken == "" {
 		servicesStatus["telegram"] = "unhealthy: TELEGRAM_BOT_TOKEN not set"
 		span.SetTag("telegram.status", "not_configured")
 	} else {
@@ -200,6 +204,16 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CCXTHealthResponse represents the detailed health response from CCXT service.
+type CCXTHealthResponse struct {
+	Status               string `json:"status"`
+	Timestamp            string `json:"timestamp"`
+	Service              string `json:"service"`
+	Version              string `json:"version"`
+	ExchangesCount       int    `json:"exchanges_count"`
+	ExchangeConnectivity string `json:"exchange_connectivity"`
+}
+
 func (h *HealthHandler) checkCCXTService() error {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
@@ -207,7 +221,7 @@ func (h *HealthHandler) checkCCXTService() error {
 
 	resp, err := client.Get(h.ccxtURL + "/health")
 	if err != nil {
-		return err
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -215,6 +229,20 @@ func (h *HealthHandler) checkCCXTService() error {
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("CCXT service returned status: %d", resp.StatusCode)
+	}
+
+	// Parse the response to check detailed health
+	var healthResp CCXTHealthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
+		// A 200 OK with an unparseable body is a contract violation and should be an error.
+		// This indicates either a response format change or a CCXT service issue.
+		return fmt.Errorf("failed to parse CCXT health response: %w", err)
+	}
+
+	// Verify CCXT service has active exchanges (only if the field was present and parsed)
+	// If exchanges_count is 0 but status is "healthy", it could be a startup condition
+	if healthResp.ExchangesCount == 0 && healthResp.Status != "" && healthResp.Status != "healthy" {
+		return fmt.Errorf("CCXT service has no active exchanges")
 	}
 
 	return nil

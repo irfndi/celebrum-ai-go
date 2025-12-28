@@ -103,6 +103,10 @@ RUN chown -R appuser:appgroup /app && \
     chmod +x scripts/*.sh 2>/dev/null || true && \
     chmod +x entrypoint.sh
 
+# Environment markers for Docker/container detection
+ENV DOCKER_ENVIRONMENT=true
+ENV COOLIFY=true
+
 USER appuser
 
 # Expose ports (Go: 8080, CCXT: 3001, Telegram: 3002)

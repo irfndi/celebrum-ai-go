@@ -8,18 +8,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
+	"github.com/irfandi/celebrum-ai-go/internal/services"
 )
 
 // TelegramInternalHandler handles internal API requests from the Telegram service.
 type TelegramInternalHandler struct {
-	db          *database.PostgresDB
+	db          services.DBPool
 	userHandler *UserHandler
 }
 
 // NewTelegramInternalHandler creates a new instance of TelegramInternalHandler.
-func NewTelegramInternalHandler(db *database.PostgresDB, userHandler *UserHandler) *TelegramInternalHandler {
+func NewTelegramInternalHandler(db services.DBPool, userHandler *UserHandler) *TelegramInternalHandler {
 	return &TelegramInternalHandler{
 		db:          db,
 		userHandler: userHandler,
@@ -66,7 +66,7 @@ func (h *TelegramInternalHandler) GetNotificationPreferences(c *gin.Context) {
 		  AND is_active = false
 	`
 	var countDisabled int
-	err := h.db.Pool.QueryRow(c.Request.Context(), queryDisabled, userID).Scan(&countDisabled)
+	err := h.db.QueryRow(c.Request.Context(), queryDisabled, userID).Scan(&countDisabled)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch preferences"})
 		return
@@ -88,7 +88,7 @@ func (h *TelegramInternalHandler) GetNotificationPreferences(c *gin.Context) {
 	profitThreshold := 0.5 // Default
 
 	// We ignore sql.ErrNoRows here, as we fall back to defaults
-	row := h.db.Pool.QueryRow(c.Request.Context(), queryActive, userID)
+	row := h.db.QueryRow(c.Request.Context(), queryActive, userID)
 	if err := row.Scan(&conditionsJSON); err == nil {
 		var conditions models.AlertConditions
 		if err := json.Unmarshal(conditionsJSON, &conditions); err == nil && conditions.ProfitThreshold != nil {
@@ -119,7 +119,7 @@ func (h *TelegramInternalHandler) SetNotificationPreferences(c *gin.Context) {
 		return
 	}
 
-	tx, err := h.db.Pool.Begin(c.Request.Context())
+	tx, err := h.db.Begin(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to begin transaction"})
 		return

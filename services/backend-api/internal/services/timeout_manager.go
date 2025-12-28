@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/sirupsen/logrus"
 )
 
 // TimeoutConfig defines timeout durations for various types of operations.
@@ -26,7 +26,7 @@ type TimeoutConfig struct {
 // allowing for centralized configuration and monitoring of operation durations.
 type TimeoutManager struct {
 	config         *TimeoutConfig
-	logger         *logrus.Logger
+	logger         logging.Logger
 	activeContexts map[string]context.CancelFunc
 	mu             sync.RWMutex
 	defaultTimeout time.Duration
@@ -49,7 +49,7 @@ type OperationContext struct {
 //
 // Returns:
 //   - A pointer to the initialized TimeoutManager.
-func NewTimeoutManager(config *TimeoutConfig, logger *logrus.Logger) *TimeoutManager {
+func NewTimeoutManager(config *TimeoutConfig, logger logging.Logger) *TimeoutManager {
 	if config == nil {
 		config = DefaultTimeoutConfig()
 	}
@@ -202,7 +202,7 @@ func (tm *TimeoutManager) CancelOperation(operationID string) {
 	if cancel, exists := tm.activeContexts[operationID]; exists {
 		cancel()
 		delete(tm.activeContexts, operationID)
-		tm.logger.WithField("operation_id", operationID).Info("Operation cancelled")
+		tm.logger.WithFields(map[string]interface{}{"operation_id": operationID}).Info("Operation cancelled")
 		observability.AddBreadcrumbWithData(context.Background(), "timeout_manager", "Operation cancelled", sentry.LevelInfo, map[string]interface{}{
 			"operation_id": operationID,
 		})
@@ -216,7 +216,7 @@ func (tm *TimeoutManager) CancelAllOperations() {
 
 	for operationID, cancel := range tm.activeContexts {
 		cancel()
-		tm.logger.WithField("operation_id", operationID).Info("Operation cancelled during shutdown")
+		tm.logger.WithFields(map[string]interface{}{"operation_id": operationID}).Info("Operation cancelled during shutdown")
 		observability.AddBreadcrumbWithData(context.Background(), "timeout_manager", "Operation cancelled during shutdown", sentry.LevelInfo, map[string]interface{}{
 			"operation_id": operationID,
 		})
@@ -299,7 +299,7 @@ func (tm *TimeoutManager) ExecuteWithTimeout(
 	case result := <-resultChan:
 		duration := time.Since(opCtx.StartTime)
 		opErr = result.err
-		tm.logger.WithFields(logrus.Fields{
+		tm.logger.WithFields(map[string]interface{}{
 			"operation_type": operationType,
 			"operation_id":   operationID,
 			"duration":       duration,
@@ -317,7 +317,7 @@ func (tm *TimeoutManager) ExecuteWithTimeout(
 	case <-opCtx.Ctx.Done():
 		duration := time.Since(opCtx.StartTime)
 		opErr = opCtx.Ctx.Err()
-		tm.logger.WithFields(logrus.Fields{
+		tm.logger.WithFields(map[string]interface{}{
 			"operation_type": operationType,
 			"operation_id":   operationID,
 			"duration":       duration,
@@ -361,7 +361,7 @@ func (tm *TimeoutManager) ExecuteWithTimeoutAndFallback(
 ) (interface{}, error) {
 	result, err := tm.ExecuteWithTimeout(operationType, operationID, operation)
 	if err != nil && fallback != nil {
-		tm.logger.WithFields(logrus.Fields{
+		tm.logger.WithFields(map[string]interface{}{
 			"operation_type": operationType,
 			"operation_id":   operationID,
 			"error":          err.Error(),
@@ -386,11 +386,11 @@ func (tm *TimeoutManager) MonitorOperationHealth() {
 
 	for range ticker.C {
 		activeCount := tm.GetActiveOperationCount()
-		tm.logger.WithField("active_operations", activeCount).Debug("Operation health check")
+		tm.logger.WithFields(map[string]interface{}{"active_operations": activeCount}).Debug("Operation health check")
 
 		// Log warning if too many operations are active
 		if activeCount > 100 {
-			tm.logger.WithField("active_operations", activeCount).Warn("High number of active operations detected")
+			tm.logger.WithFields(map[string]interface{}{"active_operations": activeCount}).Warn("High number of active operations detected")
 			observability.AddBreadcrumbWithData(context.Background(), "timeout_manager", "High number of active operations detected", sentry.LevelWarning, map[string]interface{}{
 				"active_operations": activeCount,
 			})

@@ -3,9 +3,21 @@ syntax = "proto3";
 package telegram;
 option go_package = "github.com/irfandi/celebrum-ai-go/services/backend-api/pkg/pb/telegram";
 
+// TelegramService - Hosted by telegram-service, called by backend
+// Used for sending messages to users via Telegram bot
 service TelegramService {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// UserService - Hosted by backend, called by telegram-service
+// Used for user operations without ADMIN_API_KEY
+service UserService {
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+  rpc GetUserStatus(GetUserStatusRequest) returns (GetUserStatusResponse);
+  rpc GetUserPreferences(GetUserPreferencesRequest) returns (GetUserPreferencesResponse);
+  rpc SetUserPreferences(SetUserPreferencesRequest) returns (SetUserPreferencesResponse);
+  rpc GetOpportunities(GetOpportunitiesRequest) returns (GetOpportunitiesResponse);
 }
 
 message SendMessageRequest {
@@ -18,6 +30,11 @@ message SendMessageResponse {
   bool ok = 1;
   string message_id = 2;
   string error = 3;
+  // Structured error code for programmatic handling
+  // Values: USER_BLOCKED, CHAT_NOT_FOUND, RATE_LIMITED, INVALID_REQUEST, NETWORK_ERROR, TIMEOUT, INTERNAL_ERROR, UNKNOWN
+  string error_code = 4;
+  // Seconds to wait before retrying (only set for RATE_LIMITED errors)
+  int32 retry_after = 5;
 }
 
 message HealthCheckRequest {}
@@ -25,4 +42,83 @@ message HealthCheckResponse {
   string status = 1;
   string version = 2;
   string service = 3;
+}
+
+// User registration
+message RegisterUserRequest {
+  string telegram_chat_id = 1;
+  string telegram_user_id = 2;
+  string username = 3;
+  string first_name = 4;
+  string last_name = 5;
+}
+
+message RegisterUserResponse {
+  bool ok = 1;
+  string user_id = 2;
+  string error = 3;
+  bool already_exists = 4;
+}
+
+// User status
+message GetUserStatusRequest {
+  string telegram_chat_id = 1;
+}
+
+message GetUserStatusResponse {
+  bool ok = 1;
+  string error = 2;
+  bool found = 3;
+  string user_id = 4;
+  string subscription_tier = 5;
+  string created_at = 6;
+  bool notifications_enabled = 7;
+}
+
+// User preferences
+message GetUserPreferencesRequest {
+  string telegram_chat_id = 1;
+}
+
+message GetUserPreferencesResponse {
+  bool ok = 1;
+  string error = 2;
+  bool notifications_enabled = 3;
+  double profit_threshold = 4;
+  string alert_frequency = 5;
+}
+
+message SetUserPreferencesRequest {
+  string telegram_chat_id = 1;
+  bool notifications_enabled = 2;
+  double profit_threshold = 3;
+  string alert_frequency = 4;
+}
+
+message SetUserPreferencesResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+// Opportunities
+message GetOpportunitiesRequest {
+  string telegram_chat_id = 1;
+  int32 limit = 2;
+}
+
+message Opportunity {
+  string symbol = 1;
+  string buy_exchange = 2;
+  string sell_exchange = 3;
+  double buy_price = 4;
+  double sell_price = 5;
+  double profit_percent = 6;
+  double volume = 7;
+  string timestamp = 8;
+}
+
+message GetOpportunitiesResponse {
+  bool ok = 1;
+  string error = 2;
+  repeated Opportunity opportunities = 3;
 }

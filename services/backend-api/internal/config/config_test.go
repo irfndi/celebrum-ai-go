@@ -476,3 +476,123 @@ func TestConfig_JWTSecretFromEnvironment(t *testing.T) {
 
 	assert.Equal(t, "env-jwt-secret-that-is-long-enough-for-production", config.Auth.JWTSecret)
 }
+
+// TestConfig_DockerEnvironmentDefaults validates Docker-aware service defaults
+func TestConfig_DockerEnvironmentDefaults(t *testing.T) {
+	t.Run("Docker environment uses service names", func(t *testing.T) {
+		os.Clearenv()
+
+		t.Setenv("DOCKER_ENVIRONMENT", "true")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://telegram-service:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "telegram-service:50052", config.Telegram.GrpcAddress)
+	})
+
+	t.Run("Coolify environment uses service names", func(t *testing.T) {
+		os.Clearenv()
+
+		t.Setenv("COOLIFY", "true")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+	})
+
+	t.Run("Coolify detection via COOLIFY_CONTAINER_NAME", func(t *testing.T) {
+		os.Clearenv()
+
+		// Coolify sets COOLIFY_CONTAINER_NAME but not COOLIFY=true
+		t.Setenv("COOLIFY_CONTAINER_NAME", "backend-api-mc88g0gcw8w4o8cok8kooc0w-pr-80")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names when COOLIFY_CONTAINER_NAME is set
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://telegram-service:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "telegram-service:50052", config.Telegram.GrpcAddress)
+	})
+
+	t.Run("Coolify detection via COOLIFY_RESOURCE_UUID", func(t *testing.T) {
+		os.Clearenv()
+
+		// Coolify also sets COOLIFY_RESOURCE_UUID
+		t.Setenv("COOLIFY_RESOURCE_UUID", "mc88g0gcw8w4o8cok8kooc0w")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use Docker service names when COOLIFY_RESOURCE_UUID is set
+		assert.Equal(t, "http://ccxt-service:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "ccxt-service:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://telegram-service:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "telegram-service:50052", config.Telegram.GrpcAddress)
+	})
+
+	t.Run("Non-Docker environment uses localhost", func(t *testing.T) {
+		os.Clearenv()
+
+		t.Setenv("DOCKER_ENVIRONMENT", "false")
+		t.Setenv("COOLIFY", "false")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use localhost for HTTP, 127.0.0.1 for gRPC (to avoid IPv6 issues)
+		assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "127.0.0.1:50051", config.CCXT.GrpcAddress)
+		assert.Equal(t, "http://localhost:3002", config.Telegram.ServiceURL)
+		assert.Equal(t, "127.0.0.1:50052", config.Telegram.GrpcAddress)
+	})
+
+	t.Run("Empty environment uses localhost", func(t *testing.T) {
+		os.Clearenv()
+
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Should use localhost for HTTP, 127.0.0.1 for gRPC (to avoid IPv6 issues)
+		assert.Equal(t, "http://localhost:3001", config.CCXT.ServiceURL)
+		assert.Equal(t, "127.0.0.1:50051", config.CCXT.GrpcAddress)
+	})
+
+	t.Run("Explicit env vars override Docker defaults", func(t *testing.T) {
+		os.Clearenv()
+
+		t.Setenv("DOCKER_ENVIRONMENT", "true")
+		t.Setenv("JWT_SECRET", "test-jwt-secret-that-is-long-enough-32chars")
+		t.Setenv("CCXT_SERVICE_URL", "http://custom-ccxt:9001")
+		t.Setenv("CCXT_GRPC_ADDRESS", "custom-ccxt:59051")
+
+		config, err := Load()
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Explicit env vars should override defaults
+		assert.Equal(t, "http://custom-ccxt:9001", config.CCXT.ServiceURL)
+		assert.Equal(t, "custom-ccxt:59051", config.CCXT.GrpcAddress)
+	})
+}

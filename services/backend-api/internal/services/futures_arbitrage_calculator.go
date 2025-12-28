@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/google/uuid"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/shopspring/decimal"
@@ -1024,7 +1025,7 @@ func (calc *FuturesArbitrageCalculator) calculateSymbolArbitrage(
 		_ = estimatedAmount.Sub(baseAmount) // profitAmount for logging/debugging
 
 		opportunity := models.ArbitrageOpportunity{
-			ID:               fmt.Sprintf("%s_%s_%s_%d", symbol, lowestExchange, highestExchange, time.Now().Unix()),
+			ID:               uuid.New().String(),
 			TradingPairID:    lowestData.TradingPairID,
 			BuyExchangeID:    lowestData.ExchangeID,
 			SellExchangeID:   highestData.ExchangeID,

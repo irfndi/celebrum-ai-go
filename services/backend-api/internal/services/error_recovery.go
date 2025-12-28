@@ -3,19 +3,20 @@ package services
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/sirupsen/logrus"
 )
 
 // Note: CircuitBreaker types are defined in circuit_breaker.go
 
 // ErrorRecoveryManager manages error recovery for concurrent operations.
 type ErrorRecoveryManager struct {
-	logger          *logrus.Logger
+	logger          logging.Logger
 	circuitBreakers map[string]*CircuitBreaker
 	retryPolicies   map[string]*RetryPolicy
 	mu              sync.RWMutex
@@ -66,7 +67,7 @@ type OperationResult struct {
 // Returns:
 //
 //	*ErrorRecoveryManager: Initialized manager.
-func NewErrorRecoveryManager(logger *logrus.Logger) *ErrorRecoveryManager {
+func NewErrorRecoveryManager(logger logging.Logger) *ErrorRecoveryManager {
 	return &ErrorRecoveryManager{
 		logger:          logger,
 		circuitBreakers: make(map[string]*CircuitBreaker),
@@ -271,8 +272,10 @@ func (erm *ErrorRecoveryManager) calculateDelay(baseDelay time.Duration, policy 
 		return baseDelay
 	}
 
-	// Add up to 25% jitter
-	jitter := time.Duration(float64(baseDelay) * 0.25 * (0.5 - float64(time.Now().UnixNano()%1000)/1000.0))
+	// Add up to 25% jitter using proper random distribution
+	// jitterFactor ranges from -0.25 to +0.25
+	jitterFactor := (rand.Float64() - 0.5) * 0.5
+	jitter := time.Duration(float64(baseDelay) * jitterFactor)
 	return baseDelay + jitter
 }
 
@@ -382,7 +385,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 		if err == nil {
 			if attempt > 0 {
 				observability.AddBreadcrumb(spanCtx, "error_recovery", fmt.Sprintf("Operation %s recovered after %d retries", operationName, attempt), sentry.LevelInfo)
-				erm.logger.WithFields(logrus.Fields{
+				erm.logger.WithFields(map[string]interface{}{
 					"operation": operationName,
 					"attempts":  attempt + 1,
 					"duration":  time.Since(start),
@@ -400,7 +403,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 
 		// Log retry attempt
 		observability.AddBreadcrumb(spanCtx, "error_recovery", fmt.Sprintf("Operation %s attempt %d failed, retrying", operationName, attempt+1), sentry.LevelWarning)
-		erm.logger.WithFields(logrus.Fields{
+		erm.logger.WithFields(map[string]interface{}{
 			"operation": operationName,
 			"attempt":   attempt + 1,
 			"error":     err.Error(),
@@ -420,7 +423,7 @@ func (erm *ErrorRecoveryManager) ExecuteWithRetry(
 		"attempts": retryPolicy.MaxRetries + 1,
 		"duration": time.Since(start).String(),
 	})
-	erm.logger.WithFields(logrus.Fields{
+	erm.logger.WithFields(map[string]interface{}{
 		"operation": operationName,
 		"attempts":  retryPolicy.MaxRetries + 1,
 		"duration":  time.Since(start),

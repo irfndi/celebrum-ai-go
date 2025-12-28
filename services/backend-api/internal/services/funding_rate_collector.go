@@ -10,20 +10,20 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/irfandi/celebrum-ai-go/internal/ccxt"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
-	"github.com/irfandi/celebrum-ai-go/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
 // FundingRateCollector handles collection and storage of historical funding rate data.
 type FundingRateCollector struct {
-	db          *database.PostgresDB
+	db          DBPool
 	redisClient *redis.Client
-	ccxtClient  *ccxt.Client
+	ccxtClient  CCXTClient
 	config      *config.Config
+	logger      logging.Logger
 
 	// Service lifecycle
 	ctx     context.Context
@@ -47,11 +47,12 @@ type FundingRateCollectorConfig struct {
 
 // NewFundingRateCollector creates a new funding rate collector.
 func NewFundingRateCollector(
-	db *database.PostgresDB,
+	db DBPool,
 	redisClient *redis.Client,
-	ccxtClient *ccxt.Client,
+	ccxtClient CCXTClient,
 	cfg *config.Config,
 	collectorCfg *FundingRateCollectorConfig,
+	logger logging.Logger,
 ) *FundingRateCollector {
 	if collectorCfg == nil {
 		collectorCfg = &FundingRateCollectorConfig{
@@ -69,6 +70,7 @@ func NewFundingRateCollector(
 		retentionDays:      collectorCfg.RetentionDays,
 		collectionInterval: collectorCfg.CollectionInterval,
 		targetExchanges:    collectorCfg.TargetExchanges,
+		logger:             logger,
 	}
 }
 
@@ -92,10 +94,11 @@ func (c *FundingRateCollector) Start() error {
 	c.wg.Add(1)
 	go c.runCleanup()
 
-	telemetry.Logger().Info("Funding rate collector started",
-		"retention_days", c.retentionDays,
-		"collection_interval", c.collectionInterval,
-		"target_exchanges", c.targetExchanges)
+	c.logger.WithFields(map[string]interface{}{
+		"retention_days":      c.retentionDays,
+		"collection_interval": c.collectionInterval,
+		"target_exchanges":    c.targetExchanges,
+	}).Info("Funding rate collector started")
 
 	return nil
 }
@@ -113,7 +116,7 @@ func (c *FundingRateCollector) Stop() {
 	c.wg.Wait()
 	c.running = false
 
-	telemetry.Logger().Info("Funding rate collector stopped")
+	c.logger.Info("Funding rate collector stopped")
 }
 
 // runCollector runs the periodic funding rate collection.
@@ -125,7 +128,7 @@ func (c *FundingRateCollector) runCollector() {
 
 	// Run initial collection immediately
 	if err := c.collectFundingRates(c.ctx); err != nil {
-		telemetry.Logger().Error("Initial funding rate collection failed", "error", err)
+		c.logger.WithError(err).Error("Initial funding rate collection failed")
 	}
 
 	for {
@@ -134,7 +137,7 @@ func (c *FundingRateCollector) runCollector() {
 			return
 		case <-ticker.C:
 			if err := c.collectFundingRates(c.ctx); err != nil {
-				telemetry.Logger().Error("Funding rate collection failed", "error", err)
+				c.logger.WithError(err).Error("Funding rate collection failed")
 			}
 		}
 	}
@@ -154,7 +157,7 @@ func (c *FundingRateCollector) runCleanup() {
 			return
 		case <-ticker.C:
 			if err := c.cleanupOldData(c.ctx); err != nil {
-				telemetry.Logger().Error("Funding rate cleanup failed", "error", err)
+				c.logger.WithError(err).Error("Funding rate cleanup failed")
 			}
 		}
 	}
@@ -167,23 +170,27 @@ func (c *FundingRateCollector) collectFundingRates(ctx context.Context) error {
 	})
 	defer observability.FinishSpan(span, nil)
 
-	telemetry.Logger().Info("Starting funding rate collection")
+	c.logger.Info("Starting funding rate collection")
 
 	var totalCollected int
 	for _, exchange := range c.targetExchanges {
 		collected, err := c.collectExchangeFundingRates(spanCtx, exchange)
 		if err != nil {
 			observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Failed to collect from %s: %v", exchange, err), sentry.LevelError)
-			telemetry.Logger().Error("Failed to collect funding rates",
-				"exchange", exchange, "error", err)
+			observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Failed to collect from %s: %v", exchange, err), sentry.LevelError)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchange,
+			}).WithError(err).Error("Failed to collect funding rates")
 			continue
 		}
 		totalCollected += collected
 	}
 
 	observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Collection completed: %d rates collected", totalCollected), sentry.LevelInfo)
-	telemetry.Logger().Info("Funding rate collection completed",
-		"total_collected", totalCollected)
+	observability.AddBreadcrumb(spanCtx, "funding_rate_collector", fmt.Sprintf("Collection completed: %d rates collected", totalCollected), sentry.LevelInfo)
+	c.logger.WithFields(map[string]interface{}{
+		"total_collected": totalCollected,
+	}).Info("Funding rate collection completed")
 
 	return nil
 }
@@ -211,8 +218,10 @@ func (c *FundingRateCollector) collectExchangeFundingRates(ctx context.Context, 
 	stored := 0
 	for _, rate := range rates {
 		if err := c.storeFundingRate(spanCtx, exchange, &rate); err != nil {
-			telemetry.Logger().Warn("Failed to store funding rate",
-				"exchange", exchange, "symbol", rate.Symbol, "error", err)
+			c.logger.WithFields(map[string]interface{}{
+				"exchange": exchange,
+				"symbol":   rate.Symbol,
+			}).WithError(err).Warn("Failed to store funding rate")
 			continue
 		}
 		stored++
@@ -223,7 +232,7 @@ func (c *FundingRateCollector) collectExchangeFundingRates(ctx context.Context, 
 
 // storeFundingRate stores a single funding rate in the database.
 func (c *FundingRateCollector) storeFundingRate(ctx context.Context, exchange string, rate *ccxt.FundingRate) error {
-	if c.db == nil || c.db.Pool == nil {
+	if c.db == nil {
 		return fmt.Errorf("database pool is not available")
 	}
 
@@ -243,7 +252,7 @@ func (c *FundingRateCollector) storeFundingRate(ctx context.Context, exchange st
 		fundingTime = time.Now()
 	}
 
-	_, err := c.db.Pool.Exec(ctx, query,
+	_, err := c.db.Exec(ctx, query,
 		rate.Symbol,
 		exchange,
 		rate.FundingRate,
@@ -258,7 +267,7 @@ func (c *FundingRateCollector) storeFundingRate(ctx context.Context, exchange st
 
 // cleanupOldData removes funding rate data older than retention period.
 func (c *FundingRateCollector) cleanupOldData(ctx context.Context) error {
-	if c.db == nil || c.db.Pool == nil {
+	if c.db == nil {
 		return fmt.Errorf("database pool is not available")
 	}
 
@@ -268,16 +277,17 @@ func (c *FundingRateCollector) cleanupOldData(ctx context.Context) error {
 	`
 
 	interval := fmt.Sprintf("%d days", c.retentionDays)
-	result, err := c.db.Pool.Exec(ctx, query, interval)
+	result, err := c.db.Exec(ctx, query, interval)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup old data: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected > 0 {
-		telemetry.Logger().Info("Cleaned up old funding rate data",
-			"rows_deleted", rowsAffected,
-			"retention_days", c.retentionDays)
+		c.logger.WithFields(map[string]interface{}{
+			"rows_deleted":   rowsAffected,
+			"retention_days": c.retentionDays,
+		}).Info("Cleaned up old funding rate data")
 	}
 
 	return nil
@@ -291,7 +301,7 @@ func (c *FundingRateCollector) GetFundingRateStats(
 	symbol string,
 	exchange string,
 ) (*models.FundingRateStats, error) {
-	if c.db == nil || c.db.Pool == nil {
+	if c.db == nil {
 		return nil, fmt.Errorf("database pool is not available")
 	}
 
@@ -357,7 +367,7 @@ func (c *FundingRateCollector) getCurrentFundingRate(
 	`
 
 	var rate decimal.Decimal
-	err := c.db.Pool.QueryRow(ctx, query, symbol, exchange).Scan(&rate)
+	err := c.db.QueryRow(ctx, query, symbol, exchange).Scan(&rate)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -380,7 +390,7 @@ func (c *FundingRateCollector) getHistoricalRates(
 	`
 
 	interval := fmt.Sprintf("%d days", days)
-	rows, err := c.db.Pool.Query(ctx, query, symbol, exchange, interval)
+	rows, err := c.db.Query(ctx, query, symbol, exchange, interval)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +555,7 @@ func (c *FundingRateCollector) GetFundingRateHistory(
 	exchange string,
 	days int,
 ) ([]models.FundingRateHistoryPoint, error) {
-	if c.db == nil || c.db.Pool == nil {
+	if c.db == nil {
 		return nil, fmt.Errorf("database pool is not available")
 	}
 
@@ -558,7 +568,7 @@ func (c *FundingRateCollector) GetFundingRateHistory(
 	`
 
 	interval := fmt.Sprintf("%d days", days)
-	rows, err := c.db.Pool.Query(ctx, query, symbol, exchange, interval)
+	rows, err := c.db.Query(ctx, query, symbol, exchange, interval)
 	if err != nil {
 		return nil, err
 	}

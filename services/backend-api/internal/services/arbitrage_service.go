@@ -8,9 +8,9 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
 	"github.com/irfandi/celebrum-ai-go/internal/database"
@@ -133,7 +133,7 @@ type ArbitrageService struct {
 	wg                 sync.WaitGroup
 	isRunning          bool
 	mu                 sync.RWMutex
-	logger             *logrus.Logger
+	logger             logging.Logger
 	lastCalculation    time.Time
 	opportunitiesFound int
 	multiLegCalculator *MultiLegArbitrageCalculator
@@ -177,8 +177,15 @@ func NewArbitrageService(db database.DatabasePool, cfg *config.Config, calculato
 	}
 	arbitrageConfig.Enabled = cfg.Arbitrage.Enabled
 
-	// Initialize logger
-	logger := logrus.New()
+	// Initialize logger with config-provided log level
+	logLevel := cfg.Telemetry.LogLevel
+	if logLevel == "" {
+		logLevel = cfg.LogLevel
+	}
+	if logLevel == "" {
+		logLevel = "info" // fallback default
+	}
+	logger := logging.NewStandardLogger(logLevel, cfg.Environment)
 
 	// Initialize multi-leg calculator
 	multiLegCalculator := NewMultiLegArbitrageCalculator(feeProvider, decimal.NewFromFloat(cfg.Fees.DefaultTakerFee))
@@ -214,7 +221,7 @@ func (s *ArbitrageService) Start() error {
 	s.isRunning = true
 	s.mu.Unlock()
 
-	s.logger.WithFields(logrus.Fields{
+	s.logger.WithFields(map[string]interface{}{
 		"interval_seconds": s.arbitrageConfig.IntervalSeconds,
 		"min_profit":       s.arbitrageConfig.MinProfit,
 		"max_age_minutes":  s.arbitrageConfig.MaxAgeMinutes,
@@ -339,7 +346,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 		return nil
 	}
 
-	s.logger.WithFields(logrus.Fields{
+	s.logger.WithFields(map[string]interface{}{
 		"exchanges":   len(marketData),
 		"total_pairs": s.countTotalTradingPairs(marketData),
 	}).Info("Retrieved market data")
@@ -361,6 +368,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 	// Step 3b: Calculate multi-leg arbitrage opportunities (Triangular)
 	_, mlCalcSpan := observability.StartSpan(ctx, observability.SpanOpArbitrage, "calculate_multi_leg_opportunities")
 	var allMultiLegOps []models.MultiLegOpportunity
+	var multiLegErrors int
 	for exchangeName, tickers := range marketData {
 		tickerData := make([]TickerData, len(tickers))
 		for i, t := range tickers {
@@ -371,11 +379,15 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 			}
 		}
 		mlOps, err := s.multiLegCalculator.FindTriangularOpportunities(ctx, exchangeName, tickerData)
-		if err == nil {
+		if err != nil {
+			multiLegErrors++
+			s.logger.WithFields(map[string]interface{}{"exchange": exchangeName}).WithError(err).Warn("Failed to calculate multi-leg opportunities")
+		} else {
 			allMultiLegOps = append(allMultiLegOps, mlOps...)
 		}
 	}
 	mlCalcSpan.SetData("multi_leg_calculated", len(allMultiLegOps))
+	mlCalcSpan.SetData("multi_leg_errors", multiLegErrors)
 	observability.FinishSpan(mlCalcSpan, nil)
 
 	// Step 4: Filter opportunities by minimum profit threshold
@@ -426,7 +438,7 @@ func (s *ArbitrageService) calculateAndStoreOpportunities() error {
 		"opportunities_found": len(validOpportunities),
 	})
 
-	s.logger.WithFields(logrus.Fields{
+	s.logger.WithFields(map[string]interface{}{
 		"duration_ms":          duration.Milliseconds(),
 		"opportunities_found":  len(validOpportunities),
 		"total_calculated":     len(opportunities),
@@ -490,15 +502,81 @@ func (s *ArbitrageService) getLatestMarketData() (map[string][]models.MarketData
 		return nil, fmt.Errorf("error iterating market data rows: %w", err)
 	}
 
-	s.logger.WithField("exchanges", len(marketData)).Info("Market data retrieved")
+	s.logger.WithFields(map[string]interface{}{"exchanges": len(marketData)}).Info("Market data retrieved")
+
+	// If no market data found, run diagnostics to understand why
+	if len(marketData) == 0 {
+		s.diagnoseNoMarketData()
+	}
+
 	for exchange, data := range marketData {
-		s.logger.WithFields(logrus.Fields{
+		s.logger.WithFields(map[string]interface{}{
 			"exchange": exchange,
 			"pairs":    len(data),
 		}).Debug("Exchange data")
 	}
 
 	return marketData, nil
+}
+
+// diagnoseNoMarketData logs diagnostic information when no market data is available.
+// This helps identify the root cause: missing data, stale data, or database seeding issues.
+func (s *ArbitrageService) diagnoseNoMarketData() {
+	var totalRows, freshRows, activeExchanges, activePairs int
+
+	// Check total market_data rows
+	err := s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM market_data").Scan(&totalRows)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count market_data rows")
+		totalRows = -1
+	}
+
+	// Check fresh market_data rows (within 10 minutes)
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM market_data WHERE timestamp >= NOW() - INTERVAL '10 minutes'").Scan(&freshRows)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count fresh market_data rows")
+		freshRows = -1
+	}
+
+	// Check active exchanges
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM exchanges WHERE status = 'active'").Scan(&activeExchanges)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count active exchanges")
+		activeExchanges = -1
+	}
+
+	// Check active trading pairs
+	err = s.db.QueryRow(s.ctx, "SELECT COUNT(*) FROM trading_pairs WHERE is_active = true").Scan(&activePairs)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to count active trading pairs")
+		activePairs = -1
+	}
+
+	// Log comprehensive diagnostic
+	s.logger.WithFields(map[string]interface{}{
+		"total_market_data_rows":    totalRows,
+		"fresh_rows_10min":          freshRows,
+		"active_exchanges":          activeExchanges,
+		"active_trading_pairs":      activePairs,
+		"diagnostic_recommendation": s.getDiagnosticRecommendation(totalRows, freshRows, activeExchanges, activePairs),
+	}).Warn("Market data diagnostic - no data available for arbitrage")
+}
+
+// getDiagnosticRecommendation returns a human-readable recommendation based on the counts.
+func (s *ArbitrageService) getDiagnosticRecommendation(totalRows, freshRows, activeExchanges, activePairs int) string {
+	if activeExchanges == 0 {
+		return "No active exchanges in database - check migrations and seeding"
+	}
+	if activePairs == 0 {
+		return "No active trading pairs - collector may not have created pairs yet"
+	}
+	if totalRows == 0 {
+		return "No market data at all - collector has not saved any data yet"
+	}
+	if freshRows == 0 {
+		return "Market data exists but is stale (>10min old) - collector may be failing"
+	}
+	return "Unknown issue - data exists but query returned nothing"
 }
 
 // filterOpportunities filters arbitrage opportunities based on configuration thresholds
@@ -521,7 +599,7 @@ func (s *ArbitrageService) filterOpportunities(opportunities []models.ArbitrageO
 		filtered = append(filtered, opp)
 	}
 
-	s.logger.WithFields(logrus.Fields{
+	s.logger.WithFields(map[string]interface{}{
 		"original": len(opportunities),
 		"filtered": len(filtered),
 	}).Info("Filtered opportunities")
@@ -549,7 +627,7 @@ func (s *ArbitrageService) storeOpportunities(opportunities []models.ArbitrageOp
 		}
 	}
 
-	s.logger.WithField("count", len(opportunities)).Info("Stored opportunities")
+	s.logger.WithFields(map[string]interface{}{"count": len(opportunities)}).Info("Stored opportunities")
 	return nil
 }
 
@@ -600,10 +678,11 @@ func (s *ArbitrageService) storeOpportunityBatch(opportunities []models.Arbitrag
 		)
 
 		if err != nil {
-			s.logger.WithError(err).Error("Failed to insert opportunity",
-				"buy_exchange", opp.BuyExchangeID,
-				"sell_exchange", opp.SellExchangeID,
-				"symbol", opp.TradingPair != nil)
+			s.logger.WithFields(map[string]interface{}{
+				"buy_exchange":  opp.BuyExchangeID,
+				"sell_exchange": opp.SellExchangeID,
+				"symbol":        opp.TradingPair != nil,
+			}).WithError(err).Error("Failed to insert opportunity")
 			return fmt.Errorf("failed to insert opportunity: %w", err)
 		}
 	}
@@ -638,7 +717,7 @@ func (s *ArbitrageService) cleanupOldOpportunities() error {
 	}
 
 	if expiredCount > 0 {
-		s.logger.WithField("count", expiredCount).Info("Found expired opportunities")
+		s.logger.WithFields(map[string]interface{}{"count": expiredCount}).Info("Found expired opportunities")
 	}
 
 	return nil

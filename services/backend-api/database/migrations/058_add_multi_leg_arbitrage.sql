@@ -2,8 +2,9 @@
 -- Description: Adds tables to store multi-leg (triangular) arbitrage opportunities.
 
 -- Multi-leg arbitrage opportunities
+-- Uses gen_random_uuid() which is built-in to PostgreSQL 13+
 CREATE TABLE IF NOT EXISTS multi_leg_opportunities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     exchange_id INTEGER NOT NULL REFERENCES exchanges(id),
     total_profit DECIMAL(20, 8),
     profit_percentage DECIMAL(10, 6) NOT NULL,

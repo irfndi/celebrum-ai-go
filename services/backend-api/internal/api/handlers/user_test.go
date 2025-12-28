@@ -372,6 +372,174 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
+
+	// UPSERT: Telegram user exists with NULL chat ID - should update
+	t.Run("telegram user exists with NULL chat ID - updates chat ID", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		newChatID := "123456789"
+		existingUserID := uuid.New().String()
+		existingCreatedAt := time.Now().Add(-24 * time.Hour)
+
+		// Mock userExists check - user exists
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock getUserByEmail - existing user with NULL telegram_chat_id
+		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
+				AddRow(existingUserID, "telegram_12345@celebrum.ai", "", nil, "free", existingCreatedAt, existingCreatedAt))
+
+		// Mock UPDATE for telegram_chat_id
+		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$1, updated_at = NOW\(\) WHERE email = \$2`).
+			WithArgs(&newChatID, "telegram_12345@celebrum.ai").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		handler := NewUserHandlerWithQuerier(mock, nil)
+
+		user := RegisterRequest{
+			Email:          "telegram_12345@celebrum.ai",
+			Password:       TestValidPassword,
+			TelegramChatID: &newChatID,
+		}
+
+		jsonData, _ := json.Marshal(user)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("POST", "/users/register", bytes.NewBuffer(jsonData))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		handler.RegisterUser(c)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response, "user")
+		assert.True(t, response["already_exists"].(bool))
+
+		userData := response["user"].(map[string]interface{})
+		assert.Equal(t, existingUserID, userData["id"])
+		assert.Equal(t, newChatID, userData["telegram_chat_id"])
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	// UPSERT: Telegram user exists with different chat ID - should update
+	t.Run("telegram user exists with different chat ID - updates chat ID", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		oldChatID := "111111111"
+		newChatID := "222222222"
+		existingUserID := uuid.New().String()
+		existingCreatedAt := time.Now().Add(-24 * time.Hour)
+
+		// Mock userExists check - user exists
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock getUserByEmail - existing user with different telegram_chat_id
+		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
+				AddRow(existingUserID, "telegram_12345@celebrum.ai", "", &oldChatID, "free", existingCreatedAt, existingCreatedAt))
+
+		// Mock UPDATE for telegram_chat_id
+		mock.ExpectExec(`UPDATE users SET telegram_chat_id = \$1, updated_at = NOW\(\) WHERE email = \$2`).
+			WithArgs(&newChatID, "telegram_12345@celebrum.ai").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		handler := NewUserHandlerWithQuerier(mock, nil)
+
+		user := RegisterRequest{
+			Email:          "telegram_12345@celebrum.ai",
+			Password:       TestValidPassword,
+			TelegramChatID: &newChatID,
+		}
+
+		jsonData, _ := json.Marshal(user)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("POST", "/users/register", bytes.NewBuffer(jsonData))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		handler.RegisterUser(c)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response, "user")
+		assert.True(t, response["already_exists"].(bool))
+
+		userData := response["user"].(map[string]interface{})
+		assert.Equal(t, newChatID, userData["telegram_chat_id"])
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	// UPSERT: Telegram user exists with same chat ID - no update needed
+	t.Run("telegram user exists with same chat ID - returns existing user", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		chatID := "123456789"
+		existingUserID := uuid.New().String()
+		existingCreatedAt := time.Now().Add(-24 * time.Hour)
+
+		// Mock userExists check - user exists
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock getUserByEmail - existing user with same telegram_chat_id
+		mock.ExpectQuery(`SELECT id, email, password_hash, telegram_chat_id, subscription_tier, created_at, updated_at FROM users WHERE email = \$1`).
+			WithArgs("telegram_12345@celebrum.ai").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "password_hash", "telegram_chat_id", "subscription_tier", "created_at", "updated_at"}).
+				AddRow(existingUserID, "telegram_12345@celebrum.ai", "", &chatID, "free", existingCreatedAt, existingCreatedAt))
+
+		// No UPDATE expected since chat ID is the same
+
+		handler := NewUserHandlerWithQuerier(mock, nil)
+
+		user := RegisterRequest{
+			Email:          "telegram_12345@celebrum.ai",
+			Password:       TestValidPassword,
+			TelegramChatID: &chatID,
+		}
+
+		jsonData, _ := json.Marshal(user)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("POST", "/users/register", bytes.NewBuffer(jsonData))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		handler.RegisterUser(c)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response, "user")
+		assert.True(t, response["already_exists"].(bool))
+
+		userData := response["user"].(map[string]interface{})
+		assert.Equal(t, existingUserID, userData["id"])
+		assert.Equal(t, chatID, userData["telegram_chat_id"])
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestUserHandler_LoginUser(t *testing.T) {

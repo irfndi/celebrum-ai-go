@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 )
 
 // PerformanceMonitor tracks system and application performance metrics.
 type PerformanceMonitor struct {
-	logger *logrus.Logger
+	logger logging.Logger
 	redis  *redis.Client
 	ctx    context.Context
 	mu     sync.RWMutex
@@ -122,7 +122,7 @@ type TelegramPerformanceMetrics struct {
 // Returns:
 //
 //	*PerformanceMonitor: Initialized monitor.
-func NewPerformanceMonitor(logger *logrus.Logger, redis *redis.Client, ctx context.Context) *PerformanceMonitor {
+func NewPerformanceMonitor(logger logging.Logger, redis *redis.Client, ctx context.Context) *PerformanceMonitor {
 	return &PerformanceMonitor{
 		logger:          logger,
 		redis:           redis,
@@ -237,7 +237,7 @@ func (pm *PerformanceMonitor) collectRedisMetrics() {
 	// Get Redis info
 	_, err := pm.redis.Info(pm.ctx, "stats", "memory").Result()
 	if err != nil {
-		pm.logger.WithError(err).Warn("Failed to get Redis info")
+		pm.logger.WithFields(map[string]interface{}{"error": err}).Warn("Failed to get Redis info")
 		return
 	}
 
@@ -270,7 +270,7 @@ func (pm *PerformanceMonitor) cacheMetrics() {
 
 // logPerformanceSummary logs a summary of current performance
 func (pm *PerformanceMonitor) logPerformanceSummary() {
-	pm.logger.WithFields(logrus.Fields{
+	pm.logger.WithFields(map[string]interface{}{
 		"memory_mb":  pm.systemMetrics.MemoryUsage / 1024 / 1024,
 		"goroutines": pm.systemMetrics.Goroutines,
 		"heap_alloc": pm.systemMetrics.HeapAlloc / 1024 / 1024,
@@ -372,7 +372,7 @@ func (pm *PerformanceMonitor) RecordWorkerHealth(exchange string, isRunning bool
 	}
 
 	// Log worker health status
-	pm.logger.WithFields(logrus.Fields{
+	pm.logger.WithFields(map[string]interface{}{
 		"exchange":    exchange,
 		"is_running":  isRunning,
 		"error_count": errorCount,

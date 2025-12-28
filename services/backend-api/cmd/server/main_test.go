@@ -15,10 +15,10 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -179,17 +179,17 @@ func TestDatabaseMock(t *testing.T) {
 
 // Test logger setup
 func TestLoggerSetup(t *testing.T) {
-	// Test logrus logger
-	logger := logrus.New()
+	// Test standard logger
+	logger := logging.NewStandardLogger("info", "test")
 	assert.NotNil(t, logger)
 
-	// Test log level setting
-	logger.SetLevel(logrus.InfoLevel)
-	assert.Equal(t, logrus.InfoLevel, logger.GetLevel())
+	// Since we're using zap directly through the interface now, we verify it implements Logger
+	var _ logging.Logger = logger
 
-	// Test JSON formatter
-	logger.SetFormatter(&logrus.JSONFormatter{})
-	assert.NotNil(t, logger.Formatter)
+	// Test SetLevel
+	logger.SetLevel("debug")
+	// Note: We can't easily verify internal level state without more complex reflection or hooks,
+	// but we can verify the method exists and runs without panic.
 }
 
 // Test graceful shutdown

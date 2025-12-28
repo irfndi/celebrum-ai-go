@@ -8,9 +8,9 @@ import (
 
 	"github.com/irfandi/celebrum-ai-go/internal/cache"
 	"github.com/irfandi/celebrum-ai-go/internal/config"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/models"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 )
 
 // Service provides high-level CCXT operations.
@@ -20,7 +20,7 @@ type Service struct {
 	blacklistCache     cache.BlacklistCache
 	mu                 sync.RWMutex
 	lastUpdate         time.Time
-	logger             *logrus.Logger
+	logger             logging.Logger
 }
 
 // NewService creates a new CCXT service instance.
@@ -34,7 +34,7 @@ type Service struct {
 // Returns:
 //
 //	*Service: Initialized service.
-func NewService(cfg *config.CCXTConfig, logger *logrus.Logger, blacklistCache cache.BlacklistCache) *Service {
+func NewService(cfg *config.CCXTConfig, logger logging.Logger, blacklistCache cache.BlacklistCache) *Service {
 	s := &Service{
 		client:             NewClient(cfg),
 		supportedExchanges: make(map[string]ExchangeInfo),
@@ -75,7 +75,7 @@ func (s *Service) Initialize(ctx context.Context) error {
 	}
 
 	s.lastUpdate = time.Now()
-	s.logger.Infof("Initialized CCXT service with %d supported exchanges", len(s.supportedExchanges))
+	s.logger.Info("Initialized CCXT service", "count", len(s.supportedExchanges))
 
 	// Load existing blacklist from database if blacklist cache is available
 	if s.blacklistCache != nil {
@@ -164,6 +164,14 @@ func (s *Service) FetchMarketData(ctx context.Context, exchanges []string, symbo
 	resp, err := s.client.GetTickers(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tickers: %w", err)
+	}
+
+	// CRITICAL FIX: Validate response is not empty
+	// This helps detect API format mismatches or CCXT service issues
+	if len(resp.Tickers) == 0 {
+		s.logger.Warn("Empty tickers response from CCXT service",
+			"exchanges", exchanges,
+			"symbols_count", len(symbols))
 	}
 
 	marketData := make([]MarketPriceInterface, 0, len(resp.Tickers))

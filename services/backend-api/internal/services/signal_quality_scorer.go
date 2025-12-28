@@ -7,10 +7,9 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 
 	"github.com/irfandi/celebrum-ai-go/internal/config"
-	"github.com/irfandi/celebrum-ai-go/internal/database"
+	"github.com/irfandi/celebrum-ai-go/internal/logging"
 	"github.com/irfandi/celebrum-ai-go/internal/observability"
 )
 
@@ -18,8 +17,8 @@ import (
 // exchange reliability, market conditions, and technical indicators.
 type SignalQualityScorer struct {
 	config *config.Config
-	db     *database.PostgresDB
-	logger *logrus.Logger
+	db     DBPool
+	logger logging.Logger
 
 	// Cached exchange reliability scores
 	exchangeReliabilityCache map[string]*ExchangeReliability
@@ -112,7 +111,7 @@ type QualityThresholds struct {
 //
 // Returns:
 //   - A pointer to the initialized SignalQualityScorer.
-func NewSignalQualityScorer(cfg *config.Config, db *database.PostgresDB, logger *logrus.Logger) *SignalQualityScorer {
+func NewSignalQualityScorer(cfg *config.Config, db DBPool, logger logging.Logger) *SignalQualityScorer {
 	return &SignalQualityScorer{
 		config:                   cfg,
 		db:                       db,
@@ -128,7 +127,7 @@ func (sqs *SignalQualityScorer) GetDefaultQualityThresholds() *QualityThresholds
 		MinOverallScore:   decimal.NewFromFloat(0.6),
 		MinExchangeScore:  decimal.NewFromFloat(0.7),
 		MinVolumeScore:    decimal.NewFromFloat(0.5),
-		MinLiquidityScore: decimal.NewFromFloat(0.6),
+		MinLiquidityScore: decimal.NewFromFloat(0.5),
 		MaxRiskScore:      decimal.NewFromFloat(0.4),
 		MinDataFreshness:  5 * time.Minute,
 	}
@@ -156,7 +155,7 @@ func (sqs *SignalQualityScorer) AssessSignalQuality(ctx context.Context, input *
 		input.SignalType, input.Symbol, input.Exchanges, input.Volume.InexactFloat64(),
 		input.ProfitPotential.InexactFloat64(), input.Confidence.InexactFloat64())
 
-	sqs.logger.WithFields(logrus.Fields{
+	sqs.logger.WithFields(map[string]interface{}{
 		"signal_type": input.SignalType,
 		"symbol":      input.Symbol,
 		"exchanges":   input.Exchanges,
@@ -623,7 +622,7 @@ func (sqs *SignalQualityScorer) refreshExchangeReliabilityCache(ctx context.Cont
 	sqs.exchangeReliabilityCache = newCache
 	sqs.cacheExpiry = time.Now().Add(time.Hour)
 
-	sqs.logger.WithField("exchanges_cached", len(newCache)).Info("Exchange reliability cache refreshed")
+	sqs.logger.WithFields(map[string]interface{}{"exchanges_cached": len(newCache)}).Info("Exchange reliability cache refreshed")
 	return nil
 }
 

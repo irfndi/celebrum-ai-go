@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -112,6 +113,8 @@ type CCXTConfig struct {
 	GrpcAddress string `mapstructure:"grpc_address"`
 	// Timeout is the request timeout in seconds.
 	Timeout int `mapstructure:"timeout"`
+	// AdminAPIKey is the API key for authenticating with admin endpoints.
+	AdminAPIKey string `mapstructure:"admin_api_key"`
 }
 
 // TelegramConfig defines settings for the Telegram notification bot.
@@ -308,6 +311,15 @@ func Load() (*Config, error) {
 	// Bind standard DATABASE_URL
 	_ = viper.BindEnv("database.database_url", "DATABASE_URL")
 
+	// Bind CCXT service environment variables
+	_ = viper.BindEnv("ccxt.service_url", "CCXT_SERVICE_URL")
+	_ = viper.BindEnv("ccxt.grpc_address", "CCXT_GRPC_ADDRESS")
+	_ = viper.BindEnv("ccxt.admin_api_key", "ADMIN_API_KEY")
+
+	// Bind Telegram service environment variables
+	_ = viper.BindEnv("telegram.service_url", "TELEGRAM_SERVICE_URL")
+	_ = viper.BindEnv("telegram.grpc_address", "TELEGRAM_GRPC_ADDRESS")
+
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found, use defaults and environment variables
@@ -372,14 +384,40 @@ func setDefaults() {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
-	// CCXT
-	viper.SetDefault("ccxt.service_url", "http://localhost:3001")
-	viper.SetDefault("ccxt.grpc_address", "localhost:50051")
+	// CCXT - Use Docker service names when running in Docker/Coolify
+	// Note: These defaults can be overridden by explicit env vars (CCXT_SERVICE_URL, CCXT_GRPC_ADDRESS)
+	// which are bound via viper.BindEnv() in Load(). Viper prioritizes env vars over defaults.
+	//
+	// Detect Coolify environment by checking for COOLIFY_* variables
+	// Coolify sets COOLIFY_CONTAINER_NAME, COOLIFY_RESOURCE_UUID, etc., not just COOLIFY=true
+	isCoolify := os.Getenv("COOLIFY_CONTAINER_NAME") != "" ||
+		os.Getenv("COOLIFY_RESOURCE_UUID") != "" ||
+		os.Getenv("COOLIFY") == "true"
+	isDocker := os.Getenv("DOCKER_ENVIRONMENT") == "true" || isCoolify
+
+	// Log detection result for debugging (only if log package is available)
+	if isDocker {
+		log.Printf("INFO: Docker/Coolify environment detected (COOLIFY=%v, DOCKER_ENVIRONMENT=%s)",
+			isCoolify, os.Getenv("DOCKER_ENVIRONMENT"))
+		viper.SetDefault("ccxt.service_url", "http://ccxt-service:3001")
+		viper.SetDefault("ccxt.grpc_address", "ccxt-service:50051")
+	} else {
+		viper.SetDefault("ccxt.service_url", "http://localhost:3001")
+		// Use explicit IPv4 address to avoid IPv6 resolution issues on some systems
+		viper.SetDefault("ccxt.grpc_address", "127.0.0.1:50051")
+	}
 	viper.SetDefault("ccxt.timeout", 30)
 
-	// Telegram
-	viper.SetDefault("telegram.service_url", "http://localhost:3002")
-	viper.SetDefault("telegram.grpc_address", "localhost:50052")
+	// Telegram - Use Docker service names when running in Docker/Coolify
+	// Note: These defaults can be overridden by explicit env vars (TELEGRAM_SERVICE_URL, TELEGRAM_GRPC_ADDRESS)
+	if isDocker {
+		viper.SetDefault("telegram.service_url", "http://telegram-service:3002")
+		viper.SetDefault("telegram.grpc_address", "telegram-service:50052")
+	} else {
+		viper.SetDefault("telegram.service_url", "http://localhost:3002")
+		// Use explicit IPv4 address to avoid IPv6 resolution issues on some systems
+		viper.SetDefault("telegram.grpc_address", "127.0.0.1:50052")
+	}
 	viper.SetDefault("telegram.admin_api_key", "")
 	viper.SetDefault("telegram.bot_token", "")
 	viper.SetDefault("telegram.webhook_url", "")

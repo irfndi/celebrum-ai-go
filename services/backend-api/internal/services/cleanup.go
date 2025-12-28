@@ -113,6 +113,7 @@ func (c *CleanupService) Start(config CleanupConfig) {
 		for {
 			select {
 			case <-c.ctx.Done():
+				ticker.Stop() // Explicitly stop ticker on context cancellation
 				return
 			case <-ticker.C:
 				// Create timeout context for periodic cleanup
