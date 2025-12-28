@@ -23,6 +23,18 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// safeIntToInt32 safely converts an int to int32, clamping values to the valid int32 range.
+// This prevents integer overflow when converting from architecture-dependent int to int32.
+func safeIntToInt32(v int) int32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(v)
+}
+
 // SymbolNotFoundError represents an error when a symbol is not found on an exchange.
 // This error should not be retried as the symbol doesn't exist.
 type SymbolNotFoundError struct {
@@ -281,22 +293,15 @@ func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersR
 
 // GetOrderBook retrieves order book data for a specific exchange and symbol.
 func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
-	// Bounds check for int32 conversion to prevent overflow
-	// Use a separate variable to make the bounds relationship explicit for static analysis
-	safeLimit := limit
-	if safeLimit < 0 {
-		safeLimit = 0
-	}
-	if safeLimit > math.MaxInt32 {
-		safeLimit = math.MaxInt32
-	}
+	// Convert to int32 safely using helper function
+	safeLimit := safeIntToInt32(limit)
 
 	// Try gRPC first
 	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetOrderBook(ctx, &pb.GetOrderBookRequest{
 			Exchange: exchange,
 			Symbol:   symbol,
-			Limit:    int32(safeLimit),
+			Limit:    safeLimit,
 		})
 		if err == nil && resp.Error == "" {
 			return c.convertGrpcOrderBookResponse(resp), nil
@@ -312,7 +317,7 @@ func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limi
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
 	path := fmt.Sprintf("/api/orderbook/%s/%s", exchange, ccxtSymbol)
 	if safeLimit > 0 {
-		path += "?limit=" + strconv.Itoa(safeLimit)
+		path += "?limit=" + strconv.FormatInt(int64(safeLimit), 10)
 	}
 	var response OrderBookResponse
 	err := c.makeRequest(ctx, "GET", path, nil, &response)
@@ -321,21 +326,15 @@ func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limi
 
 // GetTrades retrieves recent trades for a specific exchange and symbol.
 func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit int) (*TradesResponse, error) {
-	// Bounds check for int32 conversion to prevent overflow
-	safeLimit := limit
-	if safeLimit < 0 {
-		safeLimit = 0
-	}
-	if safeLimit > math.MaxInt32 {
-		safeLimit = math.MaxInt32
-	}
+	// Convert to int32 safely using helper function
+	safeLimit := safeIntToInt32(limit)
 
 	// Try gRPC first
 	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetTrades(ctx, &pb.GetTradesRequest{
 			Exchange: exchange,
 			Symbol:   symbol,
-			Limit:    int32(safeLimit),
+			Limit:    safeLimit,
 		})
 		if err == nil && resp.Error == "" {
 			return c.convertGrpcTradesResponse(resp), nil
@@ -351,7 +350,7 @@ func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit i
 	ccxtSymbol := c.formatSymbolForExchange(exchange, symbol)
 	path := fmt.Sprintf("/api/trades/%s/%s", exchange, ccxtSymbol)
 	if safeLimit > 0 {
-		path += "?limit=" + strconv.Itoa(safeLimit)
+		path += "?limit=" + strconv.FormatInt(int64(safeLimit), 10)
 	}
 	var response TradesResponse
 	err := c.makeRequest(ctx, "GET", path, nil, &response)
@@ -360,14 +359,8 @@ func (c *Client) GetTrades(ctx context.Context, exchange, symbol string, limit i
 
 // GetOHLCV retrieves OHLCV data for a specific exchange and symbol.
 func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe string, limit int) (*OHLCVResponse, error) {
-	// Bounds check for int32 conversion to prevent overflow
-	safeLimit := limit
-	if safeLimit < 0 {
-		safeLimit = 0
-	}
-	if safeLimit > math.MaxInt32 {
-		safeLimit = math.MaxInt32
-	}
+	// Convert to int32 safely using helper function
+	safeLimit := safeIntToInt32(limit)
 
 	// Try gRPC first
 	if c.IsGRPCEnabled() {
@@ -375,7 +368,7 @@ func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe strin
 			Exchange:  exchange,
 			Symbol:    symbol,
 			Timeframe: timeframe,
-			Limit:     int32(safeLimit),
+			Limit:     safeLimit,
 		})
 		if err == nil && resp.Error == "" {
 			return c.convertGrpcOHLCVResponse(resp), nil
@@ -395,7 +388,7 @@ func (c *Client) GetOHLCV(ctx context.Context, exchange, symbol, timeframe strin
 		params.Set("timeframe", timeframe)
 	}
 	if safeLimit > 0 {
-		params.Set("limit", strconv.Itoa(safeLimit))
+		params.Set("limit", strconv.FormatInt(int64(safeLimit), 10))
 	}
 	if len(params) > 0 {
 		path += "?" + params.Encode()
