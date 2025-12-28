@@ -79,24 +79,35 @@ func TestHealthHandler_HealthCheck(t *testing.T) {
 		dbError        error
 		redisError     error
 		expectedStatus int
+		expectedHealth string
 	}{
 		{
 			name:           "all services healthy",
 			dbError:        nil,
 			redisError:     nil,
 			expectedStatus: http.StatusOK,
+			expectedHealth: "healthy",
 		},
 		{
-			name:           "database error",
+			name:           "database error - critical, returns 503",
 			dbError:        assert.AnError,
 			redisError:     nil,
 			expectedStatus: http.StatusServiceUnavailable,
+			expectedHealth: "degraded",
 		},
 		{
-			name:           "redis error",
+			name:           "redis error - non-critical, returns 200",
 			dbError:        nil,
 			redisError:     assert.AnError,
+			expectedStatus: http.StatusOK,
+			expectedHealth: "degraded",
+		},
+		{
+			name:           "both db and redis error - critical, returns 503",
+			dbError:        assert.AnError,
+			redisError:     assert.AnError,
 			expectedStatus: http.StatusServiceUnavailable,
+			expectedHealth: "degraded",
 		},
 	}
 
@@ -127,11 +138,70 @@ func TestHealthHandler_HealthCheck(t *testing.T) {
 			assert.Contains(t, response, "services")
 			assert.Contains(t, response, "timestamp")
 
+			// Verify the health status matches expected
+			status, ok := response["status"].(string)
+			assert.True(t, ok, "status should be a string")
+			assert.Equal(t, tt.expectedHealth, status, "health status should match expected")
+
 			mockDB.AssertExpectations(t)
 			mockRedis.AssertExpectations(t)
 			mockCacheAnalytics.AssertExpectations(t)
 		})
 	}
+}
+
+// TestHealthHandler_DegradedNonCriticalService tests that a non-critical CCXT service failure
+// returns 200 OK with a "degraded" overall health status.
+// Note: Redis failures are tested separately in the table-driven tests above (line 99-104).
+func TestHealthHandler_DegradedNonCriticalService(t *testing.T) {
+	// Set up a mock CCXT server that returns unhealthy
+	mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+	}))
+	if mockCCXTServer == nil {
+		return
+	}
+	defer mockCCXTServer.Close()
+
+	// Set environment variable for Telegram bot token
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+
+	mockDB := &MockDatabase{}
+	mockRedis := &MockRedisHealthClient{}
+	mockCacheAnalytics := NewMockCacheAnalyticsService()
+
+	// Database and Redis are healthy
+	mockDB.On("HealthCheck", mock.Anything).Return(nil)
+	mockRedis.On("HealthCheck", mock.Anything).Return(nil)
+	mockCacheAnalytics.On("GetMetrics", mock.Anything).Return(&services.CacheMetrics{}, nil)
+	mockCacheAnalytics.On("GetAllStats").Return(map[string]services.CacheStats{})
+
+	handler := NewHealthHandler(mockDB, mockRedis, mockCCXTServer.URL, mockCacheAnalytics)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/health", nil)
+
+	handler.HealthCheck(w, req)
+
+	// Should return 200 OK even though CCXT is unhealthy (non-critical)
+	assert.Equal(t, http.StatusOK, w.Code, "should return 200 when only non-critical services are unhealthy")
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	status, ok := response["status"].(string)
+	assert.True(t, ok, "status should be a string")
+	assert.Equal(t, "degraded", status, "status should be degraded when CCXT is unhealthy")
+
+	services, ok := response["services"].(map[string]interface{})
+	assert.True(t, ok, "services should be a map")
+	assert.Contains(t, services["ccxt"].(string), "unhealthy", "ccxt should be marked as unhealthy")
+
+	mockDB.AssertExpectations(t)
+	mockRedis.AssertExpectations(t)
+	mockCacheAnalytics.AssertExpectations(t)
 }
 
 func TestHealthHandler_ReadinessCheck(t *testing.T) {

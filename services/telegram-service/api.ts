@@ -16,14 +16,159 @@ export interface ApiError {
   code?: string;
 }
 
-// Type guard for ApiError
-export const isApiError = (error: unknown): error is ApiError => {
-  return (
+// Custom error class that preserves both ApiError info and stack trace
+export class ApiException extends Error {
+  readonly apiError: ApiError;
+
+  constructor(apiError: ApiError) {
+    super(apiError.message);
+    this.name = "ApiException";
+    this.apiError = apiError;
+    // Preserve stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ApiException);
+    }
+  }
+}
+
+// WeakMap to cache extracted ApiErrors - avoids mutation
+const extractedApiErrors = new WeakMap<object, ApiError>();
+
+// Type guard for ApiError - also handles Effect's wrapped errors
+// Uses immutable extraction with caching to avoid mutation
+export const isApiError = (
+  error: unknown,
+  visited: WeakSet<object> = new WeakSet(),
+): error is ApiError => {
+  // Direct ApiError check
+  if (
     typeof error === "object" &&
     error !== null &&
     "type" in error &&
-    "message" in error
-  );
+    "message" in error &&
+    typeof (error as ApiError).type === "string"
+  ) {
+    return true;
+  }
+
+  // Check for ApiException
+  if (error instanceof ApiException) {
+    return true;
+  }
+
+  // Check for Effect's wrapped error (UnknownException with cause)
+  if (typeof error === "object" && error !== null && "cause" in error) {
+    // Prevent infinite recursion with circular references
+    if (visited.has(error)) {
+      return false;
+    }
+    visited.add(error);
+
+    const cause = (error as { cause: unknown }).cause;
+
+    // The cause might be an Error with message containing our ApiError JSON
+    if (cause instanceof Error && cause.message) {
+      try {
+        const parsed = JSON.parse(cause.message);
+        if (
+          parsed &&
+          typeof parsed.type === "string" &&
+          typeof parsed.message === "string"
+        ) {
+          // Cache the parsed ApiError instead of mutating
+          extractedApiErrors.set(error, parsed as ApiError);
+          return true;
+        }
+      } catch {
+        // Not JSON, continue
+      }
+    }
+
+    // Check for ApiException in cause
+    if (cause instanceof ApiException) {
+      extractedApiErrors.set(error, cause.apiError);
+      return true;
+    }
+
+    // Recursive check with visited set to prevent infinite loops
+    if (typeof cause === "object" && cause !== null) {
+      return isApiError(cause, visited);
+    }
+  }
+
+  return false;
+};
+
+// Extract ApiError from potentially wrapped errors (immutable)
+// This function unwraps nested error structures to find ApiError
+export const extractApiError = (error: unknown): ApiError | null => {
+  if (error == null) {
+    return null;
+  }
+
+  // Direct ApiError check
+  if (
+    typeof error === "object" &&
+    "type" in error &&
+    "message" in error &&
+    typeof (error as ApiError).type === "string"
+  ) {
+    return error as ApiError;
+  }
+
+  // ApiException - extract the wrapped apiError
+  if (error instanceof ApiException) {
+    return error.apiError;
+  }
+
+  // Check cache first (populated by isApiError)
+  if (typeof error === "object") {
+    const cached = extractedApiErrors.get(error);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  // Follow Effect-style or generic error chaining via `cause`
+  if (
+    typeof error === "object" &&
+    "cause" in error &&
+    (error as { cause: unknown }).cause !== error // Prevent self-reference
+  ) {
+    const cause = (error as { cause: unknown }).cause;
+    const extractedFromCause = extractApiError(cause);
+    if (extractedFromCause) {
+      // Cache the result for future lookups
+      extractedApiErrors.set(error, extractedFromCause);
+      return extractedFromCause;
+    }
+  }
+
+  // Try to parse Error.message as JSON-encoded ApiError
+  if (error instanceof Error && error.message) {
+    try {
+      const parsed = JSON.parse(error.message);
+      if (
+        parsed &&
+        typeof parsed.type === "string" &&
+        typeof parsed.message === "string"
+      ) {
+        const apiError: ApiError = {
+          type: parsed.type as ApiErrorType,
+          message: parsed.message,
+          status: typeof parsed.status === "number" ? parsed.status : undefined,
+          code: typeof parsed.code === "string" ? parsed.code : undefined,
+        };
+        // Cache the result
+        extractedApiErrors.set(error, apiError);
+        return apiError;
+      }
+    } catch {
+      // Not JSON or not ApiError-shaped; fall through
+    }
+  }
+
+  return null;
 };
 
 export const createApi = (config: TelegramConfigPartial) => {
@@ -53,11 +198,11 @@ export const createApi = (config: TelegramConfigPartial) => {
           `[API] Network error for ${path}:`,
           networkError instanceof Error ? networkError.message : networkError,
         );
-        const apiError: ApiError = {
+        // Throw ApiException to preserve stack trace and error info
+        throw new ApiException({
           type: "network_error",
           message: "Network error: Unable to connect to backend API",
-        };
-        throw apiError;
+        });
       }
 
       const payload = await response
@@ -89,13 +234,13 @@ export const createApi = (config: TelegramConfigPartial) => {
           console.error(`[API] ${errorType}: ${response.status} for ${path}`);
         }
 
-        const apiError: ApiError = {
+        // Throw ApiException to preserve stack trace and error info
+        throw new ApiException({
           type: errorType,
           status: response.status,
           message,
           code: payload?.code,
-        };
-        throw apiError;
+        });
       }
 
       return payload as T;

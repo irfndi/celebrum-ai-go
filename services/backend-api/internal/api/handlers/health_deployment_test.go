@@ -130,7 +130,7 @@ func TestHealthHandler_MissingTelegramToken(t *testing.T) {
 		{
 			name:           "telegram_token_missing",
 			telegramToken:  "",
-			expectedStatus: http.StatusServiceUnavailable,
+			expectedStatus: http.StatusOK, // Telegram is non-critical, so degraded returns 200
 		},
 		{
 			name:           "telegram_token_present",

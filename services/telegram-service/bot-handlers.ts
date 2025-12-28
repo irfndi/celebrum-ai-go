@@ -1,6 +1,6 @@
 import { Context } from "grammy";
 import { Effect } from "effect";
-import { Api, isApiError } from "./api";
+import { Api, isApiError, extractApiError, ApiException } from "./api";
 
 export const formatOpportunitiesMessage = (opps: any[]) => {
   if (!opps || opps.length === 0) {
@@ -63,17 +63,51 @@ export const handleStart = (api: Api) => async (ctx: Context) => {
 
   // Register new user if not found
   if (!userResult) {
-    const registerResult = await Effect.runPromise(
-      Effect.catchAll(api.registerTelegramUser(chatIdStr, userId), (error) => {
-        if (isApiError(error)) {
-          console.error(`[Start] Registration failed: ${error.message}`);
-        }
-        return Effect.succeed(null);
-      }),
-    );
+    let registrationSucceeded = false;
+    let registrationError: string | null = null;
 
-    if (!registerResult) {
-      console.error("[Start] Failed to register user");
+    try {
+      const registerResult = await Effect.runPromise(
+        api.registerTelegramUser(chatIdStr, userId),
+      );
+      // Check for explicit success - registerResult !== null covers empty objects {}
+      // which indicate API returned successfully (even with empty response body)
+      if (registerResult !== null && registerResult !== undefined) {
+        registrationSucceeded = true;
+      }
+    } catch (error) {
+      // Use extractApiError for cleaner error extraction
+      const apiError = extractApiError(error);
+      if (apiError) {
+        console.error(
+          `[Start] Registration failed: ${apiError.type} - ${apiError.message}`,
+        );
+        registrationError =
+          apiError.type === "network_error"
+            ? "Unable to connect to the server. Please try again later."
+            : apiError.type === "server_error"
+              ? "Server is temporarily unavailable. Please try again in a few minutes."
+              : apiError.message;
+      } else {
+        console.error("[Start] Unexpected registration error:", error);
+        registrationError =
+          "An unexpected error occurred. Please try again later.";
+      }
+    }
+
+    if (!registrationSucceeded) {
+      // Format error message consistently - avoid "Error: Error:" duplication
+      const formattedError = registrationError
+        ? registrationError.startsWith("Error:")
+          ? registrationError
+          : registrationError
+        : "";
+      await ctx.reply(
+        "❌ Registration failed.\n\n" +
+          (formattedError ? `${formattedError}\n\n` : "") +
+          "Please try again using /start.",
+      );
+      return;
     }
   }
 
@@ -103,22 +137,31 @@ export const handleHelp = () => async (ctx: Context) => {
 };
 
 export const handleOpportunities = (api: Api) => async (ctx: Context) => {
-  const response = await Effect.runPromise(
-    Effect.catchAll(api.getOpportunities(), (error) =>
-      Effect.fail(error as Error),
-    ),
-  ).catch(async (error) => {
+  try {
+    const response = await Effect.runPromise(api.getOpportunities());
+    await ctx.reply(formatOpportunitiesMessage(response.opportunities));
+  } catch (error) {
+    let errorMessage = "An unexpected error occurred.";
+
+    const apiError = extractApiError(error);
+    if (apiError) {
+      console.error(
+        `[Opportunities] API error: ${apiError.type} - ${apiError.message}`,
+      );
+      errorMessage =
+        apiError.type === "network_error"
+          ? "Unable to connect to the server."
+          : apiError.type === "server_error"
+            ? "Server is temporarily unavailable."
+            : apiError.message;
+    } else {
+      console.error("[Opportunities] Unexpected error:", error);
+    }
+
     await ctx.reply(
-      `❌ Failed to fetch opportunities. Please try again later. (${(error as Error).message})`,
+      `❌ Failed to fetch opportunities.\n\n${errorMessage}\n\nPlease try again later.`,
     );
-    return null;
-  });
-
-  if (!response) {
-    return;
   }
-
-  await ctx.reply(formatOpportunitiesMessage(response.opportunities));
 };
 
 export const handleStatus = (api: Api) => async (ctx: Context) => {

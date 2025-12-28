@@ -1324,14 +1324,15 @@ func (ns *NotificationService) formatEnhancedArbitrageMessage(signal *Aggregated
 }
 
 // logNotification records the notification in the database
-func (ns *NotificationService) logNotification(ctx context.Context, userID, notificationType, content string) error {
+func (ns *NotificationService) logNotification(ctx context.Context, userID, notificationType, message string) error {
+	// Note: alert_id is nullable for notifications not tied to a specific alert
 	query := `
-		INSERT INTO alert_notifications (user_id, notification_type, content, sent_at, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO alert_notifications (user_id, notification_type, message, sent_at)
+		VALUES ($1, $2, $3, $4)
 	`
 
 	now := time.Now()
-	_, err := ns.db.Pool.Exec(ctx, query, userID, notificationType, content, now, now)
+	_, err := ns.db.Pool.Exec(ctx, query, userID, notificationType, message, now)
 	if err != nil {
 		return fmt.Errorf("failed to log notification: %w", err)
 	}

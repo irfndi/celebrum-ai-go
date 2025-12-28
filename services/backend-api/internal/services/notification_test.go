@@ -1201,3 +1201,456 @@ func TestNotificationService_CleanupDeadLetters_NilService(t *testing.T) {
 	assert.Contains(t, err.Error(), "dead letter service not initialized")
 	assert.Equal(t, 0, count)
 }
+
+// TestTelegramErrorCode_AllCodes tests all TelegramErrorCode constants
+func TestTelegramErrorCode_AllCodes(t *testing.T) {
+	codes := []struct {
+		code        TelegramErrorCode
+		expected    string
+		isRetryable bool
+	}{
+		{TelegramErrorUserBlocked, "USER_BLOCKED", false},
+		{TelegramErrorChatNotFound, "CHAT_NOT_FOUND", false},
+		{TelegramErrorRateLimited, "RATE_LIMITED", true},
+		{TelegramErrorInvalidRequest, "INVALID_REQUEST", false},
+		{TelegramErrorNetworkError, "NETWORK_ERROR", true},
+		{TelegramErrorTimeout, "TIMEOUT", true},
+		{TelegramErrorInternal, "INTERNAL_ERROR", true},
+		{TelegramErrorUnknown, "UNKNOWN", false},
+	}
+
+	for _, tc := range codes {
+		t.Run(string(tc.code), func(t *testing.T) {
+			assert.Equal(t, TelegramErrorCode(tc.expected), tc.code)
+			assert.Equal(t, tc.isRetryable, isRetryableError(tc.code))
+		})
+	}
+}
+
+// TestNotificationService_formatArbitrageMessage_AllTypes tests all opportunity types
+func TestNotificationService_formatArbitrageMessage_AllTypes(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	types := []struct {
+		oppType        string
+		expectedHeader string
+	}{
+		{"arbitrage", "🚀 *True Arbitrage Opportunities*"},
+		{"technical", "📊 *Technical Analysis Signals*"},
+		{"ai_generated", "🤖 *AI-Generated Opportunities*"},
+		{"", "🚨 *Arbitrage Alert!*"},
+		{"unknown", "🚨 *Arbitrage Alert!*"},
+	}
+
+	for _, tc := range types {
+		t.Run("Type_"+tc.oppType, func(t *testing.T) {
+			opps := []ArbitrageOpportunity{
+				{
+					Symbol:          "BTC/USDT",
+					BuyExchange:     "binance",
+					SellExchange:    "coinbase",
+					BuyPrice:        50000.0,
+					SellPrice:       50500.0,
+					ProfitPercent:   1.0,
+					OpportunityType: tc.oppType,
+				},
+			}
+			message := ns.formatArbitrageMessage(opps)
+			assert.Contains(t, message, tc.expectedHeader)
+		})
+	}
+}
+
+// TestNotificationService_RetryLogic_EdgeCases tests retry logic edge cases
+func TestNotificationService_RetryLogic_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		errorCode   TelegramErrorCode
+		isRetryable bool
+		description string
+	}{
+		{
+			name:        "Rate limited should retry",
+			errorCode:   TelegramErrorRateLimited,
+			isRetryable: true,
+			description: "Rate limiting is temporary",
+		},
+		{
+			name:        "Network error should retry",
+			errorCode:   TelegramErrorNetworkError,
+			isRetryable: true,
+			description: "Network issues are usually transient",
+		},
+		{
+			name:        "Timeout should retry",
+			errorCode:   TelegramErrorTimeout,
+			isRetryable: true,
+			description: "Timeouts can be temporary",
+		},
+		{
+			name:        "Internal error should retry",
+			errorCode:   TelegramErrorInternal,
+			isRetryable: true,
+			description: "Internal errors may resolve",
+		},
+		{
+			name:        "User blocked should not retry",
+			errorCode:   TelegramErrorUserBlocked,
+			isRetryable: false,
+			description: "User action required",
+		},
+		{
+			name:        "Chat not found should not retry",
+			errorCode:   TelegramErrorChatNotFound,
+			isRetryable: false,
+			description: "Chat doesn't exist",
+		},
+		{
+			name:        "Invalid request should not retry",
+			errorCode:   TelegramErrorInvalidRequest,
+			isRetryable: false,
+			description: "Request is malformed",
+		},
+		{
+			name:        "Unknown error should not retry",
+			errorCode:   TelegramErrorUnknown,
+			isRetryable: false,
+			description: "Unknown errors are not safe to retry",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isRetryableError(tc.errorCode)
+			assert.Equal(t, tc.isRetryable, result, tc.description)
+		})
+	}
+}
+
+// TestNotificationService_HashGeneration_Consistency tests hash generation consistency
+func TestNotificationService_HashGeneration_Consistency(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	// Test that same input produces same hash
+	opps := []ArbitrageOpportunity{
+		{Symbol: "BTC/USDT", BuyExchange: "binance", SellExchange: "coinbase", ProfitPercent: 1.0},
+		{Symbol: "ETH/USDT", BuyExchange: "kraken", SellExchange: "bitfinex", ProfitPercent: 0.5},
+	}
+
+	hash1 := ns.generateOpportunityHash(opps)
+	hash2 := ns.generateOpportunityHash(opps)
+	assert.Equal(t, hash1, hash2, "Same input should produce same hash")
+
+	// Test that different input produces different hash
+	opps2 := []ArbitrageOpportunity{
+		{Symbol: "LTC/USDT", BuyExchange: "binance", SellExchange: "coinbase", ProfitPercent: 1.0},
+	}
+	hash3 := ns.generateOpportunityHash(opps2)
+	assert.NotEqual(t, hash1, hash3, "Different input should produce different hash")
+}
+
+// TestNotificationService_TechnicalSignalMessage_AllScenarios tests all technical signal scenarios
+func TestNotificationService_TechnicalSignalMessage_AllScenarios(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	tests := []struct {
+		name           string
+		signals        []TechnicalSignalNotification
+		expectedParts  []string
+		unexpectedPart string
+	}{
+		{
+			name:          "Empty signals",
+			signals:       []TechnicalSignalNotification{},
+			expectedParts: []string{"No technical analysis signals found."},
+		},
+		{
+			name:    "Single buy signal",
+			signals: []TechnicalSignalNotification{{Symbol: "BTC/USDT", Action: "buy", SignalText: "RSI oversold", Confidence: 0.85}},
+			expectedParts: []string{
+				"📊 *Technical Analysis Signals*",
+				"BTC/USDT",
+				"RSI oversold",
+				"85.0%",
+			},
+		},
+		{
+			name:    "Sell signal with targets",
+			signals: []TechnicalSignalNotification{{Symbol: "ETH/USDT", Action: "sell", SignalText: "MACD crossover", Confidence: 0.75, Targets: []Target{{Price: 3000.0, Profit: 5.0}}}},
+			expectedParts: []string{
+				"📊 *Technical Analysis Signals*",
+				"ETH/USDT",
+				"MACD crossover",
+			},
+		},
+		{
+			name:    "Signal with stop loss",
+			signals: []TechnicalSignalNotification{{Symbol: "ADA/USDT", Action: "buy", SignalText: "Support bounce", Confidence: 0.65, StopLoss: StopLoss{Price: 0.45, Risk: 2.0}}},
+			expectedParts: []string{
+				"📊 *Technical Analysis Signals*",
+				"ADA/USDT",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			message := ns.formatTechnicalSignalMessage(tc.signals)
+			for _, part := range tc.expectedParts {
+				assert.Contains(t, message, part)
+			}
+			if tc.unexpectedPart != "" {
+				assert.NotContains(t, message, tc.unexpectedPart)
+			}
+		})
+	}
+}
+
+// TestNotificationService_CacheOperations_NilRedis tests cache operations with nil Redis
+func TestNotificationService_CacheOperations_NilRedis(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	t.Run("GetCacheStats with nil Redis", func(t *testing.T) {
+		stats := ns.GetCacheStats(context.Background())
+		assert.NotNil(t, stats)
+		assert.False(t, stats["redis_available"].(bool))
+	})
+
+	t.Run("InvalidateUserCache with nil Redis", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			ns.InvalidateUserCache(context.Background())
+		})
+	})
+
+	t.Run("InvalidateOpportunityCache with nil Redis", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			ns.InvalidateOpportunityCache(context.Background())
+		})
+	})
+
+	t.Run("CacheMarketData with nil Redis", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			ns.CacheMarketData(context.Background(), "binance", map[string]interface{}{"test": true})
+		})
+	})
+
+	t.Run("PublishOpportunityUpdate with nil Redis", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			ns.PublishOpportunityUpdate(context.Background(), []ArbitrageOpportunity{})
+		})
+	})
+
+	t.Run("getCachedMessage with nil Redis", func(t *testing.T) {
+		message, found := ns.getCachedMessage(context.Background(), "type", "hash")
+		assert.Empty(t, message)
+		assert.False(t, found)
+	})
+
+	t.Run("setCachedMessage with nil Redis", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			ns.setCachedMessage(context.Background(), "type", "hash", "message")
+		})
+	})
+}
+
+// TestNotificationService_ConvertAggregatedSignal_AllCases tests signal conversion
+func TestNotificationService_ConvertAggregatedSignal_AllCases(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	tests := []struct {
+		name           string
+		signal         *AggregatedSignal
+		expectedAction string
+		expectedSymbol string
+	}{
+		{
+			name: "Buy signal",
+			signal: &AggregatedSignal{
+				Symbol:     "BTC/USDT",
+				Action:     "buy",
+				Confidence: decimal.NewFromFloat(0.85),
+				Indicators: []string{"RSI"},
+				Metadata:   map[string]interface{}{"current_price": 50000.0},
+			},
+			expectedAction: "buy",
+			expectedSymbol: "BTC/USDT",
+		},
+		{
+			name: "Sell signal",
+			signal: &AggregatedSignal{
+				Symbol:     "ETH/USDT",
+				Action:     "sell",
+				Confidence: decimal.NewFromFloat(0.75),
+				Indicators: []string{"MACD", "BB"},
+				Metadata:   map[string]interface{}{"current_price": 3000.0},
+			},
+			expectedAction: "sell",
+			expectedSymbol: "ETH/USDT",
+		},
+		{
+			name: "Signal with timeframe",
+			signal: &AggregatedSignal{
+				Symbol:     "ADA/USDT",
+				Action:     "buy",
+				Confidence: decimal.NewFromFloat(0.65),
+				Indicators: []string{"EMA"},
+				Metadata:   map[string]interface{}{"current_price": 0.5, "timeframe": "1H"},
+			},
+			expectedAction: "buy",
+			expectedSymbol: "ADA/USDT",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			notification := ns.ConvertAggregatedSignalToNotification(tc.signal)
+			assert.NotNil(t, notification)
+			assert.Equal(t, tc.expectedSymbol, notification.Symbol)
+			assert.Equal(t, tc.expectedAction, notification.Action)
+		})
+	}
+}
+
+// TestNotificationService_FormatEnhancedArbitrageMessage_EdgeCases tests edge cases
+func TestNotificationService_FormatEnhancedArbitrageMessage_EdgeCases(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	t.Run("Nil signal", func(t *testing.T) {
+		message := ns.formatEnhancedArbitrageMessage(nil)
+		assert.Equal(t, "No arbitrage signal found.", message)
+	})
+
+	t.Run("Non-arbitrage signal type", func(t *testing.T) {
+		signal := &AggregatedSignal{
+			Symbol:     "BTC/USDT",
+			SignalType: SignalTypeTechnical,
+		}
+		message := ns.formatEnhancedArbitrageMessage(signal)
+		assert.Equal(t, "No arbitrage signal found.", message)
+	})
+
+	t.Run("Arbitrage signal with minimal metadata", func(t *testing.T) {
+		signal := &AggregatedSignal{
+			Symbol:     "BTC/USDT",
+			SignalType: SignalTypeArbitrage,
+			Confidence: decimal.NewFromFloat(0.80),
+			Metadata:   map[string]interface{}{},
+		}
+		message := ns.formatEnhancedArbitrageMessage(signal)
+		assert.Contains(t, message, "BTC/USDT")
+	})
+}
+
+// TestNotificationService_AggregatedMessages_EmptyInputs tests aggregated messages with empty inputs
+func TestNotificationService_AggregatedMessages_EmptyInputs(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	t.Run("Empty arbitrage signals", func(t *testing.T) {
+		message := ns.formatAggregatedArbitrageMessage([]*AggregatedSignal{})
+		assert.Equal(t, "🔍 No arbitrage opportunities available", message)
+	})
+
+	t.Run("Empty technical signals", func(t *testing.T) {
+		message := ns.formatAggregatedTechnicalMessage([]*AggregatedSignal{})
+		assert.Equal(t, "📊 No technical analysis signals available", message)
+	})
+
+	t.Run("Nil arbitrage signals", func(t *testing.T) {
+		message := ns.formatAggregatedArbitrageMessage(nil)
+		assert.Equal(t, "🔍 No arbitrage opportunities available", message)
+	})
+
+	t.Run("Nil technical signals", func(t *testing.T) {
+		message := ns.formatAggregatedTechnicalMessage(nil)
+		assert.Equal(t, "📊 No technical analysis signals available", message)
+	})
+}
+
+// TestNotificationService_Context_Handling tests context handling
+func TestNotificationService_Context_Handling(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	t.Run("Cancelled context for rate limit", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		allowed, err := ns.checkRateLimit(ctx, "user123")
+		assert.Error(t, err)
+		assert.False(t, allowed)
+	})
+
+	t.Run("Timeout context for cache", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+		defer cancel()
+		time.Sleep(2 * time.Nanosecond) // Ensure timeout
+
+		message, found := ns.getCachedMessage(ctx, "type", "hash")
+		assert.Empty(t, message)
+		assert.False(t, found)
+	})
+}
+
+// TestTelegramSendResult_AllScenarios tests all TelegramSendResult scenarios
+func TestTelegramSendResult_AllScenarios(t *testing.T) {
+	tests := []struct {
+		name   string
+		result TelegramSendResult
+	}{
+		{
+			name:   "Successful send",
+			result: TelegramSendResult{OK: true, MessageID: "12345"},
+		},
+		{
+			name:   "User blocked",
+			result: TelegramSendResult{OK: false, Error: "Forbidden: bot was blocked by the user", ErrorCode: TelegramErrorUserBlocked},
+		},
+		{
+			name:   "Rate limited",
+			result: TelegramSendResult{OK: false, Error: "Too Many Requests: retry after 60", ErrorCode: TelegramErrorRateLimited, RetryAfter: 60},
+		},
+		{
+			name:   "Chat not found",
+			result: TelegramSendResult{OK: false, Error: "Bad Request: chat not found", ErrorCode: TelegramErrorChatNotFound},
+		},
+		{
+			name:   "Network error",
+			result: TelegramSendResult{OK: false, Error: "Connection refused", ErrorCode: TelegramErrorNetworkError},
+		},
+		{
+			name:   "Timeout",
+			result: TelegramSendResult{OK: false, Error: "Context deadline exceeded", ErrorCode: TelegramErrorTimeout},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Verify struct is valid and accessible
+			assert.NotPanics(t, func() {
+				_ = tc.result.OK
+				_ = tc.result.MessageID
+				_ = tc.result.Error
+				_ = tc.result.ErrorCode
+				_ = tc.result.RetryAfter
+			})
+		})
+	}
+}
+
+// TestNotificationService_AggregatedSignalsHash_Ordering tests hash is consistent regardless of order
+func TestNotificationService_AggregatedSignalsHash_Ordering(t *testing.T) {
+	ns := NewNotificationService(nil, nil, "", "", "")
+
+	signal1 := &AggregatedSignal{Symbol: "BTC/USDT", Action: "buy", Confidence: decimal.NewFromFloat(0.85)}
+	signal2 := &AggregatedSignal{Symbol: "ETH/USDT", Action: "sell", Confidence: decimal.NewFromFloat(0.75)}
+
+	// Same signals in different order
+	signals1 := []*AggregatedSignal{signal1, signal2}
+	signals2 := []*AggregatedSignal{signal2, signal1}
+
+	hash1 := ns.generateAggregatedSignalsHash(signals1)
+	hash2 := ns.generateAggregatedSignalsHash(signals2)
+
+	// Hashes should be equal because signals are sorted internally
+	assert.Equal(t, hash1, hash2, "Hash should be consistent regardless of input order")
+	assert.Len(t, hash1, 64, "SHA256 hash should be 64 characters")
+}
