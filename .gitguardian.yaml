@@ -33,6 +33,8 @@ secrets:
       match: admin-secret-key-change-me
     - name: admin-dev-key-change-in-production
       match: admin-dev-key-change-in-production
+    - name: docker-compose-changeme-default
+      match: changeme
   ignored-paths:
     # Test files commonly use fake credentials
     - "**/*_test.go"
