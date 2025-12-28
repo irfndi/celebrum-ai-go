@@ -75,15 +75,19 @@ export const handleStart = (api: Api) => async (ctx: Context) => {
       }
     } catch (error) {
       if (isApiError(error)) {
-        console.error(`[Start] Registration failed: ${error.type} - ${error.message}`);
-        registrationError = error.type === "network_error"
-          ? "Unable to connect to the server. Please try again later."
-          : error.type === "server_error"
-            ? "Server is temporarily unavailable. Please try again in a few minutes."
-            : error.message;
+        console.error(
+          `[Start] Registration failed: ${error.type} - ${error.message}`,
+        );
+        registrationError =
+          error.type === "network_error"
+            ? "Unable to connect to the server. Please try again later."
+            : error.type === "server_error"
+              ? "Server is temporarily unavailable. Please try again in a few minutes."
+              : error.message;
       } else {
         console.error("[Start] Unexpected registration error:", error);
-        registrationError = "An unexpected error occurred. Please try again later.";
+        registrationError =
+          "An unexpected error occurred. Please try again later.";
       }
     }
 
@@ -130,12 +134,15 @@ export const handleOpportunities = (api: Api) => async (ctx: Context) => {
     let errorMessage = "An unexpected error occurred.";
 
     if (isApiError(error)) {
-      console.error(`[Opportunities] API error: ${error.type} - ${error.message}`);
-      errorMessage = error.type === "network_error"
-        ? "Unable to connect to the server."
-        : error.type === "server_error"
-          ? "Server is temporarily unavailable."
-          : error.message;
+      console.error(
+        `[Opportunities] API error: ${error.type} - ${error.message}`,
+      );
+      errorMessage =
+        error.type === "network_error"
+          ? "Unable to connect to the server."
+          : error.type === "server_error"
+            ? "Server is temporarily unavailable."
+            : error.message;
     } else {
       console.error("[Opportunities] Unexpected error:", error);
     }

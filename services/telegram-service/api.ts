@@ -30,17 +30,17 @@ export const isApiError = (error: unknown): error is ApiError => {
   }
 
   // Check for Effect's wrapped error (UnknownException with cause)
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "cause" in error
-  ) {
+  if (typeof error === "object" && error !== null && "cause" in error) {
     const cause = (error as { cause: unknown }).cause;
     // The cause might be an Error with message containing our ApiError JSON
     if (cause instanceof Error && cause.message) {
       try {
         const parsed = JSON.parse(cause.message);
-        if (parsed && typeof parsed.type === "string" && typeof parsed.message === "string") {
+        if (
+          parsed &&
+          typeof parsed.type === "string" &&
+          typeof parsed.message === "string"
+        ) {
           // Copy the parsed ApiError properties to the error object for easier access
           Object.assign(error, parsed);
           return true;
