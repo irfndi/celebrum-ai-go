@@ -110,9 +110,15 @@ func fitAR1(series []float64) (phi float64, c float64) {
 
 // garch11Forecast computes forecasted variance using simple GARCH(1,1) parameters.
 // For GARCH(1,1) stationarity, alpha + beta must be < 1.
+// Maximum horizon is capped at 10000 to prevent excessive memory allocation.
 func garch11Forecast(returns []float64, horizon int, omega float64, alpha float64, beta float64) []float64 {
+	// Bounds check to prevent excessive memory allocation
+	const maxHorizon = 10000
 	if horizon <= 0 {
 		return nil
+	}
+	if horizon > maxHorizon {
+		horizon = maxHorizon
 	}
 
 	// GARCH(1,1) stationarity constraint: alpha + beta < 1

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -280,6 +281,13 @@ func (c *Client) GetTickers(ctx context.Context, req *TickersRequest) (*TickersR
 
 // GetOrderBook retrieves order book data for a specific exchange and symbol.
 func (c *Client) GetOrderBook(ctx context.Context, exchange, symbol string, limit int) (*OrderBookResponse, error) {
+	// Bounds check for int32 conversion to prevent overflow
+	if limit < 0 {
+		limit = 0
+	} else if limit > math.MaxInt32 {
+		limit = math.MaxInt32
+	}
+
 	// Try gRPC first
 	if c.IsGRPCEnabled() {
 		resp, err := c.grpcClient.GetOrderBook(ctx, &pb.GetOrderBookRequest{
