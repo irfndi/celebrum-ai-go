@@ -187,7 +187,7 @@ func TestTelegramInternalHandler_GetUserByChatID_Success(t *testing.T) {
 	defer mockDB.Close()
 
 	// Create UserHandler with querier for testing
-	userHandler := NewUserHandlerWithQuerier(mockDB, nil)
+	userHandler := NewUserHandlerWithQuerier(mockDB, nil, &MockTokenGenerator{})
 	handler := NewTelegramInternalHandler(mockDB, userHandler)
 
 	chatID := "123456789"
@@ -226,7 +226,7 @@ func TestTelegramInternalHandler_GetUserByChatID_NotFound(t *testing.T) {
 	assert.NoError(t, err)
 	defer mockDB.Close()
 
-	userHandler := NewUserHandlerWithQuerier(mockDB, nil)
+	userHandler := NewUserHandlerWithQuerier(mockDB, nil, &MockTokenGenerator{})
 	handler := NewTelegramInternalHandler(mockDB, userHandler)
 
 	chatID := "nonexistent123"
@@ -282,7 +282,7 @@ func TestTelegramInternalHandler_GetUserByChatID_DatabaseError(t *testing.T) {
 	assert.NoError(t, err)
 	defer mockDB.Close()
 
-	userHandler := NewUserHandlerWithQuerier(mockDB, nil)
+	userHandler := NewUserHandlerWithQuerier(mockDB, nil, &MockTokenGenerator{})
 	handler := NewTelegramInternalHandler(mockDB, userHandler)
 
 	chatID := "123456789"

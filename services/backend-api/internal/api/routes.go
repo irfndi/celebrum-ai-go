@@ -68,7 +68,7 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 	}
 
 	// Initialize user and telegram internal handlers early for internal routes
-	userHandler := handlers.NewUserHandler(db, redis.Client)
+	userHandler := handlers.NewUserHandler(db, redis.Client, authMiddleware)
 	telegramInternalHandler := handlers.NewTelegramInternalHandler(db, userHandler)
 
 	// Internal service-to-service routes (no auth, network-isolated via Docker)
