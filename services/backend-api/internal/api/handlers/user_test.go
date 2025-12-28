@@ -417,7 +417,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs(&newChatID, "telegram_12345@celebrum.ai").
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:          "telegram_12345@celebrum.ai",
@@ -475,7 +475,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			WithArgs(&newChatID, "telegram_12345@celebrum.ai").
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:          "telegram_12345@celebrum.ai",
@@ -528,7 +528,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 
 		// No UPDATE expected since chat ID is the same
 
-		handler := NewUserHandlerWithQuerier(mock, nil)
+		handler := NewUserHandlerWithQuerier(mock, nil, &MockTokenGenerator{})
 
 		user := RegisterRequest{
 			Email:          "telegram_12345@celebrum.ai",
@@ -2353,4 +2353,3 @@ func TestUserHandler_CreateTelegramUser(t *testing.T) {
 		assert.Nil(t, user)
 	})
 }
-

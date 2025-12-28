@@ -249,6 +249,15 @@ func parseIntQuery(c *gin.Context, key string, fallback int) int {
 	if err != nil {
 		return fallback
 	}
+	// Bounds check to prevent excessive memory allocation
+	// Negative values get fallback, and cap at reasonable maximum (10000)
+	const maxQueryInt = 10000
+	if value < 0 {
+		return fallback
+	}
+	if value > maxQueryInt {
+		return maxQueryInt
+	}
 	return value
 }
 
