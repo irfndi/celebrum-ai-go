@@ -388,11 +388,11 @@ func TestDeadLetterService_MaxRetriesExceeded(t *testing.T) {
 	maxAttempts := 5
 
 	tests := []struct {
-		currentAttempts  int
-		errorCode        string
-		shouldBeFailed   bool
-		shouldHaveRetry  bool
-		description      string
+		currentAttempts int
+		errorCode       string
+		shouldBeFailed  bool
+		shouldHaveRetry bool
+		description     string
 	}{
 		{
 			currentAttempts: 1,
