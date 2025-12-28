@@ -153,6 +153,51 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user existence"})
 		return
 	}
+
+	// For telegram users: if user exists, update telegram_chat_id if different
+	if exists && req.TelegramChatID != nil && *req.TelegramChatID != "" {
+		existingUser, err := h.getUserByEmail(c.Request.Context(), req.Email)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch existing user"})
+			return
+		}
+
+		// If telegram_chat_id is different or NULL, update it
+		if existingUser.TelegramChatID == nil || *existingUser.TelegramChatID != *req.TelegramChatID {
+			updateQuery := `UPDATE users SET telegram_chat_id = $1, updated_at = NOW() WHERE email = $2`
+			var updateErr error
+			if h.querier != nil {
+				_, updateErr = h.querier.Exec(c.Request.Context(), updateQuery, req.TelegramChatID, req.Email)
+			} else if h.db != nil {
+				_, updateErr = h.db.Pool.Exec(c.Request.Context(), updateQuery, req.TelegramChatID, req.Email)
+			}
+			if updateErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update telegram chat ID"})
+				return
+			}
+			// Invalidate cache for old and new chat IDs
+			if h.redis != nil {
+				if existingUser.TelegramChatID != nil {
+					h.redis.Del(c.Request.Context(), fmt.Sprintf("user:telegram:%s", *existingUser.TelegramChatID))
+				}
+				h.redis.Del(c.Request.Context(), fmt.Sprintf("user:telegram:%s", *req.TelegramChatID))
+			}
+		}
+
+		// Return existing user (updated with new telegram_chat_id)
+		userResponse := UserResponse{
+			ID:               existingUser.ID,
+			Email:            existingUser.Email,
+			TelegramChatID:   req.TelegramChatID,
+			SubscriptionTier: existingUser.SubscriptionTier,
+			CreatedAt:        existingUser.CreatedAt,
+			UpdatedAt:        time.Now(),
+		}
+		c.JSON(http.StatusOK, gin.H{"user": userResponse, "already_exists": true})
+		return
+	}
+
+	// For non-telegram users: if exists, return conflict
 	if exists {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return

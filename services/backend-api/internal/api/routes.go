@@ -167,8 +167,15 @@ func SetupRoutes(router *gin.Engine, db *database.PostgresDB, redis *database.Re
 			analysis.GET("/forecast", analysisHandler.GetForecast)
 		}
 
-		// NOTE: Telegram internal routes moved to /internal/telegram/ (no auth, network-isolated)
-		// Old /api/v1/telegram/internal/* routes are deprecated
+		// Telegram internal routes - backward compatible (no auth for internal network)
+		// Both new (/internal/telegram/*) and legacy (/api/v1/telegram/internal/*) paths work
+		telegram := v1.Group("/telegram")
+		{
+			// Legacy paths kept for backward compatibility with older telegram-service versions
+			telegram.GET("/internal/users/:id", telegramInternalHandler.GetUserByChatID)
+			telegram.GET("/internal/notifications/:userId", telegramInternalHandler.GetNotificationPreferences)
+			telegram.POST("/internal/notifications/:userId", telegramInternalHandler.SetNotificationPreferences)
+		}
 
 		// User management
 		users := v1.Group("/users")
