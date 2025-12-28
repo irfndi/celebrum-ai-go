@@ -1,10 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import {
-  ApiError,
-  ApiException,
-  isApiError,
-  extractApiError,
-} from "./api";
+import { ApiError, ApiException, isApiError, extractApiError } from "./api";
 
 describe("ApiException", () => {
   test("creates ApiException with proper properties", () => {
