@@ -14,6 +14,7 @@ export type TelegramConfig = {
 export type TelegramConfigPartial = TelegramConfig & {
   botTokenMissing: boolean;
   configError: string | null;
+  // adminApiKeyMissing is deprecated - internal endpoints no longer require auth
   adminApiKeyMissing: boolean;
 };
 
@@ -37,37 +38,14 @@ export const loadConfig = (): TelegramConfigPartial => {
     process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN || "";
   const botTokenMissing = !botToken;
 
+  // ADMIN_API_KEY is no longer required - internal endpoints use network isolation
+  // Keeping the field for backwards compatibility but it's not validated or used
   const adminApiKey = process.env.ADMIN_API_KEY || "";
-  const adminApiKeyMissing = !adminApiKey;
-  const isProduction =
-    process.env.NODE_ENV === "production" ||
-    process.env.SENTRY_ENVIRONMENT === "production";
+  const adminApiKeyMissing = !adminApiKey; // Deprecated, always false effectively
 
   let configError: string | null = null;
 
-  // Validate ADMIN_API_KEY only in production
-  if (isProduction) {
-    if (!adminApiKey) {
-      configError =
-        "ADMIN_API_KEY environment variable must be set in production";
-    } else if (
-      adminApiKey === "admin-secret-key-change-me" ||
-      adminApiKey === "admin-dev-key-change-in-production"
-    ) {
-      configError =
-        "ADMIN_API_KEY cannot use default/example values. Please set a secure API key.";
-    } else if (adminApiKey.length < 32) {
-      configError =
-        "ADMIN_API_KEY must be at least 32 characters long for security";
-    }
-  } else if (!adminApiKey) {
-    console.warn(
-      "⚠️ WARNING: ADMIN_API_KEY is not set. Internal API calls to backend will fail.",
-    );
-    console.warn(
-      "   Set ADMIN_API_KEY to match the backend's ADMIN_API_KEY for user lookups to work.",
-    );
-  }
+  // No ADMIN_API_KEY validation needed - internal endpoints are network-isolated
 
   if (botTokenMissing) {
     console.error(

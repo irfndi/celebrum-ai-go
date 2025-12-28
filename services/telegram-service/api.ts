@@ -101,13 +101,14 @@ export const createApi = (config: TelegramConfigPartial) => {
       return payload as T;
     });
 
+  // Internal endpoints - no auth required (network-isolated via Docker)
   const getUserByChatId = (chatId: string) =>
     apiFetch<{
       user: { id: string; subscription_tier: string; created_at: string };
     }>(
-      `/api/v1/telegram/internal/users/${encodeURIComponent(chatId)}`,
+      `/internal/telegram/users/${encodeURIComponent(chatId)}`,
       {},
-      true,
+      false, // No admin auth needed - internal endpoint
     );
 
   const getNotificationPreference = (userId: string) =>
@@ -116,19 +117,19 @@ export const createApi = (config: TelegramConfigPartial) => {
       profit_threshold: number;
       alert_frequency: string;
     }>(
-      `/api/v1/telegram/internal/notifications/${encodeURIComponent(userId)}`,
+      `/internal/telegram/notifications/${encodeURIComponent(userId)}`,
       {},
-      true,
+      false, // No admin auth needed - internal endpoint
     );
 
   const setNotificationPreference = (userId: string, enabled: boolean) =>
     apiFetch(
-      `/api/v1/telegram/internal/notifications/${encodeURIComponent(userId)}`,
+      `/internal/telegram/notifications/${encodeURIComponent(userId)}`,
       {
         method: "POST",
         body: JSON.stringify({ enabled }),
       },
-      true,
+      false, // No admin auth needed - internal endpoint
     );
 
   const registerTelegramUser = (chatId: string, userId: number) =>
