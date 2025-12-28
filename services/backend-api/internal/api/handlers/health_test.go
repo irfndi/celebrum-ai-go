@@ -150,8 +150,9 @@ func TestHealthHandler_HealthCheck(t *testing.T) {
 	}
 }
 
-// TestHealthHandler_DegradedNonCriticalService tests that non-critical service failures
-// (CCXT, Telegram, Redis) return 200 OK with "degraded" status
+// TestHealthHandler_DegradedNonCriticalService tests that a non-critical CCXT service failure
+// returns 200 OK with a "degraded" overall health status.
+// Note: Redis failures are tested separately in the table-driven tests above (line 99-104).
 func TestHealthHandler_DegradedNonCriticalService(t *testing.T) {
 	// Set up a mock CCXT server that returns unhealthy
 	mockCCXTServer := newTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

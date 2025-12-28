@@ -158,14 +158,16 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine overall status
-	// Critical services that should cause 503 if unhealthy
+	// Critical services map - services that should cause 503 if unhealthy
+	// This centralizes the definition for maintainability
+	criticalServices := map[string]bool{"database": true}
 	criticalUnhealthy := false
 	status := "healthy"
 	for serviceName, s := range servicesStatus {
 		if s != "healthy" && s != "not configured" {
 			status = "degraded"
-			// Only database is considered critical - if it's down, return 503
-			if serviceName == "database" {
+			// Check if the unhealthy service is critical
+			if criticalServices[serviceName] {
 				criticalUnhealthy = true
 			}
 		}

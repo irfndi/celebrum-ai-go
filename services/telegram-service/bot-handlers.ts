@@ -96,9 +96,15 @@ export const handleStart = (api: Api) => async (ctx: Context) => {
     }
 
     if (!registrationSucceeded) {
+      // Format error message consistently - avoid "Error: Error:" duplication
+      const formattedError = registrationError
+        ? registrationError.startsWith("Error:")
+          ? registrationError
+          : registrationError
+        : "";
       await ctx.reply(
         "❌ Registration failed.\n\n" +
-          (registrationError ? `Error: ${registrationError}\n\n` : "") +
+          (formattedError ? `${formattedError}\n\n` : "") +
           "Please try again using /start.",
       );
       return;

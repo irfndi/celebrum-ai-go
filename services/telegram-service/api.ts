@@ -100,11 +100,15 @@ export const isApiError = (
 };
 
 // Extract ApiError from potentially wrapped errors (immutable)
+// This function unwraps nested error structures to find ApiError
 export const extractApiError = (error: unknown): ApiError | null => {
-  // Direct ApiError
+  if (error == null) {
+    return null;
+  }
+
+  // Direct ApiError check
   if (
     typeof error === "object" &&
-    error !== null &&
     "type" in error &&
     "message" in error &&
     typeof (error as ApiError).type === "string"
@@ -112,26 +116,56 @@ export const extractApiError = (error: unknown): ApiError | null => {
     return error as ApiError;
   }
 
-  // ApiException
+  // ApiException - extract the wrapped apiError
   if (error instanceof ApiException) {
     return error.apiError;
   }
 
-  // Check cache first
-  if (typeof error === "object" && error !== null) {
+  // Check cache first (populated by isApiError)
+  if (typeof error === "object") {
     const cached = extractedApiErrors.get(error);
     if (cached) {
       return cached;
     }
   }
 
-  // Try to extract (this will populate the cache)
-  if (isApiError(error)) {
-    // Check cache again after isApiError populated it
-    if (typeof error === "object" && error !== null) {
-      return extractedApiErrors.get(error) ?? (error as ApiError);
+  // Follow Effect-style or generic error chaining via `cause`
+  if (
+    typeof error === "object" &&
+    "cause" in error &&
+    (error as { cause: unknown }).cause !== error // Prevent self-reference
+  ) {
+    const cause = (error as { cause: unknown }).cause;
+    const extractedFromCause = extractApiError(cause);
+    if (extractedFromCause) {
+      // Cache the result for future lookups
+      extractedApiErrors.set(error, extractedFromCause);
+      return extractedFromCause;
     }
-    return error as ApiError;
+  }
+
+  // Try to parse Error.message as JSON-encoded ApiError
+  if (error instanceof Error && error.message) {
+    try {
+      const parsed = JSON.parse(error.message);
+      if (
+        parsed &&
+        typeof parsed.type === "string" &&
+        typeof parsed.message === "string"
+      ) {
+        const apiError: ApiError = {
+          type: parsed.type as ApiErrorType,
+          message: parsed.message,
+          status: typeof parsed.status === "number" ? parsed.status : undefined,
+          code: typeof parsed.code === "string" ? parsed.code : undefined,
+        };
+        // Cache the result
+        extractedApiErrors.set(error, apiError);
+        return apiError;
+      }
+    } catch {
+      // Not JSON or not ApiError-shaped; fall through
+    }
   }
 
   return null;

@@ -170,6 +170,51 @@ describe("extractApiError", () => {
     expect(second).toEqual(apiError);
     expect(first).toBe(second); // Should be same object from cache
   });
+
+  test("extracts from deeply nested cause chain", () => {
+    const apiError: ApiError = {
+      type: "auth_failed",
+      message: "Token expired",
+      status: 401,
+    };
+    const deeplyNested = {
+      cause: {
+        cause: new Error(JSON.stringify(apiError)),
+      },
+    };
+    const extracted = extractApiError(deeplyNested);
+    expect(extracted).toEqual(apiError);
+  });
+
+  test("extracts from Error with JSON message directly", () => {
+    const apiError: ApiError = {
+      type: "server_error",
+      message: "Database connection failed",
+      status: 500,
+      code: "DB_ERROR",
+    };
+    const jsonError = new Error(JSON.stringify(apiError));
+    const extracted = extractApiError(jsonError);
+    expect(extracted).toEqual(apiError);
+  });
+
+  test("handles self-referencing cause", () => {
+    const selfRef: any = { cause: null };
+    selfRef.cause = selfRef;
+    // Should not infinite loop
+    expect(extractApiError(selfRef)).toBeNull();
+  });
+
+  test("extracts ApiException from cause chain", () => {
+    const apiError: ApiError = {
+      type: "network_error",
+      message: "Connection refused",
+    };
+    const exception = new ApiException(apiError);
+    const wrapped = { cause: exception };
+    const extracted = extractApiError(wrapped);
+    expect(extracted).toEqual(apiError);
+  });
 });
 
 describe("ApiError types", () => {
