@@ -16,14 +16,52 @@ export interface ApiError {
   code?: string;
 }
 
-// Type guard for ApiError
+// Type guard for ApiError - also handles Effect's wrapped errors
 export const isApiError = (error: unknown): error is ApiError => {
-  return (
+  // Direct ApiError check
+  if (
     typeof error === "object" &&
     error !== null &&
     "type" in error &&
-    "message" in error
-  );
+    "message" in error &&
+    typeof (error as ApiError).type === "string"
+  ) {
+    return true;
+  }
+
+  // Check for Effect's wrapped error (UnknownException with cause)
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "cause" in error
+  ) {
+    const cause = (error as { cause: unknown }).cause;
+    // The cause might be an Error with message containing our ApiError JSON
+    if (cause instanceof Error && cause.message) {
+      try {
+        const parsed = JSON.parse(cause.message);
+        if (parsed && typeof parsed.type === "string" && typeof parsed.message === "string") {
+          // Copy the parsed ApiError properties to the error object for easier access
+          Object.assign(error, parsed);
+          return true;
+        }
+      } catch {
+        // Not JSON, continue
+      }
+    }
+    // Direct ApiError in cause
+    return isApiError(cause);
+  }
+
+  return false;
+};
+
+// Extract ApiError from potentially wrapped errors
+export const extractApiError = (error: unknown): ApiError | null => {
+  if (isApiError(error)) {
+    return error as ApiError;
+  }
+  return null;
 };
 
 export const createApi = (config: TelegramConfigPartial) => {
@@ -57,7 +95,8 @@ export const createApi = (config: TelegramConfigPartial) => {
           type: "network_error",
           message: "Network error: Unable to connect to backend API",
         };
-        throw apiError;
+        // Throw as Error with JSON message for proper extraction from Effect wrapper
+        throw new Error(JSON.stringify(apiError));
       }
 
       const payload = await response
@@ -95,7 +134,8 @@ export const createApi = (config: TelegramConfigPartial) => {
           message,
           code: payload?.code,
         };
-        throw apiError;
+        // Throw as Error with JSON message for proper extraction from Effect wrapper
+        throw new Error(JSON.stringify(apiError));
       }
 
       return payload as T;

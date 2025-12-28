@@ -104,6 +104,27 @@ describe("Bot Handlers", () => {
     expect(ctx.reply).toHaveBeenCalled();
   });
 
+  test("handleStart shows error when registration fails", async () => {
+    const api = createMockApi();
+    // Simulate user not found first
+    (api.getUserByChatId as any).mockImplementationOnce(() =>
+      Effect.fail(new Error("Not found")),
+    );
+    // Simulate registration failure
+    (api.registerTelegramUser as any).mockImplementationOnce(() =>
+      Effect.fail(new Error("Registration failed")),
+    );
+
+    const ctx = createMockContext();
+    await handleStart(api)(ctx);
+
+    expect(api.getUserByChatId).toHaveBeenCalled();
+    expect(api.registerTelegramUser).toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalled();
+    // Should show error message, not welcome message
+    expect(ctx.reply.mock.calls[0][0]).toContain("Registration failed");
+  });
+
   test("handleHelp sends help message", async () => {
     const api = createMockApi(); // Not used but needed for consistent setup if we change help signature
     const ctx = createMockContext();

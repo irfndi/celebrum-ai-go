@@ -158,11 +158,16 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine overall status
+	// Critical services that should cause 503 if unhealthy
+	criticalUnhealthy := false
 	status := "healthy"
-	for _, s := range servicesStatus {
+	for serviceName, s := range servicesStatus {
 		if s != "healthy" && s != "not configured" {
 			status = "degraded"
-			break
+			// Only database is considered critical - if it's down, return 503
+			if serviceName == "database" {
+				criticalUnhealthy = true
+			}
 		}
 	}
 	span.SetTag("overall.status", status)
@@ -189,7 +194,10 @@ func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if status != "healthy" {
+	// Only return 503 if critical services (database) are unhealthy
+	// This allows the service to remain available for degraded operation
+	// when non-critical services (CCXT, Telegram) are temporarily unavailable
+	if criticalUnhealthy {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		span.Status = sentry.SpanStatusUnavailable
 	} else {
