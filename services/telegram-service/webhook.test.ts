@@ -64,9 +64,13 @@ describe("Webhook secret token validation logic", () => {
     };
 
     // Valid matching secret
-    expect(validateSecretToken("my-secret-token-123", "my-secret-token-123")).toBe(true);
+    expect(
+      validateSecretToken("my-secret-token-123", "my-secret-token-123"),
+    ).toBe(true);
     // Mismatched secret
-    expect(validateSecretToken("my-secret-token-123", "wrong-secret")).toBe(false);
+    expect(validateSecretToken("my-secret-token-123", "wrong-secret")).toBe(
+      false,
+    );
     // Empty provided secret
     expect(validateSecretToken("my-secret-token-123", "")).toBe(false);
     // No configured secret (validation skipped)
