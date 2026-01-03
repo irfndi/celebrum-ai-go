@@ -62,6 +62,8 @@ describe("TelegramGrpcServer", () => {
         errorCode: TelegramErrorCode.INVALID_REQUEST,
         retryAfter: 0,
       });
+      // Verify bot API was NOT called on validation failure
+      expect(mockBot.api.sendMessageMock).not.toHaveBeenCalled();
     });
 
     test("returns error when text is missing", () => {
@@ -81,6 +83,8 @@ describe("TelegramGrpcServer", () => {
         errorCode: TelegramErrorCode.INVALID_REQUEST,
         retryAfter: 0,
       });
+      // Verify bot API was NOT called on validation failure
+      expect(mockBot.api.sendMessageMock).not.toHaveBeenCalled();
     });
 
     test("returns error when both chatId and text are missing", () => {
@@ -96,6 +100,8 @@ describe("TelegramGrpcServer", () => {
         errorCode: TelegramErrorCode.INVALID_REQUEST,
         retryAfter: 0,
       });
+      // Verify bot API was NOT called on validation failure
+      expect(mockBot.api.sendMessageMock).not.toHaveBeenCalled();
     });
   });
 
