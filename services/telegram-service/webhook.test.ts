@@ -7,7 +7,9 @@ import "./test-setup"; // Load test environment variables
 describe("Webhook configuration validation", () => {
   test("webhook path is configurable via environment variable", () => {
     // test-setup.ts sets TELEGRAM_WEBHOOK_URL
-    expect(process.env.TELEGRAM_WEBHOOK_URL).toBe("https://example.com/webhook");
+    expect(process.env.TELEGRAM_WEBHOOK_URL).toBe(
+      "https://example.com/webhook",
+    );
   });
 
   test("webhook secret can be set via environment variable", () => {

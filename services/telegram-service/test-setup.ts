@@ -62,9 +62,14 @@ mock.module("grammy", () => {
 
     constructor(
       message: string,
-      payload: { ok: false; error_code: number; description: string; parameters?: any },
+      payload: {
+        ok: false;
+        error_code: number;
+        description: string;
+        parameters?: any;
+      },
       method: string,
-      params: any
+      params: any,
     ) {
       super(message);
       this.name = "GrammyError";

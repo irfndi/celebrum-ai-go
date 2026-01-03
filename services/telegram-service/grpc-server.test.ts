@@ -5,9 +5,11 @@ import type * as grpc from "@grpc/grpc-js";
 
 // Mock Bot class
 class MockApi {
-  sendMessageMock = mock(async (chatId: string | number, text: string, options?: any) => {
-    return { message_id: 123, chat: { id: chatId }, text };
-  });
+  sendMessageMock = mock(
+    async (chatId: string | number, text: string, options?: any) => {
+      return { message_id: 123, chat: { id: chatId }, text };
+    },
+  );
 
   async sendMessage(chatId: string | number, text: string, options?: any) {
     return this.sendMessageMock(chatId, text, options);
@@ -63,7 +65,11 @@ describe("TelegramGrpcServer", () => {
     });
 
     test("returns error when text is missing", () => {
-      const call = createMockCall({ chatId: "123456", text: "", parseMode: "" });
+      const call = createMockCall({
+        chatId: "123456",
+        text: "",
+        parseMode: "",
+      });
       const callback = createMockCallback();
 
       server.sendMessage(call as any, callback as any);
@@ -98,7 +104,7 @@ describe("TelegramGrpcServer", () => {
       const call = createMockCall({
         chatId: "123456",
         text: "Hello World",
-        parseMode: "HTML"
+        parseMode: "HTML",
       });
       const callback = createMockCallback();
 
@@ -126,7 +132,7 @@ describe("TelegramGrpcServer", () => {
       const call = createMockCall({
         chatId: "123456",
         text: "<b>Bold</b>",
-        parseMode: "HTML"
+        parseMode: "HTML",
       });
       const callback = createMockCallback();
 
@@ -144,7 +150,7 @@ describe("TelegramGrpcServer", () => {
       expect(mockBot.api.sendMessageMock).toHaveBeenCalledWith(
         "123456",
         "<b>Bold</b>",
-        { parse_mode: "HTML" }
+        { parse_mode: "HTML" },
       );
     });
   });
@@ -154,7 +160,7 @@ describe("TelegramGrpcServer", () => {
       const call = createMockCall({
         chatId: "blocked-user",
         text: "Hello",
-        parseMode: ""
+        parseMode: "",
       });
       const callback = createMockCallback();
 
@@ -176,7 +182,7 @@ describe("TelegramGrpcServer", () => {
       const call = createMockCall({
         chatId: "123456",
         text: "Hello",
-        parseMode: ""
+        parseMode: "",
       });
       const callback = createMockCallback();
 
