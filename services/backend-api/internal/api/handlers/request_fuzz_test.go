@@ -29,7 +29,7 @@ func FuzzRegisterRequest(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, input string) {
 		gin.SetMode(gin.TestMode)
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -65,7 +65,7 @@ func FuzzLoginRequest(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, input string) {
 		gin.SetMode(gin.TestMode)
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -172,7 +172,7 @@ func FuzzContentTypeHandling(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, contentType, body string) {
 		gin.SetMode(gin.TestMode)
-		handler := NewUserHandler(nil, nil)
+		handler := NewUserHandler(nil, nil, nil)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
