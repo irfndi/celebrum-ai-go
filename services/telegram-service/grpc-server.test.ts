@@ -106,7 +106,6 @@ describe("TelegramGrpcServer", () => {
         text: "Hello World",
         parseMode: "HTML",
       });
-      const callback = createMockCallback();
 
       mockBot.api.sendMessageMock.mockResolvedValueOnce({
         message_id: 456,
@@ -114,17 +113,19 @@ describe("TelegramGrpcServer", () => {
         text: "Hello World",
       });
 
-      server.sendMessage(call as any, callback as any);
-
-      // Wait for async operation
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      expect(callback).toHaveBeenCalledWith(null, {
-        ok: true,
-        messageId: "456",
-        error: "",
-        errorCode: "",
-        retryAfter: 0,
+      // Use Promise-based waiting for async operation
+      await new Promise<void>((resolve) => {
+        const callback = mock((err: any, resp: any) => {
+          expect(resp).toEqual({
+            ok: true,
+            messageId: "456",
+            error: "",
+            errorCode: "",
+            retryAfter: 0,
+          });
+          resolve();
+        });
+        server.sendMessage(call as any, callback as any);
       });
     });
 
@@ -134,7 +135,6 @@ describe("TelegramGrpcServer", () => {
         text: "<b>Bold</b>",
         parseMode: "HTML",
       });
-      const callback = createMockCallback();
 
       mockBot.api.sendMessageMock.mockResolvedValueOnce({
         message_id: 789,
@@ -142,10 +142,13 @@ describe("TelegramGrpcServer", () => {
         text: "<b>Bold</b>",
       });
 
-      server.sendMessage(call as any, callback as any);
-
-      // Wait for async operation
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Use Promise-based waiting for async operation
+      await new Promise<void>((resolve) => {
+        const callback = mock((err: any, resp: any) => {
+          resolve();
+        });
+        server.sendMessage(call as any, callback as any);
+      });
 
       expect(mockBot.api.sendMessageMock).toHaveBeenCalledWith(
         "123456",
@@ -162,20 +165,19 @@ describe("TelegramGrpcServer", () => {
         text: "Hello",
         parseMode: "",
       });
-      const callback = createMockCallback();
 
       const error = new Error("Some error occurred");
       mockBot.api.sendMessageMock.mockRejectedValue(error);
 
-      server.sendMessage(call as any, callback as any);
-
-      // Wait for async operation and retries (gRPC has 2 retries with 500ms initial delay)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      expect(callback).toHaveBeenCalled();
-      const callArgs = (callback as any).mock.calls[0];
-      expect(callArgs[1].ok).toBe(false);
-      expect(callArgs[1].error).toBeDefined();
+      // Use Promise-based waiting with timeout for retry scenarios
+      await new Promise<void>((resolve) => {
+        const callback = mock((err: any, resp: any) => {
+          expect(resp.ok).toBe(false);
+          expect(resp.error).toBeDefined();
+          resolve();
+        });
+        server.sendMessage(call as any, callback as any);
+      });
     });
 
     test("retries on network errors and can succeed", async () => {
@@ -184,7 +186,6 @@ describe("TelegramGrpcServer", () => {
         text: "Hello",
         parseMode: "",
       });
-      const callback = createMockCallback();
 
       // First call fails with network error (retryable), second succeeds
       mockBot.api.sendMessageMock
@@ -195,15 +196,15 @@ describe("TelegramGrpcServer", () => {
           text: "Hello",
         });
 
-      server.sendMessage(call as any, callback as any);
-
-      // Wait for retries (network errors are retryable)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      expect(callback).toHaveBeenCalled();
-      const callArgs = (callback as any).mock.calls[0];
-      expect(callArgs[1].ok).toBe(true);
-      expect(callArgs[1].messageId).toBe("999");
+      // Use Promise-based waiting for retry operation
+      await new Promise<void>((resolve) => {
+        const callback = mock((err: any, resp: any) => {
+          expect(resp.ok).toBe(true);
+          expect(resp.messageId).toBe("999");
+          resolve();
+        });
+        server.sendMessage(call as any, callback as any);
+      });
     });
   });
 

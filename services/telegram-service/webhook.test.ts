@@ -51,29 +51,26 @@ describe("Webhook path resolution", () => {
 });
 
 describe("Webhook secret token validation logic", () => {
-  test("should match exact secret token", () => {
-    const configuredSecret = "my-secret-token-123";
-    const providedSecret = "my-secret-token-123";
-    expect(providedSecret === configuredSecret).toBe(true);
-  });
+  test("validates secret token matching behavior", () => {
+    // Test the validation logic pattern used in webhook handlers
+    const validateSecretToken = (
+      configured: string | null,
+      provided: string,
+    ): boolean => {
+      // When no secret is configured, validation is skipped and any provided token is accepted
+      if (!configured) return true;
+      // When secret is configured, it must match exactly
+      return provided === configured;
+    };
 
-  test("should reject mismatched secret token", () => {
-    const configuredSecret: string = "my-secret-token-123";
-    const providedSecret: string = "wrong-secret";
-    expect(providedSecret === configuredSecret).toBe(false);
-  });
-
-  test("should reject empty secret token", () => {
-    const configuredSecret: string = "my-secret-token-123";
-    const providedSecret: string = "";
-    expect(providedSecret === configuredSecret).toBe(false);
-  });
-
-  test("should handle null secret gracefully", () => {
-    const configuredSecret: string | null = null;
-    const providedSecret = "some-token";
-    // When no secret is configured, validation is skipped
-    expect(!configuredSecret).toBe(true);
+    // Valid matching secret
+    expect(validateSecretToken("my-secret-token-123", "my-secret-token-123")).toBe(true);
+    // Mismatched secret
+    expect(validateSecretToken("my-secret-token-123", "wrong-secret")).toBe(false);
+    // Empty provided secret
+    expect(validateSecretToken("my-secret-token-123", "")).toBe(false);
+    // No configured secret (validation skipped)
+    expect(validateSecretToken(null, "any-token")).toBe(true);
   });
 });
 
