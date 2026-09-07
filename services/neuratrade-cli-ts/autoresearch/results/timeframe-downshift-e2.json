@@ -1,0 +1,117 @@
+{
+  "task": "Growth E2 timeframe downshift (clever-cabin-umi)",
+  "additiveOnly": true,
+  "venue": "bybit-futures (exact-symbol, venue-filtered loads; aliases/venues never merged)",
+  "costs": {
+    "makerFeePctPerSide": 0.02,
+    "takerExitFeePctPerSide": 0.06,
+    "slippageBps": 2,
+    "note": "mirrors autoresearch/prepare.ts honest schedule"
+  },
+  "championKnobsFrozenCopy": {
+    "rungs": 2,
+    "gridStepPct": 1.3,
+    "gridMaxGrids": 2,
+    "gridPauseAfterLossBars": 2,
+    "stopRatio": 1.58,
+    "targetRatio": 1.95,
+    "maxHoldBars": 39,
+    "trendFilterPeriod": 0,
+    "chopGateAdxThreshold": 0,
+    "positionFraction": 1
+  },
+  "championSource": "autoresearch/results/champion-soak.json (read-only copy; champion files untouched)",
+  "claimGatesUntouched": {
+    "minMedianLogReturn": 0.08,
+    "minExpectancyPct": 0.001
+  },
+  "symbols": [
+    "PUMPFUN/USDT:USDT",
+    "SOL/USDT:USDT",
+    "SUI/USDT:USDT",
+    "TAO/USDT:USDT",
+    "TUT/USDT:USDT",
+    "XAUT/USDT:USDT",
+    "XRP/USDT:USDT",
+    "ZEC/USDT:USDT"
+  ],
+  "note": "15m baseline is RE-MEASURED on the current venue panel (same 8 symbols, same loader), not the stored historic champion score, so TF comparison is apples-to-apples. Bar-count params (maxHold 39, pause 2) applied as-coded in panel bars: 39 bars = ~9.75d at 15m but ~3.25d at 5m.",
+  "rows": [
+    {
+      "panelTimeframe": "15m",
+      "sourceTimeframe": "5m",
+      "resampled": true,
+      "refLen": 35905,
+      "holdoutBars": 2880,
+      "selection": {
+        "score": 0.0,
+        "medianLogReturn": 0.0,
+        "expectancyPct": -0.0015,
+        "tradesPerSymMonth": 126.34,
+        "winRatePct": 49.5,
+        "medianDrawdownPct": 7.93,
+        "windows": 80,
+        "guardsOk": false,
+        "reason": "log_return_nonpositive,winrate_below_52,expectancy_nonpositive"
+      },
+      "holdout": {
+        "score": -0.0565,
+        "medianLogReturn": -0.0565,
+        "expectancyPct": -0.0026,
+        "tradesPerSymMonth": 236.25,
+        "winRatePct": 47.8,
+        "medianDrawdownPct": 15.8,
+        "windows": 8,
+        "guardsOk": false,
+        "reason": "log_return_nonpositive,winrate_below_52,drawdown_above_12,expectancy_nonpositive"
+      }
+    },
+    {
+      "panelTimeframe": "5m",
+      "sourceTimeframe": "5m",
+      "resampled": false,
+      "refLen": 107715,
+      "holdoutBars": 8640,
+      "selection": {
+        "score": -0.0249,
+        "medianLogReturn": -0.0249,
+        "expectancyPct": -0.0018,
+        "tradesPerSymMonth": 120.36,
+        "winRatePct": 47.6,
+        "medianDrawdownPct": 6.66,
+        "windows": 80,
+        "guardsOk": false,
+        "reason": "log_return_nonpositive,winrate_below_52,expectancy_nonpositive"
+      },
+      "holdout": {
+        "score": -0.0327,
+        "medianLogReturn": -0.0327,
+        "expectancyPct": -0.0021,
+        "tradesPerSymMonth": 326.5,
+        "winRatePct": 48.6,
+        "medianDrawdownPct": 13.46,
+        "windows": 8,
+        "guardsOk": false,
+        "reason": "log_return_nonpositive,winrate_below_52,drawdown_above_12,expectancy_nonpositive"
+      }
+    },
+    {
+      "panelTimeframe": "1m",
+      "sourceTimeframe": "1m",
+      "resampled": false,
+      "refLen": 0,
+      "holdoutBars": 43200,
+      "selection": null,
+      "holdout": null,
+      "loadReason": "insufficient_data_no_1m_venue_candles",
+      "note": "bybit-futures has no 1m candles in the venue DB; no cross-venue substitution per venue rule."
+    }
+  ],
+  "elapsedMs": 125797,
+  "method": {
+    "evalScript": "autoresearch/timeframe-downshift-e2.ts",
+    "maxSteps": 10,
+    "selectionGeom": "1d step / 30d forward / 7d warmup, prefix before frozen tail",
+    "holdoutGeom": "one trailing 30d window per symbol"
+  }
+}
