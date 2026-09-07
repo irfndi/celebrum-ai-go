@@ -1,0 +1,723 @@
+{
+  "generatedAt": "2026-09-07T05:51:11.033Z",
+  "task": "growth-E3-cohort-expansion (clever-cabin-lnj)",
+  "venue": "bybit-futures",
+  "timeframe": "15m",
+  "minCandles": 55000,
+  "frozenChampionSource": "autoresearch/results/champion-soak.json (grid-relevant knobs + honestFees maker0.02/takerExit0.06)",
+  "frozenGrid": {
+    "gridStepPct": 1.3,
+    "gridMaxGrids": 2,
+    "gridPauseAfterLossBars": 2,
+    "feePct": 0.02,
+    "takerExitFeePct": 0.06,
+    "slippageBps": 1,
+    "initialCapital": 100,
+    "trendFilterPeriod": 0,
+    "leverage": 1,
+    "positionFraction": 1,
+    "onlyWithTrend": false,
+    "targetRatio": 1.95,
+    "chopGateAdxThreshold": 0
+  },
+  "holdout": "validateGridEvidence fixed last-20% OOS + 5-seed stress (frozen, no per-symbol fitting)",
+  "elapsedSec": 133.902,
+  "screened": 25,
+  "valid": 24,
+  "passing": 0,
+  "baseline": {
+    "symbols": [
+      "BTC/USDT:USDT",
+      "ETH/USDT:USDT"
+    ],
+    "meanReturnPct": -45.42612700891038
+  },
+  "union": {
+    "symbols": [],
+    "meanReturnPct": 0
+  },
+  "upliftPp": 45.42612700891038,
+  "rows": [
+    {
+      "symbol": "ADA/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.1449713643280187,
+      "tradesPerMonth": 27.291666666666668,
+      "oosWinRatePct": 48.854961832061065,
+      "oosReturnPct": -20.83164798993795,
+      "profitFactor": 0.8934963417527398,
+      "gates": {
+        "profitableWindowPct": 46.15384615384615,
+        "compoundedReturnPct": 21.5204720205669,
+        "maxDrawdownPct": 42.708259229895106,
+        "fixedOosTrades": 131,
+        "confidenceLowerBoundPct": -0.004614032753752552,
+        "stressWorstReturnPct": -24.433092381826626,
+        "stressLowerBoundPct": -0.0029440909976696556,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.006403595502782211,
+      "tradesPerMonth": 38.333333333333336,
+      "oosWinRatePct": 51.63043478260869,
+      "oosReturnPct": -7.0224800375474805,
+      "profitFactor": 0.9950319860306079,
+      "gates": {
+        "profitableWindowPct": 46.15384615384615,
+        "compoundedReturnPct": 21.31334626113491,
+        "maxDrawdownPct": 28.25932916855425,
+        "fixedOosTrades": 184,
+        "confidenceLowerBoundPct": -0.0033783258798276996,
+        "stressWorstReturnPct": -28.732539098879283,
+        "stressLowerBoundPct": -0.001779857783246759,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "ARB/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.2263623240244408,
+      "tradesPerMonth": 40,
+      "oosWinRatePct": 47.39583333333333,
+      "oosReturnPct": -39.27779027220564,
+      "profitFactor": 0.8387292527620832,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -40.54459147228044,
+        "maxDrawdownPct": 65.6505027793882,
+        "fixedOosTrades": 192,
+        "confidenceLowerBoundPct": -0.005752265204999867,
+        "stressWorstReturnPct": -42.37894086142221,
+        "stressLowerBoundPct": -0.003936580128681205,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "ATOM/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.11434124577906282,
+      "tradesPerMonth": 18.958333333333336,
+      "oosWinRatePct": 53.84615384615385,
+      "oosReturnPct": 7.663159325574867,
+      "profitFactor": 1.0929676440514553,
+      "gates": {
+        "profitableWindowPct": 53.84615384615385,
+        "compoundedReturnPct": -52.71230699536067,
+        "maxDrawdownPct": 75.30879832004563,
+        "fixedOosTrades": 91,
+        "confidenceLowerBoundPct": -0.003915630739931929,
+        "stressWorstReturnPct": -13.862437087862958,
+        "stressLowerBoundPct": -0.0016849144010482274,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "AVAX/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.299340369869131,
+      "tradesPerMonth": 22.708333333333336,
+      "oosWinRatePct": 45.87155963302752,
+      "oosReturnPct": -30.421662977705548,
+      "profitFactor": 0.7919204751629836,
+      "gates": {
+        "profitableWindowPct": 15.384615384615385,
+        "compoundedReturnPct": -84.9800688641404,
+        "maxDrawdownPct": 84.9800688641404,
+        "fixedOosTrades": 109,
+        "confidenceLowerBoundPct": -0.007780265119733187,
+        "stressWorstReturnPct": -49.60403507296975,
+        "stressLowerBoundPct": -0.00659417735153533,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "BCH/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.09079568705065698,
+      "tradesPerMonth": 23.75,
+      "oosWinRatePct": 50,
+      "oosReturnPct": -13.17802547893453,
+      "profitFactor": 0.9317664891590881,
+      "gates": {
+        "profitableWindowPct": 30.76923076923077,
+        "compoundedReturnPct": -71.71500711641268,
+        "maxDrawdownPct": 71.71500711641268,
+        "fixedOosTrades": 114,
+        "confidenceLowerBoundPct": -0.005829693574636325,
+        "stressWorstReturnPct": -16.56647616567173,
+        "stressLowerBoundPct": -0.0027387565212908093,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "BNB/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.05152739931502203,
+      "tradesPerMonth": 6.458333333333334,
+      "oosWinRatePct": 51.61290322580645,
+      "oosReturnPct": 0.6000551626184745,
+      "profitFactor": 1.0417169820222958,
+      "gates": {
+        "profitableWindowPct": 53.84615384615385,
+        "compoundedReturnPct": -18.23507911630064,
+        "maxDrawdownPct": 36.37809995401967,
+        "fixedOosTrades": 31,
+        "confidenceLowerBoundPct": -0.008228196148381642,
+        "stressWorstReturnPct": -10.832809542098019,
+        "stressLowerBoundPct": -0.007681567674875288,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "BTC/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.44980338502388334,
+      "tradesPerMonth": 6.25,
+      "oosWinRatePct": 43.333333333333336,
+      "oosReturnPct": -13.502149071931967,
+      "profitFactor": 0.7037941425494068,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -36.23948383705735,
+        "maxDrawdownPct": 45.08629847672731,
+        "fixedOosTrades": 30,
+        "confidenceLowerBoundPct": -0.016446089928437883,
+        "stressWorstReturnPct": -18.74575158123399,
+        "stressLowerBoundPct": -0.01046417743100707,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "DOGE/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.16508346305279073,
+      "tradesPerMonth": 17.291666666666668,
+      "oosWinRatePct": 55.42168674698795,
+      "oosReturnPct": 11.61341210579532,
+      "profitFactor": 1.138550745811632,
+      "gates": {
+        "profitableWindowPct": 46.15384615384615,
+        "compoundedReturnPct": -61.493361617748356,
+        "maxDrawdownPct": 70.2592714425714,
+        "fixedOosTrades": 83,
+        "confidenceLowerBoundPct": -0.003796044310708118,
+        "stressWorstReturnPct": 4.614999896550259,
+        "stressLowerBoundPct": 0.0010876549408743424,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0"
+      ]
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.36831219779875446,
+      "tradesPerMonth": 22.5,
+      "oosWinRatePct": 59.25925925925925,
+      "oosReturnPct": 43.705573954876996,
+      "profitFactor": 1.3387874415168923,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -4.967237199921044,
+        "maxDrawdownPct": 52.48962931677064,
+        "fixedOosTrades": 108,
+        "confidenceLowerBoundPct": -0.0008205304040436777,
+        "stressWorstReturnPct": 4.551764554427933,
+        "stressLowerBoundPct": 0.000042852248303591544,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0"
+      ]
+    },
+    {
+      "symbol": "ETC/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.5569577694308009,
+      "tradesPerMonth": 16.875,
+      "oosWinRatePct": 62.96296296296296,
+      "oosReturnPct": 52.95325572170936,
+      "profitFactor": 1.5633571084703652,
+      "gates": {
+        "profitableWindowPct": 23.076923076923077,
+        "compoundedReturnPct": -63.15148027519154,
+        "maxDrawdownPct": 76.33214126226808,
+        "fixedOosTrades": 81,
+        "confidenceLowerBoundPct": 0.0012712479600217757,
+        "stressWorstReturnPct": 34.63617235773995,
+        "stressLowerBoundPct": 0.0035655007982818717,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%"
+      ]
+    },
+    {
+      "symbol": "ETH/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.06889116032314509,
+      "tradesPerMonth": 15.625,
+      "oosWinRatePct": 53.333333333333336,
+      "oosReturnPct": 2.725457261776228,
+      "profitFactor": 1.0551654319760135,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -54.612770180763405,
+        "maxDrawdownPct": 63.20917113846954,
+        "fixedOosTrades": 75,
+        "confidenceLowerBoundPct": -0.0068898606395353685,
+        "stressWorstReturnPct": -12.571945474403037,
+        "stressLowerBoundPct": -0.0016402644272415568,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "FIL/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.26985875661715414,
+      "tradesPerMonth": 42.91666666666667,
+      "oosWinRatePct": 56.79611650485437,
+      "oosReturnPct": 62.99853051127655,
+      "profitFactor": 1.236364170480779,
+      "gates": {
+        "profitableWindowPct": 30.76923076923077,
+        "compoundedReturnPct": -21.465020441419384,
+        "maxDrawdownPct": 52.313039156838784,
+        "fixedOosTrades": 206,
+        "confidenceLowerBoundPct": -0.0010897856414258124,
+        "stressWorstReturnPct": -0.3134958497169009,
+        "stressLowerBoundPct": 0.0006916658971967925,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0"
+      ]
+    },
+    {
+      "symbol": "HBAR/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.4775919981205958,
+      "tradesPerMonth": 15,
+      "oosWinRatePct": 61.111111111111114,
+      "oosReturnPct": 37.7734159639991,
+      "profitFactor": 1.4607043363982608,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -74.2056318413363,
+        "maxDrawdownPct": 87.08513632447554,
+        "fixedOosTrades": 72,
+        "confidenceLowerBoundPct": -0.0009791517749129616,
+        "stressWorstReturnPct": 16.259930990729032,
+        "stressLowerBoundPct": 0.0016052234680199269,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0"
+      ]
+    },
+    {
+      "symbol": "INJ/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.04446744010892329,
+      "tradesPerMonth": 62.083333333333336,
+      "oosWinRatePct": 52.68456375838926,
+      "oosReturnPct": 3.4204778117798895,
+      "profitFactor": 1.0351816414992359,
+      "gates": {
+        "profitableWindowPct": 23.076923076923077,
+        "compoundedReturnPct": -82.33800874029265,
+        "maxDrawdownPct": 85.38837777273552,
+        "fixedOosTrades": 298,
+        "confidenceLowerBoundPct": -0.0026820801113458773,
+        "stressWorstReturnPct": -50.30257421102785,
+        "stressLowerBoundPct": -0.002201899105688127,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "LINK/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.06580158886533567,
+      "tradesPerMonth": 17.916666666666668,
+      "oosWinRatePct": 53.48837209302325,
+      "oosReturnPct": 2.8655214937796956,
+      "profitFactor": 1.0528243699946553,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -54.69946911643069,
+        "maxDrawdownPct": 65.0113282327698,
+        "fixedOosTrades": 86,
+        "confidenceLowerBoundPct": -0.004612937565874987,
+        "stressWorstReturnPct": -15.753281481667203,
+        "stressLowerBoundPct": -0.0022429792356458726,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "LTC/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.3598493426043991,
+      "tradesPerMonth": 8.541666666666668,
+      "oosWinRatePct": 58.536585365853654,
+      "oosReturnPct": 14.358109852198439,
+      "profitFactor": 1.328023244711542,
+      "gates": {
+        "profitableWindowPct": 53.84615384615385,
+        "compoundedReturnPct": 22.754562892685612,
+        "maxDrawdownPct": 41.71733355142074,
+        "fixedOosTrades": 41,
+        "confidenceLowerBoundPct": -0.0027397805295662583,
+        "stressWorstReturnPct": 6.185352519902409,
+        "stressLowerBoundPct": 0.0016379788373928066,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "dd>15%",
+        "confLB<0"
+      ]
+    },
+    {
+      "symbol": "NEAR/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.1906040373344649,
+      "tradesPerMonth": 68.125,
+      "oosWinRatePct": 55.35168195718655,
+      "oosReturnPct": 67.45369114421177,
+      "profitFactor": 1.1606997330428666,
+      "gates": {
+        "profitableWindowPct": 30.76923076923077,
+        "compoundedReturnPct": -69.60868672336979,
+        "maxDrawdownPct": 81.92587556765687,
+        "fixedOosTrades": 327,
+        "confidenceLowerBoundPct": -0.0011814652478804692,
+        "stressWorstReturnPct": -55.57088069999797,
+        "stressLowerBoundPct": -0.0018225553934137794,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "OP/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.10206010968087834,
+      "tradesPerMonth": 45.208333333333336,
+      "oosWinRatePct": 49.76958525345622,
+      "oosReturnPct": -25.46697343237014,
+      "profitFactor": 0.9238758970838666,
+      "gates": {
+        "profitableWindowPct": 30.76923076923077,
+        "compoundedReturnPct": -86.47173399593042,
+        "maxDrawdownPct": 86.47173399593042,
+        "fixedOosTrades": 217,
+        "confidenceLowerBoundPct": -0.004377856632510747,
+        "stressWorstReturnPct": -49.63744451287257,
+        "stressLowerBoundPct": -0.002992301533974734,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "RENDER/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": -0.09176845610825887,
+      "tradesPerMonth": 43.333333333333336,
+      "oosWinRatePct": 50,
+      "oosReturnPct": -22.922195080031614,
+      "profitFactor": 0.9313005460316878,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -92.71132894472059,
+        "maxDrawdownPct": 93.90158109226016,
+        "fixedOosTrades": 208,
+        "confidenceLowerBoundPct": -0.004639225037100264,
+        "stressWorstReturnPct": -34.24204637181535,
+        "stressLowerBoundPct": -0.0010554113504717129,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "SOL/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.25581577963859825,
+      "tradesPerMonth": 18.75,
+      "oosWinRatePct": 56.666666666666664,
+      "oosReturnPct": 22.214466076455196,
+      "profitFactor": 1.2216330113010645,
+      "gates": {
+        "profitableWindowPct": 38.46153846153847,
+        "compoundedReturnPct": -39.519105725145735,
+        "maxDrawdownPct": 67.58951286744835,
+        "fixedOosTrades": 90,
+        "confidenceLowerBoundPct": -0.004377474052720089,
+        "stressWorstReturnPct": -9.771855058740954,
+        "stressLowerBoundPct": -0.002722423553576531,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "SUI/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.1384258040187188,
+      "tradesPerMonth": 30.208333333333336,
+      "oosWinRatePct": 54.48275862068965,
+      "oosReturnPct": 16.50949007860841,
+      "profitFactor": 1.1139552125922996,
+      "gates": {
+        "profitableWindowPct": 46.15384615384615,
+        "compoundedReturnPct": -22.089669783871997,
+        "maxDrawdownPct": 49.21449418591692,
+        "fixedOosTrades": 145,
+        "confidenceLowerBoundPct": -0.0027919456949275293,
+        "stressWorstReturnPct": -29.3395243901889,
+        "stressLowerBoundPct": -0.002257104024631055,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "TRX/USDT:USDT",
+      "status": "invalid",
+      "candles": 69120,
+      "detail": "fixed OOS trade count is below 30"
+    },
+    {
+      "symbol": "WIF/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.18680259922932757,
+      "tradesPerMonth": 48.54166666666667,
+      "oosWinRatePct": 55.36480686695279,
+      "oosReturnPct": 43.06828969358892,
+      "profitFactor": 1.156755307180491,
+      "gates": {
+        "profitableWindowPct": 30.76923076923077,
+        "compoundedReturnPct": -84.77478651849499,
+        "maxDrawdownPct": 89.14937842916709,
+        "fixedOosTrades": 233,
+        "confidenceLowerBoundPct": -0.002145190145366905,
+        "stressWorstReturnPct": -16.362318836706805,
+        "stressLowerBoundPct": -0.0008387776872635319,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%",
+        "confLB<0",
+        "stressRet<0",
+        "stressLB<0"
+      ]
+    },
+    {
+      "symbol": "XRP/USDT:USDT",
+      "status": "ok",
+      "candles": 69120,
+      "expectancyPct": 0.7528447302232429,
+      "tradesPerMonth": 11.25,
+      "oosWinRatePct": 66.66666666666666,
+      "oosReturnPct": 47.5674602708207,
+      "profitFactor": 1.8415673453402752,
+      "gates": {
+        "profitableWindowPct": 46.15384615384615,
+        "compoundedReturnPct": -22.018631074168553,
+        "maxDrawdownPct": 48.20172131185234,
+        "fixedOosTrades": 54,
+        "confidenceLowerBoundPct": 0.0009541184612753887,
+        "stressWorstReturnPct": 37.28247447912389,
+        "stressLowerBoundPct": 0.004662354374400464,
+        "windowCount": 13
+      },
+      "pass": false,
+      "failures": [
+        "windows<50%",
+        "compounded<=0",
+        "dd>15%"
+      ]
+    }
+  ]
+}
