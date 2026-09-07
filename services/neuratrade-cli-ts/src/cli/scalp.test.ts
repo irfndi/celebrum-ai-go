@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { BacktestResult } from "../scalping/backtest.js";
+import {
+  BitgetApiError,
+  type BitgetClientError,
+} from "../services/bitget-client.js";
 import { applyPreset } from "../scalping/presets.js";
 import { VALIDATED_BTC_GRID_CANDIDATE } from "../scalping/grid-candidate.js";
 import {
@@ -7,6 +11,7 @@ import {
   type ResolvedBacktestArgs,
 } from "../scalping/strategy-profile.js";
 import type { CandleLike, ComposerConfig } from "../scalping/types.js";
+import type { GridUniverseEntry } from "../scalping/grid-universe.js";
 import { Command, evaluate } from "./kit/kit.ts";
 import {
   SCALP_OPTION_DEFAULTS,
@@ -23,6 +28,12 @@ import {
   bybitContractSpecs,
   combineWalkForwardResults,
   extractExplicitOverrides,
+  formatBestParamsLine,
+  formatOptimizeCandidateLine,
+  classifyProbeOutcome,
+  formatUniverseScanEntry,
+  parseScanRungs,
+  formatScanRow,
   generateCandidates,
   generateWalkForwardWindows,
   isLiveReady,
@@ -33,6 +44,7 @@ import {
   scalpCommand,
   selectBestForSymbol,
   selectWinner,
+  summarizeScanResults,
   validateWatchlist,
   validateLiveExecutionMarket,
   validateLiveExecutionStrategy,
@@ -54,6 +66,7 @@ import {
   type OptimizeArgs,
   type OptimizeCandidateParams,
   type OptimizeResult,
+  type ScanResult,
   type SelectArgs,
   type SelectWatchlistEntry,
   type ValidationRow,
@@ -849,6 +862,116 @@ describe("optimizer candidate generation", () => {
     expect(offsets.has(0)).toBe(true);
     expect(offsets.has(5)).toBe(true);
     expect(offsets.has(10)).toBe(true);
+  });
+});
+
+describe("scan result formatting", () => {
+  const makeScanResult = (overrides: Partial<ScanResult>): ScanResult => ({
+    symbol: "BTCUSDT",
+    exchange: "bitget",
+    totalTrades: 10,
+    winRate: 0.6,
+    totalReturnPct: 12.34,
+    maxDrawdownPct: 5.67,
+    sharpeRatio: 1.234,
+    ...overrides,
+  });
+
+  it("formatScanRow omits the exchange column for single-exchange scans", () => {
+    const row = formatScanRow(makeScanResult({}), false);
+    expect(row.startsWith("BTCUSDT")).toBe(true);
+    expect(row).toContain("12.34%");
+    expect(row).toContain("1.234");
+  });
+
+  it("formatScanRow prefixes the exchange for multi-exchange scans", () => {
+    const row = formatScanRow(
+      makeScanResult({ exchange: "bybit", symbol: "ETHUSDT" }),
+      true,
+    );
+    expect(row.startsWith("bybit      ETHUSDT")).toBe(true);
+  });
+
+  it("formatBestParamsLine returns null without tuned params", () => {
+    expect(formatBestParamsLine(makeScanResult({}), false)).toBe(null);
+  });
+
+  it("formatBestParamsLine renders tuned params with exchange prefix", () => {
+    const line = formatBestParamsLine(
+      makeScanResult({
+        bestParams: {
+          atrStopMultiplier: 1.5,
+          atrTakeProfitMultiplier: 3,
+          minConfidence: 0.6,
+        },
+      }),
+      true,
+    );
+    expect(line).toContain("bitget:BTCUSDT");
+    expect(line).toContain("stop=1.5");
+    expect(line).toContain("tp=3.0");
+    expect(line).toContain("conf=0.6");
+  });
+
+  it("summarizeScanResults aggregates counts and picks best/worst", () => {
+    const summary = summarizeScanResults([
+      makeScanResult({ symbol: "A", totalReturnPct: 10, sharpeRatio: 0.9 }),
+      makeScanResult({ symbol: "B", totalReturnPct: -5, sharpeRatio: 0.1 }),
+      makeScanResult({ symbol: "C", totalReturnPct: 3, sharpeRatio: 0.2 }),
+    ]);
+    expect(summary.profitable).toBe(2);
+    expect(summary.highSharpe).toBe(1);
+    expect(summary.liveReady).toBe(1);
+    expect(summary.best.symbol).toBe("A");
+    expect(summary.worst.symbol).toBe("B");
+    expect(summary.avgReturn).toBeCloseTo(8 / 3, 10);
+  });
+});
+
+describe("optimize result formatting", () => {
+  it("formatOptimizeCandidateLine renders params and OOS result when present", () => {
+    const params = buildCandidate(
+      true,
+      [1.5, 3, 0.7, 1, 12, 6, 20, 0.3, 65, 35],
+    );
+    const line = formatOptimizeCandidateLine(
+      makeOptimizeResult(
+        params,
+        { totalReturnPct: 5 },
+        { totalReturnPct: 12.34, sharpeRatio: 1.5 },
+      ),
+    );
+    expect(line).toContain("stop=1.50");
+    expect(line).toContain("tp=3.00");
+    expect(line).toContain("return=12.34%");
+    expect(line).toContain("sharpe=1.500");
+  });
+
+  it("formatOptimizeCandidateLine falls back to the in-sample result", () => {
+    const params = buildCandidate(
+      true,
+      [1.5, 3, 0.7, 1, 12, 6, 20, 0.3, 65, 35],
+    );
+    const line = formatOptimizeCandidateLine(
+      makeOptimizeResult(params, { totalReturnPct: 7.5 }),
+    );
+    expect(line).toContain("return=7.50%");
+  });
+});
+
+describe("scan rungs parsing", () => {
+  it("parseScanRungs defaults to the 1-3 rung sweep when absent", () => {
+    expect(parseScanRungs(Option.none())).toEqual([1, 2, 3]);
+  });
+
+  it("parseScanRungs parses comma-separated rung counts", () => {
+    expect(parseScanRungs(Option.some("1,2,3"))).toEqual([1, 2, 3]);
+    expect(parseScanRungs(Option.some("2"))).toEqual([2]);
+  });
+
+  it("parseScanRungs drops non-integer and out-of-range entries", () => {
+    expect(parseScanRungs(Option.some("0,2,x,3.5"))).toEqual([2]);
+    expect(parseScanRungs(Option.some("abc"))).toEqual([]);
   });
 });
 
@@ -2079,5 +2202,87 @@ describe("probeNamesProbedSymbol", () => {
         "BLESS/USDT",
       ),
     ).toBe(false);
+  });
+});
+
+describe("classifyProbeOutcome", () => {
+  const apiError = (code: string, body: string) =>
+    new BitgetApiError({
+      status: 400,
+      body,
+      endpoint: "/api/v2/mix/account/account",
+      code,
+    });
+
+  it("marks a 40034 naming the probed symbol as untradeable", () => {
+    const verdict = classifyProbeOutcome(
+      apiError(
+        "40034",
+        '{"code":"40034","msg":"Parameter BLESSUSDT does not exist"}',
+      ),
+      "BLESS/USDT",
+    );
+    expect(verdict.kind).toBe("untradeable");
+    if (verdict.kind === "untradeable") {
+      expect(verdict.evidence).toContain("40034");
+    }
+  });
+
+  it("marks non-instrument errors as transient with a reason", () => {
+    const apiTransient = classifyProbeOutcome(
+      apiError("40774", '{"code":"40774","msg":"rate limit"}'),
+      "BLESS/USDT",
+    );
+    expect(apiTransient.kind).toBe("transient");
+    if (apiTransient.kind === "transient") {
+      expect(apiTransient.reason).toContain("40774");
+    }
+    const generic = classifyProbeOutcome(
+      new Error("boom") as BitgetClientError,
+      "BLESS/USDT",
+    );
+    expect(generic).toEqual({ kind: "transient", reason: "boom" });
+  });
+});
+
+describe("formatUniverseScanEntry", () => {
+  const makeEntry = (
+    overrides: Partial<GridUniverseEntry>,
+  ): GridUniverseEntry => ({
+    symbol: "BTCUSDT",
+    candles: 500,
+    bestParams: {
+      gridStepPct: 0.5,
+      gridMaxGrids: 8,
+      gridPauseAfterLossBars: 3,
+    },
+    walkForward: {
+      windows: [],
+      aggregateReturnPct: 12.34,
+      profitableWindowsPct: 80,
+      maxDrawdownPct: 5,
+      totalTrades: 10,
+    },
+    passed: true,
+    ...overrides,
+  });
+
+  it("marks passed entries with a check", () => {
+    const line = formatUniverseScanEntry(makeEntry({}));
+    expect(line.startsWith("BTCUSDT")).toBe(true);
+    expect(line).toContain("✔");
+    expect(line).toContain("12.34%");
+  });
+
+  it("marks gated-dropped entries and appends gate reasons", () => {
+    const line = formatUniverseScanEntry(
+      makeEntry({
+        passed: false,
+        gatedDropped: true,
+        gateFailureReasons: ["dd", "oos"],
+      }),
+    );
+    expect(line).toContain("✘");
+    expect(line).toContain("gate=dd|oos");
   });
 });

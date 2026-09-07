@@ -43,3 +43,21 @@ Screened: 25 symbols | valid: 24 | PASS: 0
 - Uplift vs baseline: 45.43pp
 
 Method: capital split equally across member symbols; portfolio return ~= mean of per-symbol compounded walk-forward returns. Throughput/expectancy are per-symbol (expectancy is scale-invariant; HistRet scales with positionFraction=1 frozen).
+
+## Addendum — read the union line with care
+
+- PASS members = 0, so there is NO valid union portfolio estimate. The
+  `0.00%` union mean is an empty-set placeholder; the `+45.43pp uplift`
+  is NOT a real outperformance signal. Do not promote on it.
+- Baseline (BTC/ETH, same frozen grid): mean HistRet -45.43%. The frozen
+  champion grid itself fails on the baseline venue — this is a transfer
+  falsification, not a cohort problem.
+- Sensitivity check (uncommitted /tmp script, whitelist-style grid
+  step=1.29 grids=3 pause=4 target=1.9 posFrac=0.5 on LTC/BTC/ETH/XRP):
+  still 0 PASS (LTC fails stress, BTC OOS<30, ETH/XRP fail gates).
+  Conclusion is robust to the config mapping, not an artifact of it.
+- Closest candidates for any future per-symbol work (NOT passes):
+  LTC (win 53.8%, HistRet +22.75%, exp +0.36%/tr, fails dd+confLB),
+  XRP (exp +0.75%/tr, fails windows+dd), ETC (exp +0.56%/tr, fails
+  windows+dd). Any follow-up must refit per symbol on this venue;
+  the frozen one-size-fits-all transfer is rejected.

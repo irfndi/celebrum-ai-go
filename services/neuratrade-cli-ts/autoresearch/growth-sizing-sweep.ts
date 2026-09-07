@@ -30,7 +30,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runLadderGridBacktest, type LadderOptions } from "../src/scalping/ladder-grid.ts";
+import {
+  runLadderGridBacktest,
+  type LadderOptions,
+} from "../src/scalping/ladder-grid.ts";
 import {
   loadAlignedPanel,
   toDatasetProvenance,
@@ -335,10 +338,7 @@ if (import.meta.main) {
     "champion",
     join(here, "results", "champion-soak.json"),
   );
-  const outJson = arg(
-    "out",
-    join(here, "results", "growth-sizing-sweep.json"),
-  );
+  const outJson = arg("out", join(here, "results", "growth-sizing-sweep.json"));
   const base = loadFrozenChampionKnobs(championPath);
   const panel = loadAlignedPanel({
     symbols: Number(arg("symbols", "8")),

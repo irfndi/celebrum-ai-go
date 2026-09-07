@@ -82,46 +82,7 @@ export function withFileLock<T>(
     acquiredAt: Date.now(),
     owner,
   };
-
-  let acquired = false;
-  for (let i = 0; i < retries; i++) {
-    let fd: number | undefined;
-    try {
-      fd = openSync(lockPath, "wx");
-    } catch {
-      // Acquisition failure only: maybe the holder crashed. Recover
-      // stale locks, then wait and retry.
-      tryRecoverStaleLock(lockPath, staleMs);
-      Bun.sleepSync(sleepMs);
-      continue;
-    }
-    try {
-      writeSync(fd, JSON.stringify(payload));
-    } catch {
-      try {
-        closeSync(fd);
-      } catch {
-        /* ignore */
-      }
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        /* ignore */
-      }
-      Bun.sleepSync(sleepMs);
-      continue;
-    }
-    try {
-      closeSync(fd);
-    } catch {
-      /* ignore */
-    }
-    acquired = true;
-    break;
-  }
-  if (!acquired) {
-    throw new Error(`timeout acquiring lock ${lockPath}`);
-  }
+  acquireLock(lockPath, payload, retries, sleepMs, staleMs);
 
   // Run the critical section exactly once. Callback errors propagate
   // untouched and are never retried.
@@ -130,14 +91,80 @@ export function withFileLock<T>(
   } finally {
     // Release only our own lock so we never delete a fresh lock that a
     // racing worker (or a stale-recovery) installed.
-    try {
-      const current = readPayload(lockPath);
-      if (current?.owner === owner) {
-        unlinkSync(lockPath);
-      }
-    } catch {
-      /* ignore */
+    releaseOwnLock(lockPath, owner);
+  }
+}
+
+function closeIgnoringErrors(fd: number): void {
+  try {
+    closeSync(fd);
+  } catch {
+    /* ignore */
+  }
+}
+
+function unlinkIgnoringErrors(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * One acquisition attempt: exclusive-create the lock file and stamp our
+ * payload. Returns the open fd on success, null when another worker holds
+ * the lock or our own stamp failed (lock file removed).
+ */
+function acquireLockOnce(
+  lockPath: string,
+  payload: LockPayload,
+): number | null {
+  let fd: number;
+  try {
+    fd = openSync(lockPath, "wx");
+  } catch {
+    return null;
+  }
+  try {
+    writeSync(fd, JSON.stringify(payload));
+    return fd;
+  } catch {
+    closeIgnoringErrors(fd);
+    unlinkIgnoringErrors(lockPath);
+    return null;
+  }
+}
+
+function acquireLock(
+  lockPath: string,
+  payload: LockPayload,
+  retries: number,
+  sleepMs: number,
+  staleMs: number,
+): void {
+  for (let i = 0; i < retries; i++) {
+    const fd = acquireLockOnce(lockPath, payload);
+    if (fd !== null) {
+      closeIgnoringErrors(fd);
+      return;
     }
+    // Acquisition failure only: maybe the holder crashed. Recover
+    // stale locks, then wait and retry.
+    tryRecoverStaleLock(lockPath, staleMs);
+    Bun.sleepSync(sleepMs);
+  }
+  throw new Error(`timeout acquiring lock ${lockPath}`);
+}
+
+function releaseOwnLock(lockPath: string, owner: string): void {
+  try {
+    const current = readPayload(lockPath);
+    if (current?.owner === owner) {
+      unlinkSync(lockPath);
+    }
+  } catch {
+    /* ignore */
   }
 }
 

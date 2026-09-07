@@ -306,7 +306,16 @@ interface ParityCheck {
   match: boolean;
   note: string;
 }
-type ParityChecks = Record<string, ParityCheck>;
+type ParityChecks = {
+  "trigger-bar": ParityCheck;
+  "order-type": ParityCheck;
+  "fill-price": ParityCheck;
+  fees: ParityCheck;
+  slippage: ParityCheck;
+  quantity: ParityCheck;
+  "exit-reason": ParityCheck;
+  pnl: ParityCheck;
+};
 
 interface ParityMetrics {
   readonly tradeCountMatches: boolean;

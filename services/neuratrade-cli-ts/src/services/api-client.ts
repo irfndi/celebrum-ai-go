@@ -141,8 +141,15 @@ type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
 /** Backtest summary metrics payload returned by the backend. */
 type BacktestSummary = Record<string, JsonValue>;
 
-/** Outbound request headers (all header values are strings). */
-type RequestHeaders = Record<string, string>;
+/**
+ * Outbound request headers (all header values are strings).
+ * X-API-Key is added only when a key is configured so unauthenticated
+ * requests omit the header entirely.
+ */
+type RequestHeaders = {
+  readonly "Content-Type": string;
+  "X-API-Key"?: string;
+};
 
 /** Request body shapes accepted by the backend API client. */
 type ApiRequestBody = BacktestRequest | { readonly user_id: string };

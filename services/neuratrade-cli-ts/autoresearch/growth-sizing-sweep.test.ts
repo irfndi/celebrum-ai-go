@@ -82,7 +82,13 @@ function poisonPrefix(panel: AlignedPanel): AlignedPanel {
     let px = 10;
     for (let i = 0; i < cp.length - keep; i++) {
       px *= 1.05;
-      cp[i] = { ...cp[i]!, open: px / 1.01, high: px * 1.005, low: px / 1.015, close: px };
+      cp[i] = {
+        ...cp[i]!,
+        open: px / 1.01,
+        high: px * 1.005,
+        low: px / 1.015,
+        close: px,
+      };
     }
     aligned.set(s, cp);
   }

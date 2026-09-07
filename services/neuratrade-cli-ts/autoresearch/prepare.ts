@@ -291,11 +291,36 @@ export function loadAlignedPanel(opts: LoadPanelOptions): AlignedPanel {
   const db = new Database(homeDb(opts.dbPath), { readonly: true });
   db.exec("PRAGMA busy_timeout = 30000;");
 
-  // Top symbols WITHIN the venue. Grouping by pair id keeps venues and
-  // aliases (BTC/USDT vs BTC/USDT:USDT) as distinct candidates.
-  let symbolRows: Array<{ symbol: string; count: number }>;
+  const panel = loadPanelCandles(
+    db,
+    queryPanelSymbols(db, exchange, timeframe, topN),
+    topN,
+    exchange,
+    timeframe,
+    minCandles,
+  );
+  db.close();
+
+  const { t0, t1 } = panelTimeRange(panel);
+  const aligned = clipPanelToRange(panel, t0, t1, minCandles);
+  return finalizeAlignedPanel(aligned, t0, t1, exchange, timeframe, started);
+}
+
+interface PanelSymbolRow {
+  readonly symbol: string;
+  readonly count: number;
+}
+
+// Top symbols WITHIN the venue. Grouping by pair id keeps venues and
+// aliases (BTC/USDT vs BTC/USDT:USDT) as distinct candidates.
+function queryPanelSymbols(
+  db: Database,
+  exchange: string,
+  timeframe: string,
+  topN: number,
+): PanelSymbolRow[] {
   if (tableExists(db, "exchanges")) {
-    symbolRows = db
+    return db
       .query(
         `SELECT tp.symbol AS symbol, COUNT(*) AS count
        FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id
@@ -307,43 +332,79 @@ export function loadAlignedPanel(opts: LoadPanelOptions): AlignedPanel {
       symbol: string;
       count: number;
     }>;
-  } else {
-    symbolRows = db
-      .query(
-        `SELECT tp.symbol AS symbol, COUNT(*) AS count
+  }
+  return db
+    .query(
+      `SELECT tp.symbol AS symbol, COUNT(*) AS count
        FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id
        WHERE c.timeframe = ?
        GROUP BY tp.symbol ORDER BY count DESC LIMIT ?`,
-      )
-      .all(timeframe, topN + 4) as Array<{ symbol: string; count: number }>;
-  }
+    )
+    .all(timeframe, topN + 4) as Array<{ symbol: string; count: number }>;
+}
 
+function loadPanelCandles(
+  db: Database,
+  symbolRows: PanelSymbolRow[],
+  topN: number,
+  exchange: string,
+  timeframe: string,
+  minCandles: number,
+): Map<string, Candle[]> {
   const panel = new Map<string, Candle[]>();
   for (const row of symbolRows.slice(0, topN)) {
     const candles = load15m(db, row.symbol, exchange, timeframe);
     if (candles.length >= minCandles) panel.set(row.symbol, candles);
   }
-  db.close();
+  return panel;
+}
 
+interface PanelTimeRange {
+  readonly t0: number;
+  readonly t1: number;
+}
+
+function panelTimeRange(panel: Map<string, Candle[]>): PanelTimeRange {
   let t0 = 0;
   let t1 = Number.POSITIVE_INFINITY;
   for (const candles of panel.values()) {
     t0 = Math.max(t0, candles[0]!.timestamp.getTime());
     t1 = Math.min(t1, candles[candles.length - 1]!.timestamp.getTime());
   }
+  return { t0, t1 };
+}
 
+function isInPanelRange(c: Candle, t0: number, t1: number): boolean {
+  return (
+    c.timestamp.getTime() >= t0 &&
+    c.timestamp.getTime() <= t1 &&
+    Number.isFinite(c.close) &&
+    c.close > 0
+  );
+}
+
+function clipPanelToRange(
+  panel: Map<string, Candle[]>,
+  t0: number,
+  t1: number,
+  minCandles: number,
+): Map<string, Candle[]> {
   const aligned = new Map<string, Candle[]>();
   for (const [symbol, candles] of panel) {
-    const clipped = candles.filter(
-      (c) =>
-        c.timestamp.getTime() >= t0 &&
-        c.timestamp.getTime() <= t1 &&
-        Number.isFinite(c.close) &&
-        c.close > 0,
-    );
+    const clipped = candles.filter((c) => isInPanelRange(c, t0, t1));
     if (clipped.length >= minCandles) aligned.set(symbol, clipped);
   }
+  return aligned;
+}
 
+function finalizeAlignedPanel(
+  aligned: Map<string, Candle[]>,
+  t0: number,
+  t1: number,
+  exchange: string,
+  timeframe: string,
+  started: number,
+): AlignedPanel {
   const symbols = [...aligned.keys()].sort();
   const refLen =
     symbols.length > 0
@@ -575,12 +636,6 @@ export function evaluateKnobsOnPanel(
 ): EvaluateResult {
   const started = Date.now();
   const phase: EvalPhase = opts.phase ?? "confirm";
-  const geom = PHASE_GEOM[phase];
-  const budgetMs = (opts.budgetSec ?? (phase === "screen" ? 45 : 180)) * 1000;
-  const maxSteps = opts.maxSteps ?? (phase === "screen" ? 12 : 40);
-  const stride = Math.max(1, opts.symbolStride ?? 1);
-  const offset = Math.max(0, opts.symbolOffset ?? 0);
-
   if (phase === "holdout") {
     return evaluateHoldoutOnPanel(knobs, panel, {
       budgetSec: opts.budgetSec,
@@ -589,6 +644,49 @@ export function evaluateKnobsOnPanel(
     });
   }
 
+  const budget = resolvePanelEvalBudget(phase, opts.budgetSec, opts.maxSteps);
+  const stride = Math.max(1, opts.symbolStride ?? 1);
+  const offset = Math.max(0, opts.symbolOffset ?? 0);
+  return evaluatePanelSelection(
+    knobs,
+    panel,
+    stride,
+    offset,
+    budget.budgetMs,
+    budget.maxSteps,
+    started,
+    phase,
+  );
+}
+
+interface PanelEvalBudget {
+  readonly budgetMs: number;
+  readonly maxSteps: number;
+}
+
+function resolvePanelEvalBudget(
+  phase: EvalPhase,
+  budgetSec: number | undefined,
+  maxSteps: number | undefined,
+): PanelEvalBudget {
+  const screen = phase === "screen";
+  return {
+    budgetMs: (budgetSec ?? (screen ? 45 : 180)) * 1000,
+    maxSteps: maxSteps ?? (screen ? 12 : 40),
+  };
+}
+
+function evaluatePanelSelection(
+  knobs: AutoresearchKnobs,
+  panel: AlignedPanel,
+  stride: number,
+  offset: number,
+  budgetMs: number,
+  maxSteps: number,
+  started: number,
+  phase: EvalPhase,
+): EvaluateResult {
+  const geom = PHASE_GEOM[phase];
   const symbols = selectShardSymbols(panel, stride, offset);
   if (symbols.length < geom.minSymbols) {
     return emptyResult("insufficient_symbols", started, phase, symbols.length);
@@ -645,6 +743,36 @@ export function evaluateHoldoutOnPanel(
   const offset = Math.max(0, opts.symbolOffset ?? 0);
 
   const symbols = selectShardSymbols(panel, stride, offset);
+  const holdoutBars = panel.holdoutBars ?? HOLDOUT_BARS;
+  const guard = checkHoldoutGuards(symbols, geom, holdoutBars, started);
+  if (guard !== null) return guard;
+
+  const baseOpts = buildBacktestBaseOptions(knobs);
+  const stats = accumulateHoldoutStats(
+    panel,
+    symbols,
+    holdoutBars,
+    baseOpts,
+    started,
+    budgetMs,
+  );
+  if (stats.rets.length < geom.minWindows) {
+    return emptyResult(
+      "insufficient_holdout_windows",
+      started,
+      "holdout",
+      symbols.length,
+    );
+  }
+  return summarizeWindowStats(stats, geom, symbols.length, started, "holdout");
+}
+
+function checkHoldoutGuards(
+  symbols: readonly string[],
+  geom: (typeof PHASE_GEOM)[EvalPhase],
+  holdoutBars: number,
+  started: number,
+): EvaluateResult | null {
   if (symbols.length < geom.minSymbols) {
     return emptyResult(
       "insufficient_symbols",
@@ -653,12 +781,20 @@ export function evaluateHoldoutOnPanel(
       symbols.length,
     );
   }
-  const holdoutBars = panel.holdoutBars ?? HOLDOUT_BARS;
   if (!Number.isFinite(holdoutBars) || holdoutBars <= 0) {
     return emptyResult("holdout_disabled", started, "holdout", symbols.length);
   }
+  return null;
+}
 
-  const baseOpts = buildBacktestBaseOptions(knobs);
+function accumulateHoldoutStats(
+  panel: AlignedPanel,
+  symbols: readonly string[],
+  holdoutBars: number,
+  baseOpts: ReturnType<typeof buildBacktestBaseOptions>,
+  started: number,
+  budgetMs: number,
+): WindowStats {
   const mutable = {
     rets: [] as number[],
     dds: [] as number[],
@@ -676,7 +812,7 @@ export function evaluateHoldoutOnPanel(
       mutable,
     );
   }
-  const stats: WindowStats = {
+  return {
     rets: mutable.rets,
     dds: mutable.dds,
     trades: mutable.trades,
@@ -684,15 +820,6 @@ export function evaluateHoldoutOnPanel(
     pnlSum: mutable.pnlSum,
     steps: mutable.rets.length,
   };
-  if (stats.rets.length < geom.minWindows) {
-    return emptyResult(
-      "insufficient_holdout_windows",
-      started,
-      "holdout",
-      symbols.length,
-    );
-  }
-  return summarizeWindowStats(stats, geom, symbols.length, started, "holdout");
 }
 
 /** Convenience: load panel (or use opts.panel) then evaluate. */

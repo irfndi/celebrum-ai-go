@@ -268,6 +268,101 @@ function runScan(kv: {
   }).pipe(Effect.provide(MarketDataGatewayLive));
 }
 
+function isAuthorizedRequest(request: Request, adminKey: string): boolean {
+  return adminKey.length > 0 && request.headers.get("x-api-key") === adminKey;
+}
+
+function healthResponse(): Response {
+  return Response.json({ status: "healthy", service: "universe-watch" });
+}
+
+function unauthorizedResponse(): Response {
+  return Response.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+function notFoundResponse(): Response {
+  return new Response("Not Found", { status: 404 });
+}
+
+async function watchlistMetaResponse(env: UniverseWatchEnv): Promise<Response> {
+  const metaRaw = await env.watchlist.get(WATCHLIST_META_KEY);
+  const meta = parseWhitelistMeta(metaRaw);
+  if (meta === null) {
+    return Response.json(
+      { updatedAt: null, stale: true, note: "no scan run yet" },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
+  return Response.json(
+    { ...meta, stale: isWhitelistStale(meta) },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
+async function watchlistResponse(env: UniverseWatchEnv): Promise<Response> {
+  const [raw, metaRaw] = await Promise.all([
+    env.watchlist.get(WATCHLIST_KEY),
+    env.watchlist.get(WATCHLIST_META_KEY),
+  ]);
+  return Response.json(buildWatchlistEnvelope(raw, metaRaw), {
+    headers: { "cache-control": "no-store" },
+  });
+}
+
+async function scanResponse(env: UniverseWatchEnv): Promise<Response> {
+  try {
+    const survivors = await Effect.runPromise(runScan(env.watchlist));
+    const metaRaw = await env.watchlist.get(WATCHLIST_META_KEY);
+    const meta = parseWhitelistMeta(metaRaw);
+    return Response.json({
+      scanned: true,
+      survivors,
+      updatedAt: meta?.updatedAt ?? null,
+      stale: false,
+    });
+  } catch (err) {
+    return Response.json(
+      { scanned: false, error: String(err) },
+      { status: 500 },
+    );
+  }
+}
+
+function isSeedPayload(symbols: unknown): symbols is ReadonlyArray<string> {
+  const decoded = S.decodeUnknownOption(S.Array(S.String))(symbols);
+  return (
+    Option.isSome(decoded) && !decoded.value.some((s) => s.trim().length === 0)
+  );
+}
+
+async function seedResponse(
+  request: Request,
+  env: UniverseWatchEnv,
+): Promise<Response> {
+  let symbols: unknown;
+  try {
+    symbols = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!isSeedPayload(symbols)) {
+    return Response.json(
+      { error: "seed must be a JSON array of symbol strings" },
+      { status: 400 },
+    );
+  }
+  await env.watchlist.put(SEED_KEY, JSON.stringify(symbols));
+  return Response.json({ seed: symbols.length });
+}
+
+const PUBLIC_WATCHLIST_ROUTES: ReadonlyArray<{
+  readonly suffix: string;
+  readonly handle: (env: UniverseWatchEnv) => Promise<Response>;
+}> = [
+  { suffix: "/watchlist/meta", handle: watchlistMetaResponse },
+  { suffix: "/watchlist", handle: watchlistResponse },
+];
+
 export default {
   async scheduled(
     _controller: { scheduledTime: number },
@@ -301,83 +396,22 @@ export default {
 
   async fetch(request: Request, env: UniverseWatchEnv): Promise<Response> {
     const url = new URL(request.url);
-
-    if (request.method === "GET" && url.pathname.endsWith("/health")) {
-      return Response.json({ status: "healthy", service: "universe-watch" });
-    }
-
-    if (request.method === "GET" && url.pathname.endsWith("/watchlist/meta")) {
-      const metaRaw = await env.watchlist.get(WATCHLIST_META_KEY);
-      const meta = parseWhitelistMeta(metaRaw);
-      if (meta === null) {
-        return Response.json(
-          { updatedAt: null, stale: true, note: "no scan run yet" },
-          { headers: { "cache-control": "no-store" } },
-        );
-      }
-      return Response.json(
-        { ...meta, stale: isWhitelistStale(meta) },
-        { headers: { "cache-control": "no-store" } },
+    if (request.method === "GET") {
+      if (url.pathname.endsWith("/health")) return healthResponse();
+      const route = PUBLIC_WATCHLIST_ROUTES.find((r) =>
+        url.pathname.endsWith(r.suffix),
       );
+      if (route !== undefined) return route.handle(env);
     }
-
-    if (request.method === "GET" && url.pathname.endsWith("/watchlist")) {
-      const [raw, metaRaw] = await Promise.all([
-        env.watchlist.get(WATCHLIST_KEY),
-        env.watchlist.get(WATCHLIST_META_KEY),
-      ]);
-      return Response.json(buildWatchlistEnvelope(raw, metaRaw), {
-        headers: { "cache-control": "no-store" },
-      });
+    if (!isAuthorizedRequest(request, env.adminKey)) {
+      return unauthorizedResponse();
     }
-
-    const authorized =
-      env.adminKey.length > 0 &&
-      request.headers.get("x-api-key") === env.adminKey;
-    if (!authorized) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     if (request.method === "POST" && url.pathname.endsWith("/scan")) {
-      try {
-        const survivors = await Effect.runPromise(runScan(env.watchlist));
-        const metaRaw = await env.watchlist.get(WATCHLIST_META_KEY);
-        const meta = parseWhitelistMeta(metaRaw);
-        return Response.json({
-          scanned: true,
-          survivors,
-          updatedAt: meta?.updatedAt ?? null,
-          stale: false,
-        });
-      } catch (err) {
-        return Response.json(
-          { scanned: false, error: String(err) },
-          { status: 500 },
-        );
-      }
+      return scanResponse(env);
     }
-
     if (request.method === "PUT" && url.pathname.endsWith("/seed")) {
-      let symbols: unknown;
-      try {
-        symbols = await request.json();
-      } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
-      }
-      const decoded = S.decodeUnknownOption(S.Array(S.String))(symbols);
-      if (
-        Option.isNone(decoded) ||
-        decoded.value.some((s) => s.trim().length === 0)
-      ) {
-        return Response.json(
-          { error: "seed must be a JSON array of symbol strings" },
-          { status: 400 },
-        );
-      }
-      await env.watchlist.put(SEED_KEY, JSON.stringify(decoded.value));
-      return Response.json({ seed: decoded.value.length });
+      return seedResponse(request, env);
     }
-
-    return new Response("Not Found", { status: 404 });
+    return notFoundResponse();
   },
 };

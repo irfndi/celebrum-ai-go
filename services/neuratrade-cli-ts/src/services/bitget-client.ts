@@ -60,10 +60,41 @@ type BitgetApiRecord = Record<
 >;
 
 /** Signed request headers (all header values are strings). */
-type AuthHeaders = Record<string, string>;
+/** Signed Bitget request auth headers (fixed header set, PAPTRADING only in demo). */
+type AuthHeaders = {
+  readonly "Content-Type": string;
+  readonly "ACCESS-KEY": string;
+  readonly "ACCESS-SIGN": string;
+  readonly "ACCESS-TIMESTAMP": string;
+  readonly "ACCESS-PASSPHRASE": string;
+  readonly locale: string;
+  PAPTRADING?: string;
+};
 
-/** Request body for a signed Bitget mutation (all values are strings). */
-type BitgetRequestBody = Record<string, string>;
+/**
+ * Request body for a signed Bitget mutation (all values are strings).
+ * Each endpoint sets its own required fields; optional fields are added
+ * only when present so signed payloads omit absent keys.
+ */
+type BitgetRequestBody = {
+  symbol?: string;
+  side?: string;
+  orderType?: string;
+  size?: string;
+  force?: string;
+  price?: string;
+  clientOid?: string;
+  orderId?: string;
+  productType?: string;
+  marginCoin?: string;
+  marginMode?: string;
+  leverage?: string;
+  holdSide?: string;
+  timeInForceValue?: string;
+  stopSurplusTriggerPrice?: string;
+  stopLossTriggerPrice?: string;
+  reduceOnly?: string;
+};
 
 /** Bitget error envelope: `{"code":"40034","msg":...}`. */
 const BitgetEnvelopeSchema = S.Struct({

@@ -16,7 +16,11 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 
-export const COHORT = ["BTC/USDT:USDT", "SOL/USDT:USDT", "ETH/USDT:USDT"] as const;
+export const COHORT = [
+  "BTC/USDT:USDT",
+  "SOL/USDT:USDT",
+  "ETH/USDT:USDT",
+] as const;
 export const EXCHANGE = "bybit-futures";
 export const BAR_MS_15M = 900_000;
 export const CLIENT_TIMEOUT_MS = 120_000;
@@ -37,11 +41,16 @@ export function planFrozenHoldout(
   stepBars: number,
   maxOrigins: number,
 ): OosPlan {
-  if (!Number.isInteger(totalBars) || totalBars < 0) throw new Error("totalBars must be a non-negative integer");
-  if (!Number.isInteger(contextBars) || contextBars < 1) throw new Error("contextBars must be a positive integer");
-  if (!Number.isInteger(horizon) || horizon < 1) throw new Error("horizon must be a positive integer");
-  if (!Number.isInteger(stepBars) || stepBars < 1) throw new Error("stepBars must be a positive integer");
-  if (!Number.isInteger(maxOrigins) || maxOrigins < 0) throw new Error("maxOrigins must be a non-negative integer");
+  if (!Number.isInteger(totalBars) || totalBars < 0)
+    throw new Error("totalBars must be a non-negative integer");
+  if (!Number.isInteger(contextBars) || contextBars < 1)
+    throw new Error("contextBars must be a positive integer");
+  if (!Number.isInteger(horizon) || horizon < 1)
+    throw new Error("horizon must be a positive integer");
+  if (!Number.isInteger(stepBars) || stepBars < 1)
+    throw new Error("stepBars must be a positive integer");
+  if (!Number.isInteger(maxOrigins) || maxOrigins < 0)
+    throw new Error("maxOrigins must be a non-negative integer");
   // Same frozen rule as validateGridEvidence: last 20% tail.
   const oosStart = Math.floor(totalBars * 0.8);
   const oosBars = totalBars - oosStart;
@@ -49,12 +58,24 @@ export function planFrozenHoldout(
   // full horizon of future (index <= n - horizon - 1), starting at context-1.
   const lastOrigin = totalBars - horizon - 1;
   let origins = 0;
-  for (let index = contextBars - 1; index <= lastOrigin; index += stepBars) origins += 1;
+  for (let index = contextBars - 1; index <= lastOrigin; index += stepBars)
+    origins += 1;
   // Origins before the holdout belong to in-sample history, not OOS scoring.
   let oosOrigins = 0;
-  for (let index = Math.max(contextBars - 1, oosStart); index <= lastOrigin; index += stepBars) oosOrigins += 1;
+  for (
+    let index = Math.max(contextBars - 1, oosStart);
+    index <= lastOrigin;
+    index += stepBars
+  )
+    oosOrigins += 1;
   const capped = maxOrigins > 0 ? Math.min(oosOrigins, maxOrigins) : oosOrigins;
-  return { totalBars, oosStart, oosBars, origins: capped, coveredBars: capped * stepBars };
+  return {
+    totalBars,
+    oosStart,
+    oosBars,
+    origins: capped,
+    coveredBars: capped * stepBars,
+  };
 }
 
 export interface LatencyBudget {
@@ -65,7 +86,8 @@ export interface LatencyBudget {
 }
 
 export function latencyBudget(symbols: number): LatencyBudget {
-  if (!Number.isInteger(symbols) || symbols < 1) throw new Error("symbols must be a positive integer");
+  if (!Number.isInteger(symbols) || symbols < 1)
+    throw new Error("symbols must be a positive integer");
   return {
     barLoopMs: BAR_MS_15M,
     mustP95Ms: CLIENT_TIMEOUT_MS,
@@ -83,7 +105,9 @@ interface PanelRow {
 }
 
 function homeDir(): string {
-  return process.env.NEURATRADE_HOME ?? join(process.env.HOME ?? "~", ".neuratrade");
+  return (
+    process.env.NEURATRADE_HOME ?? join(process.env.HOME ?? "~", ".neuratrade")
+  );
 }
 
 function loadPanels(dbPath: string): PanelRow[] {
@@ -128,7 +152,13 @@ function main(): void {
       panel15m: panel15 ?? null,
       panel5m: panel5 ?? null,
       oos15m: planFrozenHoldout(total, contextBars, horizon, horizon, 0),
-      oos15mCapped96: planFrozenHoldout(total, contextBars, horizon, horizon, 96).origins,
+      oos15mCapped96: planFrozenHoldout(
+        total,
+        contextBars,
+        horizon,
+        horizon,
+        96,
+      ).origins,
     };
   });
   const report = {
@@ -154,7 +184,9 @@ function main(): void {
     return;
   }
   console.log("TimesFM OOS spike (read-only, throwaway)");
-  console.log(`exchange=${EXCHANGE} context=${contextBars} horizon=${horizon} step=${horizon}`);
+  console.log(
+    `exchange=${EXCHANGE} context=${contextBars} horizon=${horizon} step=${horizon}`,
+  );
   if (dbNote) console.log(dbNote);
   for (const s of symbols) {
     const p = s.oos15m;

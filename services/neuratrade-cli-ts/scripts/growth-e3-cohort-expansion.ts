@@ -99,7 +99,8 @@ export function tradesPerMonth(
   candleCount: number,
   holdoutFraction = HOLDOUT_FRACTION,
 ): number {
-  const months = (holdoutFraction * candleCount * TIMEFRAME_MINUTES) / MINUTES_PER_MONTH;
+  const months =
+    (holdoutFraction * candleCount * TIMEFRAME_MINUTES) / MINUTES_PER_MONTH;
   return months > 0 ? totalTrades / months : 0;
 }
 
@@ -110,11 +111,17 @@ export function venueEligible(
   candleCount: number,
   minCandles = MIN_CANDLES,
 ): boolean {
-  return exchange === VENUE && timeframe === TIMEFRAME && candleCount >= minCandles;
+  return (
+    exchange === VENUE && timeframe === TIMEFRAME && candleCount >= minCandles
+  );
 }
 
 /** Bybit-alignment gate (mirrors scripts/verify-cohort-on-bybit.ts). */
-export function passesCohortGate(g: CohortGateMetrics): { pass: boolean; failures: string[] } {
+export interface CohortGateVerdict {
+  readonly pass: boolean;
+  readonly failures: string[];
+}
+export function passesCohortGate(g: CohortGateMetrics): CohortGateVerdict {
   const failures: string[] = [];
   if (g.profitableWindowPct < 50) failures.push("windows<50%");
   if (g.compoundedReturnPct <= 0) failures.push("compounded<=0");
@@ -147,12 +154,15 @@ export function unionGrowthEstimate(rows: readonly CohortRow[]): UnionEstimate {
   const meanReturnPct =
     members.length === 0
       ? 0
-      : members.reduce((acc, r) => acc + r.gates.compoundedReturnPct, 0) / members.length;
+      : members.reduce((acc, r) => acc + r.gates.compoundedReturnPct, 0) /
+        members.length;
   return { symbols, meanReturnPct };
 }
 
 /** Baseline: equal-weight mean over the BTC/ETH baseline symbols (valid rows). */
-export function baselineGrowthEstimate(rows: readonly CohortRow[]): UnionEstimate {
+export function baselineGrowthEstimate(
+  rows: readonly CohortRow[],
+): UnionEstimate {
   const members = rows.filter(
     (r): r is CohortRow & { gates: CohortGateMetrics } =>
       r.status === "ok" &&
@@ -163,7 +173,8 @@ export function baselineGrowthEstimate(rows: readonly CohortRow[]): UnionEstimat
   const meanReturnPct =
     members.length === 0
       ? 0
-      : members.reduce((acc, r) => acc + r.gates.compoundedReturnPct, 0) / members.length;
+      : members.reduce((acc, r) => acc + r.gates.compoundedReturnPct, 0) /
+        members.length;
   return { symbols, meanReturnPct };
 }
 
@@ -188,15 +199,25 @@ function toMarkdown(
   lines.push(
     `Frozen grid: step=${FROZEN_CHAMPION_GRID.gridStepPct} grids=${FROZEN_CHAMPION_GRID.gridMaxGrids} pause=${FROZEN_CHAMPION_GRID.gridPauseAfterLossBars} target=${FROZEN_CHAMPION_GRID.targetRatio} adx=${FROZEN_CHAMPION_GRID.chopGateAdxThreshold} fee=${FROZEN_CHAMPION_GRID.feePct} takerExit=${FROZEN_CHAMPION_GRID.takerExitFeePct} slip=${FROZEN_CHAMPION_GRID.slippageBps}bps posFrac=${FROZEN_CHAMPION_GRID.positionFraction}`,
   );
-  lines.push(`Holdout (frozen): last 20% of candles per symbol + 5-seed stress; no per-symbol fitting.`);
-  lines.push(`Venue filter: exchange=${VENUE}, timeframe=${TIMEFRAME}, >= ${MIN_CANDLES} bars.`);
-  lines.push(`Screened: ${rows.length} symbols | valid: ${ok.length} | PASS: ${passCount}`);
+  lines.push(
+    `Holdout (frozen): last 20% of candles per symbol + 5-seed stress; no per-symbol fitting.`,
+  );
+  lines.push(
+    `Venue filter: exchange=${VENUE}, timeframe=${TIMEFRAME}, >= ${MIN_CANDLES} bars.`,
+  );
+  lines.push(
+    `Screened: ${rows.length} symbols | valid: ${ok.length} | PASS: ${passCount}`,
+  );
   lines.push(``);
-  lines.push(`| Symbol | Bars | WinWin% | HistRet% | MaxDD% | OOS n | Expect%/tr | Trades/mo | OOS win% | OOS ret% | ConfLB | StressWorst | StressLB | Gate |`);
+  lines.push(
+    `| Symbol | Bars | WinWin% | HistRet% | MaxDD% | OOS n | Expect%/tr | Trades/mo | OOS win% | OOS ret% | ConfLB | StressWorst | StressLB | Gate |`,
+  );
   lines.push(`|---|---|---|---|---|---|---|---|---|---|---|---|---|---|`);
   for (const r of rows) {
     if (r.status !== "ok" || !r.gates) {
-      lines.push(`| ${r.symbol} | ${r.candles ?? "n/a"} | — | — | — | — | — | — | — | — | — | — | — | ${r.status}${r.detail ? `: ${r.detail}` : ""} |`);
+      lines.push(
+        `| ${r.symbol} | ${r.candles ?? "n/a"} | — | — | — | — | — | — | — | — | — | — | — | ${r.status}${r.detail ? `: ${r.detail}` : ""} |`,
+      );
       continue;
     }
     const g = r.gates;
@@ -205,21 +226,30 @@ function toMarkdown(
     );
   }
   lines.push(``);
-  lines.push(`## Union portfolio growth estimate (equal-weight mean of PASS walk-forward HistRet%)`);
+  lines.push(
+    `## Union portfolio growth estimate (equal-weight mean of PASS walk-forward HistRet%)`,
+  );
   lines.push(``);
-  lines.push(`- PASS members (${union.symbols.length}): ${union.symbols.join(", ") || "none"}`);
+  lines.push(
+    `- PASS members (${union.symbols.length}): ${union.symbols.join(", ") || "none"}`,
+  );
   lines.push(`- Union mean return: ${fmt(union.meanReturnPct)}%`);
-  lines.push(`- Baseline (${baseline.symbols.join(", ") || "none"}): ${fmt(baseline.meanReturnPct)}%`);
+  lines.push(
+    `- Baseline (${baseline.symbols.join(", ") || "none"}): ${fmt(baseline.meanReturnPct)}%`,
+  );
   lines.push(`- Uplift vs baseline: ${fmt(uplift)}pp`);
   lines.push(``);
-  lines.push(`Method: capital split equally across member symbols; portfolio return ~= mean of per-symbol compounded walk-forward returns. Throughput/expectancy are per-symbol (expectancy is scale-invariant; HistRet scales with positionFraction=1 frozen).`);
+  lines.push(
+    `Method: capital split equally across member symbols; portfolio return ~= mean of per-symbol compounded walk-forward returns. Throughput/expectancy are per-symbol (expectancy is scale-invariant; HistRet scales with positionFraction=1 frozen).`,
+  );
   lines.push(``);
   return lines.join("\n");
 }
 
 async function main(): Promise<void> {
   const arg = (flag: string, fallback: string): string =>
-    process.argv.find((a) => a.startsWith(flag))?.slice(flag.length) ?? fallback;
+    process.argv.find((a) => a.startsWith(flag))?.slice(flag.length) ??
+    fallback;
   const minCandles = Number(arg("--min-candles=", String(MIN_CANDLES)));
   const home = process.env.NEURATRADE_HOME ?? `${process.env.HOME}/.neuratrade`;
   const db = new Database(`${home}/data/neuratrade.db`, { readonly: true });
@@ -236,7 +266,12 @@ async function main(): Promise<void> {
   const t0 = Date.now();
   for (const { symbol, n } of symbols) {
     if (!venueEligible(VENUE, TIMEFRAME, n, minCandles)) {
-      rows.push({ symbol, status: "venue-filtered", candles: n, detail: `below min-candles ${minCandles}` });
+      rows.push({
+        symbol,
+        status: "venue-filtered",
+        candles: n,
+        detail: `below min-candles ${minCandles}`,
+      });
       continue;
     }
     const raw = db
@@ -249,13 +284,24 @@ async function main(): Promise<void> {
          ORDER BY o.timestamp ASC`,
       )
       .all(VENUE, symbol, TIMEFRAME) as Array<{
-      open: number; high: number; low: number; close: number; volume: number; ts: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+      ts: string;
     }>;
     const candles = raw.map((r) => ({
-      open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume,
+      open: r.open,
+      high: r.high,
+      low: r.low,
+      close: r.close,
+      volume: r.volume,
       timestamp: new Date(Date.parse(r.ts)),
     }));
-    const now = new Date(candles.at(-1)!.timestamp.getTime() + TIMEFRAME_MINUTES * 60 * 1000);
+    const now = new Date(
+      candles.at(-1)!.timestamp.getTime() + TIMEFRAME_MINUTES * 60 * 1000,
+    );
     const r = validateGridEvidence(candles, {
       now,
       timeframeMinutes: TIMEFRAME_MINUTES,
@@ -263,7 +309,12 @@ async function main(): Promise<void> {
       executionParityPassed: true,
     });
     if (r.kind !== "ok") {
-      rows.push({ symbol, status: "invalid", candles: candles.length, detail: r.failures.join("; ") });
+      rows.push({
+        symbol,
+        status: "invalid",
+        candles: candles.length,
+        detail: r.failures.join("; "),
+      });
       console.log(`${symbol}: INVALID -> ${r.failures.join("; ")}`);
       continue;
     }
@@ -286,7 +337,9 @@ async function main(): Promise<void> {
       tradesPerMonth: tradesPerMonth(r.fixedOos.totalTrades, candles.length),
       oosWinRatePct: r.fixedOos.winRate,
       oosReturnPct: r.fixedOos.totalReturnPct,
-      profitFactor: Number.isFinite(r.fixedOos.profitFactor) ? r.fixedOos.profitFactor : "Infinity",
+      profitFactor: Number.isFinite(r.fixedOos.profitFactor)
+        ? r.fixedOos.profitFactor
+        : "Infinity",
       gates,
       pass,
       failures,
@@ -307,7 +360,8 @@ async function main(): Promise<void> {
     minCandles,
     frozenChampionSource: FROZEN_CHAMPION_SOURCE,
     frozenGrid: { ...FROZEN_CHAMPION_GRID },
-    holdout: "validateGridEvidence fixed last-20% OOS + 5-seed stress (frozen, no per-symbol fitting)",
+    holdout:
+      "validateGridEvidence fixed last-20% OOS + 5-seed stress (frozen, no per-symbol fitting)",
     elapsedSec: (Date.now() - t0) / 1000,
     screened: rows.length,
     valid: rows.filter((x) => x.status === "ok").length,
@@ -323,7 +377,9 @@ async function main(): Promise<void> {
   const mdPath = join(outDir, "growth-e3-cohort-expansion.md");
   writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
   writeFileSync(mdPath, toMarkdown(generatedAt, rows, union, baseline));
-  console.log(`\nPASS ${rows.filter((x) => x.pass).length}/${rows.length} | baseline ${baseline.meanReturnPct.toFixed(2)}% | union ${union.meanReturnPct.toFixed(2)}% | uplift ${(union.meanReturnPct - baseline.meanReturnPct).toFixed(2)}pp`);
+  console.log(
+    `\nPASS ${rows.filter((x) => x.pass).length}/${rows.length} | baseline ${baseline.meanReturnPct.toFixed(2)}% | union ${union.meanReturnPct.toFixed(2)}% | uplift ${(union.meanReturnPct - baseline.meanReturnPct).toFixed(2)}pp`,
+  );
   console.log(`results: ${jsonPath}\ntable:   ${mdPath}`);
 }
 

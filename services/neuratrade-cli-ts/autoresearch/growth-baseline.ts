@@ -302,7 +302,9 @@ function main(): void {
     `drift-only benchmark: ${Math.round(driftTrades).toLocaleString()} trades for 1000x on edge alone ` +
       `(=${(driftTrades / 5 / 365).toFixed(0)}y at 5/day before volatility/guards)`,
   );
-  console.log("trades/day | success | ruin (kill15%) | censored | median time-to-$1M | median ruin day");
+  console.log(
+    "trades/day | success | ruin (kill15%) | censored | median time-to-$1M | median ruin day",
+  );
   const rows: GrowthSimResult[] = [];
   for (const k of TRADES_PER_DAY_RANGE) {
     const r = runGrowthMonteCarlo({
@@ -317,10 +319,18 @@ function main(): void {
     console.log(
       `${String(k).padStart(10)} | ${(r.successRate * 100).toFixed(2)}% | ${(r.ruinRate * 100).toFixed(2)}%        | ` +
         `${(r.censoredRate * 100).toFixed(2)}%    | ${fmtDays(r.medianDaysToTarget).padStart(12)} | ` +
-        (r.medianRuinDays === null ? "n/a" : `${Math.round(r.medianRuinDays)}d`),
+        (r.medianRuinDays === null
+          ? "n/a"
+          : `${Math.round(r.medianRuinDays)}d`),
     );
   }
-  console.log(JSON.stringify({ kind: "growth-e0-baseline", muLog, sigma, paths, maxYears, seed, rows }, null, 2));
+  console.log(
+    JSON.stringify(
+      { kind: "growth-e0-baseline", muLog, sigma, paths, maxYears, seed, rows },
+      null,
+      2,
+    ),
+  );
 }
 
 if (import.meta.main) main();

@@ -60,7 +60,14 @@ describe("growth-baseline stats", () => {
 
 describe("growth-baseline calibration", () => {
   it("recovers a sigma whose median DD matches the frozen 8.53%", () => {
-    const sigma = calibrateSigma(FROZEN_MEDIAN_MAXDD_PCT, MU_LOG, 100, 99, 1500, 14);
+    const sigma = calibrateSigma(
+      FROZEN_MEDIAN_MAXDD_PCT,
+      MU_LOG,
+      100,
+      99,
+      1500,
+      14,
+    );
     expect(Number.isFinite(sigma)).toBe(true);
     expect(sigma).toBeGreaterThan(0.001);
     expect(sigma).toBeLessThan(0.05);

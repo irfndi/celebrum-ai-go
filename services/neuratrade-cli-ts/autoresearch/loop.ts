@@ -82,51 +82,16 @@ interface ChampionState {
   dataset: DatasetProvenance | null;
 }
 
-function loadChampionUnlocked(panel?: AlignedPanel): ChampionState {
-  const raw = readJsonFile<
-    ChampionState & {
-      screenScore?: number;
-      medianDrawdownPct?: number;
-      expectancyPct?: number;
-      dataset?: DatasetProvenance | null;
-    }
-  >(championPath);
-  if (raw?.knobs) {
-    const state: ChampionState = {
-      knobs: raw.knobs,
-      score: Number.isFinite(raw.score) ? raw.score : Number.NEGATIVE_INFINITY,
-      screenScore: Number.isFinite(raw.screenScore)
-        ? (raw.screenScore as number)
-        : Number.NEGATIVE_INFINITY,
-      guardsOk: Boolean(raw.guardsOk),
-      medianDrawdownPct: Number.isFinite(raw.medianDrawdownPct)
-        ? (raw.medianDrawdownPct as number)
-        : Number.POSITIVE_INFINITY,
-      expectancyPct: Number.isFinite(raw.expectancyPct)
-        ? (raw.expectancyPct as number)
-        : Number.NEGATIVE_INFINITY,
-      dataset: (raw.dataset as DatasetProvenance | null) ?? null,
-    };
-    // A panel change (venue, symbols, span) makes stored scores incomparable.
-    // Invalidate them so the search re-earns the crown on the new dataset.
-    if (panel && !isProvenanceCompatible(state.dataset, panel)) {
-      console.log(
-        `champion dataset mismatch (stored=${state.dataset?.panelHash ?? "none"}:${state.dataset?.exchange ?? "none"} current=${panel.panelHash}:${panel.exchange}) — invalidating old scores.`,
-      );
-      return {
-        knobs: state.knobs,
-        score: Number.NEGATIVE_INFINITY,
-        screenScore: Number.NEGATIVE_INFINITY,
-        guardsOk: false,
-        medianDrawdownPct: Number.POSITIVE_INFINITY,
-        expectancyPct: Number.NEGATIVE_INFINITY,
-        dataset: null,
-      };
-    }
-    return state;
-  }
+type StoredChampion = ChampionState & {
+  screenScore?: number;
+  medianDrawdownPct?: number;
+  expectancyPct?: number;
+  dataset?: DatasetProvenance | null;
+};
+
+function freshChampionState(knobs: AutoresearchKnobs): ChampionState {
   return {
-    knobs: { ...seedKnobs },
+    knobs,
     score: Number.NEGATIVE_INFINITY,
     screenScore: Number.NEGATIVE_INFINITY,
     guardsOk: false,
@@ -134,6 +99,39 @@ function loadChampionUnlocked(panel?: AlignedPanel): ChampionState {
     expectancyPct: Number.NEGATIVE_INFINITY,
     dataset: null,
   };
+}
+
+function normalizeStoredChampion(raw: StoredChampion): ChampionState {
+  return {
+    knobs: raw.knobs,
+    score: Number.isFinite(raw.score) ? raw.score : Number.NEGATIVE_INFINITY,
+    screenScore: Number.isFinite(raw.screenScore)
+      ? (raw.screenScore as number)
+      : Number.NEGATIVE_INFINITY,
+    guardsOk: Boolean(raw.guardsOk),
+    medianDrawdownPct: Number.isFinite(raw.medianDrawdownPct)
+      ? (raw.medianDrawdownPct as number)
+      : Number.POSITIVE_INFINITY,
+    expectancyPct: Number.isFinite(raw.expectancyPct)
+      ? (raw.expectancyPct as number)
+      : Number.NEGATIVE_INFINITY,
+    dataset: (raw.dataset as DatasetProvenance | null) ?? null,
+  };
+}
+
+function loadChampionUnlocked(panel?: AlignedPanel): ChampionState {
+  const raw = readJsonFile<StoredChampion>(championPath);
+  if (!raw?.knobs) return freshChampionState({ ...seedKnobs });
+  const state = normalizeStoredChampion(raw);
+  // A panel change (venue, symbols, span) makes stored scores incomparable.
+  // Invalidate them so the search re-earns the crown on the new dataset.
+  if (panel && !isProvenanceCompatible(state.dataset, panel)) {
+    console.log(
+      `champion dataset mismatch (stored=${state.dataset?.panelHash ?? "none"}:${state.dataset?.exchange ?? "none"} current=${panel.panelHash}:${panel.exchange}) — invalidating old scores.`,
+    );
+    return freshChampionState(state.knobs);
+  }
+  return state;
 }
 
 function persistChampionUnlocked(state: ChampionState): void {

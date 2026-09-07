@@ -22,6 +22,7 @@ import {
   MarketDataRepositoryError,
   MarketDataRepositorySQLite,
   MarketDataRepositorySQLiteLive,
+  type MarketDataRepositoryService,
 } from "../market-data/repository.js";
 import { defaultComposerConfig } from "../scalping/composer.js";
 import type { CandleLike, ComposerConfig } from "../scalping/types.js";
@@ -67,6 +68,7 @@ import {
   BitgetApiError,
   isBitgetUnsupportedInstrumentError,
   toBitgetFuturesSymbol,
+  type BitgetClientError,
   type BitgetContract,
 } from "../services/bitget-client.js";
 import { BitgetConfig, BitgetConfigLive } from "../services/bitget-config.js";
@@ -155,6 +157,7 @@ import {
   READINESS_COHORT_CANDIDATES,
   VALIDATED_BTC_GRID_CANDIDATE,
   candidateForSymbol,
+  type ValidatedGridCandidate,
 } from "../scalping/grid-candidate.js";
 import {
   runGridUniverseScan,
@@ -678,20 +681,58 @@ function isDefaultBacktestComposerFlags(
   useFunding: boolean | undefined,
 ): boolean {
   return (
-    !priceOnly &&
-    !noRsi &&
-    !noTrend &&
+    isDefaultSignalSelection(priceOnly, noRsi, noTrend) &&
+    isDefaultRegimeThresholds(regimeMode, volumeMinRatio, minConfluence) &&
+    isDefaultConfirmationGates(
+      entryCandleConfirm,
+      momentumConfirmBars,
+      adxMin,
+      breakoutLookback,
+    ) &&
+    isDefaultFundingGates(fundingBiasThreshold, useFunding)
+  );
+}
+
+function isDefaultSignalSelection(
+  priceOnly: boolean,
+  noRsi: boolean,
+  noTrend: boolean,
+): boolean {
+  return !priceOnly && !noRsi && !noTrend;
+}
+
+function isDefaultRegimeThresholds(
+  regimeMode: "trend" | "reversion" | "breakout",
+  volumeMinRatio: number,
+  minConfluence: number,
+): boolean {
+  return (
     regimeMode === defaultComposerConfig.thresholds.regimeMode &&
     volumeMinRatio <= 0 &&
-    minConfluence <= 0 &&
+    minConfluence <= 0
+  );
+}
+
+function isDefaultConfirmationGates(
+  entryCandleConfirm: boolean,
+  momentumConfirmBars: number,
+  adxMin: number,
+  breakoutLookback: number,
+): boolean {
+  return (
     !entryCandleConfirm &&
     momentumConfirmBars <= 0 &&
     adxMin <= 0 &&
     (breakoutLookback <= 0 ||
-      breakoutLookback === defaultComposerConfig.thresholds.breakoutLookback) &&
-    fundingBiasThreshold === undefined &&
-    useFunding === undefined
+      breakoutLookback === defaultComposerConfig.thresholds.breakoutLookback)
   );
+}
+
+function isDefaultFundingGates(
+  fundingBiasThreshold: number | undefined,
+  useFunding: boolean | undefined,
+): boolean {
+  return fundingBiasThreshold === undefined && useFunding === undefined;
 }
 
 export function buildBacktestComposerConfig(
@@ -728,6 +769,32 @@ export function buildBacktestComposerConfig(
     return defaultComposerConfig;
   }
 
+  const normalized = normalizeComposerWeights(
+    disabledSignalWeights(priceOnly, noRsi, noTrend),
+  );
+  if (normalized === null) return defaultComposerConfig;
+  return {
+    weights: normalized,
+    thresholds: overrideComposerThresholds(
+      regimeMode,
+      volumeMinRatio,
+      volumeLookback,
+      minConfluence,
+      entryCandleConfirm,
+      momentumConfirmBars,
+      adxMin,
+      breakoutLookback,
+      fundingBiasThreshold,
+      useFunding,
+    ),
+  } satisfies ComposerConfig;
+}
+
+function disabledSignalWeights(
+  priceOnly: boolean,
+  noRsi: boolean,
+  noTrend: boolean,
+): ComposerConfig["weights"] {
   const weights = { ...defaultComposerConfig.weights };
   if (priceOnly) {
     weights.spread = 0;
@@ -740,11 +807,15 @@ export function buildBacktestComposerConfig(
   if (noTrend) {
     weights.trend = 0;
   }
+  return weights;
+}
 
+function normalizeComposerWeights(
+  weights: ComposerConfig["weights"],
+): ComposerConfig["weights"] | null {
   const activeSum = Object.values(weights).reduce((a, b) => a + b, 0);
-  if (activeSum <= 0) return defaultComposerConfig;
-
-  const normalized: ComposerConfig["weights"] = {
+  if (activeSum <= 0) return null;
+  return {
     spread: weights.spread / activeSum,
     imbalance: weights.imbalance / activeSum,
     volatility: weights.volatility / activeSum,
@@ -757,7 +828,20 @@ export function buildBacktestComposerConfig(
     funding: weights.funding / activeSum,
     connorsRsi2: weights.connorsRsi2 / activeSum,
   };
+}
 
+function overrideComposerThresholds(
+  regimeMode: "trend" | "reversion" | "breakout",
+  volumeMinRatio: number,
+  volumeLookback: number,
+  minConfluence: number,
+  entryCandleConfirm: boolean,
+  momentumConfirmBars: number,
+  adxMin: number,
+  breakoutLookback: number,
+  fundingBiasThreshold: number | undefined,
+  useFunding: boolean | undefined,
+): ComposerConfig["thresholds"] {
   const thresholds = {
     ...defaultComposerConfig.thresholds,
     regimeMode,
@@ -772,7 +856,7 @@ export function buildBacktestComposerConfig(
   if (fundingBiasThreshold !== undefined)
     thresholds.fundingBiasThreshold = fundingBiasThreshold;
   if (useFunding !== undefined) thresholds.useFunding = useFunding;
-  return { weights: normalized, thresholds } satisfies ComposerConfig;
+  return thresholds;
 }
 
 /**
@@ -805,17 +889,99 @@ function resolveBacktestCandleRange(
   return { ok: true, range };
 }
 
+function requireBacktestCandleRange(args: ResolvedBacktestArgs) {
+  const candleRange = resolveBacktestCandleRange(args);
+  if (!candleRange.ok) {
+    return Effect.fail(new Error(candleRange.error));
+  }
+  return Effect.succeed(candleRange.range);
+}
+
+function loadHtfCandles(
+  repo: MarketDataRepositoryService,
+  args: ResolvedBacktestArgs,
+  from: Date | undefined,
+  to: Date | undefined,
+) {
+  const htf = args.htfTimeframe;
+  if (htf === undefined || htf.trim().length === 0) {
+    return Effect.succeed([] as readonly CandleLike[]);
+  }
+  return repo.getCandles({
+    exchange: args.exchange,
+    symbol: args.symbol,
+    timeframe: htf,
+    from,
+    to,
+  });
+}
+
+function loadFundingRatesOrWarn(
+  repo: MarketDataRepositoryService,
+  args: ResolvedBacktestArgs,
+  candles: readonly CandleLike[],
+) {
+  // Historical funding rates power the funding-bias component. Missing
+  // rows leave the component inert (buildFundingComponent returns null);
+  // a fetch failure must not fail the backtest.
+  return repo
+    .getFundingRates(
+      args.exchange,
+      args.symbol,
+      candles[0]?.timestamp,
+      candles[candles.length - 1]?.timestamp,
+    )
+    .pipe(
+      Effect.catch((err) =>
+        Effect.gen(function* () {
+          yield* Effect.logWarning(
+            `failed to load funding rates: ${
+              err instanceof Error ? err.message : String(err)
+            } — funding component inert`,
+          );
+          return [] as readonly FundingRate[];
+        }),
+      ),
+      Effect.tap((fundingRates) =>
+        fundingRates.length === 0
+          ? Effect.logWarning("funding rates absent — funding component inert")
+          : Effect.log(
+              `loaded ${fundingRates.length} funding rates — funding component active`,
+            ),
+      ),
+    );
+}
+
+interface TemplatedBacktestConfig {
+  readonly args: ResolvedBacktestArgs;
+  readonly composerConfig: ComposerConfig;
+}
+
+function applyBacktestTemplate(
+  args: ResolvedBacktestArgs,
+  composerConfig: ComposerConfig,
+): TemplatedBacktestConfig {
+  // --template applies the strategy template's signal weights/thresholds
+  // (e.g. microScalp RSI(2)) and its execution overrides on top of the
+  // CLI-derived config. Previously the template flags were parsed but
+  // never wired — backtests silently ran the default composer.
+  if (args.template === undefined || args.template === "") {
+    return { args, composerConfig };
+  }
+  const template = args.template as StrategyTemplateName;
+  return {
+    args: buildBacktestArgsFromTemplate(template, args),
+    composerConfig: buildComposerConfigFromTemplate(template, composerConfig),
+  };
+}
+
 export function backtestProgram(args: ResolvedBacktestArgs) {
   return Effect.gen(function* () {
     const repo = yield* MarketDataRepository;
     const path = yield* Path;
     const engine = yield* BacktestEngine;
 
-    const candleRange = resolveBacktestCandleRange(args);
-    if (!candleRange.ok) {
-      return yield* Effect.fail(new Error(candleRange.error));
-    }
-    const { from, to } = candleRange.range;
+    const { from, to } = yield* requireBacktestCandleRange(args);
 
     const candles = yield* repo.getCandles({
       exchange: args.exchange,
@@ -825,16 +991,7 @@ export function backtestProgram(args: ResolvedBacktestArgs) {
       to,
     });
 
-    const htfCandles =
-      args.htfTimeframe && args.htfTimeframe.trim().length > 0
-        ? yield* repo.getCandles({
-            exchange: args.exchange,
-            symbol: args.symbol,
-            timeframe: args.htfTimeframe,
-            from,
-            to,
-          })
-        : [];
+    const htfCandles = yield* loadHtfCandles(repo, args, from, to);
 
     if (candles.length === 0) {
       return yield* Effect.fail(
@@ -844,37 +1001,7 @@ export function backtestProgram(args: ResolvedBacktestArgs) {
       );
     }
 
-    // Historical funding rates power the funding-bias component. Missing
-    // rows leave the component inert (buildFundingComponent returns null);
-    // a fetch failure must not fail the backtest.
-    const fundingRates = yield* repo
-      .getFundingRates(
-        args.exchange,
-        args.symbol,
-        candles[0]?.timestamp,
-        candles[candles.length - 1]?.timestamp,
-      )
-      .pipe(
-        Effect.catch((err) =>
-          Effect.gen(function* () {
-            yield* Effect.logWarning(
-              `failed to load funding rates: ${
-                err instanceof Error ? err.message : String(err)
-              } — funding component inert`,
-            );
-            return [] as readonly FundingRate[];
-          }),
-        ),
-      );
-    if (fundingRates.length === 0) {
-      yield* Effect.logWarning(
-        "funding rates absent — funding component inert",
-      );
-    } else {
-      yield* Effect.log(
-        `loaded ${fundingRates.length} funding rates — funding component active`,
-      );
-    }
+    const fundingRates = yield* loadFundingRatesOrWarn(repo, args, candles);
 
     let composerConfig = buildBacktestComposerConfig(
       args.priceOnly,
@@ -892,18 +1019,9 @@ export function backtestProgram(args: ResolvedBacktestArgs) {
       args.useFunding,
     );
 
-    // --template applies the strategy template's signal weights/thresholds
-    // (e.g. microScalp RSI(2)) and its execution overrides on top of the
-    // CLI-derived config. Previously the template flags were parsed but
-    // never wired — backtests silently ran the default composer.
-    if (args.template !== undefined && args.template !== "") {
-      const template = args.template as StrategyTemplateName;
-      composerConfig = buildComposerConfigFromTemplate(
-        template,
-        composerConfig,
-      );
-      args = buildBacktestArgsFromTemplate(template, args);
-    }
+    const templated = applyBacktestTemplate(args, composerConfig);
+    args = templated.args;
+    composerConfig = templated.composerConfig;
 
     const result: BacktestResult =
       args.strategyType === "grid"
@@ -1171,6 +1289,48 @@ function printBacktestResult(
   });
 }
 
+function candleTimestamp(
+  candles: readonly CandleLike[],
+  bar: number,
+  fallbackBar: number,
+): Date {
+  return (
+    candles[bar]?.timestamp ?? candles[fallbackBar]?.timestamp ?? new Date(0)
+  );
+}
+
+function gridTradeToBacktestTrade(
+  t: GridTrade,
+  idx: number,
+  symbol: string,
+  candles: readonly CandleLike[],
+  feePct: number,
+): BacktestTrade {
+  const entryTime = candleTimestamp(candles, t.entryBar, 0);
+  const exitTime = candleTimestamp(candles, t.exitBar, candles.length - 1);
+  return {
+    id: `grid-${idx}`,
+    symbol,
+    side: t.side,
+    entryTime,
+    exitTime,
+    entryPrice: t.entryPrice,
+    exitPrice: t.exitPrice,
+    pnl: t.pnlQuote,
+    pnlPct: t.pnlPct * 100,
+    netPnl: t.pnlQuote,
+    exitReason: t.isLiquidation
+      ? ("liquidation" as const)
+      : t.win
+        ? ("take_profit" as const)
+        : ("stop_loss" as const),
+    initialRiskPct: 0,
+    fillType: "maker" as const,
+    entryFeePct: feePct / 2,
+    exitFeePct: feePct / 2,
+  };
+}
+
 function gridResultToBacktestResult(
   symbol: string,
   grid: GridResult,
@@ -1178,36 +1338,8 @@ function gridResultToBacktestResult(
   initialCapital: number,
   feePct: number,
 ): BacktestResult {
-  const trades: BacktestTrade[] = grid.trades.map(
-    (t: GridTrade, idx: number) => {
-      const entryTime =
-        candles[t.entryBar]?.timestamp ?? candles[0]?.timestamp ?? new Date(0);
-      const exitTime =
-        candles[t.exitBar]?.timestamp ??
-        candles[candles.length - 1]?.timestamp ??
-        new Date(0);
-      return {
-        id: `grid-${idx}`,
-        symbol,
-        side: t.side,
-        entryTime,
-        exitTime,
-        entryPrice: t.entryPrice,
-        exitPrice: t.exitPrice,
-        pnl: t.pnlQuote,
-        pnlPct: t.pnlPct * 100,
-        netPnl: t.pnlQuote,
-        exitReason: t.isLiquidation
-          ? ("liquidation" as const)
-          : t.win
-            ? ("take_profit" as const)
-            : ("stop_loss" as const),
-        initialRiskPct: 0,
-        fillType: "maker" as const,
-        entryFeePct: feePct / 2,
-        exitFeePct: feePct / 2,
-      };
-    },
+  const trades: BacktestTrade[] = grid.trades.map((t: GridTrade, idx: number) =>
+    gridTradeToBacktestTrade(t, idx, symbol, candles, feePct),
   );
   const first = candles[0]?.timestamp.getTime() ?? 0;
   const last = candles[candles.length - 1]?.timestamp.getTime() ?? 0;
@@ -1532,11 +1664,7 @@ function optimizeProgram(args: OptimizeArgs) {
     const repo = yield* MarketDataRepository;
     const engine = yield* BacktestEngine;
 
-    const candleRange = resolveBacktestCandleRange(args);
-    if (!candleRange.ok) {
-      return yield* Effect.fail(new Error(candleRange.error));
-    }
-    const { from, to } = candleRange.range;
+    const { from, to } = yield* requireBacktestCandleRange(args);
 
     const candles = yield* repo.getCandles({
       exchange: args.exchange,
@@ -1589,44 +1717,63 @@ function optimizeProgram(args: OptimizeArgs) {
       args.wfStepDays,
     );
     for (const window of windows) {
-      let selected:
-        | {
-            readonly params: OptimizeCandidateParams;
-            readonly isResult: BacktestResult;
-          }
-        | undefined;
-
-      for (const params of candidates) {
-        const isResult = yield* runOptimizeCandidate(
-          engine,
-          args,
-          window.trainCandles,
-          composerConfig,
-          params,
-        );
-        if (isResult.totalTrades < args.minTrades) continue;
-        if (
-          selected === undefined ||
-          objectiveValue(isResult, args.selectBy) >
-            objectiveValue(selected.isResult, args.selectBy)
-        ) {
-          selected = { params, isResult };
-        }
-      }
-
-      if (selected === undefined) continue;
-      const oosResult = yield* runOptimizeCandidate(
+      const result = yield* evaluateWalkForwardWindow(
         engine,
         args,
-        window.testCandles,
+        window,
         composerConfig,
-        selected.params,
+        candidates,
       );
-      if (oosResult.totalTrades < args.minOosTrades) continue;
-      results.push({ ...selected, oosResult });
+      if (result !== null) results.push(result);
     }
 
     return results;
+  });
+}
+
+function evaluateWalkForwardWindow(
+  engine: BacktestEngineImpl,
+  args: OptimizeArgs,
+  window: WalkForwardWindow,
+  composerConfig: ComposerConfig,
+  candidates: readonly OptimizeCandidateParams[],
+) {
+  return Effect.gen(function* () {
+    let selected:
+      | {
+          readonly params: OptimizeCandidateParams;
+          readonly isResult: BacktestResult;
+        }
+      | undefined;
+
+    for (const params of candidates) {
+      const isResult = yield* runOptimizeCandidate(
+        engine,
+        args,
+        window.trainCandles,
+        composerConfig,
+        params,
+      );
+      if (isResult.totalTrades < args.minTrades) continue;
+      if (
+        selected === undefined ||
+        objectiveValue(isResult, args.selectBy) >
+          objectiveValue(selected.isResult, args.selectBy)
+      ) {
+        selected = { params, isResult };
+      }
+    }
+
+    if (selected === undefined) return null;
+    const oosResult = yield* runOptimizeCandidate(
+      engine,
+      args,
+      window.testCandles,
+      composerConfig,
+      selected.params,
+    );
+    if (oosResult.totalTrades < args.minOosTrades) return null;
+    return { ...selected, oosResult };
   });
 }
 
@@ -1695,6 +1842,73 @@ function runOptimizeCandidate(
   });
 }
 
+function topOptimizeBy(
+  results: ReadonlyArray<OptimizeResult>,
+  metric: "totalReturnPct" | "sharpeRatio",
+): OptimizeResult[] {
+  return [...results]
+    .sort(
+      (a, b) =>
+        (b.oosResult ?? b.isResult)[metric] -
+        (a.oosResult ?? a.isResult)[metric],
+    )
+    .slice(0, 5);
+}
+
+export function formatOptimizeCandidateLine(r: OptimizeResult): string {
+  const result = r.oosResult ?? r.isResult;
+  return (
+    `  stop=${r.params.stopMult.toFixed(2)} tp=${r.params.tpMult.toFixed(2)} conf=${r.params.minConfidence.toFixed(2)} | ` +
+    `return=${result.totalReturnPct.toFixed(2)}% sharpe=${result.sharpeRatio.toFixed(3)} trades=${result.totalTrades} win=${(result.winRate * 100).toFixed(1)}% dd=${result.maxDrawdownPct.toFixed(2)}%`
+  );
+}
+
+function logTopOptimizeCandidates(
+  title: string,
+  rows: ReadonlyArray<OptimizeResult>,
+) {
+  return Effect.gen(function* () {
+    yield* Console.log(title);
+    for (const r of rows) {
+      yield* Console.log(formatOptimizeCandidateLine(r));
+    }
+  });
+}
+
+function logOosAggregate(
+  oosResults: ReadonlyArray<BacktestResult>,
+  initialCapital: number,
+) {
+  return Effect.gen(function* () {
+    if (oosResults.length === 0 || initialCapital <= 0) return;
+    let capital = initialCapital;
+    let peak = capital;
+    let maxDrawdownPct = 0;
+    for (const result of oosResults) {
+      const windowStartCapital = capital;
+      const scale = windowStartCapital / initialCapital;
+      for (const trade of result.trades) {
+        capital += trade.netPnl * scale;
+        peak = Math.max(peak, capital);
+        maxDrawdownPct = Math.max(
+          maxDrawdownPct,
+          peak > 0 ? ((peak - capital) / peak) * 100 : 0,
+        );
+      }
+    }
+    const profitableWindows = oosResults.filter(
+      (result) => result.totalReturnPct > 0,
+    ).length;
+    yield* Console.log(
+      `Walk-forward OOS aggregate: windows=${oosResults.length} ` +
+        `profitable=${((profitableWindows / oosResults.length) * 100).toFixed(1)}% ` +
+        `compoundReturn=${(((capital - initialCapital) / initialCapital) * 100).toFixed(2)}% ` +
+        `maxDD=${maxDrawdownPct.toFixed(2)}% ` +
+        `trades=${oosResults.reduce((sum, result) => sum + result.totalTrades, 0)}`,
+    );
+  });
+}
+
 function printOptimizeResult(
   results: ReadonlyArray<OptimizeResult>,
   symbol: string,
@@ -1707,20 +1921,8 @@ function printOptimizeResult(
       return;
     }
 
-    const byReturn = [...results]
-      .sort(
-        (a, b) =>
-          (b.oosResult ?? b.isResult).totalReturnPct -
-          (a.oosResult ?? a.isResult).totalReturnPct,
-      )
-      .slice(0, 5);
-    const bySharpe = [...results]
-      .sort(
-        (a, b) =>
-          (b.oosResult ?? b.isResult).sharpeRatio -
-          (a.oosResult ?? a.isResult).sharpeRatio,
-      )
-      .slice(0, 5);
+    const byReturn = topOptimizeBy(results, "totalReturnPct");
+    const bySharpe = topOptimizeBy(results, "sharpeRatio");
 
     yield* Console.log(
       `\n🔬 Optimization results for ${symbol} ${timeframe} (${results.length} configs tested)`,
@@ -1728,50 +1930,9 @@ function printOptimizeResult(
     const oosResults = results.flatMap((result) =>
       result.oosResult === undefined ? [] : [result.oosResult],
     );
-    if (oosResults.length > 0 && initialCapital > 0) {
-      let capital = initialCapital;
-      let peak = capital;
-      let maxDrawdownPct = 0;
-      for (const result of oosResults) {
-        const windowStartCapital = capital;
-        const scale = windowStartCapital / initialCapital;
-        for (const trade of result.trades) {
-          capital += trade.netPnl * scale;
-          peak = Math.max(peak, capital);
-          maxDrawdownPct = Math.max(
-            maxDrawdownPct,
-            peak > 0 ? ((peak - capital) / peak) * 100 : 0,
-          );
-        }
-      }
-      const profitableWindows = oosResults.filter(
-        (result) => result.totalReturnPct > 0,
-      ).length;
-      yield* Console.log(
-        `Walk-forward OOS aggregate: windows=${oosResults.length} ` +
-          `profitable=${((profitableWindows / oosResults.length) * 100).toFixed(1)}% ` +
-          `compoundReturn=${(((capital - initialCapital) / initialCapital) * 100).toFixed(2)}% ` +
-          `maxDD=${maxDrawdownPct.toFixed(2)}% ` +
-          `trades=${oosResults.reduce((sum, result) => sum + result.totalTrades, 0)}`,
-      );
-    }
-    yield* Console.log("\nTop 5 by total return:");
-    for (const r of byReturn) {
-      const result = r.oosResult ?? r.isResult;
-      yield* Console.log(
-        `  stop=${r.params.stopMult.toFixed(2)} tp=${r.params.tpMult.toFixed(2)} conf=${r.params.minConfidence.toFixed(2)} | ` +
-          `return=${result.totalReturnPct.toFixed(2)}% sharpe=${result.sharpeRatio.toFixed(3)} trades=${result.totalTrades} win=${(result.winRate * 100).toFixed(1)}% dd=${result.maxDrawdownPct.toFixed(2)}%`,
-      );
-    }
-
-    yield* Console.log("\nTop 5 by Sharpe ratio:");
-    for (const r of bySharpe) {
-      const result = r.oosResult ?? r.isResult;
-      yield* Console.log(
-        `  stop=${r.params.stopMult.toFixed(2)} tp=${r.params.tpMult.toFixed(2)} conf=${r.params.minConfidence.toFixed(2)} | ` +
-          `return=${result.totalReturnPct.toFixed(2)}% sharpe=${result.sharpeRatio.toFixed(3)} trades=${result.totalTrades} win=${(result.winRate * 100).toFixed(1)}% dd=${result.maxDrawdownPct.toFixed(2)}%`,
-      );
-    }
+    yield* logOosAggregate(oosResults, initialCapital);
+    yield* logTopOptimizeCandidates("\nTop 5 by total return:", byReturn);
+    yield* logTopOptimizeCandidates("\nTop 5 by Sharpe ratio:", bySharpe);
   });
 }
 
@@ -2063,69 +2224,97 @@ function scanSingleExchange(
     const results: Array<ScanResult> = [];
 
     for (const symbol of selected) {
-      const candles = yield* repo.getCandles({
+      const result = yield* evaluateScanSymbol(
+        repo,
         exchange,
         symbol,
-        timeframe: args.timeframe,
-      });
-
-      if (candles.length < 50) continue;
-
-      const result = args.optimize
-        ? yield* optimizeForSymbol(
-            symbol,
-            candles,
-            args,
-            exchange,
-            composerConfig,
-          )
-        : yield* runBacktestWithParams(
-            symbol,
-            candles,
-            args,
-            exchange,
-            composerConfig,
-            {
-              atrStopMultiplier: args.atrStopMultiplier,
-              atrTakeProfitMultiplier: args.atrTakeProfitMultiplier,
-              minConfidence: args.minConfidence,
-            },
-          );
-
-      if (
-        Option.isSome(args.minReturnPct) &&
-        result.totalReturnPct < args.minReturnPct.value
-      ) {
-        continue;
-      }
-
-      if (
-        Option.isSome(args.minSharpe) &&
-        result.sharpeRatio < args.minSharpe.value
-      ) {
-        continue;
-      }
-
-      if (
-        Option.isSome(args.maxDrawdownPct) &&
-        result.maxDrawdownPct > args.maxDrawdownPct.value
-      ) {
-        continue;
-      }
-
-      results.push({
-        symbol,
-        exchange,
-        totalTrades: result.totalTrades,
-        winRate: result.winRate,
-        totalReturnPct: result.totalReturnPct,
-        maxDrawdownPct: result.maxDrawdownPct,
-        sharpeRatio: result.sharpeRatio,
-        bestParams: result.bestParams,
-      });
+        args,
+        composerConfig,
+      );
+      if (result !== null) results.push(result);
     }
 
     return results;
+  });
+}
+
+function passesScanGates(
+  result: Pick<
+    BacktestResult,
+    "totalReturnPct" | "sharpeRatio" | "maxDrawdownPct"
+  >,
+  args: ScanArgs,
+): boolean {
+  if (
+    Option.isSome(args.minReturnPct) &&
+    result.totalReturnPct < args.minReturnPct.value
+  ) {
+    return false;
+  }
+  if (
+    Option.isSome(args.minSharpe) &&
+    result.sharpeRatio < args.minSharpe.value
+  ) {
+    return false;
+  }
+  if (
+    Option.isSome(args.maxDrawdownPct) &&
+    result.maxDrawdownPct > args.maxDrawdownPct.value
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function evaluateScanSymbol(
+  repo: import("../market-data/repository.js").MarketDataRepositoryService,
+  exchange: string,
+  symbol: string,
+  args: ScanArgs,
+  composerConfig: ComposerConfig,
+) {
+  return Effect.gen(function* () {
+    const candles = yield* repo.getCandles({
+      exchange,
+      symbol,
+      timeframe: args.timeframe,
+    });
+
+    if (candles.length < 50) return null;
+
+    const result = args.optimize
+      ? yield* optimizeForSymbol(
+          symbol,
+          candles,
+          args,
+          exchange,
+          composerConfig,
+        )
+      : yield* runBacktestWithParams(
+          symbol,
+          candles,
+          args,
+          exchange,
+          composerConfig,
+          {
+            atrStopMultiplier: args.atrStopMultiplier,
+            atrTakeProfitMultiplier: args.atrTakeProfitMultiplier,
+            minConfidence: args.minConfidence,
+          },
+        );
+
+    if (!passesScanGates(result, args)) return null;
+
+    return {
+      symbol,
+      exchange,
+      totalTrades: result.totalTrades,
+      winRate: result.winRate,
+      totalReturnPct: result.totalReturnPct,
+      maxDrawdownPct: result.maxDrawdownPct,
+      sharpeRatio: result.sharpeRatio,
+      bestParams: result.bestParams,
+    } satisfies ScanResult;
   });
 }
 
@@ -2284,6 +2473,196 @@ function emptyScanResult(symbol: string): BacktestResult {
   };
 }
 
+const SCAN_TABLE_HEADER_SINGLE =
+  "Symbol        Trades  Win%    Return   Drawdown  Sharpe";
+const SCAN_TABLE_HEADER_MULTI =
+  "Exchange   Symbol        Trades  Win%    Return   Drawdown  Sharpe";
+const SCAN_TABLE_SEPARATOR =
+  "--------------------------------------------------------------------";
+
+/** Single scan-result table row; identical layout with and without exchange. */
+export function formatScanRow(r: ScanResult, multiExchange: boolean): string {
+  const stats =
+    `${String(r.totalTrades).padStart(6)}  ` +
+    `${(r.winRate * 100).toFixed(1).padStart(5)}%  ` +
+    `${r.totalReturnPct.toFixed(2).padStart(6)}%  ` +
+    `${r.maxDrawdownPct.toFixed(2).padStart(7)}%   ` +
+    `${r.sharpeRatio.toFixed(3)}`;
+  if (!multiExchange) return `${r.symbol.padEnd(13)} ${stats}`;
+  return `${r.exchange.padEnd(10)} ${r.symbol.padEnd(13)} ${stats}`;
+}
+
+/** Best-params detail line, or null when this symbol has no tuned params. */
+export function formatBestParamsLine(
+  r: ScanResult,
+  multiExchange: boolean,
+): string | null {
+  if (!r.bestParams) return null;
+  const prefix = multiExchange ? `${r.exchange}:${r.symbol}` : r.symbol;
+  return (
+    `  ${prefix.padEnd(25)} stop=${r.bestParams.atrStopMultiplier.toFixed(1)} ` +
+    `tp=${r.bestParams.atrTakeProfitMultiplier.toFixed(1)} ` +
+    `conf=${r.bestParams.minConfidence.toFixed(1)}`
+  );
+}
+
+export interface ScanSummary {
+  readonly profitable: number;
+  readonly avgReturn: number;
+  readonly avgSharpe: number;
+  readonly highSharpe: number;
+  readonly lowDrawdown: number;
+  readonly liveReady: number;
+  readonly best: ScanResult;
+  readonly worst: ScanResult;
+}
+
+/** Aggregate scan stats. Callers must pass a non-empty list. */
+export function summarizeScanResults(
+  results: ReadonlyArray<ScanResult>,
+): ScanSummary {
+  return {
+    profitable: results.filter((r) => r.totalReturnPct > 0).length,
+    avgReturn:
+      results.reduce((sum, r) => sum + r.totalReturnPct, 0) / results.length,
+    avgSharpe:
+      results.reduce((sum, r) => sum + r.sharpeRatio, 0) / results.length,
+    highSharpe: results.filter((r) => r.sharpeRatio > 0.5).length,
+    lowDrawdown: results.filter((r) => r.maxDrawdownPct < 15).length,
+    liveReady: results.filter(isLiveReadyScanResult).length,
+    best: results.reduce((max, r) =>
+      r.totalReturnPct > max.totalReturnPct ? r : max,
+    ),
+    worst: results.reduce((min, r) =>
+      r.totalReturnPct < min.totalReturnPct ? r : min,
+    ),
+  };
+}
+
+function isLiveReadyScanResult(r: ScanResult): boolean {
+  return r.totalReturnPct > 0 && r.sharpeRatio > 0.5 && r.maxDrawdownPct < 15;
+}
+
+function scanShare(count: number, total: number): string {
+  return ((count / total) * 100).toFixed(1);
+}
+
+function logScanTable(
+  results: ReadonlyArray<ScanResult>,
+  multiExchange: boolean,
+) {
+  return Effect.gen(function* () {
+    yield* Console.log("\n🔎 Multi-ticker backtest scan");
+    yield* Console.log(
+      multiExchange ? SCAN_TABLE_HEADER_MULTI : SCAN_TABLE_HEADER_SINGLE,
+    );
+    yield* Console.log(SCAN_TABLE_SEPARATOR);
+    for (const r of results) {
+      yield* Console.log(formatScanRow(r, multiExchange));
+    }
+  });
+}
+
+function logBestParamsSection(
+  results: ReadonlyArray<ScanResult>,
+  multiExchange: boolean,
+) {
+  return Effect.gen(function* () {
+    const lines = results.flatMap((r) => {
+      const line = formatBestParamsLine(r, multiExchange);
+      return line === null ? [] : [line];
+    });
+    if (lines.length === 0) return;
+    yield* Console.log("\nBest params per symbol");
+    for (const line of lines) {
+      yield* Console.log(line);
+    }
+  });
+}
+
+function logScanSummary(
+  results: ReadonlyArray<ScanResult>,
+  multiExchange: boolean,
+) {
+  const summary = summarizeScanResults(results);
+  const bestPrefix = multiExchange ? `${summary.best.exchange}:` : "";
+  const worstPrefix = multiExchange ? `${summary.worst.exchange}:` : "";
+  return Effect.gen(function* () {
+    yield* Console.log("\nSummary");
+    yield* Console.log(`  Symbols tested: ${results.length}`);
+    yield* Console.log(
+      `  Profitable:     ${summary.profitable} (${scanShare(summary.profitable, results.length)}%)`,
+    );
+    yield* Console.log(
+      `  Sharpe > 0.5:   ${summary.highSharpe} (${scanShare(summary.highSharpe, results.length)}%)`,
+    );
+    yield* Console.log(
+      `  Drawdown < 15%: ${summary.lowDrawdown} (${scanShare(summary.lowDrawdown, results.length)}%)`,
+    );
+    yield* Console.log(
+      `  Live-ready:     ${summary.liveReady} (${scanShare(summary.liveReady, results.length)}%)`,
+    );
+    yield* Console.log(`  Avg return:     ${summary.avgReturn.toFixed(2)}%`);
+    yield* Console.log(`  Avg Sharpe:     ${summary.avgSharpe.toFixed(3)}`);
+    yield* Console.log(
+      `  Best:           ${bestPrefix}${summary.best.symbol} ${summary.best.totalReturnPct.toFixed(2)}% (Sharpe ${summary.best.sharpeRatio.toFixed(3)})`,
+    );
+    yield* Console.log(
+      `  Worst:          ${worstPrefix}${summary.worst.symbol} ${summary.worst.totalReturnPct.toFixed(2)}% (Sharpe ${summary.worst.sharpeRatio.toFixed(3)})`,
+    );
+  });
+}
+
+interface GroupedScanResults {
+  readonly byExchange: Map<string, ScanResult[]>;
+  readonly bySymbol: Map<string, ScanResult[]>;
+}
+
+function groupScanResults(
+  results: ReadonlyArray<ScanResult>,
+): GroupedScanResults {
+  const byExchange = new Map<string, ScanResult[]>();
+  const bySymbol = new Map<string, ScanResult[]>();
+  for (const r of results) {
+    const exchangeList = byExchange.get(r.exchange) ?? [];
+    exchangeList.push(r);
+    byExchange.set(r.exchange, exchangeList);
+    const symbolList = bySymbol.get(r.symbol) ?? [];
+    symbolList.push(r);
+    bySymbol.set(r.symbol, symbolList);
+  }
+  return { byExchange, bySymbol };
+}
+
+function logPerExchangeBreakdown(results: ReadonlyArray<ScanResult>) {
+  return Effect.gen(function* () {
+    const { byExchange, bySymbol } = groupScanResults(results);
+    yield* Console.log("\nPer-exchange averages");
+    for (const [exchange, list] of byExchange) {
+      const avg =
+        list.reduce((sum, r) => sum + r.totalReturnPct, 0) / list.length;
+      const sharpe =
+        list.reduce((sum, r) => sum + r.sharpeRatio, 0) / list.length;
+      yield* Console.log(
+        `  ${exchange.padEnd(10)} n=${String(list.length).padStart(3)} avgReturn=${avg.toFixed(2)}% avgSharpe=${sharpe.toFixed(3)}`,
+      );
+    }
+    const consistent = [...bySymbol.entries()]
+      .filter(([, list]) => list.every((r) => r.totalReturnPct > 0))
+      .sort((a, b) => b[1].length - a[1].length);
+    if (consistent.length > 0) {
+      yield* Console.log("\nCross-exchange consistent symbols");
+      for (const [symbol, list] of consistent.slice(0, 10)) {
+        const avg =
+          list.reduce((sum, r) => sum + r.totalReturnPct, 0) / list.length;
+        yield* Console.log(
+          `  ${symbol.padEnd(13)} profitable on ${list.length} exchange(s) avgReturn=${avg.toFixed(2)}%`,
+        );
+      }
+    }
+  });
+}
+
 function printScanResult(results: ReadonlyArray<ScanResult>) {
   return Effect.gen(function* () {
     if (results.length === 0) {
@@ -2293,126 +2672,13 @@ function printScanResult(results: ReadonlyArray<ScanResult>) {
 
     const multiExchange = new Set(results.map((r) => r.exchange)).size > 1;
 
-    yield* Console.log("\n🔎 Multi-ticker backtest scan");
-    yield* Console.log(
-      multiExchange
-        ? "Exchange   Symbol        Trades  Win%    Return   Drawdown  Sharpe"
-        : "Symbol        Trades  Win%    Return   Drawdown  Sharpe",
-    );
-    yield* Console.log(
-      "--------------------------------------------------------------------",
-    );
+    yield* logScanTable(results, multiExchange);
 
-    for (const r of results) {
-      const row = multiExchange
-        ? `${r.exchange.padEnd(10)} ${r.symbol.padEnd(13)} ${String(r.totalTrades).padStart(6)}  ` +
-          `${(r.winRate * 100).toFixed(1).padStart(5)}%  ` +
-          `${r.totalReturnPct.toFixed(2).padStart(6)}%  ` +
-          `${r.maxDrawdownPct.toFixed(2).padStart(7)}%   ` +
-          `${r.sharpeRatio.toFixed(3)}`
-        : `${r.symbol.padEnd(13)} ${String(r.totalTrades).padStart(6)}  ` +
-          `${(r.winRate * 100).toFixed(1).padStart(5)}%  ` +
-          `${r.totalReturnPct.toFixed(2).padStart(6)}%  ` +
-          `${r.maxDrawdownPct.toFixed(2).padStart(7)}%   ` +
-          `${r.sharpeRatio.toFixed(3)}`;
-      yield* Console.log(row);
-    }
-
-    const profitable = results.filter((r) => r.totalReturnPct > 0);
-    const avgReturn =
-      results.reduce((sum, r) => sum + r.totalReturnPct, 0) / results.length;
-    const avgSharpe =
-      results.reduce((sum, r) => sum + r.sharpeRatio, 0) / results.length;
-
-    if (results.some((r) => r.bestParams)) {
-      yield* Console.log("\nBest params per symbol");
-      for (const r of results) {
-        if (r.bestParams) {
-          const prefix = multiExchange ? `${r.exchange}:${r.symbol}` : r.symbol;
-          yield* Console.log(
-            `  ${prefix.padEnd(25)} stop=${r.bestParams.atrStopMultiplier.toFixed(1)} ` +
-              `tp=${r.bestParams.atrTakeProfitMultiplier.toFixed(1)} ` +
-              `conf=${r.bestParams.minConfidence.toFixed(1)}`,
-          );
-        }
-      }
-    }
-
-    const highSharpe = results.filter((r) => r.sharpeRatio > 0.5);
-    const lowDrawdown = results.filter((r) => r.maxDrawdownPct < 15);
-    const liveReady = results.filter(
-      (r) =>
-        r.totalReturnPct > 0 && r.sharpeRatio > 0.5 && r.maxDrawdownPct < 15,
-    );
-    const best = results.reduce((max, r) =>
-      r.totalReturnPct > max.totalReturnPct ? r : max,
-    );
-    const worst = results.reduce((min, r) =>
-      r.totalReturnPct < min.totalReturnPct ? r : min,
-    );
-
-    yield* Console.log("\nSummary");
-    yield* Console.log(`  Symbols tested: ${results.length}`);
-    yield* Console.log(
-      `  Profitable:     ${profitable.length} (${((profitable.length / results.length) * 100).toFixed(1)}%)`,
-    );
-    yield* Console.log(
-      `  Sharpe > 0.5:   ${highSharpe.length} (${((highSharpe.length / results.length) * 100).toFixed(1)}%)`,
-    );
-    yield* Console.log(
-      `  Drawdown < 15%: ${lowDrawdown.length} (${((lowDrawdown.length / results.length) * 100).toFixed(1)}%)`,
-    );
-    yield* Console.log(
-      `  Live-ready:     ${liveReady.length} (${((liveReady.length / results.length) * 100).toFixed(1)}%)`,
-    );
-    yield* Console.log(`  Avg return:     ${avgReturn.toFixed(2)}%`);
-    yield* Console.log(`  Avg Sharpe:     ${avgSharpe.toFixed(3)}`);
-    yield* Console.log(
-      `  Best:           ${multiExchange ? `${best.exchange}:` : ""}${best.symbol} ${best.totalReturnPct.toFixed(2)}% (Sharpe ${best.sharpeRatio.toFixed(3)})`,
-    );
-    yield* Console.log(
-      `  Worst:          ${multiExchange ? `${worst.exchange}:` : ""}${worst.symbol} ${worst.totalReturnPct.toFixed(2)}% (Sharpe ${worst.sharpeRatio.toFixed(3)})`,
-    );
+    yield* logBestParamsSection(results, multiExchange);
+    yield* logScanSummary(results, multiExchange);
 
     if (multiExchange) {
-      const byExchange = new Map<string, ScanResult[]>();
-      for (const r of results) {
-        const list = byExchange.get(r.exchange) ?? [];
-        list.push(r);
-        byExchange.set(r.exchange, list);
-      }
-
-      yield* Console.log("\nPer-exchange averages");
-      for (const [exchange, list] of byExchange) {
-        const avg =
-          list.reduce((sum, r) => sum + r.totalReturnPct, 0) / list.length;
-        const sharpe =
-          list.reduce((sum, r) => sum + r.sharpeRatio, 0) / list.length;
-        yield* Console.log(
-          `  ${exchange.padEnd(10)} n=${String(list.length).padStart(3)} avgReturn=${avg.toFixed(2)}% avgSharpe=${sharpe.toFixed(3)}`,
-        );
-      }
-
-      const bySymbol = new Map<string, ScanResult[]>();
-      for (const r of results) {
-        const list = bySymbol.get(r.symbol) ?? [];
-        list.push(r);
-        bySymbol.set(r.symbol, list);
-      }
-      const consistent = [...bySymbol.entries()]
-        .filter(([, list]) => list.every((r) => r.totalReturnPct > 0))
-        .sort((a, b) => b[1].length - a[1].length);
-
-      if (consistent.length > 0) {
-        yield* Console.log("\nCross-exchange consistent symbols");
-        for (const [symbol, list] of consistent.slice(0, 10)) {
-          const avg =
-            list.reduce((sum, r) => sum + r.totalReturnPct, 0) / list.length;
-          yield* Console.log(
-            `  ${symbol.padEnd(13)} profitable on ${list.length} exchange(s) avgReturn=${avg.toFixed(2)}%`,
-          );
-        }
-      }
+      yield* logPerExchangeBreakdown(results);
     }
   });
 }
@@ -2696,7 +2962,17 @@ function loadWatchlist(
   });
 }
 
-function buildRiskOverrides(args: PaperTradeArgs): MutablePartialRiskLimits {
+interface RiskOverrideOptions {
+  readonly maxDrawdownPct: Option.Option<number>;
+  readonly maxDailyLossPct: Option.Option<number>;
+  readonly maxPositionSizePct: Option.Option<number>;
+  readonly maxTradesPerDay: Option.Option<number>;
+  readonly minCapital: Option.Option<number>;
+}
+
+function buildRiskOverrides(
+  args: RiskOverrideOptions,
+): MutablePartialRiskLimits {
   const overrides: MutablePartialRiskLimits = {};
   if (Option.isSome(args.maxDrawdownPct))
     overrides.maxDrawdownPct = args.maxDrawdownPct.value;
@@ -3099,19 +3375,55 @@ function isLiveGridCohortCandidate(
 ): boolean {
   return (
     candidate !== undefined &&
+    matchesCohortMarket(config, candidate) &&
+    matchesCohortGeometry(config, candidate) &&
+    matchesCohortCosts(config, candidate) &&
+    matchesCohortSignalGates(config, candidate) &&
+    config.leverage >= candidate.leverage
+  );
+}
+
+function matchesCohortMarket(
+  config: LiveGridConfiguration,
+  candidate: ValidatedGridCandidate,
+): boolean {
+  return (
     config.exchange === candidate.exchange &&
     config.timeframe === candidate.timeframe &&
-    config.productType === candidate.productType &&
+    config.productType === candidate.productType
+  );
+}
+
+function matchesCohortGeometry(
+  config: LiveGridConfiguration,
+  candidate: ValidatedGridCandidate,
+): boolean {
+  return (
     config.gridStepPct === candidate.gridStepPct &&
     config.gridMaxGrids === candidate.gridMaxGrids &&
-    config.gridPauseAfterLossBars === candidate.gridPauseAfterLossBars &&
+    config.gridPauseAfterLossBars === candidate.gridPauseAfterLossBars
+  );
+}
+
+function matchesCohortCosts(
+  config: LiveGridConfiguration,
+  candidate: ValidatedGridCandidate,
+): boolean {
+  return (
     config.feePct === candidate.feePct &&
-    config.slippageBps === candidate.slippageBps &&
+    config.slippageBps === candidate.slippageBps
+  );
+}
+
+function matchesCohortSignalGates(
+  config: LiveGridConfiguration,
+  candidate: ValidatedGridCandidate,
+): boolean {
+  return (
     config.trendFilterPeriod === candidate.trendFilterPeriod &&
     config.onlyWithTrend === candidate.onlyWithTrend &&
     config.targetRatio === candidate.targetRatio &&
-    config.chopGateAdx === candidate.chopGateAdx &&
-    config.leverage >= candidate.leverage
+    config.chopGateAdx === candidate.chopGateAdx
   );
 }
 
@@ -3135,27 +3447,48 @@ export function validateLiveGridConfiguration(
     return "live grid must use a validated readiness cohort candidate";
   }
   if (sandbox) return undefined;
-  const riskCap =
-    candidate?.maxPositionSizePct ??
-    VALIDATED_BTC_GRID_CANDIDATE.maxPositionSizePct;
-  const ddCap =
-    candidate?.maxDrawdownPct ?? VALIDATED_BTC_GRID_CANDIDATE.maxDrawdownPct;
-  const dailyCap =
-    candidate?.maxDailyLossPct ?? VALIDATED_BTC_GRID_CANDIDATE.maxDailyLossPct;
+  return firstLiveGridRiskError(config, liveGridRiskCaps(candidate));
+}
+
+interface LiveGridRiskCaps {
+  readonly riskCap: number;
+  readonly ddCap: number;
+  readonly dailyCap: number;
+}
+
+function liveGridRiskCaps(
+  candidate: ReturnType<typeof candidateForSymbol>,
+): LiveGridRiskCaps {
+  return {
+    riskCap:
+      candidate?.maxPositionSizePct ??
+      VALIDATED_BTC_GRID_CANDIDATE.maxPositionSizePct,
+    ddCap:
+      candidate?.maxDrawdownPct ?? VALIDATED_BTC_GRID_CANDIDATE.maxDrawdownPct,
+    dailyCap:
+      candidate?.maxDailyLossPct ??
+      VALIDATED_BTC_GRID_CANDIDATE.maxDailyLossPct,
+  };
+}
+
+function firstLiveGridRiskError(
+  config: LiveGridConfiguration,
+  caps: LiveGridRiskCaps,
+): string | undefined {
   return (
     liveGridRiskPctError(
       config.maxPositionSizePct,
-      riskCap,
+      caps.riskCap,
       "live grid max position size must be between 0% and 50%",
     ) ??
     liveGridRiskPctError(
       config.maxDrawdownPct,
-      ddCap,
+      caps.ddCap,
       "live grid max drawdown must be between 0% and 5%",
     ) ??
     liveGridRiskPctError(
       config.maxDailyLossPct,
-      dailyCap,
+      caps.dailyCap,
       "live grid max daily loss must be between 0% and 2%",
     )
   );
@@ -3442,14 +3775,31 @@ export function resolveLadderGridSettings(
   configMismatchAction: "hold" | "force-reseed" = "hold",
 ): LadderGridSettings {
   const mismatches = detectFrozenGridMismatch(gridParams, args);
+  assertNoFrozenMismatch(mismatches, configMismatchAction);
+  const frozen = mismatches.length > 0;
+  return {
+    rungs: gridParams?.rungs ?? 1,
+    ...resolveLadderKnobs(gridParams, args, frozen),
+  } satisfies LadderGridSettings;
+}
+
+function assertNoFrozenMismatch(
+  mismatches: readonly FrozenGridMismatch[],
+  configMismatchAction: "hold" | "force-reseed",
+): void {
   if (mismatches.length > 0 && configMismatchAction === "hold") {
     throw new Error(
       `frozen champion config mismatch [${formatFrozenGridMismatch(mismatches)}] — watchlist gridParams diverge from the frozen CLI knobs (champion-soak.json); refusing to trade the stale row (fail-closed). Re-run with --config-mismatch-action force-reseed to trade the frozen CLI config, or regenerate the whitelist from the frozen knobs`,
     );
   }
-  const frozen = mismatches.length > 0;
+}
+
+function resolveLadderKnobs(
+  gridParams: WatchlistEntry["gridParams"] | undefined,
+  args: FrozenGridCliKnobs,
+  frozen: boolean,
+): Omit<LadderGridSettings, "rungs"> {
   return {
-    rungs: gridParams?.rungs ?? 1,
     gridStepPct: pickFrozenKnob(
       "gridStepPct",
       args.gridStepPct,
@@ -3485,7 +3835,7 @@ export function resolveLadderGridSettings(
       0,
       frozen,
     ),
-  } satisfies LadderGridSettings;
+  };
 }
 
 export interface FrozenGridGeometry {
@@ -3771,6 +4121,79 @@ function formatPaperIterationLog(
   return `[${new Date().toISOString()}] ${scope}${result.action.toUpperCase()} | capital=${result.capital.toFixed(2)}${rungs} | ${result.note}`;
 }
 
+interface LadderPortfolioRow {
+  readonly entry: WatchlistEntry;
+  readonly key: string;
+}
+
+interface LadderPortfolioPrep {
+  readonly entries: readonly WatchlistEntry[];
+  readonly rows: readonly LadderPortfolioRow[];
+  readonly keys: readonly string[];
+  readonly id: string | undefined;
+  readonly allocations: ReadonlyMap<string, Decimal>;
+}
+
+function prepareLadderPortfolio(
+  entries: readonly WatchlistEntry[] | undefined,
+  args: PaperTradeArgs,
+  resolvedExchange: string,
+): LadderPortfolioPrep {
+  const ladderPortfolioEntries =
+    entries?.filter((entry) =>
+      isLadderSurvivorRow(entry.gridParams, args.strategyType),
+    ) ?? [];
+  const rows = ladderPortfolioEntries
+    .map((entry) => ({
+      entry,
+      key: `${resolveFuturesMarketExchange(entry.exchange ?? args.exchange, true)}:${entry.symbol}:${args.timeframe}`,
+    }))
+    .sort((left, right) => left.key.localeCompare(right.key));
+  const keys = rows.map((row) => row.key);
+  const id =
+    ladderPortfolioEntries.length > 0
+      ? `ladder:${resolvedExchange}:${args.timeframe}:${args.capital}:${keys.join(",")}`
+      : undefined;
+  const allocations = allocateLadderPortfolioCapital(
+    rows.map((row) => ({
+      key: row.key,
+      allocatedWeight: row.entry.gridParams?.allocatedWeight,
+    })),
+    args.capital,
+  );
+  return { entries: ladderPortfolioEntries, rows, keys, id, allocations };
+}
+
+function loadPaperTradeContracts(
+  args: PaperTradeArgs,
+  resolvedExchange: string,
+  strategyType: string,
+  productType: BitgetProductType,
+  contractSymbols: readonly string[],
+) {
+  return Effect.gen(function* () {
+    const bitgetContracts =
+      args.live &&
+      resolvedExchange !== "bybit-futures" &&
+      (args.futures || strategyType === "grid")
+        ? yield* fetchBitgetContracts(productType)
+        : undefined;
+    const bybitContracts =
+      args.live &&
+      resolvedExchange === "bybit-futures" &&
+      (args.futures || strategyType === "grid")
+        ? yield* fetchBybitContracts(contractSymbols)
+        : undefined;
+    const bybitContractMap = new Map(
+      (bybitContracts ?? []).map((contract) => [
+        toBybitSymbol(contract.symbol),
+        contract,
+      ]),
+    );
+    return { bitgetContracts, bybitContracts, bybitContractMap };
+  });
+}
+
 function paperTradeProgram(args: PaperTradeArgs) {
   return Effect.gen(function* () {
     const resolveRuntime = (): Effect.Effect<PaperTradeRuntime, Error, never> =>
@@ -3948,33 +4371,18 @@ function paperTradeProgram(args: PaperTradeArgs) {
     // symbol. Give every current survivor a stable cash partition and include
     // the manifest in the portfolio id so a watchlist change starts a new,
     // auditable cohort instead of silently summing old and new symbols.
-    const ladderPortfolioEntries =
-      entries?.filter((entry) =>
-        isLadderSurvivorRow(entry.gridParams, args.strategyType),
-      ) ?? [];
-    const ladderPortfolioRows = ladderPortfolioEntries
-      .map((entry) => ({
-        entry,
-        key: `${resolveFuturesMarketExchange(entry.exchange ?? args.exchange, true)}:${entry.symbol}:${args.timeframe}`,
-      }))
-      .sort((left, right) => left.key.localeCompare(right.key));
-    const ladderPortfolioKeys = ladderPortfolioRows.map((row) => row.key);
-    const ladderPortfolioId =
-      ladderPortfolioEntries.length > 0
-        ? `ladder:${resolvedExchange}:${args.timeframe}:${args.capital}:${ladderPortfolioKeys.join(",")}`
-        : undefined;
-    const ladderPortfolioAllocations = allocateLadderPortfolioCapital(
-      ladderPortfolioRows.map((row) => ({
-        key: row.key,
-        allocatedWeight: row.entry.gridParams?.allocatedWeight,
-      })),
-      args.capital,
+    const ladderPortfolio = prepareLadderPortfolio(
+      entries,
+      args,
+      resolvedExchange,
     );
+    const ladderPortfolioRows = ladderPortfolio.rows;
+    const ladderPortfolioId = ladderPortfolio.id;
     const ladderAllocationFor = (
       symbol: string,
       exchange: string,
     ): Decimal | undefined =>
-      ladderPortfolioAllocations.get(
+      ladderPortfolio.allocations.get(
         `${resolveFuturesMarketExchange(exchange, true)}:${symbol}:${args.timeframe}`,
       );
 
@@ -3983,7 +4391,7 @@ function paperTradeProgram(args: PaperTradeArgs) {
     // per-state fields. Without it ladder fills are untagged legacy rows the
     // real-money readiness gate can never count.
     stampLadderTradeProvenance(
-      ladderPortfolioEntries,
+      ladderPortfolio.entries,
       args,
       resolvedExchange,
       useTestnet,
@@ -4080,24 +4488,14 @@ function paperTradeProgram(args: PaperTradeArgs) {
       args.symbol,
       ...(activeEntries ?? []).map((entry) => entry.symbol),
     ];
-    const bitgetContracts =
-      args.live &&
-      resolvedExchange !== "bybit-futures" &&
-      (args.futures || strategyType === "grid")
-        ? yield* fetchBitgetContracts(productType)
-        : undefined;
-    const bybitContracts =
-      args.live &&
-      resolvedExchange === "bybit-futures" &&
-      (args.futures || strategyType === "grid")
-        ? yield* fetchBybitContracts(contractSymbols)
-        : undefined;
-    const bybitContractMap = new Map(
-      (bybitContracts ?? []).map((contract) => [
-        toBybitSymbol(contract.symbol),
-        contract,
-      ]),
-    );
+    const { bitgetContracts, bybitContracts, bybitContractMap } =
+      yield* loadPaperTradeContracts(
+        args,
+        resolvedExchange,
+        strategyType,
+        productType,
+        contractSymbols,
+      );
     const contractSpecsFor = (symbol: string): ContractSizeSpec | undefined =>
       bybitContracts !== undefined
         ? bybitContractSpecs(bybitContractMap.get(toBybitSymbol(symbol)))
@@ -4696,6 +5094,77 @@ function printSoakResult(result: import("../scalping/soak.js").SoakResult) {
   });
 }
 
+function resolveSoakSpotAdapter(mergedArgs: SoakArgs) {
+  if (!mergedArgs.live) return SimulatedExchangeAdapterLive();
+  return BinanceLiveExchangeAdapterLive({
+    apiKey: mergedArgs.apiKey || process.env.BINANCE_API_KEY || "",
+    apiSecret: mergedArgs.apiSecret || process.env.BINANCE_API_SECRET || "",
+  });
+}
+
+function resolveSoakFuturesAdapter(mergedArgs: SoakArgs) {
+  if (!mergedArgs.live) return SimulatedFuturesExchangeAdapterLive();
+  if (
+    resolveFuturesMarketExchange(mergedArgs.exchange, true) === "bybit-futures"
+  ) {
+    return BybitFuturesExchangeAdapterLive.pipe(
+      Layer.provide(BybitClientLiveConfig),
+      Layer.provide(BybitConfigLive),
+    );
+  }
+  return BitgetFuturesExchangeAdapterLive.pipe(
+    Layer.provide(BitgetClientLiveConfig),
+  );
+}
+
+function resolveSoakSignalOverrides(
+  bestParams: SoakSymbol["bestParams"],
+  mergedArgs: SoakArgs,
+) {
+  return {
+    minConfidence: bestParams?.minConfidence ?? mergedArgs.minConfidence,
+    useAtrStops:
+      bestParams?.atrStopMultiplier !== undefined
+        ? true
+        : mergedArgs.useAtrStops,
+    atrStopMultiplier:
+      bestParams?.atrStopMultiplier ?? mergedArgs.atrStopMultiplier,
+    atrTakeProfitMultiplier:
+      bestParams?.atrTakeProfitMultiplier ?? mergedArgs.atrTakeProfitMultiplier,
+  };
+}
+
+function resolveSoakExecutionOverrides(
+  entry: SoakSymbol | undefined,
+  mergedArgs: SoakArgs,
+  marginModeParsed: FuturesMarginMode,
+  productTypeParsed: BitgetProductType,
+) {
+  return {
+    leverage: entry?.leverage ?? mergedArgs.leverage,
+    marginMode: entry?.marginMode ?? marginModeParsed,
+    productType: entry?.productType ?? productTypeParsed,
+  };
+}
+
+function loadSoakContracts(
+  mergedArgs: SoakArgs,
+  watchlistEntries: readonly SoakWatchlistFileEntry[],
+  productTypeParsed: BitgetProductType,
+) {
+  // Live futures orders must respect the exchange's contract size step
+  // and minimums; fetch the contract table once per soak run and resolve
+  // specs per symbol into the engine options.
+  if (!mergedArgs.live) return Effect.succeed(undefined);
+  if (
+    !mergedArgs.futures &&
+    !watchlistEntries.some((e) => e.productType !== undefined)
+  ) {
+    return Effect.succeed(undefined);
+  }
+  return fetchBitgetContracts(productTypeParsed);
+}
+
 export const soakCommand = Command.make(
   "soak",
   {
@@ -4814,18 +5283,7 @@ export const soakCommand = Command.make(
 
       const repoLayer = MarketDataRepositorySQLiteLive(db);
       const paperRepoLayer = PaperTradingRepositorySQLiteLive(db);
-      const soakRiskOverrides: MutablePartialRiskLimits = {};
-      if (Option.isSome(mergedArgs.maxDrawdownPct))
-        soakRiskOverrides.maxDrawdownPct = mergedArgs.maxDrawdownPct.value;
-      if (Option.isSome(mergedArgs.maxDailyLossPct))
-        soakRiskOverrides.maxDailyLossPct = mergedArgs.maxDailyLossPct.value;
-      if (Option.isSome(mergedArgs.maxPositionSizePct))
-        soakRiskOverrides.maxPositionSizePct =
-          mergedArgs.maxPositionSizePct.value;
-      if (Option.isSome(mergedArgs.maxTradesPerDay))
-        soakRiskOverrides.maxTradesPerDay = mergedArgs.maxTradesPerDay.value;
-      if (Option.isSome(mergedArgs.minCapital))
-        soakRiskOverrides.minCapital = mergedArgs.minCapital.value;
+      const soakRiskOverrides = buildRiskOverrides(mergedArgs);
       // The ladder uses dynamic leverage up to the account-scaled cap (150x
       // configured); the guard must not block those higher-leverage fills. The
       // real cap is still applied by ladderRungQty (small account -> low cap).
@@ -4856,25 +5314,9 @@ export const soakCommand = Command.make(
         circuitBreakerLayer,
       );
 
-      const spotAdapterLayer = mergedArgs.live
-        ? BinanceLiveExchangeAdapterLive({
-            apiKey: mergedArgs.apiKey || process.env.BINANCE_API_KEY || "",
-            apiSecret:
-              mergedArgs.apiSecret || process.env.BINANCE_API_SECRET || "",
-          })
-        : SimulatedExchangeAdapterLive();
-      const futuresAdapterLayer = (
-        mergedArgs.live
-          ? resolveFuturesMarketExchange(mergedArgs.exchange, true) ===
-            "bybit-futures"
-            ? BybitFuturesExchangeAdapterLive.pipe(
-                Layer.provide(BybitClientLiveConfig),
-                Layer.provide(BybitConfigLive),
-              )
-            : BitgetFuturesExchangeAdapterLive.pipe(
-                Layer.provide(BitgetClientLiveConfig),
-              )
-          : SimulatedFuturesExchangeAdapterLive()
+      const spotAdapterLayer = resolveSoakSpotAdapter(mergedArgs);
+      const futuresAdapterLayer = resolveSoakFuturesAdapter(
+        mergedArgs,
       ) as Layer.Layer<
         FuturesExchangeAdapterService,
         never,
@@ -4907,15 +5349,11 @@ export const soakCommand = Command.make(
         bestParams: e.bestParams,
       }));
 
-      // Live futures orders must respect the exchange's contract size step
-      // and minimums; fetch the contract table once per soak run and resolve
-      // specs per symbol into the engine options.
-      const contracts =
-        mergedArgs.live &&
-        (mergedArgs.futures ||
-          watchlistEntries.some((e) => e.productType !== undefined))
-          ? yield* fetchBitgetContracts(productTypeParsed)
-          : undefined;
+      const contracts = yield* loadSoakContracts(
+        mergedArgs,
+        watchlistEntries,
+        productTypeParsed,
+      );
 
       const runSoakFuturesIteration = (
         symbol: string,
@@ -4932,16 +5370,7 @@ export const soakCommand = Command.make(
           riskPerTradePct: mergedArgs.riskPerTrade,
           maxPositionSizePct: mergedArgs.maxPositionSize,
           feePct: mergedArgs.fee,
-          minConfidence: bestParams?.minConfidence ?? mergedArgs.minConfidence,
-          useAtrStops:
-            bestParams?.atrStopMultiplier !== undefined
-              ? true
-              : mergedArgs.useAtrStops,
-          atrStopMultiplier:
-            bestParams?.atrStopMultiplier ?? mergedArgs.atrStopMultiplier,
-          atrTakeProfitMultiplier:
-            bestParams?.atrTakeProfitMultiplier ??
-            mergedArgs.atrTakeProfitMultiplier,
+          ...resolveSoakSignalOverrides(bestParams, mergedArgs),
           atrRiskReward: mergedArgs.atrRiskReward,
           scaleOutAtR: mergedArgs.scaleOutAtR,
           scaleOutPct: mergedArgs.scaleOutPct,
@@ -4956,9 +5385,12 @@ export const soakCommand = Command.make(
           minAtrPct: mergedArgs.minAtrPct,
           initialCapital: mergedArgs.capital,
           isLive: mergedArgs.live,
-          leverage: entry?.leverage ?? mergedArgs.leverage,
-          marginMode: entry?.marginMode ?? marginModeParsed,
-          productType: entry?.productType ?? productTypeParsed,
+          ...resolveSoakExecutionOverrides(
+            entry,
+            mergedArgs,
+            marginModeParsed,
+            productTypeParsed,
+          ),
           volatilityTargetAnnualPct: mergedArgs.volatilityTargetAnnualPct,
         };
         if (contracts !== undefined) {
@@ -5179,42 +5611,78 @@ export interface ValidationRow {
   readonly entry: SelectWatchlistEntry;
 }
 
+/**
+ * Candidate vector layout: [0]=stop, [1]=take-profit, [2]=minConfidence,
+ * [3]=breakevenAtR, [4]=maxBarsInTrade, [5]=lossCooldownBars, [6]=adxMin,
+ * [7]=minEfficiencyRatio, [8]=rsiLongMax, [9]=rsiShortMin,
+ * [10]=entryOrderTypeIndex, [11]=entryLimitOffsetBps (only when length>=12).
+ */
 export function buildCandidate(
   useAtrStops: boolean,
   vector: readonly number[],
 ): OptimizeCandidateParams {
-  const stopMult = useAtrStops ? vector[0] : 0;
-  const tpMult = useAtrStops ? vector[1] : 0;
-  const stopLossPct = useAtrStops ? 0 : vector[0];
-  const takeProfitPct = useAtrStops ? 0 : vector[1];
-  const minConfidence = vector[2] ?? 0.5;
-  const breakevenAtR = vector[3] ?? 0;
-  const maxBarsInTrade = vector[4] ?? 0;
-  const lossCooldownBars = vector[5] ?? 0;
-  const adxMin = vector[6] ?? 0;
-  const minEfficiencyRatio = vector[7] ?? 0;
-  const rsiLongMax = vector[8] ?? 0;
-  const rsiShortMin = vector[9] ?? 0;
-  const hasEntryOrder = vector.length >= 12;
-  const entryOrderTypeIndex = hasEntryOrder ? vector[10] : 0;
-  const entryLimitOffsetBps = hasEntryOrder ? vector[11] : 0;
-  const entryOrderType = entryOrderTypeIndex < 0.5 ? "market" : "limit";
   return {
     useAtrStops,
-    stopMult,
-    tpMult,
-    stopLossPct,
-    takeProfitPct,
-    minConfidence,
-    breakevenAtR,
-    maxBarsInTrade,
-    lossCooldownBars,
-    adxMin,
-    minEfficiencyRatio,
-    rsiLongMax,
-    rsiShortMin,
-    entryOrderType,
-    entryLimitOffsetBps,
+    ...stopTakeProfitFromVector(useAtrStops, vector),
+    ...coreThresholdsFromVector(vector),
+    ...rsiBoundsFromVector(vector),
+    ...entryOrderFromVector(vector),
+  };
+}
+
+function stopTakeProfitFromVector(
+  useAtrStops: boolean,
+  vector: readonly number[],
+): Pick<
+  OptimizeCandidateParams,
+  "stopMult" | "tpMult" | "stopLossPct" | "takeProfitPct"
+> {
+  return {
+    stopMult: useAtrStops ? vector[0] : 0,
+    tpMult: useAtrStops ? vector[1] : 0,
+    stopLossPct: useAtrStops ? 0 : vector[0],
+    takeProfitPct: useAtrStops ? 0 : vector[1],
+  };
+}
+
+function coreThresholdsFromVector(
+  vector: readonly number[],
+): Pick<
+  OptimizeCandidateParams,
+  | "minConfidence"
+  | "breakevenAtR"
+  | "maxBarsInTrade"
+  | "lossCooldownBars"
+  | "adxMin"
+  | "minEfficiencyRatio"
+> {
+  return {
+    minConfidence: vector[2] ?? 0.5,
+    breakevenAtR: vector[3] ?? 0,
+    maxBarsInTrade: vector[4] ?? 0,
+    lossCooldownBars: vector[5] ?? 0,
+    adxMin: vector[6] ?? 0,
+    minEfficiencyRatio: vector[7] ?? 0,
+  };
+}
+
+function rsiBoundsFromVector(
+  vector: readonly number[],
+): Pick<OptimizeCandidateParams, "rsiLongMax" | "rsiShortMin"> {
+  return {
+    rsiLongMax: vector[8] ?? 0,
+    rsiShortMin: vector[9] ?? 0,
+  };
+}
+
+function entryOrderFromVector(
+  vector: readonly number[],
+): Pick<OptimizeCandidateParams, "entryOrderType" | "entryLimitOffsetBps"> {
+  const hasEntryOrder = vector.length >= 12;
+  const entryOrderTypeIndex = hasEntryOrder ? vector[10] : 0;
+  return {
+    entryOrderType: entryOrderTypeIndex < 0.5 ? "market" : "limit",
+    entryLimitOffsetBps: hasEntryOrder ? vector[11] : 0,
   };
 }
 
@@ -5246,6 +5714,18 @@ export function generateCandidates(
   args: OptimizeArgs,
 ): OptimizeCandidateParams[] {
   const useAtrStops = !args.noAtr;
+  const vectors = topUpRandomVectors(
+    args,
+    useAtrStops,
+    gridSearchVectors(args, useAtrStops),
+  );
+  return vectors.map((v) => buildCandidate(useAtrStops, v));
+}
+
+function gridSearchVectors(
+  args: OptimizeArgs,
+  useAtrStops: boolean,
+): number[][] {
   const stopRange = useAtrStops
     ? range(args.atrStopMin, args.atrStopMax, args.atrStopStep)
     : range(args.stopLossMin, args.stopLossMax, args.stopLossStep);
@@ -5303,47 +5783,57 @@ export function generateCandidates(
     dimensions.push([0, 5, 10]); // offset bps
   }
 
-  let vectors = cartesianProduct(dimensions);
+  return cartesianProduct(dimensions);
+}
 
-  if (args.randomSearch > 0) {
-    if (vectors.length > args.randomSearch) {
-      const shuffled = [...vectors].sort(() => Math.random() - 0.5);
-      vectors = shuffled.slice(0, args.randomSearch);
-    } else {
-      // Sample additional random candidates within the search bounds.
-      while (vectors.length < args.randomSearch) {
-        const randomVector = [
-          randomInRange(
-            useAtrStops ? args.atrStopMin : args.stopLossMin,
-            useAtrStops ? args.atrStopMax : args.stopLossMax,
-          ),
-          randomInRange(
-            useAtrStops ? args.atrTpMin : args.takeProfitMin,
-            useAtrStops ? args.atrTpMax : args.takeProfitMax,
-          ),
-          randomInRange(args.confMin, args.confMax),
-          randomInRange(args.breakevenAtRMin, args.breakevenAtRMax),
-          Math.floor(
-            randomInRange(args.maxBarsInTradeMin, args.maxBarsInTradeMax),
-          ),
-          Math.floor(
-            randomInRange(args.lossCooldownBarsMin, args.lossCooldownBarsMax),
-          ),
-          randomInRange(args.adxMinMin, args.adxMinMax),
-          randomInRange(args.minEfficiencyRatioMin, args.minEfficiencyRatioMax),
-          randomInRange(args.rsiLongMaxMin, args.rsiLongMaxMax),
-          randomInRange(args.rsiShortMinMin, args.rsiShortMinMax),
-        ];
-        if (args.scanEntryOrders) {
-          randomVector.push(Math.random() < 0.5 ? 0 : 1);
-          randomVector.push([0, 5, 10][Math.floor(Math.random() * 3)]);
-        }
-        vectors.push(randomVector);
-      }
+function topUpRandomVectors(
+  args: OptimizeArgs,
+  useAtrStops: boolean,
+  vectors: number[][],
+): number[][] {
+  if (args.randomSearch <= 0) return vectors;
+  let pool = vectors;
+  if (pool.length > args.randomSearch) {
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    pool = shuffled.slice(0, args.randomSearch);
+  } else {
+    // Sample additional random candidates within the search bounds.
+    while (pool.length < args.randomSearch) {
+      pool.push(randomVectorWithinBounds(args, useAtrStops));
     }
   }
+  return pool;
+}
 
-  return vectors.map((v) => buildCandidate(useAtrStops, v));
+function randomVectorWithinBounds(
+  args: OptimizeArgs,
+  useAtrStops: boolean,
+): number[] {
+  const randomVector = [
+    randomInRange(
+      useAtrStops ? args.atrStopMin : args.stopLossMin,
+      useAtrStops ? args.atrStopMax : args.stopLossMax,
+    ),
+    randomInRange(
+      useAtrStops ? args.atrTpMin : args.takeProfitMin,
+      useAtrStops ? args.atrTpMax : args.takeProfitMax,
+    ),
+    randomInRange(args.confMin, args.confMax),
+    randomInRange(args.breakevenAtRMin, args.breakevenAtRMax),
+    Math.floor(randomInRange(args.maxBarsInTradeMin, args.maxBarsInTradeMax)),
+    Math.floor(
+      randomInRange(args.lossCooldownBarsMin, args.lossCooldownBarsMax),
+    ),
+    randomInRange(args.adxMinMin, args.adxMinMax),
+    randomInRange(args.minEfficiencyRatioMin, args.minEfficiencyRatioMax),
+    randomInRange(args.rsiLongMaxMin, args.rsiLongMaxMax),
+    randomInRange(args.rsiShortMinMin, args.rsiShortMinMax),
+  ];
+  if (args.scanEntryOrders) {
+    randomVector.push(Math.random() < 0.5 ? 0 : 1);
+    randomVector.push([0, 5, 10][Math.floor(Math.random() * 3)]);
+  }
+  return randomVector;
 }
 
 export function objectiveValue(
@@ -6260,6 +6750,84 @@ export function probeNamesProbedSymbol(
  * robustness gate. With --output it writes a whitelist JSON consumable by
  * `scalp paper-trade --strategy-type grid --watchlist`.
  */
+type ProbeVerdict =
+  | { readonly kind: "untradeable"; readonly evidence: string }
+  | { readonly kind: "transient"; readonly reason: string };
+
+/** Classify a failed leverage probe: unsupported instrument vs transient. */
+export function classifyProbeOutcome(
+  failure: BitgetClientError,
+  symbol: string,
+): ProbeVerdict {
+  if (
+    failure instanceof BitgetApiError &&
+    (isBitgetUnsupportedInstrumentError(failure) ||
+      probeNamesProbedSymbol(failure, symbol, "USDT-FUTURES"))
+  ) {
+    return {
+      kind: "untradeable",
+      evidence: `Bitget ${failure.code ?? "?"}: ${failure.body.slice(0, 140)}`,
+    };
+  }
+  const reason =
+    failure instanceof BitgetApiError
+      ? `BitgetApiError code=${failure.code ?? "-"}: ${failure.body.slice(0, 140)}`
+      : failure instanceof Error
+        ? failure.message
+        : String(failure);
+  return { kind: "transient", reason };
+}
+
+export function formatUniverseScanEntry(e: GridUniverseEntry): string {
+  const mark = e.gatedDropped ? " ✘" : e.passed ? " ✔" : "";
+  const reason = e.rejectionReason ? ` [${e.rejectionReason}]` : "";
+  const gateReasons = e.gateFailureReasons?.length
+    ? ` gate=${e.gateFailureReasons.join("|")}`
+    : "";
+  return (
+    `${e.symbol.padEnd(13)} ${String(e.candles).padStart(7)}  ` +
+    `${e.bestParams.gridStepPct.toFixed(2).padStart(5)}  ` +
+    `${String(e.bestParams.gridMaxGrids).padStart(5)}  ` +
+    `${String(e.bestParams.gridPauseAfterLossBars).padStart(5)}  ` +
+    `${e.walkForward.profitableWindowsPct.toFixed(0).padStart(6)}%  ` +
+    `${e.walkForward.aggregateReturnPct.toFixed(2).padStart(9)}%${mark}${reason}${gateReasons}`
+  );
+}
+
+/** Parse --rungs into rung counts; absent means the default 1-3 rung sweep. */
+export function parseScanRungs(
+  rungs: Option.Option<string>,
+): readonly number[] {
+  if (Option.isNone(rungs)) return [1, 2, 3];
+  return rungs.value
+    .split(",")
+    .map((token) => Number(token.trim()))
+    .filter((n) => Number.isInteger(n) && n >= 1);
+}
+
+function logScanNotices(args: {
+  readonly engine: string;
+  readonly tier: string;
+  readonly minFillFrequencyPct: number;
+}) {
+  return Effect.gen(function* () {
+    if (args.engine === "ladder" && args.tier === "readiness") {
+      // Ladder readiness is gated by the ladder evidence validator inside
+      // ladderGateScoredEligibility (data quality, historical windows,
+      // fixed-OOS, block-bootstrap confidence, pooled adverse-stress LB);
+      // a survivor that clears it is admissible to the readiness board.
+      yield* Console.log(
+        `🧪 Ladder readiness tier: gate-scoring through the ladder evidence validator (this is slower than fast tier — every combo runs the 5-seed adverse-stress protocol)`,
+      );
+    }
+    if (args.minFillFrequencyPct <= 0) {
+      yield* Console.warn(
+        `⚠️ --min-fill-frequency-pct is 0 — the fill gate is DISABLED; survivors whose grid step is too wide to fill live will not be rejected`,
+      );
+    }
+  });
+}
+
 export const gridUniverseScanCommand = Command.make(
   "grid-universe-scan",
   {
@@ -6289,37 +6857,52 @@ export const gridUniverseScanCommand = Command.make(
   },
   (args) =>
     Effect.gen(function* () {
-      if (args.tier !== "readiness" && args.tier !== "fast") {
-        return yield* Effect.fail(
-          new Error(
-            `invalid --tier '${args.tier}': expected 'readiness' or 'fast'`,
-          ),
-        );
-      }
-      if (args.dataSource !== "gateway" && args.dataSource !== "db-mainnet") {
-        return yield* Effect.fail(
-          new Error(
-            `invalid --data-source '${args.dataSource}': expected 'gateway' or 'db-mainnet'`,
-          ),
-        );
-      }
-      if (args.dataSource === "db-mainnet" && !args.market) {
-        // The DB-sourced (non-market) scan reads candles at the scan
-        // timeframe — for bybit-futures those 15m rows are TESTNET-native.
-        // db-mainnet must go through the market scan so candles come from
-        // the resampled 5m mainnet cache instead.
-        return yield* Effect.fail(
-          new Error(
-            `--data-source db-mainnet requires --market (db-mainnet candles come from the 5m mainnet DB cache via the market scan)`,
-          ),
-        );
-      }
-      if (args.engine !== "grid" && args.engine !== "ladder") {
-        return yield* Effect.fail(
-          new Error(
-            `invalid --engine '${args.engine}': expected 'grid' or 'ladder'`,
-          ),
-        );
+      const scanMode = ():
+        | {
+            readonly ok: true;
+            readonly tier: "readiness" | "fast";
+            readonly engine: "grid" | "ladder";
+            readonly dataSource: "gateway" | "db-mainnet";
+          }
+        | { readonly ok: false; readonly error: string } => {
+        if (args.tier !== "readiness" && args.tier !== "fast") {
+          return {
+            ok: false,
+            error: `invalid --tier '${args.tier}': expected 'readiness' or 'fast'`,
+          };
+        }
+        if (args.dataSource !== "gateway" && args.dataSource !== "db-mainnet") {
+          return {
+            ok: false,
+            error: `invalid --data-source '${args.dataSource}': expected 'gateway' or 'db-mainnet'`,
+          };
+        }
+        if (args.dataSource === "db-mainnet" && !args.market) {
+          // The DB-sourced (non-market) scan reads candles at the scan
+          // timeframe — for bybit-futures those 15m rows are TESTNET-native.
+          // db-mainnet must go through the market scan so candles come from
+          // the resampled 5m mainnet cache instead.
+          return {
+            ok: false,
+            error: `--data-source db-mainnet requires --market (db-mainnet candles come from the 5m mainnet DB cache via the market scan)`,
+          };
+        }
+        if (args.engine !== "grid" && args.engine !== "ladder") {
+          return {
+            ok: false,
+            error: `invalid --engine '${args.engine}': expected 'grid' or 'ladder'`,
+          };
+        }
+        return {
+          ok: true,
+          tier: args.tier,
+          engine: args.engine,
+          dataSource: args.dataSource,
+        };
+      };
+      const mode = scanMode();
+      if (!mode.ok) {
+        return yield* Effect.fail(new Error(mode.error));
       }
       if (args.engine === "ladder" && args.minCandles < LADDER_GATE_TAIL) {
         return yield* Effect.fail(
@@ -6328,12 +6911,7 @@ export const gridUniverseScanCommand = Command.make(
           ),
         );
       }
-      const rungs = Option.isSome(args.rungs)
-        ? args.rungs.value
-            .split(",")
-            .map((token) => Number(token.trim()))
-            .filter((n) => Number.isInteger(n) && n >= 1)
-        : [1, 2, 3];
+      const rungs = parseScanRungs(args.rungs);
       if (rungs.length === 0) {
         return yield* Effect.fail(
           new Error(
@@ -6341,15 +6919,7 @@ export const gridUniverseScanCommand = Command.make(
           ),
         );
       }
-      if (args.engine === "ladder" && args.tier === "readiness") {
-        // Ladder readiness is gated by the ladder evidence validator inside
-        // ladderGateScoredEligibility (data quality, historical windows,
-        // fixed-OOS, block-bootstrap confidence, pooled adverse-stress LB);
-        // a survivor that clears it is admissible to the readiness board.
-        yield* Console.log(
-          `🧪 Ladder readiness tier: gate-scoring through the ladder evidence validator (this is slower than fast tier — every combo runs the 5-seed adverse-stress protocol)`,
-        );
-      }
+      yield* logScanNotices(args);
       const path = yield* Path;
       const sqlite = yield* SqliteClient;
       const repoLayer = MarketDataRepositorySQLiteLive(sqlite.database);
@@ -6363,11 +6933,6 @@ export const gridUniverseScanCommand = Command.make(
       // scan with --exchange binance then paper-trade --futures must both
       // resolve to bitget-futures, or the watchlist lookups disagree.
       const marketExchange = resolveFuturesMarketExchange(args.exchange, true);
-      if (args.minFillFrequencyPct <= 0) {
-        yield* Console.warn(
-          `⚠️ --min-fill-frequency-pct is 0 — the fill gate is DISABLED; survivors whose grid step is too wide to fill live will not be rejected`,
-        );
-      }
       const options: GridUniverseOptions = {
         exchange: args.exchange,
         timeframe: args.timeframe,
@@ -6382,12 +6947,12 @@ export const gridUniverseScanCommand = Command.make(
         slippageBps: args.slippageBps,
         trendFilterPeriod: args.trendFilterPeriod,
         searchSpace: { ...DEFAULT_GRID_UNIVERSE_SEARCH_SPACE, rungs },
-        tier: args.tier,
-        engine: args.engine,
+        tier: mode.tier,
+        engine: mode.engine,
         // db-mainnet evaluates on mainnet-fidelity candles; its fills are
         // modeled conservatively by default (a wick touch is not a fill).
-        dataSource: args.dataSource,
-        fillModel: args.dataSource === "db-mainnet" ? "conservative" : "wick",
+        dataSource: mode.dataSource,
+        fillModel: mode.dataSource === "db-mainnet" ? "conservative" : "wick",
         ladderStopRatio: args.ladderStopRatio,
         ladderMaxHoldBars: args.ladderMaxHoldBars,
       };
@@ -6569,28 +7134,16 @@ export const gridUniverseScanCommand = Command.make(
               .pipe(Effect.result);
             if (probe._tag === "Success") {
               tradeable.push(entry);
-            } else if (
-              probe.failure instanceof BitgetApiError &&
-              (isBitgetUnsupportedInstrumentError(probe.failure) ||
-                probeNamesProbedSymbol(
-                  probe.failure,
-                  entry.symbol,
-                  "USDT-FUTURES",
-                ))
-            ) {
-              const dropEvidence = `Bitget ${probe.failure.code ?? "?"}: ${probe.failure.body.slice(0, 140)}`;
+              continue;
+            }
+            const verdict = classifyProbeOutcome(probe.failure, entry.symbol);
+            if (verdict.kind === "untradeable") {
               yield* Console.log(
-                `🎯 Dropped ${entry.symbol}: not tradeable on ${args.exchange} demo (${dropEvidence})`,
+                `🎯 Dropped ${entry.symbol}: not tradeable on ${args.exchange} demo (${verdict.evidence})`,
               );
             } else {
-              const reason =
-                probe.failure instanceof BitgetApiError
-                  ? `BitgetApiError code=${probe.failure.code ?? "-"}: ${probe.failure.body.slice(0, 140)}`
-                  : probe.failure instanceof Error
-                    ? probe.failure.message
-                    : String(probe.failure);
               yield* Console.log(
-                `⚠️ Keep ${entry.symbol}: probe failed transiently (${reason})`,
+                `⚠️ Keep ${entry.symbol}: probe failed transiently (${verdict.reason})`,
               );
               tradeable.push(entry);
             }
@@ -6666,19 +7219,7 @@ export const gridUniverseScanCommand = Command.make(
             "------------------------------------------------------------------",
           );
           for (const e of result.entries) {
-            const mark = e.gatedDropped ? " ✘" : e.passed ? " ✔" : "";
-            const reason = e.rejectionReason ? ` [${e.rejectionReason}]` : "";
-            const gateReasons = e.gateFailureReasons?.length
-              ? ` gate=${e.gateFailureReasons.join("|")}`
-              : "";
-            yield* Console.log(
-              `${e.symbol.padEnd(13)} ${String(e.candles).padStart(7)}  ` +
-                `${e.bestParams.gridStepPct.toFixed(2).padStart(5)}  ` +
-                `${String(e.bestParams.gridMaxGrids).padStart(5)}  ` +
-                `${String(e.bestParams.gridPauseAfterLossBars).padStart(5)}  ` +
-                `${e.walkForward.profitableWindowsPct.toFixed(0).padStart(6)}%  ` +
-                `${e.walkForward.aggregateReturnPct.toFixed(2).padStart(9)}%${mark}${reason}${gateReasons}`,
-            );
+            yield* Console.log(formatUniverseScanEntry(e));
           }
 
           yield* persistSurvivors(result).pipe(Effect.provide(paperRepoLayer));
@@ -6845,6 +7386,93 @@ function formatFlowUniverse(entries: readonly FlowUniverseEntry[]): string {
   return lines.join("\n");
 }
 
+interface FlowBacktestInputArgs {
+  readonly symbols: string;
+  readonly holdTimes: string;
+  readonly zMode: string;
+  readonly start: string;
+  readonly end: string;
+}
+
+interface FlowBacktestInput {
+  readonly symbols: readonly string[];
+  readonly holdTimes: readonly number[];
+  readonly start: Date;
+  readonly end: Date;
+  readonly zMode: FlowBacktestOptions["zMode"];
+}
+
+function resolveFlowBacktestInput(
+  args: FlowBacktestInputArgs,
+): Effect.Effect<FlowBacktestInput, MarketDataRepositoryError> {
+  const symbols = args.symbols
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const holdTimes = args.holdTimes
+    .split(",")
+    .map((s) => Number.parseFloat(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (args.zMode !== "per-symbol" && args.zMode !== "cross-sectional") {
+    return Effect.fail(
+      new MarketDataRepositoryError(
+        `Invalid --z-mode '${args.zMode}': expected per-symbol or cross-sectional`,
+      ),
+    );
+  }
+  if (holdTimes.length === 0) {
+    return Effect.fail(
+      new MarketDataRepositoryError(
+        `Invalid --hold-times '${args.holdTimes}': expected comma-separated hours > 0`,
+      ),
+    );
+  }
+  const end = args.end.length > 0 ? new Date(args.end) : new Date();
+  const start =
+    args.start.length > 0
+      ? new Date(args.start)
+      : new Date(end.getTime() - 180 * 86_400_000);
+  // Validated above: only the two literals reach here.
+  const zMode: FlowBacktestOptions["zMode"] =
+    args.zMode === "cross-sectional" ? "cross-sectional" : "per-symbol";
+  return Effect.succeed({ symbols, holdTimes, start, end, zMode });
+}
+
+interface FlowBacktestOptionsArgs {
+  readonly fee: number;
+  readonly spreadBps: number;
+  readonly threshold: number;
+  readonly stopMult: number;
+  readonly conservativeFillRate: number;
+  readonly maxBreakevenWinRate: number;
+}
+
+function buildFlowBacktestOptions(
+  args: FlowBacktestOptionsArgs,
+  holdTimes: readonly number[],
+  zMode: FlowBacktestOptions["zMode"],
+): FlowBacktestOptions {
+  return {
+    fees: {
+      taker: args.fee / 100,
+      maker: defaultFlowBacktestOptions.fees.maker,
+    },
+    spreadBps: args.spreadBps,
+    thresholds: {
+      ...defaultFlowBacktestOptions.thresholds,
+      entry: args.threshold,
+    },
+    holdTimes,
+    trainDays: defaultFlowBacktestOptions.trainDays,
+    testDays: defaultFlowBacktestOptions.testDays,
+    walkForwardSteps: defaultFlowBacktestOptions.walkForwardSteps,
+    zMode,
+    stopMultiplier: args.stopMult > 0 ? args.stopMult : null,
+    conservativeFillRate: Math.max(0, Math.min(1, args.conservativeFillRate)),
+    maxBreakevenWinRate: args.maxBreakevenWinRate,
+  };
+}
+
 export const flowBacktestCommand = Command.make(
   "flow-backtest",
   {
@@ -6874,56 +7502,10 @@ export const flowBacktestCommand = Command.make(
   (args) =>
     Effect.gen(function* () {
       const sqlite = yield* SqliteClient;
-      const symbols = args.symbols
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      const holdTimes = args.holdTimes
-        .split(",")
-        .map((s) => Number.parseFloat(s.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      if (args.zMode !== "per-symbol" && args.zMode !== "cross-sectional") {
-        return yield* Effect.fail(
-          new MarketDataRepositoryError(
-            `Invalid --z-mode '${args.zMode}': expected per-symbol or cross-sectional`,
-          ),
-        );
-      }
-      if (holdTimes.length === 0) {
-        return yield* Effect.fail(
-          new MarketDataRepositoryError(
-            `Invalid --hold-times '${args.holdTimes}': expected comma-separated hours > 0`,
-          ),
-        );
-      }
-      const end = args.end.length > 0 ? new Date(args.end) : new Date();
-      const start =
-        args.start.length > 0
-          ? new Date(args.start)
-          : new Date(end.getTime() - 180 * 86_400_000);
+      const { symbols, holdTimes, start, end, zMode } =
+        yield* resolveFlowBacktestInput(args);
 
-      const options: FlowBacktestOptions = {
-        fees: {
-          taker: args.fee / 100,
-          maker: defaultFlowBacktestOptions.fees.maker,
-        },
-        spreadBps: args.spreadBps,
-        thresholds: {
-          ...defaultFlowBacktestOptions.thresholds,
-          entry: args.threshold,
-        },
-        holdTimes,
-        trainDays: defaultFlowBacktestOptions.trainDays,
-        testDays: defaultFlowBacktestOptions.testDays,
-        walkForwardSteps: defaultFlowBacktestOptions.walkForwardSteps,
-        zMode: args.zMode,
-        stopMultiplier: args.stopMult > 0 ? args.stopMult : null,
-        conservativeFillRate: Math.max(
-          0,
-          Math.min(1, args.conservativeFillRate),
-        ),
-        maxBreakevenWinRate: args.maxBreakevenWinRate,
-      };
+      const options = buildFlowBacktestOptions(args, holdTimes, zMode);
 
       const series: FlowSymbolSeries[] = [];
       let totalCandles = 0;

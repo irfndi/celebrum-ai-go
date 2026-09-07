@@ -219,12 +219,40 @@ interface BybitTradingStopParams {
 // Boundary parsing (zod)
 // ---------------------------------------------------------------------------
 
-/** Signed POST request payloads are flat JSON: strings, numbers, booleans. */
-export type BybitRequestPayload = Record<
-  string,
-  string | number | boolean | undefined
->;
-type BybitQuery = Record<string, string | number>;
+/**
+ * Signed POST request payloads are flat JSON: strings, numbers, booleans.
+ * Each endpoint sets its own required fields; optional fields are added
+ * only when present so signed payloads omit absent keys.
+ */
+export type BybitRequestPayload = {
+  category?: string;
+  symbol?: string;
+  side?: string;
+  orderType?: string;
+  qty?: string;
+  positionIdx?: number;
+  timeInForce?: string;
+  price?: string;
+  reduceOnly?: boolean;
+  tpTriggerBy?: string;
+  slTriggerBy?: string;
+  tpslMode?: string;
+  takeProfit?: string;
+  stopLoss?: string;
+  orderId?: string;
+  buyLeverage?: string;
+  sellLeverage?: string;
+  mode?: number;
+};
+/** Signed GET query parameters for Bybit v5 endpoints. */
+type BybitQuery = {
+  category?: string;
+  symbol?: string;
+  settleCoin?: string;
+  limit?: number;
+  startTime?: number;
+  endTime?: number;
+};
 
 /** Headers produced by bybitAuthHeaders. */
 type BybitAuthHeaders = {

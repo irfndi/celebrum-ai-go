@@ -419,43 +419,87 @@ export function fetchFundingRates(
     const results: FundingRate[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < FUNDING_MAX_PAGES; page++) {
-      const startParam = startMs !== undefined ? `&startTime=${startMs}` : "";
-      const endParam = endMs !== undefined ? `&endTime=${endMs}` : "";
-      const cursorParam = cursor ? `&cursor=${cursor}` : "";
       const data = yield* getJSON<{
         readonly list: readonly BybitFundingRate[];
         readonly nextPageCursor?: string;
       }>(
-        `/v5/market/funding/history?category=linear&symbol=${bSymbol}&limit=${FUNDING_PAGE_SIZE}${startParam}${endParam}${cursorParam}`,
+        `/v5/market/funding/history?category=linear&symbol=${bSymbol}&limit=${FUNDING_PAGE_SIZE}${fundingHistoryParams(startMs, endMs, cursor)}`,
         baseUrl,
       );
       if (data.list.length === 0) break;
 
-      let oldestOnPage = Number.POSITIVE_INFINITY;
-      for (const r of data.list) {
-        const time = Number(r.fundingTime);
-        if (time < oldestOnPage) oldestOnPage = time;
-        if (startMs !== undefined && time < startMs) continue;
-        if (endMs !== undefined && time > endMs) continue;
-        results.push({
-          exchange: EXCHANGE,
-          symbol,
-          fundingRate: asNumber(r.fundingRate),
-          timestamp: new Date(time),
-        });
-      }
-
-      if (results.length >= limit) break;
-      // Rows are newest-first, so once the oldest row on a page predates
-      // startMs no later page can contain in-window rows (this also covers
-      // a fully-skipped page whose rows are all older than startMs).
-      if (startMs !== undefined && oldestOnPage < startMs) break;
+      const oldestOnPage = appendFundingRows(
+        results,
+        data.list,
+        symbol,
+        startMs,
+        endMs,
+      );
       const next = data.nextPageCursor;
-      if (!next) break;
+      if (
+        shouldStopFundingPaging(
+          results.length,
+          limit,
+          startMs,
+          oldestOnPage,
+          next,
+        )
+      ) {
+        break;
+      }
       cursor = next;
     }
     return results;
   });
+}
+
+function fundingHistoryParams(
+  startMs: number | undefined,
+  endMs: number | undefined,
+  cursor: string | undefined,
+): string {
+  const startParam = startMs !== undefined ? `&startTime=${startMs}` : "";
+  const endParam = endMs !== undefined ? `&endTime=${endMs}` : "";
+  const cursorParam = cursor ? `&cursor=${cursor}` : "";
+  return `${startParam}${endParam}${cursorParam}`;
+}
+
+function appendFundingRows(
+  results: FundingRate[],
+  list: readonly BybitFundingRate[],
+  symbol: string,
+  startMs: number | undefined,
+  endMs: number | undefined,
+): number {
+  let oldestOnPage = Number.POSITIVE_INFINITY;
+  for (const r of list) {
+    const time = Number(r.fundingTime);
+    if (time < oldestOnPage) oldestOnPage = time;
+    if (startMs !== undefined && time < startMs) continue;
+    if (endMs !== undefined && time > endMs) continue;
+    results.push({
+      exchange: EXCHANGE,
+      symbol,
+      fundingRate: asNumber(r.fundingRate),
+      timestamp: new Date(time),
+    });
+  }
+  return oldestOnPage;
+}
+
+function shouldStopFundingPaging(
+  resultCount: number,
+  limit: number,
+  startMs: number | undefined,
+  oldestOnPage: number,
+  next: string | undefined,
+): boolean {
+  if (resultCount >= limit) return true;
+  // Rows are newest-first, so once the oldest row on a page predates
+  // startMs no later page can contain in-window rows (this also covers
+  // a fully-skipped page whose rows are all older than startMs).
+  if (startMs !== undefined && oldestOnPage < startMs) return true;
+  return !next;
 }
 
 interface BybitOpenInterestRow {
@@ -515,24 +559,16 @@ export function fetchOpenInterest(
     const rows: OpenInterestRow[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < OI_MAX_PAGES; page++) {
-      const cursorParam = cursor ? `&cursor=${cursor}` : "";
-      const startParam =
-        startTime !== undefined ? `&startTime=${startTime}` : "";
-      const endParam = endTime !== undefined ? `&endTime=${endTime}` : "";
       const data = yield* getJSON<{
         readonly list: readonly BybitOpenInterestRow[];
         readonly nextPageCursor?: string;
       }>(
-        `/v5/market/open-interest?category=linear&symbol=${bSymbol}&intervalTime=${interval}&limit=${OI_PAGE_SIZE}${cursorParam}${startParam}${endParam}`,
+        `/v5/market/open-interest?category=linear&symbol=${bSymbol}&intervalTime=${interval}&limit=${OI_PAGE_SIZE}${openInterestParams(cursor, startTime, endTime)}`,
         baseUrl,
       );
       if (data.list.length === 0) break;
       for (const r of data.list) {
-        rows.push({
-          timestamp: Number(r.timestamp),
-          oi: asNumber(r.openInterest ?? r.oi),
-          oiValue: asNumber(r.oiValue),
-        });
+        rows.push(toOpenInterestRow(r));
       }
       const next = data.nextPageCursor;
       if (!next) break;
@@ -540,6 +576,25 @@ export function fetchOpenInterest(
     }
     return rows;
   });
+}
+
+function openInterestParams(
+  cursor: string | undefined,
+  startTime: number | undefined,
+  endTime: number | undefined,
+): string {
+  const cursorParam = cursor ? `&cursor=${cursor}` : "";
+  const startParam = startTime !== undefined ? `&startTime=${startTime}` : "";
+  const endParam = endTime !== undefined ? `&endTime=${endTime}` : "";
+  return `${cursorParam}${startParam}${endParam}`;
+}
+
+function toOpenInterestRow(r: BybitOpenInterestRow): OpenInterestRow {
+  return {
+    timestamp: Number(r.timestamp),
+    oi: asNumber(r.openInterest ?? r.oi),
+    oiValue: asNumber(r.oiValue),
+  };
 }
 
 /**
@@ -624,21 +679,7 @@ export function fetchInstruments(
       );
       if (data.list.length === 0) break;
       for (const s of data.list) {
-        const listedTimeRaw = s.launchTime ?? s.listedTime;
-        instruments.push({
-          symbol: s.symbol,
-          status: s.status,
-          listedTime:
-            listedTimeRaw !== undefined ? Number(listedTimeRaw) : undefined,
-          bid1Price:
-            s.bid1Price !== undefined && s.bid1Price !== ""
-              ? asNumber(s.bid1Price)
-              : undefined,
-          ask1Price:
-            s.ask1Price !== undefined && s.ask1Price !== ""
-              ? asNumber(s.ask1Price)
-              : undefined,
-        });
+        instruments.push(toInstrumentInfo(s));
       }
       const next = data.nextPageCursor;
       if (!next) break;
@@ -646,6 +687,23 @@ export function fetchInstruments(
     }
     return instruments;
   });
+}
+
+function toInstrumentInfo(s: BybitInstrumentInfo): InstrumentInfo {
+  const listedTimeRaw = s.launchTime ?? s.listedTime;
+  return {
+    symbol: s.symbol,
+    status: s.status,
+    listedTime: listedTimeRaw !== undefined ? Number(listedTimeRaw) : undefined,
+    bid1Price:
+      s.bid1Price !== undefined && s.bid1Price !== ""
+        ? asNumber(s.bid1Price)
+        : undefined,
+    ask1Price:
+      s.ask1Price !== undefined && s.ask1Price !== ""
+        ? asNumber(s.ask1Price)
+        : undefined,
+  };
 }
 
 function bybitInterval(timeframe: string): string {

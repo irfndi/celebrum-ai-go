@@ -55,7 +55,14 @@ function goodGates(over: Partial<CohortGateMetrics> = {}): CohortGateMetrics {
 }
 
 function okRow(symbol: string, ret: number, pass = true): CohortRow {
-  return { symbol, status: "ok", candles: 69120, gates: goodGates({ compoundedReturnPct: ret }), pass, failures: [] };
+  return {
+    symbol,
+    status: "ok",
+    candles: 69120,
+    gates: goodGates({ compoundedReturnPct: ret }),
+    pass,
+    failures: [],
+  };
 }
 
 describe("growth-e3 frozen champion config", () => {
@@ -81,7 +88,9 @@ describe("growth-e3 frozen champion config", () => {
 
 describe("meanTradeExpectancyPct", () => {
   test("mean of pnlPct fractions scaled to percent", () => {
-    expect(meanTradeExpectancyPct(syntheticResult([0.01, -0.005, 0.02]))).toBeCloseTo(0.833333, 5);
+    expect(
+      meanTradeExpectancyPct(syntheticResult([0.01, -0.005, 0.02])),
+    ).toBeCloseTo(0.833333, 5);
   });
   test("empty trade list is zero, not NaN", () => {
     expect(meanTradeExpectancyPct(syntheticResult([]))).toBe(0);
@@ -152,7 +161,11 @@ describe("union and baseline estimates", () => {
   ];
   test("union means only PASS rows", () => {
     const u = unionGrowthEstimate(rows);
-    expect(u.symbols).toEqual(["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]);
+    expect(u.symbols).toEqual([
+      "BTC/USDT:USDT",
+      "ETH/USDT:USDT",
+      "SOL/USDT:USDT",
+    ]);
     expect(u.meanReturnPct).toBeCloseTo((4 + 6 + 10) / 3, 9);
   });
   test("baseline means only BTC/ETH valid rows", () => {
