@@ -13,8 +13,13 @@ import {
   evaluateKnobsOnPanel,
   type EvaluateResult,
 } from "./prepare.ts";
-import { mutateKnobs, shouldKeep, renderKnobsModule } from "./mutate.ts";
+import { mutateKnobs, hardRestartKnobs, shouldKeep, renderKnobsModule } from "./mutate.ts";
 import { withFileLock, readJsonFile, writeJsonFile } from "./lock.ts";
+import {
+  CLAIM_BARS,
+  GOAL_VERSION,
+  meetsClaimBars,
+} from "./goals.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const resultsDir = join(here, "results");
@@ -61,12 +66,19 @@ interface ChampionState {
   /** Screen-phase median log-return — used only for the cheap gate. */
   screenScore: number;
   guardsOk: boolean;
+  /** Confirm-phase risk/edge for score-tie KEEP decisions. */
+  medianDrawdownPct: number;
+  expectancyPct: number;
 }
 
 function loadChampionUnlocked(): ChampionState {
-  const raw = readJsonFile<ChampionState & { screenScore?: number }>(
-    championPath,
-  );
+  const raw = readJsonFile<
+    ChampionState & {
+      screenScore?: number;
+      medianDrawdownPct?: number;
+      expectancyPct?: number;
+    }
+  >(championPath);
   if (raw?.knobs) {
     return {
       knobs: raw.knobs,
@@ -75,6 +87,12 @@ function loadChampionUnlocked(): ChampionState {
         ? (raw.screenScore as number)
         : Number.NEGATIVE_INFINITY,
       guardsOk: Boolean(raw.guardsOk),
+      medianDrawdownPct: Number.isFinite(raw.medianDrawdownPct)
+        ? (raw.medianDrawdownPct as number)
+        : Number.POSITIVE_INFINITY,
+      expectancyPct: Number.isFinite(raw.expectancyPct)
+        ? (raw.expectancyPct as number)
+        : Number.NEGATIVE_INFINITY,
     };
   }
   return {
@@ -82,6 +100,8 @@ function loadChampionUnlocked(): ChampionState {
     score: Number.NEGATIVE_INFINITY,
     screenScore: Number.NEGATIVE_INFINITY,
     guardsOk: false,
+    medianDrawdownPct: Number.POSITIVE_INFINITY,
+    expectancyPct: Number.NEGATIVE_INFINITY,
   };
 }
 
@@ -98,15 +118,7 @@ function appendLedger(row: unknown): void {
 }
 
 function goalsClaimed(r: EvaluateResult): boolean {
-  return (
-    r.phase === "confirm" &&
-    r.guardsOk &&
-    r.medianLogReturn > 0 &&
-    r.winRatePct >= 48 &&
-    r.tradesPerSymMonth >= 4 &&
-    r.medianDrawdownPct <= 15 &&
-    r.expectancyPct > 0
-  );
+  return r.phase === "confirm" && r.guardsOk && meetsClaimBars(r);
 }
 
 function writeGoals(status: string, r: EvaluateResult | null): void {
@@ -117,7 +129,8 @@ function writeGoals(status: string, r: EvaluateResult | null): void {
   ) {
     return;
   }
-  const body = `# Autoresearch goals
+  const c = CLAIM_BARS;
+  const body = `# Autoresearch goals (${GOAL_VERSION})
 
 Status: **${status}**
 Updated: ${new Date().toISOString()}
@@ -125,12 +138,13 @@ Worker: ${worker}/${workers}
 
 | Goal | Target | Current (confirm) |
 | --- | --- | --- |
-| Profitability (med log-ret) | > 0 | ${r ? r.medianLogReturn.toFixed(4) : "n/a"} |
-| Win rate | ≥ 48% | ${r ? r.winRatePct.toFixed(1) : "n/a"} |
-| Throughput (trades/sym-mo) | ≥ 4 | ${r ? r.tradesPerSymMonth.toFixed(1) : "n/a"} |
-| Drawdown (med) | ≤ 15% | ${r ? r.medianDrawdownPct.toFixed(1) : "n/a"} |
-| Expectancy | > 0 | ${r ? r.expectancyPct.toFixed(3) : "n/a"} |
+| Profitability (med log-ret) | ≥ ${c.minMedianLogReturn} | ${r ? r.medianLogReturn.toFixed(4) : "n/a"} |
+| Win rate | ≥ ${c.minWinRatePct}% | ${r ? r.winRatePct.toFixed(1) : "n/a"} |
+| Throughput (trades/sym-mo) | ≥ ${c.minTradesPerSymMonth} | ${r ? r.tradesPerSymMonth.toFixed(1) : "n/a"} |
+| Drawdown (med) | ≤ ${c.maxMedianDrawdownPct}% | ${r ? r.medianDrawdownPct.toFixed(1) : "n/a"} |
+| Expectancy | ≥ ${c.minExpectancyPct} | ${r ? r.expectancyPct.toFixed(4) : "n/a"} |
 
+v1/v2 soak baselines live in champion-soak.json (paper/testnet).
 Live trading remains frozen until credential rotation + position reconciliation.
 `;
   writeFileSync(goalsPath, body);
@@ -197,6 +211,8 @@ withFileLock(championLock, () => {
       score: base.score,
       screenScore: screen.score,
       guardsOk: base.guardsOk,
+      medianDrawdownPct: base.medianDrawdownPct,
+      expectancyPct: base.expectancyPct,
     };
     persistChampionUnlocked(champ);
     appendLedger({
@@ -235,16 +251,21 @@ for (let i = 1; i <= trials; i++) {
     process.exit(0);
   }
   const localChamp = loadChampionUnlocked();
-  // Occasional two-axis mutate to escape plateaus.
-  let next = localChamp.knobs;
+  // Occasional hard restart (~8%) escapes local maxima; else 1–2 axis mutate.
+  let next: AutoresearchKnobs;
   let axis: string;
-  const first = mutateKnobs(next, rng);
-  next = first.next;
-  axis = first.axis;
-  if (rng() < 0.25) {
-    const second = mutateKnobs(next, rng);
-    next = second.next;
-    axis = `${first.axis}+${second.axis}`;
+  if (rng() < 0.08) {
+    next = hardRestartKnobs(rng);
+    axis = "HARD_RESTART";
+  } else {
+    const first = mutateKnobs(localChamp.knobs, rng);
+    next = first.next;
+    axis = first.axis;
+    if (rng() < 0.4) {
+      const second = mutateKnobs(next, rng);
+      next = second.next;
+      axis = `${first.axis}+${second.axis}`;
+    }
   }
   console.log(`\n[w${worker} trial ${i}/${trials}] mutate ${axis} → screen...`);
   const screen = evalScreen(next);
@@ -253,10 +274,13 @@ for (let i = 1; i <= trials; i++) {
   );
 
   // Compare screen-to-screen only (never against confirm score).
+  // Small absolute slack lets near-misses pay for confirm — without it the
+  // loop plateaus when champScreen is a hard ceiling (v2 overnight stall).
+  const SCREEN_SLACK = 0.0025;
   const screenPromising =
     Number.isFinite(screen.score) &&
     (localChamp.screenScore === Number.NEGATIVE_INFINITY ||
-      screen.score > localChamp.screenScore);
+      screen.score > localChamp.screenScore - SCREEN_SLACK);
 
   if (!screenPromising) {
     appendLedger({
@@ -271,7 +295,7 @@ for (let i = 1; i <= trials; i++) {
       championScore: localChamp.score,
     });
     console.log(
-      `  DISCARD_SCREEN (screen ${screen.score.toFixed(4)} <= champScreen ${localChamp.screenScore.toFixed(4)})`,
+      `  DISCARD_SCREEN (screen ${screen.score.toFixed(4)} <= champScreen ${localChamp.screenScore.toFixed(4)} - ${SCREEN_SLACK})`,
     );
     continue;
   }
@@ -286,6 +310,10 @@ for (let i = 1; i <= trials; i++) {
       candidateGuardsOk: result.guardsOk,
       championScore: champ.score,
       championGuardsOk: champ.guardsOk,
+      candidateDrawdownPct: result.medianDrawdownPct,
+      championDrawdownPct: champ.medianDrawdownPct,
+      candidateExpectancyPct: result.expectancyPct,
+      championExpectancyPct: champ.expectancyPct,
     });
     appendLedger({
       ts: new Date().toISOString(),
@@ -305,6 +333,8 @@ for (let i = 1; i <= trials; i++) {
         score: result.score,
         screenScore: screen.score,
         guardsOk: result.guardsOk,
+        medianDrawdownPct: result.medianDrawdownPct,
+        expectancyPct: result.expectancyPct,
       };
       persistChampionUnlocked(nextState);
       if (goalsClaimed(result)) {

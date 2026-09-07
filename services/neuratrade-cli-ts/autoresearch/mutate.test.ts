@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { checkGuards, PHASE_GEOM } from "./prepare.ts";
-import { mutateKnobs, shouldKeep, renderKnobsModule } from "./mutate.ts";
+import {
+  mutateKnobs,
+  hardRestartKnobs,
+  shouldKeep,
+  renderKnobsModule,
+} from "./mutate.ts";
 import { withFileLock, writeJsonFile, readJsonFile } from "./lock.ts";
 import type { AutoresearchKnobs } from "./knobs.ts";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -33,15 +38,27 @@ describe("autoresearch guards", () => {
     expect(g.reason).toContain("log_return_nonpositive");
   });
 
-  it("accepts growth under all claim bars", () => {
+  it("accepts growth under v2 keep bars", () => {
     const g = checkGuards({
       medianLogReturn: 0.01,
-      winRatePct: 50,
+      winRatePct: 52,
       medianDrawdownPct: 10,
       tradesPerSymMonth: 5,
       expectancyPct: 0.2,
     });
     expect(g.ok).toBe(true);
+  });
+
+  it("rejects former v1-passing stats that miss v2 keep bars", () => {
+    const g = checkGuards({
+      medianLogReturn: 0.01,
+      winRatePct: 50, // was enough for v1 (48), not v2 keep (52)
+      medianDrawdownPct: 10,
+      tradesPerSymMonth: 5,
+      expectancyPct: 0.2,
+    });
+    expect(g.ok).toBe(false);
+    expect(g.reason).toContain("winrate_below_52");
   });
 });
 
@@ -86,6 +103,58 @@ describe("autoresearch keep/discard", () => {
       }),
     ).toBe(false);
   });
+
+  it("on score tie prefers lower drawdown then higher expectancy", () => {
+    expect(
+      shouldKeep({
+        candidateScore: 0.05,
+        candidateGuardsOk: true,
+        championScore: 0.05,
+        championGuardsOk: true,
+        candidateDrawdownPct: 8,
+        championDrawdownPct: 10,
+      }),
+    ).toBe(true);
+    expect(
+      shouldKeep({
+        candidateScore: 0.05,
+        candidateGuardsOk: true,
+        championScore: 0.05,
+        championGuardsOk: true,
+        candidateDrawdownPct: 10,
+        championDrawdownPct: 10,
+        candidateExpectancyPct: 0.002,
+        championExpectancyPct: 0.001,
+      }),
+    ).toBe(true);
+    expect(
+      shouldKeep({
+        candidateScore: 0.05,
+        candidateGuardsOk: true,
+        championScore: 0.05,
+        championGuardsOk: true,
+        candidateDrawdownPct: 11,
+        championDrawdownPct: 10,
+        candidateExpectancyPct: 0.01,
+        championExpectancyPct: 0.001,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("hardRestartKnobs", () => {
+  it("returns knobs in valid ranges", () => {
+    let i = 0;
+    const rng = () => {
+      i += 1;
+      return (i % 10) / 10;
+    };
+    const k = hardRestartKnobs(rng);
+    expect(k.rungs).toBeGreaterThanOrEqual(1);
+    expect(k.rungs).toBeLessThanOrEqual(3);
+    expect(k.gridStepPct).toBeGreaterThanOrEqual(0.4);
+    expect(k.positionFraction).toBe(1);
+  });
 });
 
 describe("mutateKnobs", () => {
@@ -113,6 +182,13 @@ describe("phase geometry", () => {
     expect(PHASE_GEOM.screen.forwardBars).toBeLessThan(
       PHASE_GEOM.confirm.forwardBars,
     );
+  });
+
+  it("throughput months use forward window not step span", () => {
+    // Confirm forwardBars=2880 × 15m = 30d = 1 month → divisor is 1.
+    const confirmMonths =
+      (PHASE_GEOM.confirm.forwardBars * 15) / (60 * 24 * 30);
+    expect(confirmMonths).toBeCloseTo(1, 5);
   });
 });
 

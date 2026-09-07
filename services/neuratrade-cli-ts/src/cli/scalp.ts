@@ -4182,11 +4182,11 @@ function paperTradeProgram(args: PaperTradeArgs) {
         ) {
           return;
         }
-        const saveMember = paperRepo.saveLadderPortfolioMember;
-        if (saveMember === undefined) return;
+        if (paperRepo.saveLadderPortfolioMember === undefined) return;
         const ladderResult = input.result as LadderPaperIterationResult;
         ladderLiveCapital.set(input.entryKey, ladderResult.capital);
-        yield* saveMember({
+        // Call through the repo object — extracting the method unbound loses `this.db`.
+        yield* paperRepo.saveLadderPortfolioMember({
           portfolioId: ladderPortfolioId,
           exchange: resolveFuturesMarketExchange(input.entryExchange, true),
           symbol: input.entry.symbol,
@@ -4269,9 +4269,14 @@ function paperTradeProgram(args: PaperTradeArgs) {
     > =>
       Effect.gen(function* () {
         if (!activeEntries) return;
-        const cohortSymbols = new Set<string>(
-          READINESS_COHORT_CANDIDATES.map((candidate) => candidate.symbol),
-        );
+        // Candidate soaks own readiness-cohort symbols in the shared default
+        // home. Explicit --watchlist soaks (champion paper/demo) own their
+        // full symbol set — do not skip BTC/ETH/SOL there.
+        const cohortSymbols = Option.isSome(args.watchlist)
+          ? new Set<string>()
+          : new Set<string>(
+              READINESS_COHORT_CANDIDATES.map((candidate) => candidate.symbol),
+            );
         for (const line of ladderRefreshRebalancePlan()) {
           yield* Console.log(line);
         }

@@ -10,6 +10,7 @@ import { resampleCandles } from "../src/scalping/grid-universe.ts";
 import { runLadderGridBacktest } from "../src/scalping/ladder-grid.ts";
 import type { Candle } from "../src/market-data/types.ts";
 import type { AutoresearchKnobs } from "./knobs.ts";
+import { checkKeepGuards } from "./goals.ts";
 
 export type EvalPhase = "screen" | "confirm";
 
@@ -47,7 +48,8 @@ export interface AlignedPanel {
   readonly loadedMs: number;
 }
 
-const FEE_PCT = 0.02;
+const FEE_PCT = 0.02; // maker per side (limit entries + target exits)
+const TAKER_EXIT_FEE_PCT = 0.06; // Bybit taker per side (stop/liquidation/max-hold exits)
 const SLIPPAGE_BPS = 2;
 
 /** Phase geometry — screen is cheap; confirm is the claim gate. */
@@ -248,6 +250,7 @@ export function evaluateKnobsOnPanel(
     gridMaxGrids: knobs.gridMaxGrids,
     gridPauseAfterLossBars: knobs.gridPauseAfterLossBars,
     feePct: FEE_PCT,
+    takerExitFeePct: TAKER_EXIT_FEE_PCT,
     slippageBps: SLIPPAGE_BPS,
     initialCapital: 10_000,
     leverage: 1,
@@ -291,9 +294,13 @@ export function evaluateKnobsOnPanel(
     return emptyResult("insufficient_windows", started, phase, symbols.length);
   }
 
-  const months = (steps * geom.stepBars * 15) / (60 * 24 * 30);
+  // Throughput: average closed trades per window, scaled to a 30d month.
+  // Do NOT divide by the step-timeline span — overlapping windows would
+  // inflate trades/sym-mo into the thousands and make the guard meaningless.
+  const windowMonths = (geom.forwardBars * 15) / (60 * 24 * 30);
+  const avgTradesPerWindow = trades / windows;
   const tradesPerSymMonth =
-    months > 0 ? trades / Math.max(1, symbols.length * months) : Number.NaN;
+    windowMonths > 0 ? avgTradesPerWindow / windowMonths : Number.NaN;
   const winRatePct = trades > 0 ? (wins / trades) * 100 : Number.NaN;
   const expectancyPct = trades > 0 ? pnlSum / trades : Number.NaN;
   const medianReturnPct = median(rets);
@@ -361,14 +368,5 @@ export function checkGuards(input: {
   tradesPerSymMonth: number;
   expectancyPct: number;
 }): { ok: boolean; reason: string } {
-  const guards: string[] = [];
-  if (!(input.medianLogReturn > 0)) guards.push("log_return_nonpositive");
-  if (!(input.winRatePct >= 48)) guards.push("winrate_below_48");
-  if (!(input.medianDrawdownPct <= 15)) guards.push("drawdown_above_15");
-  if (!(input.tradesPerSymMonth >= 4)) guards.push("throughput_below_4");
-  if (!(input.expectancyPct > 0)) guards.push("expectancy_nonpositive");
-  return {
-    ok: guards.length === 0,
-    reason: guards.length === 0 ? "ok" : guards.join(","),
-  };
+  return checkKeepGuards(input);
 }

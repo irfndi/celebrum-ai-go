@@ -14,6 +14,21 @@ const AXES = [
   "chopGateAdxThreshold",
 ] as const;
 
+/** Prefer risk-shaping axes when climbing toward lower drawdown. */
+const WEIGHTED_AXES: readonly Axis[] = [
+  "gridStepPct",
+  "gridStepPct",
+  "stopRatio",
+  "stopRatio",
+  "stopRatio",
+  "maxHoldBars",
+  "targetRatio",
+  "rungs",
+  "gridMaxGrids",
+  "gridPauseAfterLossBars",
+  "chopGateAdxThreshold",
+];
+
 type Axis = (typeof AXES)[number];
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -25,11 +40,13 @@ function round(n: number, digits: number): number {
   return Math.round(n * p) / p;
 }
 
+const SCORE_EPS = 1e-9;
+
 export function mutateKnobs(
   base: AutoresearchKnobs,
   rng: () => number = Math.random,
 ): { next: AutoresearchKnobs; axis: Axis } {
-  const axis = AXES[Math.floor(rng() * AXES.length)]!;
+  const axis = WEIGHTED_AXES[Math.floor(rng() * WEIGHTED_AXES.length)]!;
   const next = { ...base };
   switch (axis) {
     case "gridStepPct":
@@ -82,18 +99,76 @@ export function mutateKnobs(
   return { next, axis };
 }
 
+/**
+ * Wide random restart to escape local maxima when 1–2 axis mutates plateau.
+ */
+export function hardRestartKnobs(
+  rng: () => number = Math.random,
+): AutoresearchKnobs {
+  const chopChoices = [0, 0, 20, 25, 30];
+  return {
+    rungs: 1 + Math.floor(rng() * 3),
+    gridStepPct: round(0.4 + rng() * 2.2, 2),
+    gridMaxGrids: 2 + Math.floor(rng() * 4),
+    gridPauseAfterLossBars: Math.floor(rng() * 9),
+    stopRatio: round(0.8 + rng() * 1.8, 2),
+    targetRatio: round(1.0 + rng() * 2.2, 2),
+    maxHoldBars: Math.round(8 + rng() * 72),
+    trendFilterPeriod: 0,
+    chopGateAdxThreshold: chopChoices[Math.floor(rng() * chopChoices.length)]!,
+    positionFraction: 1,
+  };
+}
+
 export function shouldKeep(input: {
   candidateScore: number;
   candidateGuardsOk: boolean;
   championScore: number;
   /** Once a champion has passed guards, never regress to a failing candidate. */
   championGuardsOk: boolean;
+  /** Optional tie-breakers when scores are equal within SCORE_EPS. */
+  candidateDrawdownPct?: number;
+  championDrawdownPct?: number;
+  candidateExpectancyPct?: number;
+  championExpectancyPct?: number;
 }): boolean {
   if (!Number.isFinite(input.candidateScore)) return false;
-  if (!(input.candidateScore > input.championScore)) return false;
   // Climb from a failing seed on score alone; after first guard-pass, require guards.
   if (input.championGuardsOk && !input.candidateGuardsOk) return false;
-  return true;
+
+  if (input.candidateScore > input.championScore + SCORE_EPS) return true;
+
+  // Tie on score: prefer lower drawdown, then higher expectancy.
+  const tied =
+    Math.abs(input.candidateScore - input.championScore) <= SCORE_EPS;
+  if (!tied) return false;
+
+  const cDd = input.candidateDrawdownPct;
+  const hDd = input.championDrawdownPct;
+  if (
+    Number.isFinite(cDd) &&
+    Number.isFinite(hDd) &&
+    (cDd as number) < (hDd as number) - SCORE_EPS
+  ) {
+    return true;
+  }
+  const cExp = input.candidateExpectancyPct;
+  const hExp = input.championExpectancyPct;
+  if (
+    Number.isFinite(cExp) &&
+    Number.isFinite(hExp) &&
+    (cExp as number) > (hExp as number) + SCORE_EPS
+  ) {
+    // Only use expectancy when DD is not worse.
+    if (
+      !Number.isFinite(cDd) ||
+      !Number.isFinite(hDd) ||
+      (cDd as number) <= (hDd as number) + SCORE_EPS
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function renderKnobsModule(k: AutoresearchKnobs): string {

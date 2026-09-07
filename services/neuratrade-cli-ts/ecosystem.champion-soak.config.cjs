@@ -36,7 +36,21 @@ function loadDotEnv(file) {
 }
 
 function loadChampionKnobs() {
-  const p = path.join(__dirname, "autoresearch", "results", "champion.json");
+  // Freeze the soak baseline so overnight autoresearch can climb champion.json
+  // without changing what paper/demo are validating.
+  const soak = path.join(
+    __dirname,
+    "autoresearch",
+    "results",
+    "champion-soak.json",
+  );
+  const fallback = path.join(
+    __dirname,
+    "autoresearch",
+    "results",
+    "champion.json",
+  );
+  const p = fs.existsSync(soak) ? soak : fallback;
   const raw = JSON.parse(fs.readFileSync(p, "utf8"));
   return raw.knobs;
 }
@@ -160,6 +174,20 @@ module.exports = {
       error_file: path.join(demoHome, "logs", "champion-demo.err.log"),
       max_size: "50M",
       retain: 5,
+      merge_logs: true,
+      time: true,
+    },
+    {
+      // Keep soak candles fresh. Without this, ladder holds forever on
+      // "no new candle" once the one-shot seed ages past the tip.
+      name: "neuratrade-champion-candle-sync",
+      script: "bash",
+      args: ["scripts/sync-champion-soak-candles.sh"],
+      cwd: cliTsDir,
+      cron_restart: "*/15 * * * *",
+      autorestart: false,
+      out_file: path.join(paperHome, "logs", "champion-candle-sync.out.log"),
+      error_file: path.join(paperHome, "logs", "champion-candle-sync.err.log"),
       merge_logs: true,
       time: true,
     },

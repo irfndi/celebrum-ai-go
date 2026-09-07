@@ -1,0 +1,22 @@
+{
+  "knobs": {
+    "rungs": 2,
+    "gridStepPct": 1.3,
+    "gridMaxGrids": 2,
+    "gridPauseAfterLossBars": 2,
+    "stopRatio": 1.58,
+    "targetRatio": 1.95,
+    "maxHoldBars": 39,
+    "trendFilterPeriod": 0,
+    "chopGateAdxThreshold": 0,
+    "positionFraction": 1
+  },
+  "score": 0.06400246631772191,
+  "screenScore": 0.018514,
+  "guardsOk": true,
+  "medianDrawdownPct": 9.105044650880632,
+  "expectancyPct": 0.0009768194989018687,
+  "promotedAt": "2026-09-06T23:51:16.586724Z",
+  "note": "promoted from search champion for paper/demo soak",
+  "honestFees": "maker0.02/takerExit0.06 rescored 2026-09-07"
+}

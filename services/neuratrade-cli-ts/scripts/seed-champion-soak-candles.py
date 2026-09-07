@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""Seed / sync champion paper/demo DBs with bybit-futures OHLCV from main cache.
+
+Isolated soak homes must not share the live kill-switch DB.
+
+  # full replace (first boot)
+  python3 scripts/seed-champion-soak-candles.py
+
+  # incremental append of newer candles (cron every 15m)
+  python3 scripts/seed-champion-soak-candles.py --incremental
+"""
+
+from __future__ import annotations
+
+import argparse
+import sqlite3
+import sys
+from pathlib import Path
+
+SRC = Path("/root/.neuratrade/data/neuratrade.db")
+HOMES = (
+    Path("/root/.neuratrade-champion-paper"),
+    Path("/root/.neuratrade-champion-demo"),
+)
+EXCHANGE = "bybit-futures"
+SYMBOLS = (
+    "BTC/USDT:USDT",
+    "ETH/USDT:USDT",
+    "SOL/USDT:USDT",
+    "LINK/USDT:USDT",
+)
+TIMEFRAMES = ("5m", "15m")
+LOOKBACK_DAYS = 120
+
+
+def cols(con: sqlite3.Connection, table: str, schema: str | None = None) -> list[str]:
+    if schema:
+        rows = con.execute(f"PRAGMA {schema}.table_info({table})").fetchall()
+    else:
+        rows = con.execute(f"PRAGMA table_info({table})").fetchall()
+    return [r[1] for r in rows]
+
+
+def ensure_exchange_and_pairs(
+    dst: sqlite3.Connection, src_ex_id: int, incremental: bool
+) -> dict[int, int]:
+    """Return src_pair_id -> dst_pair_id map."""
+    ex_cols = set(cols(dst, "exchanges"))
+    if "api_url" in ex_cols:
+        dst.execute(
+            """
+            INSERT OR REPLACE INTO exchanges (id, name, api_url, is_active)
+            VALUES (?, ?, '', 1)
+            """,
+            (src_ex_id, EXCHANGE),
+        )
+    else:
+        dst.execute(
+            "INSERT OR REPLACE INTO exchanges (id, name) VALUES (?, ?)",
+            (src_ex_id, EXCHANGE),
+        )
+
+    pair_cols = cols(dst, "trading_pairs")
+    src_pair_cols = cols(dst, "trading_pairs", schema="src")
+    has_pair_ex = "exchange_id" in pair_cols
+    ph = ",".join("?" for _ in SYMBOLS)
+
+    if not incremental:
+        if "exchange_id" in cols(dst, "ohlcv_data"):
+            dst.execute("DELETE FROM ohlcv_data WHERE exchange_id = ?", (src_ex_id,))
+        else:
+            dst.execute("DELETE FROM ohlcv_data")
+        if has_pair_ex:
+            dst.execute(
+                f"DELETE FROM trading_pairs WHERE exchange_id = ? AND symbol IN ({ph})",
+                (src_ex_id, *SYMBOLS),
+            )
+        else:
+            dst.execute(f"DELETE FROM trading_pairs WHERE symbol IN ({ph})", SYMBOLS)
+
+    if has_pair_ex:
+        common = [c for c in pair_cols if c in src_pair_cols]
+        dst.execute(
+            f"""
+            INSERT OR IGNORE INTO trading_pairs ({",".join(common)})
+            SELECT {",".join("s." + c for c in common)}
+            FROM src.trading_pairs s
+            WHERE s.exchange_id = ? AND s.symbol IN ({ph})
+            """,
+            (src_ex_id, *SYMBOLS),
+        )
+        # Also REPLACE missing ids if IGNORE skipped due to unique(symbol) only
+        pairs = dst.execute(
+            f"""
+            SELECT id, symbol FROM trading_pairs
+            WHERE {"exchange_id = ? AND " if has_pair_ex else ""}symbol IN ({ph})
+            """,
+            (src_ex_id, *SYMBOLS) if has_pair_ex else SYMBOLS,
+        ).fetchall()
+    else:
+        for sym in SYMBOLS:
+            base, rest = sym.split("/", 1)
+            quote = rest.split(":", 1)[0]
+            src_row = dst.execute(
+                """
+                SELECT id FROM src.trading_pairs
+                WHERE exchange_id = ? AND symbol = ?
+                """,
+                (src_ex_id, sym),
+            ).fetchone()
+            if not src_row:
+                raise SystemExit(f"missing src pair {sym}")
+            src_pid = int(src_row[0])
+            insert_cols = ["id", "symbol"]
+            values: list[object] = [src_pid, sym]
+            if "base_currency" in pair_cols:
+                insert_cols.append("base_currency")
+                values.append(base)
+            if "quote_currency" in pair_cols:
+                insert_cols.append("quote_currency")
+                values.append(quote)
+            if "is_futures" in pair_cols:
+                insert_cols.append("is_futures")
+                values.append(1)
+            if "is_active" in pair_cols:
+                insert_cols.append("is_active")
+                values.append(1)
+            placeholders = ",".join("?" for _ in insert_cols)
+            dst.execute(
+                f"INSERT OR IGNORE INTO trading_pairs ({','.join(insert_cols)}) VALUES ({placeholders})",
+                values,
+            )
+        pairs = dst.execute(
+            f"SELECT id, symbol FROM trading_pairs WHERE symbol IN ({ph})",
+            SYMBOLS,
+        ).fetchall()
+
+    print(f"  pairs={pairs}")
+    src_pairs = dst.execute(
+        f"""
+        SELECT id, symbol FROM src.trading_pairs
+        WHERE exchange_id = ? AND symbol IN ({ph})
+        """,
+        (src_ex_id, *SYMBOLS),
+    ).fetchall()
+    dst_by_sym = {sym: int(pid) for pid, sym in pairs}
+    return {int(sid): dst_by_sym[sym] for sid, sym in src_pairs}
+
+
+def seed(dst_path: Path, *, incremental: bool) -> None:
+    print(f"{'syncing' if incremental else 'seeding'} {dst_path}")
+    dst = sqlite3.connect(dst_path)
+    dst.execute("PRAGMA foreign_keys=OFF")
+    dst.execute("ATTACH DATABASE ? AS src", (str(SRC),))
+
+    src_ex = dst.execute(
+        "SELECT id FROM src.exchanges WHERE name = ?", (EXCHANGE,)
+    ).fetchone()
+    if not src_ex:
+        raise SystemExit(f"missing exchange {EXCHANGE} in {SRC}")
+    src_ex_id = int(src_ex[0])
+
+    src_to_dst = ensure_exchange_and_pairs(dst, src_ex_id, incremental)
+    src_ids = list(src_to_dst.keys())
+    id_ph = ",".join("?" for _ in src_ids)
+    tf_ph = ",".join("?" for _ in TIMEFRAMES)
+
+    since_clause = ""
+    params: list[object] = [src_ex_id, *src_ids, *TIMEFRAMES]
+    if incremental:
+        # Per-timeframe watermark — a fresh 5m tip must not hide a stale 15m gap.
+        watermarks = {
+            row[0]: row[1]
+            for row in dst.execute(
+                """
+                SELECT timeframe, MAX(timestamp)
+                FROM ohlcv_data
+                WHERE exchange_id = ?
+                GROUP BY timeframe
+                """,
+                (src_ex_id,),
+            ).fetchall()
+        }
+        print(f"  watermarks={watermarks}")
+        # Build OR of (timeframe = X AND timestamp > watermark_X)
+        parts: list[str] = []
+        for tf in TIMEFRAMES:
+            wm = watermarks.get(tf)
+            if wm:
+                parts.append("(timeframe = ? AND timestamp > ?)")
+                params.extend([tf, wm])
+            else:
+                parts.append(
+                    "(timeframe = ? AND timestamp >= datetime('now', ?))"
+                )
+                params.extend([tf, f"-{LOOKBACK_DAYS} days"])
+        since_clause = f"AND ({' OR '.join(parts)})"
+    else:
+        since_clause = "AND timestamp >= datetime('now', ?)"
+        params.append(f"-{LOOKBACK_DAYS} days")
+
+    dst.execute("DROP TABLE IF EXISTS _ohlcv_tmp")
+    dst.execute(
+        f"""
+        CREATE TEMP TABLE _ohlcv_tmp AS
+        SELECT * FROM src.ohlcv_data
+        WHERE exchange_id = ?
+          AND trading_pair_id IN ({id_ph})
+          AND timeframe IN ({tf_ph})
+          {since_clause}
+        """,
+        params,
+    )
+    ntmp = dst.execute("SELECT COUNT(*) FROM _ohlcv_tmp").fetchone()[0]
+    print(f"  tmp_candles={ntmp}")
+
+    for sid, did in src_to_dst.items():
+        if sid != did:
+            dst.execute(
+                "UPDATE _ohlcv_tmp SET trading_pair_id = ? WHERE trading_pair_id = ?",
+                (did, sid),
+            )
+    dst.execute("UPDATE _ohlcv_tmp SET exchange_id = ?", (src_ex_id,))
+
+    ohlcv_cols = cols(dst, "ohlcv_data")
+    cols_no_id = [c for c in ohlcv_cols if c != "id"]
+    tmp_cols = {r[1] for r in dst.execute("PRAGMA table_info(_ohlcv_tmp)").fetchall()}
+    use_cols = [c for c in cols_no_id if c in tmp_cols]
+
+    if not incremental:
+        dst.execute("DELETE FROM ohlcv_data WHERE exchange_id = ?", (src_ex_id,))
+
+    before = dst.execute("SELECT COUNT(*) FROM ohlcv_data").fetchone()[0]
+    dst.execute(
+        f"""
+        INSERT OR IGNORE INTO ohlcv_data ({",".join(use_cols)})
+        SELECT {",".join(use_cols)} FROM _ohlcv_tmp
+        """
+    )
+    after = dst.execute("SELECT COUNT(*) FROM ohlcv_data").fetchone()[0]
+    latest = dst.execute(
+        "SELECT MAX(timestamp) FROM ohlcv_data WHERE exchange_id = ?", (src_ex_id,)
+    ).fetchone()[0]
+
+    dst.execute(
+        """
+        INSERT INTO risk_kill_switch (id, engaged, reason, updated_at)
+        VALUES (1, 0, '', datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET
+          engaged = 0,
+          reason = '',
+          updated_at = datetime('now')
+        """
+    )
+    dst.commit()
+    dst.execute("DETACH DATABASE src")
+    dst.close()
+    print(
+        f"  candles={after} (+{after - before}) latest={latest} "
+        f"size_mb={dst_path.stat().st_size / 1e6:.1f}"
+    )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Append only candles newer than current soak max timestamp",
+    )
+    args = ap.parse_args()
+    if not SRC.exists():
+        print(f"missing source db: {SRC}", file=sys.stderr)
+        return 1
+    for home in HOMES:
+        db = home / "data" / "neuratrade.db"
+        if not db.exists():
+            print(
+                f"missing {db}; start soak once so migrations create schema",
+                file=sys.stderr,
+            )
+            return 1
+        seed(db, incremental=args.incremental)
+    print("done")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
