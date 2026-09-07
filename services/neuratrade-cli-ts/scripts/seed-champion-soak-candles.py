@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SRC = Path("/root/.neuratrade/data/neuratrade.db")
@@ -30,7 +31,22 @@ SYMBOLS = (
     "LINK/USDT:USDT",
 )
 TIMEFRAMES = ("5m", "15m")
+TIMEFRAME_MINUTES = {"5m": 5, "15m": 15}
 LOOKBACK_DAYS = 120
+
+
+def open_candle_cutoff_iso(timeframe: str, now: datetime | None = None) -> str:
+    """Start of the currently forming bucket (exclusive upper bound).
+
+    Source cache may hold the still-open candle; copying it freezes an
+    unfinished OHLCV row that INSERT OR IGNORE then keeps forever.
+    """
+    now = now or datetime.now(timezone.utc)
+    minutes = TIMEFRAME_MINUTES[timeframe]
+    floored = now.replace(second=0, microsecond=0) - timedelta(
+        minutes=now.minute % minutes
+    )
+    return floored.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def cols(con: sqlite3.Connection, table: str, schema: str | None = None) -> list[str]:
@@ -167,37 +183,55 @@ def seed(dst_path: Path, *, incremental: bool) -> None:
 
     since_clause = ""
     params: list[object] = [src_ex_id, *src_ids, *TIMEFRAMES]
+    cutoffs = {tf: open_candle_cutoff_iso(tf) for tf in TIMEFRAMES}
+    print(f"  closed_through={cutoffs}")
     if incremental:
-        # Per-timeframe watermark — a fresh 5m tip must not hide a stale 15m gap.
+        # Per-(pair, timeframe) watermark — a fresh tip on one symbol must not
+        # hide a stale gap on another. Previously GROUP BY timeframe only.
         watermarks = {
-            row[0]: row[1]
+            (row[0], row[1]): row[2]
             for row in dst.execute(
                 """
-                SELECT timeframe, MAX(timestamp)
+                SELECT trading_pair_id, timeframe, MAX(timestamp)
                 FROM ohlcv_data
                 WHERE exchange_id = ?
-                GROUP BY timeframe
+                GROUP BY trading_pair_id, timeframe
                 """,
                 (src_ex_id,),
             ).fetchall()
         }
         print(f"  watermarks={watermarks}")
-        # Build OR of (timeframe = X AND timestamp > watermark_X)
+        # Build OR of (pair = P AND timeframe = X AND timestamp > wm AND timestamp < cutoff_X)
+        # The < cutoff excludes the still-open candle from the source cache.
         parts: list[str] = []
-        for tf in TIMEFRAMES:
-            wm = watermarks.get(tf)
-            if wm:
-                parts.append("(timeframe = ? AND timestamp > ?)")
-                params.extend([tf, wm])
-            else:
-                parts.append(
-                    "(timeframe = ? AND timestamp >= datetime('now', ?))"
-                )
-                params.extend([tf, f"-{LOOKBACK_DAYS} days"])
+        for sid, did in src_to_dst.items():
+            for tf in TIMEFRAMES:
+                wm = watermarks.get((did, tf))
+                cutoff = cutoffs[tf]
+                if wm:
+                    parts.append(
+                        "(trading_pair_id = ? AND timeframe = ? "
+                        "AND timestamp > ? AND timestamp < ?)"
+                    )
+                    params.extend([sid, tf, wm, cutoff])
+                else:
+                    parts.append(
+                        "(trading_pair_id = ? AND timeframe = ? "
+                        "AND timestamp >= datetime('now', ?) AND timestamp < ?)"
+                    )
+                    params.extend([sid, tf, f"-{LOOKBACK_DAYS} days", cutoff])
         since_clause = f"AND ({' OR '.join(parts)})"
     else:
-        since_clause = "AND timestamp >= datetime('now', ?)"
+        # Full seed: lookback window, still excluding the open candle per timeframe.
         params.append(f"-{LOOKBACK_DAYS} days")
+        parts = []
+        for tf in TIMEFRAMES:
+            parts.append("(timeframe = ? AND timestamp < ?)")
+            params.extend([tf, cutoffs[tf]])
+        since_clause = (
+            "AND timestamp >= datetime('now', ?) "
+            f"AND ({' OR '.join(parts)})"
+        )
 
     dst.execute("DROP TABLE IF EXISTS _ohlcv_tmp")
     dst.execute(
@@ -242,16 +276,27 @@ def seed(dst_path: Path, *, incremental: bool) -> None:
         "SELECT MAX(timestamp) FROM ohlcv_data WHERE exchange_id = ?", (src_ex_id,)
     ).fetchone()[0]
 
-    dst.execute(
-        """
-        INSERT INTO risk_kill_switch (id, engaged, reason, updated_at)
-        VALUES (1, 0, '', datetime('now'))
-        ON CONFLICT(id) DO UPDATE SET
-          engaged = 0,
-          reason = '',
-          updated_at = datetime('now')
-        """
-    )
+    if incremental:
+        # P0: incremental sync must never clear an engaged kill switch.
+        # Create the row only when missing; otherwise preserve state.
+        dst.execute(
+            """
+            INSERT INTO risk_kill_switch (id, engaged, reason, updated_at)
+            VALUES (1, 0, '', datetime('now'))
+            ON CONFLICT(id) DO NOTHING
+            """
+        )
+    else:
+        dst.execute(
+            """
+            INSERT INTO risk_kill_switch (id, engaged, reason, updated_at)
+            VALUES (1, 0, '', datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+              engaged = 0,
+              reason = '',
+              updated_at = datetime('now')
+            """
+        )
     dst.commit()
     dst.execute("DETACH DATABASE src")
     dst.close()

@@ -2,16 +2,55 @@ import { Effect } from "effect";
 import type { Candle, FundingRate, OrderBook, Tick } from "../types.js";
 import { MarketDataError } from "../gateway.js";
 
-const BASE_URL = "https://api-testnet.bybit.com";
+export const BYBIT_TESTNET_BASE_URL = "https://api-testnet.bybit.com";
+export const BYBIT_MAINNET_BASE_URL = "https://api.bybit.com";
+/** Legacy alias kept for compatibility; prefer BYBIT_TESTNET_BASE_URL. */
+export const BASE_URL = BYBIT_TESTNET_BASE_URL;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
- * Bybit USDT-perpetual (linear) gateway.
+ * Which Bybit price feed drives signals. This is the SIGNAL-data source and
+ * is independent of the EXECUTION venue (testnet vs mainnet order routing,
+ * selected by BYBIT_USE_TESTNET / --live):
  *
- * The testnet mirrors ~200+ USDT-perp contracts (vs Bitget demo's ~25), and
- * the testnet IS the demo environment: market data is public (no auth) and
- * the demo/funnel path trades against the same instrument set.
+ * - testnet (default): klines from api-testnet.bybit.com. The testnet mirrors
+ *   ~200+ USDT-perp contracts (vs Bitget demo's ~25), and the testnet IS the
+ *   demo execution environment: market data is public (no auth) and the
+ *   demo/funnel path trades against the same instrument set. Keep this to
+ *   certify a forward paper-vs-demo comparison on the SAME feed.
+ * - mainnet: klines from api.bybit.com (research parity with mainnet price
+ *   behavior). A demo soaking on mainnet signals while executing on testnet
+ *   proves testnet EXECUTION (routing, fills, risk guards) — it does NOT
+ *   prove a mainnet edge, because testnet and mainnet prices can diverge
+ *   (observed: LINK demo longBase=1436.694 vs paper=13.087 at the same
+ *   timestamp/config).
+ *
+ * Select with --signal-feed testnet|mainnet (paper-trade) or the
+ * BYBIT_SIGNAL_FEED env var. The resolved feed is logged at startup as
+ * `signalFeed=...` next to `executionEnv=...` so the split is always
+ * explicit; never infer a mainnet edge from testnet price behavior.
  */
+export type BybitSignalFeed = "testnet" | "mainnet";
+
+export function resolveBybitSignalFeed(
+  feed?: string | undefined,
+): BybitSignalFeed {
+  const raw = (feed ?? process.env.BYBIT_SIGNAL_FEED ?? "testnet")
+    .trim()
+    .toLowerCase();
+  return raw === "mainnet" ? "mainnet" : "testnet";
+}
+
+export function resolveBybitBaseUrl(feed?: string | undefined): string {
+  return resolveBybitSignalFeed(feed) === "mainnet"
+    ? BYBIT_MAINNET_BASE_URL
+    : BYBIT_TESTNET_BASE_URL;
+}
+
+/** Human-readable feed tag for startup logs (bybit-testnet|bybit-mainnet). */
+export function describeBybitSignalFeed(feed?: string | undefined): string {
+  return `bybit-${resolveBybitSignalFeed(feed)}`;
+}
 const EXCHANGE = "bybit-futures";
 
 /** Open-interest interval buckets keyed by timeframe. */
@@ -36,7 +75,7 @@ function retryAfterMsFrom(response: Response): number | undefined {
 
 function getJSON<T>(
   path: string,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
   timeoutMs = DEFAULT_TIMEOUT_MS,
   extraHeaders: Record<string, string> = {},
 ): Effect.Effect<T, MarketDataError, never> {
@@ -123,7 +162,7 @@ interface BybitTicker {
 
 export function fetchTick(
   symbol: string,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<Tick, MarketDataError, never> {
   const bSymbol = toBybitSymbol(symbol);
   return Effect.gen(function* () {
@@ -167,7 +206,7 @@ export function fetchOHLCV(
   timeframe: string,
   limit: number,
   startTime: Date | undefined,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly Candle[], MarketDataError, never> {
   const bSymbol = toBybitSymbol(symbol);
   const interval = bybitInterval(timeframe);
@@ -217,7 +256,7 @@ interface BybitOrderBook {
 export function fetchOrderBook(
   symbol: string,
   limit: number,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<OrderBook, MarketDataError, never> {
   const bSymbol = toBybitSymbol(symbol);
   return Effect.gen(function* () {
@@ -253,7 +292,7 @@ const SYMBOLS_PAGE_SIZE = 1000;
 const SYMBOLS_MAX_PAGES = 20;
 
 export function fetchSymbols(
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly string[], MarketDataError, never> {
   return Effect.gen(function* () {
     const symbols: string[] = [];
@@ -289,13 +328,13 @@ export function fetchSymbols(
  * contracts, vs Bitget demo's ~25). The market funnel scans this set.
  */
 export function fetchDemoSymbols(
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly string[], MarketDataError, never> {
   return fetchSymbols(baseUrl);
 }
 
 export function fetch24hrVolumes(
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<Readonly<Record<string, number>>, MarketDataError, never> {
   return Effect.gen(function* () {
     const data = yield* getJSON<{ readonly list: readonly BybitTicker[] }>(
@@ -327,7 +366,7 @@ export interface TickerInfo {
 
 /** Fetch every linear ticker with turnover and top-of-book bid/ask. */
 export function fetchTickers(
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly TickerInfo[], MarketDataError, never> {
   return Effect.gen(function* () {
     const data = yield* getJSON<{ readonly list: readonly BybitTicker[] }>(
@@ -370,7 +409,7 @@ export function fetchFundingRates(
   startTime?: Date,
   endTime?: Date,
   limit = FUNDING_PAGE_SIZE * FUNDING_MAX_PAGES,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly FundingRate[], MarketDataError, never> {
   const bSymbol = toBybitSymbol(symbol);
   const startMs = startTime?.getTime();
@@ -466,7 +505,7 @@ function oiInterval(timeframe: string): string {
 export function fetchOpenInterest(
   symbol: string,
   timeframe = "5m",
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
   startTime?: number,
   endTime?: number,
 ): Effect.Effect<readonly OpenInterestRow[], MarketDataError, never> {
@@ -524,7 +563,7 @@ interface BybitRecentTrade {
 /** Fetch the most recent public trades (max 1000 per call). */
 export function fetchRecentTrades(
   symbol: string,
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
   limit = 500,
 ): Effect.Effect<readonly RecentTrade[], MarketDataError, never> {
   const bSymbol = toBybitSymbol(symbol);
@@ -569,7 +608,7 @@ interface BybitInstrumentInfo {
  * Trading) so callers can rank a universe by spread and contract age.
  */
 export function fetchInstruments(
-  baseUrl = BASE_URL,
+  baseUrl = resolveBybitBaseUrl(),
 ): Effect.Effect<readonly InstrumentInfo[], MarketDataError, never> {
   return Effect.gen(function* () {
     const instruments: InstrumentInfo[] = [];

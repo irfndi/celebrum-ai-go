@@ -1,5 +1,11 @@
 /**
  * Exclusive file lock for shared champion.json across parallel workers.
+ *
+ * Each lock file carries owner identity (pid + timestamp + token) so an
+ * abandoned lock (owner crashed without releasing) can be recovered after
+ * a TTL. Only lock-acquisition failures are retried; callback errors are
+ * never retried and the original error propagates with the callback
+ * executed exactly once.
  */
 import {
   openSync,
@@ -8,44 +14,131 @@ import {
   writeFileSync,
   readFileSync,
   mkdirSync,
+  statSync,
+  writeSync,
 } from "node:fs";
 import { dirname } from "node:path";
+
+export interface LockOptions {
+  retries?: number;
+  sleepMs?: number;
+  /** TTL after which an unreleased lock is treated as abandoned. Defaults to 30s. */
+  staleMs?: number;
+}
+
+interface LockPayload {
+  pid: number;
+  acquiredAt: number;
+  owner: string;
+}
+
+function readPayload(lockPath: string): LockPayload | null {
+  try {
+    return JSON.parse(readFileSync(lockPath, "utf8")) as LockPayload;
+  } catch {
+    return null;
+  }
+}
+
+function isStale(lockPath: string, staleMs: number, now: number): boolean {
+  const payload = readPayload(lockPath);
+  if (payload && Number.isFinite(payload.acquiredAt)) {
+    return now - payload.acquiredAt >= staleMs;
+  }
+  // Unparseable lock file: fall back to mtime so a corrupt/legacy
+  // lock cannot block workers forever.
+  try {
+    const mtime = statSync(lockPath).mtimeMs;
+    return now - mtime >= staleMs;
+  } catch {
+    // File vanished between attempts: not stale, just retry acquisition.
+    return false;
+  }
+}
+
+function tryRecoverStaleLock(lockPath: string, staleMs: number): void {
+  try {
+    if (isStale(lockPath, staleMs, Date.now())) {
+      unlinkSync(lockPath);
+    }
+  } catch {
+    /* ignore: missing file or raced unlink */
+  }
+}
 
 export function withFileLock<T>(
   lockPath: string,
   fn: () => T,
-  opts: { retries?: number; sleepMs?: number } = {},
+  opts: LockOptions = {},
 ): T {
   const retries = opts.retries ?? 200;
   const sleepMs = opts.sleepMs ?? 25;
+  const staleMs = opts.staleMs ?? 30_000;
   mkdirSync(dirname(lockPath), { recursive: true });
 
+  const owner = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const payload: LockPayload = {
+    pid: process.pid,
+    acquiredAt: Date.now(),
+    owner,
+  };
+
+  let acquired = false;
   for (let i = 0; i < retries; i++) {
     let fd: number | undefined;
     try {
       fd = openSync(lockPath, "wx");
-      try {
-        return fn();
-      } finally {
-        closeSync(fd);
-        try {
-          unlinkSync(lockPath);
-        } catch {
-          /* ignore */
-        }
-      }
     } catch {
-      if (fd !== undefined) {
-        try {
-          closeSync(fd);
-        } catch {
-          /* ignore */
-        }
+      // Acquisition failure only: maybe the holder crashed. Recover
+      // stale locks, then wait and retry.
+      tryRecoverStaleLock(lockPath, staleMs);
+      Bun.sleepSync(sleepMs);
+      continue;
+    }
+    try {
+      writeSync(fd, JSON.stringify(payload));
+    } catch {
+      try {
+        closeSync(fd);
+      } catch {
+        /* ignore */
+      }
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        /* ignore */
       }
       Bun.sleepSync(sleepMs);
+      continue;
+    }
+    try {
+      closeSync(fd);
+    } catch {
+      /* ignore */
+    }
+    acquired = true;
+    break;
+  }
+  if (!acquired) {
+    throw new Error(`timeout acquiring lock ${lockPath}`);
+  }
+
+  // Run the critical section exactly once. Callback errors propagate
+  // untouched and are never retried.
+  try {
+    return fn();
+  } finally {
+    // Release only our own lock so we never delete a fresh lock that a
+    // racing worker (or a stale-recovery) installed.
+    try {
+      const current = readPayload(lockPath);
+      if (current?.owner === owner) {
+        unlinkSync(lockPath);
+      }
+    } catch {
+      /* ignore */
     }
   }
-  throw new Error(`timeout acquiring lock ${lockPath}`);
 }
 
 export function readJsonFile<T>(path: string): T | null {
@@ -56,6 +149,6 @@ export function readJsonFile<T>(path: string): T | null {
   }
 }
 
-export function writeJsonFile(path: string, value: unknown): void {
+export function writeJsonFile<T>(path: string, value: T): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }

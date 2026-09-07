@@ -11,15 +11,21 @@ import { knobs as seedKnobs, type AutoresearchKnobs } from "./knobs.ts";
 import {
   loadAlignedPanel,
   evaluateKnobsOnPanel,
+  evaluateHoldoutOnPanel,
+  toDatasetProvenance,
+  isProvenanceCompatible,
+  type AlignedPanel,
+  type DatasetProvenance,
   type EvaluateResult,
 } from "./prepare.ts";
-import { mutateKnobs, hardRestartKnobs, shouldKeep, renderKnobsModule } from "./mutate.ts";
-import { withFileLock, readJsonFile, writeJsonFile } from "./lock.ts";
 import {
-  CLAIM_BARS,
-  GOAL_VERSION,
-  meetsClaimBars,
-} from "./goals.ts";
+  mutateKnobs,
+  hardRestartKnobs,
+  shouldKeep,
+  renderKnobsModule,
+} from "./mutate.ts";
+import { withFileLock, readJsonFile, writeJsonFile } from "./lock.ts";
+import { CLAIM_BARS, GOAL_VERSION, meetsClaimBars } from "./goals.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const resultsDir = join(here, "results");
@@ -55,7 +61,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-const rng = mulberry32(0x9e3779b9 ^ (worker + 1) * 0x85ebca6b);
+const rng = mulberry32(0x9e3779b9 ^ ((worker + 1) * 0x85ebca6b));
 
 mkdirSync(resultsDir, { recursive: true });
 
@@ -69,18 +75,24 @@ interface ChampionState {
   /** Confirm-phase risk/edge for score-tie KEEP decisions. */
   medianDrawdownPct: number;
   expectancyPct: number;
+  /**
+   * Dataset that produced these scores (exchange + timeframe + panel hash).
+   * Null until (re)evaluated. Scores are only comparable within one dataset.
+   */
+  dataset: DatasetProvenance | null;
 }
 
-function loadChampionUnlocked(): ChampionState {
+function loadChampionUnlocked(panel?: AlignedPanel): ChampionState {
   const raw = readJsonFile<
     ChampionState & {
       screenScore?: number;
       medianDrawdownPct?: number;
       expectancyPct?: number;
+      dataset?: DatasetProvenance | null;
     }
   >(championPath);
   if (raw?.knobs) {
-    return {
+    const state: ChampionState = {
       knobs: raw.knobs,
       score: Number.isFinite(raw.score) ? raw.score : Number.NEGATIVE_INFINITY,
       screenScore: Number.isFinite(raw.screenScore)
@@ -93,7 +105,25 @@ function loadChampionUnlocked(): ChampionState {
       expectancyPct: Number.isFinite(raw.expectancyPct)
         ? (raw.expectancyPct as number)
         : Number.NEGATIVE_INFINITY,
+      dataset: (raw.dataset as DatasetProvenance | null) ?? null,
     };
+    // A panel change (venue, symbols, span) makes stored scores incomparable.
+    // Invalidate them so the search re-earns the crown on the new dataset.
+    if (panel && !isProvenanceCompatible(state.dataset, panel)) {
+      console.log(
+        `champion dataset mismatch (stored=${state.dataset?.panelHash ?? "none"}:${state.dataset?.exchange ?? "none"} current=${panel.panelHash}:${panel.exchange}) — invalidating old scores.`,
+      );
+      return {
+        knobs: state.knobs,
+        score: Number.NEGATIVE_INFINITY,
+        screenScore: Number.NEGATIVE_INFINITY,
+        guardsOk: false,
+        medianDrawdownPct: Number.POSITIVE_INFINITY,
+        expectancyPct: Number.NEGATIVE_INFINITY,
+        dataset: null,
+      };
+    }
+    return state;
   }
   return {
     knobs: { ...seedKnobs },
@@ -102,6 +132,7 @@ function loadChampionUnlocked(): ChampionState {
     guardsOk: false,
     medianDrawdownPct: Number.POSITIVE_INFINITY,
     expectancyPct: Number.NEGATIVE_INFINITY,
+    dataset: null,
   };
 }
 
@@ -113,7 +144,22 @@ function persistChampionUnlocked(state: ChampionState): void {
   }
 }
 
-function appendLedger(row: unknown): void {
+export interface LedgerRow {
+  readonly ts: string;
+  readonly worker: number;
+  readonly trial: number;
+  readonly decision: string;
+  readonly axis: string | null;
+  readonly knobs: AutoresearchKnobs;
+  readonly screen?: EvaluateResult;
+  readonly result?: EvaluateResult;
+  /** Frozen-holdout gate result (present on CLAIMED / HOLDOUT_REJECT rows). */
+  readonly holdout?: EvaluateResult;
+  readonly championScore?: number;
+  readonly championScreenScore?: number;
+}
+
+function appendLedger(row: LedgerRow): void {
   appendFileSync(ledgerPath, `${JSON.stringify(row)}\n`);
 }
 
@@ -150,14 +196,79 @@ Live trading remains frozen until credential rotation + position reconciliation.
   writeFileSync(goalsPath, body);
 }
 
-function persistClaim(r: EvaluateResult, knobs: AutoresearchKnobs): void {
+/** Holdout gate: same bars as CLAIM_BARS, on the frozen tail, evaluated once. */
+function holdoutPasses(h: EvaluateResult): boolean {
+  return h.phase === "holdout" && h.guardsOk && meetsClaimBars(h);
+}
+
+function persistClaim(
+  r: EvaluateResult,
+  holdout: EvaluateResult,
+  knobs: AutoresearchKnobs,
+): void {
   writeJsonFile(claimedPath, {
     claimedAt: new Date().toISOString(),
     worker,
     knobs,
+    dataset: toDatasetProvenance(panel),
     result: r,
+    holdout,
   });
   writeGoals("CLAIMED", r);
+}
+
+/**
+ * Final gate for a confirm-phase claim candidate: evaluate the frozen holdout
+ * exactly once (outside the champion lock), then claim only if it also passes.
+ * A HOLDOUT_REJECT means the candidate overfit selection — keep searching.
+ */
+function runHoldoutGate(
+  candidate: EvaluateResult,
+  candidateKnobs: AutoresearchKnobs,
+  trial: number,
+  axis: string | null,
+  screen: EvaluateResult | undefined,
+): "CLAIMED" | "HOLDOUT_REJECT" | "CLAIMED_BY_OTHER" {
+  console.log("  confirm meets claim bars → evaluating frozen holdout once...");
+  const holdout = evaluateHoldoutOnPanel(candidateKnobs, panel, {
+    budgetSec: confirmBudget,
+  });
+  console.log(
+    `  holdout score=${holdout.score.toFixed(4)} guardsOk=${holdout.guardsOk} reason=${holdout.reason} windows=${holdout.windows} elapsedMs=${holdout.elapsedMs}`,
+  );
+  return withFileLock(championLock, () => {
+    if (readJsonFile<{ claimedAt?: string }>(claimedPath)?.claimedAt) {
+      return "CLAIMED_BY_OTHER" as const;
+    }
+    if (holdoutPasses(holdout)) {
+      appendLedger({
+        ts: new Date().toISOString(),
+        worker,
+        trial,
+        decision: "CLAIMED",
+        axis,
+        knobs: candidateKnobs,
+        screen,
+        result: candidate,
+        holdout,
+      });
+      persistClaim(candidate, holdout, candidateKnobs);
+      return "CLAIMED" as const;
+    }
+    appendLedger({
+      ts: new Date().toISOString(),
+      worker,
+      trial,
+      decision: "HOLDOUT_REJECT",
+      axis,
+      knobs: candidateKnobs,
+      screen,
+      result: candidate,
+      holdout,
+    });
+    writeGoals("IN_PROGRESS", candidate);
+    return "HOLDOUT_REJECT" as const;
+  });
 }
 
 console.log(
@@ -172,7 +283,7 @@ if (readJsonFile<{ claimedAt?: string }>(claimedPath)?.claimedAt) {
 console.log("loading candle panel once...");
 const panel = loadAlignedPanel({ symbols: panelSymbols });
 console.log(
-  `panel ready: ${panel.symbols.length} symbols, refLen=${panel.refLen}, loadedMs=${panel.loadedMs}`,
+  `panel ready: ${panel.symbols.length} symbols, refLen=${panel.refLen}, loadedMs=${panel.loadedMs} venue=${panel.exchange}/${panel.timeframe}->${panel.panelTimeframe} hash=${panel.panelHash} holdoutBars=${panel.holdoutBars}`,
 );
 
 function evalScreen(k: AutoresearchKnobs): EvaluateResult {
@@ -192,11 +303,12 @@ function evalConfirm(k: AutoresearchKnobs): EvaluateResult {
 }
 
 // Seed / backfill screenScore under lock (screen vs confirm are not comparable).
-withFileLock(championLock, () => {
-  let champ = loadChampionUnlocked();
+const seedClaimCandidate = withFileLock(championLock, () => {
+  let champ = loadChampionUnlocked(panel);
   const needsSeed =
     !Number.isFinite(champ.score) ||
-    champ.score === Number.NEGATIVE_INFINITY;
+    champ.score === Number.NEGATIVE_INFINITY ||
+    !isProvenanceCompatible(champ.dataset, panel);
   const needsScreenBackfill =
     !needsSeed &&
     (!Number.isFinite(champ.screenScore) ||
@@ -213,6 +325,7 @@ withFileLock(championLock, () => {
       guardsOk: base.guardsOk,
       medianDrawdownPct: base.medianDrawdownPct,
       expectancyPct: base.expectancyPct,
+      dataset: toDatasetProvenance(panel),
     };
     persistChampionUnlocked(champ);
     appendLedger({
@@ -225,32 +338,57 @@ withFileLock(championLock, () => {
       screen,
       result: base,
     });
-    writeGoals(goalsClaimed(base) ? "CLAIMED" : "IN_PROGRESS", base);
+    writeGoals("IN_PROGRESS", base);
     console.log(
       `SEED confirm=${base.score.toFixed(4)} screen=${screen.score.toFixed(4)} guardsOk=${base.guardsOk} reason=${base.reason}`,
     );
-    if (goalsClaimed(base)) {
-      persistClaim(base, champ.knobs);
-      console.log("GOALS CLAIMED on seed — stopping.");
-      process.exit(0);
-    }
+    if (goalsClaimed(base)) return { knobs: champ.knobs, result: base, screen };
+    return null;
   } else if (needsScreenBackfill) {
     console.log("backfilling champion screenScore for fair gate...");
     const screen = evalScreen(champ.knobs);
-    champ = { ...champ, screenScore: screen.score };
+    champ = {
+      ...champ,
+      screenScore: screen.score,
+      dataset: toDatasetProvenance(panel),
+    };
     persistChampionUnlocked(champ);
     console.log(
       `backfill screenScore=${screen.score.toFixed(4)} (confirm champ=${champ.score.toFixed(4)})`,
     );
+    return null;
+  } else if (!isProvenanceCompatible(champ.dataset, panel)) {
+    // Scores looked seeded but belong to another dataset — rebind on re-eval.
+    champ = { ...champ, dataset: toDatasetProvenance(panel) };
+    persistChampionUnlocked(champ);
+    return null;
   }
+  return null;
 });
+
+if (seedClaimCandidate) {
+  const gate = runHoldoutGate(
+    seedClaimCandidate.result,
+    seedClaimCandidate.knobs,
+    0,
+    null,
+    seedClaimCandidate.screen,
+  );
+  if (gate === "CLAIMED") {
+    console.log("GOALS CLAIMED on seed (+holdout) — stopping.");
+    process.exit(0);
+  }
+  console.log(
+    `seed claim blocked by frozen holdout (${gate}) — continuing search.`,
+  );
+}
 
 for (let i = 1; i <= trials; i++) {
   if (readJsonFile<{ claimedAt?: string }>(claimedPath)?.claimedAt) {
     console.log("GOALS CLAIMED by another worker — stopping.");
     process.exit(0);
   }
-  const localChamp = loadChampionUnlocked();
+  const localChamp = loadChampionUnlocked(panel);
   // Occasional hard restart (~8%) escapes local maxima; else 1–2 axis mutate.
   let next: AutoresearchKnobs;
   let axis: string;
@@ -304,7 +442,7 @@ for (let i = 1; i <= trials; i++) {
   const result = evalConfirm(next);
 
   const decision = withFileLock(championLock, () => {
-    const champ = loadChampionUnlocked();
+    const champ = loadChampionUnlocked(panel);
     const keep = shouldKeep({
       candidateScore: result.score,
       candidateGuardsOk: result.guardsOk,
@@ -335,12 +473,12 @@ for (let i = 1; i <= trials; i++) {
         guardsOk: result.guardsOk,
         medianDrawdownPct: result.medianDrawdownPct,
         expectancyPct: result.expectancyPct,
+        dataset: toDatasetProvenance(panel),
       };
       persistChampionUnlocked(nextState);
-      if (goalsClaimed(result)) {
-        persistClaim(result, next);
-        return "CLAIMED" as const;
-      }
+      // A confirm claim candidate must still pass the frozen holdout, which
+      // runs exactly once outside the lock (never as a selection signal).
+      if (goalsClaimed(result)) return "CLAIM_CANDIDATE" as const;
       writeGoals("IN_PROGRESS", result);
       return "KEEP" as const;
     }
@@ -348,14 +486,25 @@ for (let i = 1; i <= trials; i++) {
     return "DISCARD_CONFIRM" as const;
   });
 
+  if (decision === "CLAIM_CANDIDATE") {
+    const gate = runHoldoutGate(result, next, i, axis, screen);
+    console.log(
+      `  ${gate} confirm score=${result.score.toFixed(4)} guardsOk=${result.guardsOk} reason=${result.reason} elapsedMs=${result.elapsedMs}`,
+    );
+    if (gate === "CLAIMED") {
+      console.log("\nGOALS CLAIMED (+holdout) — stopping loop.");
+      process.exit(0);
+    }
+    if (gate === "CLAIMED_BY_OTHER") {
+      console.log("GOALS CLAIMED by another worker — stopping.");
+      process.exit(0);
+    }
+    continue;
+  }
+
   console.log(
     `  ${decision} confirm score=${result.score.toFixed(4)} guardsOk=${result.guardsOk} reason=${result.reason} elapsedMs=${result.elapsedMs}`,
   );
-
-  if (decision === "CLAIMED") {
-    console.log("\nGOALS CLAIMED — stopping loop.");
-    process.exit(0);
-  }
 }
 
 console.log("\nloop finished without claim — champion retained.");

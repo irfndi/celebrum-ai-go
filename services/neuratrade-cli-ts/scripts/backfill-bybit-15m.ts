@@ -13,7 +13,9 @@
  *   NEURATRADE_HOME=~/.neuratrade bun run scripts/backfill-bybit-15m.ts [--months 24] [--symbols BTCUSDT,ETHUSDT]
  *
  * Pacing 250ms/request, bounded retry on 429/5xx/transport, idempotent
- * (INSERT OR IGNORE). 15m at 1000 bars/page: ~71 pages per symbol per 24m.
+ * upsert (INSERT .. ON CONFLICT DO UPDATE heals a previously frozen open
+ * candle; the still-open 15m bucket is skipped). 15m at 1000 bars/page:
+ * ~71 pages per symbol per 24m.
  */
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
@@ -31,6 +33,34 @@ const symbolOverride = process.argv
 const REQUEST_DELAY_MS = 250;
 const PAGE = 1000;
 const TIMEFRAME = "15m";
+export const TIMEFRAME_MS = 15 * 60 * 1000;
+
+/** Start of the currently forming bucket (exclusive upper bound). */
+export function bucketStartMs(
+  nowMs: number,
+  timeframeMs = TIMEFRAME_MS,
+): number {
+  return Math.floor(nowMs / timeframeMs) * timeframeMs;
+}
+
+/** True when the candle open time is fully closed (not the forming bucket). */
+export function isClosedCandle(
+  candleMs: number,
+  nowMs: number,
+  timeframeMs = TIMEFRAME_MS,
+): boolean {
+  return candleMs < bucketStartMs(nowMs, timeframeMs);
+}
+
+/** Drop the still-open candle so INSERT never freezes unfinished OHLCV. */
+export function filterClosedCandles<T extends { timestamp: Date }>(
+  candles: readonly T[],
+  nowMs: number,
+  timeframeMs = TIMEFRAME_MS,
+): T[] {
+  const cutoff = bucketStartMs(nowMs, timeframeMs);
+  return candles.filter((c) => c.timestamp.getTime() < cutoff);
+}
 
 // Liquid majors: the realistic real-money cohort universe. BTC/ETH/SOL first
 // so partial runs still unblock the gate's core symbols.
@@ -65,10 +95,16 @@ const MAJORS = [
   "FETUSDT",
 ];
 
-const db = new Database(`${HOME}/data/neuratrade.db`);
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA busy_timeout = 30000;");
-db.exec("PRAGMA synchronous = NORMAL;");
+let _db: Database | undefined;
+function getDb(): Database {
+  if (!_db) {
+    _db = new Database(`${HOME}/data/neuratrade.db`);
+    _db.exec("PRAGMA journal_mode = WAL;");
+    _db.exec("PRAGMA busy_timeout = 30000;");
+    _db.exec("PRAGMA synchronous = NORMAL;");
+  }
+  return _db;
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -102,6 +138,7 @@ function canonicalSymbol(raw: string): string {
 }
 
 function ensureExchange(): number {
+  const db = getDb();
   const row = db
     .query("SELECT id FROM exchanges WHERE name = ?")
     .get("bybit-futures") as { id: number } | undefined;
@@ -113,9 +150,10 @@ function ensureExchange(): number {
     .run();
   return Number(info.lastInsertRowid);
 }
-const EX_ID = ensureExchange();
 
 function pairId(symbol: string): number {
+  const db = getDb();
+  const EX_ID = ensureExchange();
   const base = symbol.split("/")[0];
   const quote = symbol.includes("/")
     ? symbol.slice(symbol.indexOf("/") + 1, symbol.lastIndexOf(":"))
@@ -133,10 +171,18 @@ function pairId(symbol: string): number {
   return Number(info.lastInsertRowid);
 }
 
-const insCandle = db.prepare(
-  `INSERT OR IGNORE INTO ohlcv_data (exchange_id, trading_pair_id, timeframe, open_price, high_price, low_price, close_price, volume, timestamp)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-);
+export const insCandleSQL = `INSERT INTO ohlcv_data (exchange_id, trading_pair_id, timeframe, open_price, high_price, low_price, close_price, volume, timestamp)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+   ON CONFLICT(exchange_id, trading_pair_id, timeframe, timestamp) DO UPDATE SET
+     open_price = excluded.open_price,
+     high_price = excluded.high_price,
+     low_price = excluded.low_price,
+     close_price = excluded.close_price,
+     volume = excluded.volume`;
+
+function getInsCandle() {
+  return getDb().prepare(insCandleSQL);
+}
 
 async function fetchCandles(symbol: string, startMs: number): Promise<number> {
   const pair = pairId(symbol);
@@ -150,8 +196,14 @@ async function fetchCandles(symbol: string, startMs: number): Promise<number> {
     );
     if (batch === undefined || batch.length === 0) break;
     const oldestTs = batch.at(-1)!.timestamp.getTime();
-    const keep = batch.filter((c) => c.timestamp.getTime() >= startMs);
+    const cutoff = bucketStartMs(Date.now());
+    const keep = batch.filter(
+      (c) => c.timestamp.getTime() >= startMs && c.timestamp.getTime() < cutoff,
+    );
     let inserted = 0;
+    const db = getDb();
+    const EX_ID = ensureExchange();
+    const insCandle = getInsCandle();
     db.transaction(() => {
       for (const c of keep) {
         const res = insCandle.run(
@@ -196,10 +248,12 @@ async function main() {
     console.log(`== ${symbol}: +${n} candles (running total ${total})`);
   }
   console.log(`done: ${total} candles`);
-  db.close();
+  getDb().close();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

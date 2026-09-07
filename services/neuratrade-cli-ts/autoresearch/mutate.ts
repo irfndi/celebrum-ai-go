@@ -42,10 +42,15 @@ function round(n: number, digits: number): number {
 
 const SCORE_EPS = 1e-9;
 
+export interface MutateKnobsResult {
+  readonly next: AutoresearchKnobs;
+  readonly axis: Axis;
+}
+
 export function mutateKnobs(
   base: AutoresearchKnobs,
   rng: () => number = Math.random,
-): { next: AutoresearchKnobs; axis: Axis } {
+): MutateKnobsResult {
   const axis = WEIGHTED_AXES[Math.floor(rng() * WEIGHTED_AXES.length)]!;
   const next = { ...base };
   switch (axis) {

@@ -695,3 +695,67 @@ describe("Bybit gateway", () => {
     ]);
   });
 });
+
+describe("Bybit signal feed (clever-cabin-1e1)", () => {
+  const OLD_ENV = process.env.BYBIT_SIGNAL_FEED;
+
+  afterEach(() => {
+    if (OLD_ENV === undefined) delete process.env.BYBIT_SIGNAL_FEED;
+    else process.env.BYBIT_SIGNAL_FEED = OLD_ENV;
+  });
+
+  it("defaults to the testnet feed (fail-safe)", () => {
+    delete process.env.BYBIT_SIGNAL_FEED;
+    expect(Bybit.resolveBybitSignalFeed()).toBe("testnet");
+    expect(Bybit.resolveBybitBaseUrl()).toBe(Bybit.BYBIT_TESTNET_BASE_URL);
+    expect(Bybit.resolveBybitBaseUrl()).toContain("api-testnet.bybit.com");
+    expect(Bybit.describeBybitSignalFeed()).toBe("bybit-testnet");
+  });
+
+  it("selects the mainnet feed explicitly", () => {
+    expect(Bybit.resolveBybitSignalFeed("mainnet")).toBe("mainnet");
+    expect(Bybit.resolveBybitBaseUrl("mainnet")).toBe(
+      Bybit.BYBIT_MAINNET_BASE_URL,
+    );
+    expect(Bybit.describeBybitSignalFeed("mainnet")).toBe("bybit-mainnet");
+  });
+
+  it("reads BYBIT_SIGNAL_FEED from the environment", () => {
+    process.env.BYBIT_SIGNAL_FEED = "mainnet";
+    expect(Bybit.resolveBybitSignalFeed()).toBe("mainnet");
+    expect(Bybit.resolveBybitBaseUrl()).toContain("api.bybit.com");
+  });
+
+  it("falls back to testnet on unknown values (fail-safe)", () => {
+    expect(Bybit.resolveBybitSignalFeed("bogus")).toBe("testnet");
+    expect(Bybit.resolveBybitBaseUrl("bogus")).toContain(
+      "api-testnet.bybit.com",
+    );
+  });
+
+  it("routes requests to the selected feed base URL", async () => {
+    let requestedUrl = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      return new Response(JSON.stringify(klineFixture), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      await Effect.runPromise(
+        Bybit.fetchOHLCV(
+          "BTC/USDT",
+          "15m",
+          2,
+          undefined,
+          Bybit.BYBIT_MAINNET_BASE_URL,
+        ),
+      );
+      expect(requestedUrl).toContain("https://api.bybit.com");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

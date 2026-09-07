@@ -3,6 +3,9 @@
 # demo-soak-monitor.sh — ops health + first-fill alert monitor for the
 # Bitget PAPTRADING demo soak (pm2 apps from ecosystem.demo-soak.config.cjs).
 #
+# SCOPE: default home (~/.neuratrade) + grid_paper_trades only. The isolated
+# champion paper/demo soak (ladder fills, OPENED entries, CLAIM state, disk)
+# is covered by champion-soak-monitor.sh + com.neuratrade.champion-monitor.plist.
 # Every run (POSIX-sh, idempotent, macOS-safe) it checks and reports:
 #   1. ALL pm2 apps are online (not just neuratrade-demo-soak).
 #   2. Risk kill switch state (risk_kill_switch.engaged in neuratrade.db).

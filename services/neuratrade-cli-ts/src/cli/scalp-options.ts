@@ -476,6 +476,16 @@ export const configMismatchActionOption = Options.choice(
   ),
 );
 
+export const signalFeedOption = Options.choice("signal-feed", [
+  "testnet",
+  "mainnet",
+]).pipe(
+  Options.withDefault("testnet" as const),
+  Options.withDescription(
+    "Bybit signal-data feed (klines driving entries): testnet = api-testnet.bybit.com (default; matches the demo execution venue so a forward paper-vs-demo comparison runs on the SAME feed), mainnet = api.bybit.com (research parity with mainnet price behavior). Independent of the execution venue (--live + BYBIT_USE_TESTNET selects testnet vs mainnet order routing). A demo proves testnet EXECUTION (routing, fills, risk guards) — it does NOT prove a mainnet edge. The resolved feed is logged at startup as signalFeed=... next to executionEnv=.... Also settable via BYBIT_SIGNAL_FEED.",
+  ),
+);
+
 export const maxPositionDrawdownPctOption = Options.float(
   "max-position-drawdown-pct",
 ).pipe(

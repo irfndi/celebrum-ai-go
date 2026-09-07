@@ -225,7 +225,8 @@ function rolloutSnapshot(
   chatRuntime: ChatRuntimeState | undefined,
 ): RolloutSnapshot {
   return {
-    stage: chatRuntime?.rollout_stage_current || diagnostics.rollout_stage_current,
+    stage:
+      chatRuntime?.rollout_stage_current || diagnostics.rollout_stage_current,
     status:
       chatRuntime?.rollout_status_current || diagnostics.rollout_status_current,
     gateReason:
@@ -383,7 +384,8 @@ function pushEntryGateLines(
   // blockerReason is derived ONLY from hard gate priority, not candidate-level rejections.
   // Candidate rejections (entryAttemptBlockReason) are shown separately below.
   const blockerReason =
-    gate.entryGateReason || blockerReasonFor(priority, driftCount, gate, rollout);
+    gate.entryGateReason ||
+    blockerReasonFor(priority, driftCount, gate, rollout);
   // When no hard gate is active, show just "none" without confusing parenthetical.
   // Candidate-level rejections are displayed in the separate "Entry attempt block" line.
   let blockerDisplay = "none";
@@ -413,7 +415,10 @@ function pushEntryGateLines(
   lines.push(`• Next unblock: ${resolvedUnblockCondition}`);
 }
 
-function pushCapacityLines(lines: string[], thresholds: ThresholdSnapshot): void {
+function pushCapacityLines(
+  lines: string[],
+  thresholds: ThresholdSnapshot,
+): void {
   if (thresholds.accountTier) {
     lines.push(`• Account tier: ${thresholds.accountTier}`);
   }
@@ -633,11 +638,7 @@ function pushQuestDiagnosticsLines(
   const candidates = candidateSnapshot(diagnostics, chatRuntime);
   const rollout = rolloutSnapshot(diagnostics, chatRuntime);
   const attempts = attemptSnapshot(diagnostics, chatRuntime);
-  const execution = executionSnapshot(
-    diagnostics,
-    questRuntime,
-    chatRuntime,
-  );
+  const execution = executionSnapshot(diagnostics, questRuntime, chatRuntime);
   const thresholds = thresholdSnapshot(diagnostics, chatRuntime);
   const priority = entryGatePriorityFor(
     riskLock,
@@ -739,9 +740,7 @@ function pushAiLines(
     const logs: LogsResponse = logsResult.value;
     if (logs.logs && logs.logs.length > 0) {
       const lastLog = logs.logs[0];
-      lines.push(
-        `• Last activity: ${lastLog.timestamp} (${lastLog.level})`,
-      );
+      lines.push(`• Last activity: ${lastLog.timestamp} (${lastLog.level})`);
     }
   }
 }

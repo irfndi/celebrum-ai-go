@@ -1,6 +1,23 @@
 /**
  * Champion paper-soak (simulated fills) + Bybit testnet demo soak.
  *
+ * SINGLE FROZEN CONFIG PATH: grid geometry + overlays come from
+ * autoresearch/results/champion-soak.json (loaded below into --grid-* /
+ * --target-ratio / --stop-ratio / --max-hold-bars CLI knobs). The checked-in
+ * champion-whitelist.json may still carry older gate-scored values; with
+ * --config-mismatch-action force-reseed the frozen CLI knobs WIN per row
+ * (see resolveLadderGridSettings), so the soak always validates the
+ * advertised baseline. With the default `hold` action a diverged row
+ * hard-fails instead of trading stale config.
+ *
+ * WHAT DEMO PROVES: --signal-feed testnet keeps signals AND fills on the
+ * Bybit testnet feed, so a forward paper-vs-demo comparison runs on the SAME
+ * feed. The demo proves testnet EXECUTION (order routing, fills, risk
+ * guards) — it does NOT prove a mainnet edge (testnet/mainnet prices can
+ * diverge). Signal feed (--signal-feed / BYBIT_SIGNAL_FEED) is independent
+ * of the execution venue (--live + BYBIT_USE_TESTNET); both are logged at
+ * startup as signalFeed=... + executionEnv=....
+ *
  * Paper uses a SEPARATE NEURATRADE_HOME so the live kill-switch / ghost
  * positions cannot block or contaminate it.
  *
@@ -123,6 +140,8 @@ function championArgs(extra) {
     String(knobs.chopGateAdxThreshold ?? 0),
     "--config-mismatch-action",
     "force-reseed",
+    "--signal-feed",
+    "testnet",
     "--iterations",
     "0",
     "--interval",

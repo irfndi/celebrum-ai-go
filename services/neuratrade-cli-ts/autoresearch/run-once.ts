@@ -18,5 +18,11 @@ const result = evaluateKnobsOnPanel(knobs, panel, {
   budgetSec: Number(arg("budget-sec", "180")),
 });
 
-console.log(JSON.stringify({ knobs, panelSymbols: panel.symbols.length, result }, null, 2));
+console.log(
+  JSON.stringify(
+    { knobs, panelSymbols: panel.symbols.length, result },
+    null,
+    2,
+  ),
+);
 process.exit(result.guardsOk && result.score > 0 ? 0 : 1);

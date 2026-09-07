@@ -39,10 +39,12 @@ export type GuardInput = {
   readonly expectancyPct: number;
 };
 
-export function checkKeepGuards(input: GuardInput): {
-  ok: boolean;
-  reason: string;
-} {
+export interface GuardCheckResult {
+  readonly ok: boolean;
+  readonly reason: string;
+}
+
+export function checkKeepGuards(input: GuardInput): GuardCheckResult {
   const g = KEEP_GUARDS;
   const guards: string[] = [];
   if (!(input.medianLogReturn > g.minMedianLogReturn)) {

@@ -42,6 +42,11 @@ import {
   validateLiveGridWatchlist,
   validateLiveSoakExecution,
   validateShadowMode,
+  resolveLadderGridSettings,
+  resolveFrozenGridGeometry,
+  detectFrozenGridMismatch,
+  formatFrozenGridMismatch,
+  describeSignalExecutionSplit,
   probeNamesProbedSymbol,
   walkForwardCommand,
   buildValidateBacktestArgs,
@@ -428,6 +433,143 @@ describe("watchlist grid overrides (soak reproduction)", () => {
       { targetRatio: 1, chopGateAdx: 0, maxPositionSizePct: Option.none() },
     );
     expect(overrides.maxPositionPct).toBeCloseTo(40, 6); // 0.4 * 1.0 * 100
+  });
+});
+
+describe("champion soak frozen config (clever-cabin-cdv)", () => {
+  // Frozen champion-soak.json knobs vs the stale checked-in whitelist row
+  // (step 1.29/maxGrids 3/pause 4/target 1.9).
+  const frozenCli = {
+    gridStepPct: 1.3,
+    gridMaxGrids: 2,
+    gridPauseAfterLossBars: 2,
+    targetRatio: 1.95,
+    chopGateAdx: 0,
+  };
+  const staleRow = {
+    gridStepPct: 1.29,
+    gridMaxGrids: 3,
+    gridPauseAfterLossBars: 4,
+    rungs: 2,
+    targetRatio: 1.9,
+    chopGateAdx: 0,
+    allocatedWeight: 0.25,
+  };
+
+  it("detects every diverged frozen field", () => {
+    const mismatches = detectFrozenGridMismatch(staleRow, frozenCli);
+    const fields = mismatches.map((m) => m.field).sort();
+    expect(fields).toEqual([
+      "gridMaxGrids",
+      "gridPauseAfterLossBars",
+      "gridStepPct",
+      "targetRatio",
+    ]);
+    expect(formatFrozenGridMismatch(mismatches)).toContain(
+      "gridStepPct: watchlist=1.29 cli(frozen)=1.3",
+    );
+  });
+
+  it("lets the frozen CLI knobs win under force-reseed", () => {
+    const settings = resolveLadderGridSettings(
+      staleRow,
+      frozenCli,
+      "force-reseed",
+    );
+    expect(settings.gridStepPct).toBe(1.3);
+    expect(settings.gridMaxGrids).toBe(2);
+    expect(settings.gridPauseAfterLossBars).toBe(2);
+    expect(settings.targetRatio).toBe(1.95);
+    // Row-driven fields without a CLI counterpart are preserved.
+    expect(settings.rungs).toBe(2);
+  });
+
+  it("fail-closes (throws) on divergence under hold", () => {
+    expect(() =>
+      resolveLadderGridSettings(staleRow, frozenCli, "hold"),
+    ).toThrow(/frozen champion config mismatch/);
+    // hold is the default action.
+    expect(() => resolveLadderGridSettings(staleRow, frozenCli)).toThrow(
+      /frozen champion config mismatch/,
+    );
+  });
+
+  it("keeps legacy row-wins when the CLI carries no frozen intent", () => {
+    const cliDefaults = {
+      gridStepPct: 0,
+      gridMaxGrids: 0,
+      gridPauseAfterLossBars: 0,
+      targetRatio: 1,
+      chopGateAdx: 0,
+    };
+    expect(detectFrozenGridMismatch(staleRow, cliDefaults)).toEqual([]);
+    const settings = resolveLadderGridSettings(staleRow, cliDefaults, "hold");
+    expect(settings.gridStepPct).toBe(1.29);
+    expect(settings.gridMaxGrids).toBe(3);
+    expect(settings.gridPauseAfterLossBars).toBe(4);
+    expect(settings.targetRatio).toBe(1.9);
+  });
+
+  it("passes an agreeing config through untouched", () => {
+    const row = {
+      gridStepPct: 1.3,
+      gridMaxGrids: 2,
+      gridPauseAfterLossBars: 2,
+      rungs: 2,
+      targetRatio: 1.95,
+    };
+    expect(detectFrozenGridMismatch(row, frozenCli)).toEqual([]);
+    const settings = resolveLadderGridSettings(row, frozenCli, "hold");
+    expect(settings.gridStepPct).toBe(1.3);
+    expect(settings.gridMaxGrids).toBe(2);
+    expect(settings.targetRatio).toBe(1.95);
+  });
+
+  it("mirrors the frozen contract for the grid-engine geometry", () => {
+    const geometry = resolveFrozenGridGeometry(
+      staleRow,
+      frozenCli,
+      "force-reseed",
+    );
+    expect(geometry).toEqual({
+      gridStepPct: 1.3,
+      gridMaxGrids: 2,
+      gridPauseAfterLossBars: 2,
+    });
+    expect(() =>
+      resolveFrozenGridGeometry(staleRow, frozenCli, "hold"),
+    ).toThrow(/frozen champion config mismatch/);
+  });
+});
+
+describe("signal/execution split (clever-cabin-1e1)", () => {
+  it("logs testnet-execution provenance for the champion demo", () => {
+    const line = describeSignalExecutionSplit(
+      { live: true, signalFeed: "testnet" },
+      { resolvedExchange: "bybit-futures", isDemoAccount: true },
+    );
+    expect(line).toContain("signalFeed=bybit-testnet");
+    expect(line).toContain("api-testnet.bybit.com");
+    expect(line).toContain("executionEnv=bybit-demo");
+    expect(line).toContain("demoProves=testnet-execution-only");
+  });
+
+  it("makes a mainnet-signal / testnet-fill split explicit", () => {
+    const line = describeSignalExecutionSplit(
+      { live: true, signalFeed: "mainnet" },
+      { resolvedExchange: "bybit-futures", isDemoAccount: true },
+    );
+    expect(line).toContain("signalFeed=bybit-mainnet");
+    expect(line).toContain("executionEnv=bybit-demo");
+    expect(line).toContain("signals=mainnet fills=testnet");
+  });
+
+  it("defaults to the testnet feed", () => {
+    const line = describeSignalExecutionSplit(
+      { live: false },
+      { resolvedExchange: "bybit-futures", isDemoAccount: false },
+    );
+    expect(line).toContain("signalFeed=bybit-testnet");
   });
 });
 

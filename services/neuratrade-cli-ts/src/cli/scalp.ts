@@ -196,6 +196,9 @@ import {
 import {
   fetchTickers,
   fetchInstruments,
+  resolveBybitBaseUrl,
+  resolveBybitSignalFeed,
+  describeBybitSignalFeed,
 } from "../market-data/gateways/bybit.js";
 import { makeDemoReadinessCommand } from "./demo-readiness.js";
 import { makeParityReplayCommand } from "./parity-replay.js";
@@ -263,6 +266,7 @@ import {
   chopGateAdxOption,
   maxHoldBarsOption,
   configMismatchActionOption,
+  signalFeedOption,
   maxPositionDrawdownPctOption,
   stopRatioOption,
   takerExitFeePctOption,
@@ -2511,6 +2515,13 @@ export interface PaperTradeArgs extends ResolvedBacktestArgs {
   readonly maxHoldBars: number;
   /** Ladder: how to resolve a config mismatch with open rungs. */
   readonly configMismatchAction: "hold" | "force-reseed";
+  /**
+   * Bybit signal-data feed (klines driving entries), independent of the
+   * execution venue. testnet (default) matches the demo execution venue;
+   * mainnet gives research parity with mainnet price behavior. A demo proves
+   * testnet EXECUTION, never a mainnet edge.
+   */
+  readonly signalFeed: "testnet" | "mainnet";
   /** Ladder: force-close an open rung whose unrealized loss exceeds this % (0 = off). */
   readonly maxPositionDrawdownPct: number;
   /** Ladder: stop distance as a multiple of the grid step (0 = legacy boundary). */
@@ -2797,6 +2808,7 @@ export const paperTradeCommand = Command.make(
     chopGateAdx: chopGateAdxOption,
     maxHoldBars: maxHoldBarsOption,
     configMismatchAction: configMismatchActionOption,
+    signalFeed: signalFeedOption,
     maxPositionDrawdownPct: maxPositionDrawdownPctOption,
     stopRatio: stopRatioOption,
     takerExitFeePct: takerExitFeePctOption,
@@ -2815,6 +2827,9 @@ export const paperTradeCommand = Command.make(
 
       const profile = yield* loadProfileIfNeeded(path.homeDir, args.profile);
       const mergedArgs = resolvePaperTradeArgs(args, profile);
+      // Single flag driving the Bybit kline feed (clever-cabin-1e1): the
+      // gateway resolves its base URL from BYBIT_SIGNAL_FEED at call time.
+      process.env.BYBIT_SIGNAL_FEED = mergedArgs.signalFeed ?? "testnet";
 
       const watchlist = yield* Option.match(mergedArgs.watchlist, {
         onNone: () =>
@@ -3310,30 +3325,197 @@ interface LadderGridSettings {
   readonly chopGateAdxThreshold: number;
 }
 
+export interface FrozenGridCliKnobs {
+  readonly gridStepPct: number;
+  readonly gridMaxGrids: number;
+  readonly gridPauseAfterLossBars: number;
+  readonly targetRatio?: number;
+  readonly chopGateAdx?: number;
+}
+
+export interface FrozenGridMismatch {
+  readonly field:
+    | "gridStepPct"
+    | "gridMaxGrids"
+    | "gridPauseAfterLossBars"
+    | "targetRatio"
+    | "chopGateAdx";
+  readonly watchlist: number;
+  readonly cli: number;
+}
+
 /**
- * Grid geometry for one ladder member: gate-scored values from the watchlist
- * row's gridParams when present, CLI defaults otherwise (direct symbol
- * invocation without a whitelist row).
+ * A CLI knob counts as "frozen intent" (explicitly pinned, e.g. from
+ * champion-soak.json) only when it differs from the unset/disabled default.
+ * The grid CLI defaults are 0 = disabled (step/pause/maxGrids/chopGate) and
+ * 1.0 (targetRatio); a default-valued CLI defers to the row's validated
+ * config so legacy DB-watchlist soaks keep working untouched.
  */
-function resolveLadderGridSettings(
+function isFrozenCliSet(
+  field: FrozenGridMismatch["field"],
+  value: number | undefined,
+): value is number {
+  if (value === undefined || !Number.isFinite(value)) return false;
+  if (field === "targetRatio") return value !== 1;
+  return value > 0;
+}
+
+/**
+ * Compare one watchlist row's gridParams against the frozen CLI knobs and
+ * report every field where BOTH sides are pinned but disagree (clever-cabin-cdv).
+ * The champion soak pins step 1.3 / maxGrids 2 / pause 2 / target 1.95 while
+ * the checked-in whitelist still carries 1.29 / 3 / 4 / 1.9 — without this
+ * check the soak silently validates the wrong baseline.
+ */
+export function detectFrozenGridMismatch(
   gridParams: WatchlistEntry["gridParams"] | undefined,
-  args: {
-    readonly gridStepPct: number;
-    readonly gridMaxGrids: number;
-    readonly gridPauseAfterLossBars: number;
-    readonly targetRatio?: number;
-    readonly chopGateAdx?: number;
-  },
+  args: FrozenGridCliKnobs,
+): readonly FrozenGridMismatch[] {
+  if (gridParams === undefined) return [];
+  const mismatches: FrozenGridMismatch[] = [];
+  const check = (
+    field: FrozenGridMismatch["field"],
+    watchlist: number | undefined,
+    cli: number | undefined,
+  ): void => {
+    if (watchlist === undefined || !Number.isFinite(watchlist)) return;
+    if (!isFrozenCliSet(field, cli)) return;
+    if (watchlist !== (cli as number)) {
+      mismatches.push({ field, watchlist, cli: cli as number });
+    }
+  };
+  check("gridStepPct", gridParams.gridStepPct, args.gridStepPct);
+  check("gridMaxGrids", gridParams.gridMaxGrids, args.gridMaxGrids);
+  check(
+    "gridPauseAfterLossBars",
+    gridParams.gridPauseAfterLossBars,
+    args.gridPauseAfterLossBars,
+  );
+  check("targetRatio", gridParams.targetRatio, args.targetRatio);
+  check("chopGateAdx", gridParams.chopGateAdx, args.chopGateAdx);
+  return mismatches;
+}
+
+export function formatFrozenGridMismatch(
+  mismatches: readonly FrozenGridMismatch[],
+): string {
+  return mismatches
+    .map((m) => `${m.field}: watchlist=${m.watchlist} cli(frozen)=${m.cli}`)
+    .join("; ");
+}
+
+/**
+ * Grid geometry for one ladder member on the SINGLE FROZEN CONFIG PATH:
+ *
+ * - No divergence (or no frozen CLI intent): legacy row-wins resolution —
+ *   gate-scored values from the watchlist row when present, CLI defaults
+ *   otherwise (direct symbol invocation without a whitelist row).
+ * - Divergence + `--config-mismatch-action force-reseed` (the champion soak
+ *   setting): the frozen CLI knobs (derived from champion-soak.json) WIN, so
+ *   the soak validates the advertised baseline even against a stale
+ *   whitelist.
+ * - Divergence + `hold` (default): HARD-FAIL (throw) — never silently trade
+ *   a config that matches neither the row's validated state nor the frozen
+ *   CLI. Re-run with force-reseed to trade the frozen config, or regenerate
+ *   the whitelist from the frozen knobs.
+ */
+/**
+ * Pick one knob on the frozen path. Once a divergence is approved (mismatches
+ * non-empty implies force-reseed — hold throws above), an explicitly pinned
+ * CLI knob wins; otherwise the row's validated value (or the CLI
+ * default/fallback) governs, preserving the legacy DB-watchlist behavior.
+ */
+function pickFrozenKnob(
+  field: FrozenGridMismatch["field"],
+  cli: number,
+  row: number | undefined,
+  fallback: number,
+  frozen: boolean,
+): number {
+  if (frozen && isFrozenCliSet(field, cli)) return cli;
+  return row ?? fallback;
+}
+
+export function resolveLadderGridSettings(
+  gridParams: WatchlistEntry["gridParams"] | undefined,
+  args: FrozenGridCliKnobs,
+  configMismatchAction: "hold" | "force-reseed" = "hold",
 ): LadderGridSettings {
+  const mismatches = detectFrozenGridMismatch(gridParams, args);
+  if (mismatches.length > 0 && configMismatchAction === "hold") {
+    throw new Error(
+      `frozen champion config mismatch [${formatFrozenGridMismatch(mismatches)}] — watchlist gridParams diverge from the frozen CLI knobs (champion-soak.json); refusing to trade the stale row (fail-closed). Re-run with --config-mismatch-action force-reseed to trade the frozen CLI config, or regenerate the whitelist from the frozen knobs`,
+    );
+  }
+  const frozen = mismatches.length > 0;
   return {
     rungs: gridParams?.rungs ?? 1,
-    gridStepPct: gridParams?.gridStepPct ?? args.gridStepPct,
-    gridMaxGrids: gridParams?.gridMaxGrids ?? args.gridMaxGrids,
-    gridPauseAfterLossBars:
-      gridParams?.gridPauseAfterLossBars ?? args.gridPauseAfterLossBars,
-    targetRatio: gridParams?.targetRatio ?? args.targetRatio ?? 1,
-    chopGateAdxThreshold: gridParams?.chopGateAdx ?? args.chopGateAdx ?? 0,
+    gridStepPct: pickFrozenKnob(
+      "gridStepPct",
+      args.gridStepPct,
+      gridParams?.gridStepPct,
+      args.gridStepPct,
+      frozen,
+    ),
+    gridMaxGrids: pickFrozenKnob(
+      "gridMaxGrids",
+      args.gridMaxGrids,
+      gridParams?.gridMaxGrids,
+      args.gridMaxGrids,
+      frozen,
+    ),
+    gridPauseAfterLossBars: pickFrozenKnob(
+      "gridPauseAfterLossBars",
+      args.gridPauseAfterLossBars,
+      gridParams?.gridPauseAfterLossBars,
+      args.gridPauseAfterLossBars,
+      frozen,
+    ),
+    targetRatio: pickFrozenKnob(
+      "targetRatio",
+      args.targetRatio ?? 1,
+      gridParams?.targetRatio,
+      1,
+      frozen,
+    ),
+    chopGateAdxThreshold: pickFrozenKnob(
+      "chopGateAdx",
+      args.chopGateAdx ?? 0,
+      gridParams?.chopGateAdx,
+      0,
+      frozen,
+    ),
   } satisfies LadderGridSettings;
+}
+
+export interface FrozenGridGeometry {
+  readonly gridStepPct: number;
+  readonly gridMaxGrids: number;
+  readonly gridPauseAfterLossBars: number;
+}
+
+/**
+ * Grid-engine twin of resolveLadderGridSettings for the single-position grid
+ * path (watchlist rows WITHOUT rungs): same frozen-wins / hold-fails-closed
+ * contract, geometry fields only. Target/chop overlays keep flowing through
+ * gridOverridesFromWatchlistRow; the startup gate (assertFrozenWatchlistConfig)
+ * covers them for both engines.
+ */
+export function resolveFrozenGridGeometry(
+  gridParams: WatchlistEntry["gridParams"] | undefined,
+  args: FrozenGridCliKnobs,
+  configMismatchAction: "hold" | "force-reseed" = "hold",
+): FrozenGridGeometry {
+  const settings = resolveLadderGridSettings(
+    gridParams,
+    args,
+    configMismatchAction,
+  );
+  return {
+    gridStepPct: settings.gridStepPct,
+    gridMaxGrids: settings.gridMaxGrids,
+    gridPauseAfterLossBars: settings.gridPauseAfterLossBars,
+  };
 }
 
 /**
@@ -3377,6 +3559,85 @@ function firstPaperTradeValidationError(
       isDemoAccount,
     )
   );
+}
+
+/**
+ * One-line startup provenance separating the SIGNAL-data source from the
+ * EXECUTION venue (clever-cabin-1e1). A Bybit demo soak reads klines from the
+ * signal feed but routes fills to the testnet matching engine: it proves
+ * testnet EXECUTION (order routing, fills, risk guards), never a mainnet
+ * edge. Keep signal-feed=testnet to certify a forward paper-vs-demo
+ * comparison on the SAME feed; signal-feed=mainnet gives research parity
+ * with mainnet price behavior while still executing on testnet.
+ */
+export function describeSignalExecutionSplit(
+  args: {
+    readonly live: boolean;
+    readonly shadow?: boolean;
+    readonly signalFeed?: "testnet" | "mainnet";
+  },
+  runtime: {
+    readonly resolvedExchange: string;
+    readonly isDemoAccount: boolean;
+  },
+): string {
+  const signalFeed = args.signalFeed ?? "testnet";
+  const feedTag = describeBybitSignalFeed(signalFeed);
+  const feedUrl = resolveBybitBaseUrl(signalFeed);
+  const executionEnv = executionEnvironmentFor(
+    runtime.resolvedExchange,
+    args.live,
+    runtime.isDemoAccount,
+  );
+  const marketData =
+    args.live || args.shadow === true ? "live-venue" : "stored-repository";
+  const split =
+    signalFeed === "mainnet" && executionEnv === "bybit-demo"
+      ? "signals=mainnet fills=testnet"
+      : `signals+fills=${signalFeed === "mainnet" ? "mainnet" : "testnet"}`;
+  return (
+    `signalFeed=${feedTag} (${feedUrl}) | executionEnv=${executionEnv} | ` +
+    `marketData=${marketData} | ${split} | demoProves=testnet-execution-only ` +
+    `(routing, fills, risk guards) — never a mainnet edge`
+  );
+}
+
+/**
+ * Fail-closed frozen-config gate for watchlist soaks (clever-cabin-cdv).
+ * Every row carrying gridParams must agree with the frozen CLI knobs
+ * (champion-soak.json) on all explicitly pinned fields:
+ * - `--config-mismatch-action hold` (default): HARD-FAIL the process before
+ *   any trade — a stale whitelist must never silently replace the frozen
+ *   baseline.
+ * - `force-reseed` (the champion soak setting): warn per diverged row and
+ *   continue; the per-row resolvers then trade the frozen CLI knobs
+ *   (frozen wins).
+ */
+function assertFrozenWatchlistConfig(
+  args: PaperTradeArgs,
+): Effect.Effect<void, Error> {
+  return Effect.gen(function* () {
+    const strategyType = args.strategyType ?? "signal";
+    if (strategyType !== "grid") return;
+    const rows = (args.entries ?? []).filter(
+      (entry) => entry.gridParams !== undefined,
+    );
+    for (const row of rows) {
+      const mismatches = detectFrozenGridMismatch(row.gridParams, args);
+      if (mismatches.length === 0) continue;
+      const detail = `${row.exchange ?? args.exchange}:${row.symbol} [${formatFrozenGridMismatch(mismatches)}]`;
+      if (args.configMismatchAction === "hold") {
+        return yield* Effect.fail(
+          new Error(
+            `frozen champion config mismatch for ${detail} — watchlist gridParams diverge from the frozen CLI knobs (champion-soak.json); refusing to soak the stale row (fail-closed). Re-run with --config-mismatch-action force-reseed to trade the frozen CLI config, or regenerate the whitelist from the frozen knobs`,
+          ),
+        );
+      }
+      yield* Console.warn(
+        `frozen CLI knobs win for ${detail} — trading the champion-soak config (--config-mismatch-action force-reseed)`,
+      );
+    }
+  });
 }
 
 /**
@@ -3546,7 +3807,11 @@ function paperTradeProgram(args: PaperTradeArgs) {
         if (args.live && strategyType === "grid") {
           const liveGridError = validateLiveGridConfiguration(
             buildLiveGridConfigCandidate(args, resolvedExchange, productType),
-            isDemoAccount,
+            // Single-symbol live grid must always reproduce a validated
+            // readiness cohort candidate — even on demo/testnet accounts.
+            // Only multi-symbol demo/testnet runs (watchlist soaks) relax the
+            // cohort gate; mainnet stays blocked by validateLiveSandboxMode.
+            (args.entries?.length ?? 0) > 0 && isDemoAccount,
           );
           if (liveGridError !== undefined) {
             return yield* Effect.fail(new Error(liveGridError));
@@ -3572,6 +3837,13 @@ function paperTradeProgram(args: PaperTradeArgs) {
       marginMode,
       productType,
     } = runtime;
+
+    // Explicit signal-vs-execution provenance (clever-cabin-1e1): what the
+    // demo proves is logged on every start, next to the execution env.
+    yield* Console.log(describeSignalExecutionSplit(args, runtime));
+    // Fail-closed frozen-config gate (clever-cabin-cdv): a stale whitelist
+    // must never silently replace the champion-soak baseline.
+    yield* assertFrozenWatchlistConfig(args);
 
     const repo = yield* MarketDataRepository;
     const paperRepo = yield* PaperTradingRepository;
@@ -3893,15 +4165,21 @@ function paperTradeProgram(args: PaperTradeArgs) {
     ): GridPaperTradingOptions => {
       const contractSpecs = contractSpecsFor(symbol);
       const rowOverrides = gridOverridesFromWatchlistRow(gridParams, args);
+      // Single frozen config path (clever-cabin-cdv): frozen CLI knobs win
+      // under force-reseed; hold fail-closes (throws) on divergence.
+      const frozenGeometry = resolveFrozenGridGeometry(
+        gridParams,
+        args,
+        args.configMismatchAction,
+      );
       const resolvedGridExchange = resolveFuturesMarketExchange(exchange, true);
       const options: MutableGridPaperTradingOptions = {
         exchange: resolvedGridExchange,
         symbol,
         timeframe: args.timeframe,
-        gridStepPct: gridParams?.gridStepPct ?? args.gridStepPct,
-        gridMaxGrids: gridParams?.gridMaxGrids ?? args.gridMaxGrids,
-        gridPauseAfterLossBars:
-          gridParams?.gridPauseAfterLossBars ?? args.gridPauseAfterLossBars,
+        gridStepPct: frozenGeometry.gridStepPct,
+        gridMaxGrids: frozenGeometry.gridMaxGrids,
+        gridPauseAfterLossBars: frozenGeometry.gridPauseAfterLossBars,
         feePct: args.fee,
         slippageBps: args.slippageBps,
         trendFilterPeriod: args.onlyWithTrend ? args.trendFilterPeriod : 0,
@@ -3915,8 +4193,19 @@ function paperTradeProgram(args: PaperTradeArgs) {
         fundingRatePct8h: args.fundingRatePct8h,
         maintenanceMarginRate: args.maintenanceMarginRatePct / 100,
         onlyWithTrend: args.onlyWithTrend,
-        targetRatio: rowOverrides.targetRatio,
-        chopGateAdxThreshold: rowOverrides.chopGateAdxThreshold,
+        // Frozen overlays (clever-cabin-cdv): under force-reseed an
+        // explicitly pinned CLI knob wins over the row so the soak trades the
+        // frozen baseline; otherwise the row's validated config governs.
+        targetRatio:
+          args.configMismatchAction === "force-reseed" &&
+          isFrozenCliSet("targetRatio", args.targetRatio)
+            ? (args.targetRatio as number)
+            : rowOverrides.targetRatio,
+        chopGateAdxThreshold:
+          args.configMismatchAction === "force-reseed" &&
+          isFrozenCliSet("chopGateAdx", args.chopGateAdx)
+            ? (args.chopGateAdx as number)
+            : rowOverrides.chopGateAdxThreshold,
         replayBars: args.replayBars > 0 ? args.replayBars : undefined,
         isLive: args.live,
         executionEnvironment: executionEnvironmentFor(
@@ -3955,7 +4244,11 @@ function paperTradeProgram(args: PaperTradeArgs) {
         gridPauseAfterLossBars,
         targetRatio,
         chopGateAdxThreshold,
-      } = resolveLadderGridSettings(gridParams, args);
+      } = resolveLadderGridSettings(
+        gridParams,
+        args,
+        args.configMismatchAction,
+      );
       const options: LadderPaperTradingOptions = {
         exchange: resolvedLadderExchange,
         symbol,

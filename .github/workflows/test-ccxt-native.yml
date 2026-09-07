@@ -1,4 +1,4 @@
-# Lightweight native smoke tests for operational scripts that do not need
+# Lightweight native smoke tests for the Bun services. They need no
 # external exchange credentials or long-running backend services.
 name: Lightweight Native Tests
 permissions:
@@ -12,5 +12,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
-      - name: Run script tests
-        run: make test-scripts
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+      - name: Run native tests
+        run: make test

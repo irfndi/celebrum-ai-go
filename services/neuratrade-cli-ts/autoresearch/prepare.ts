@@ -4,15 +4,26 @@
  *
  * Speed: load the 15m panel ONCE via loadAlignedPanel(), then evaluateKnobsOnPanel().
  * Two-phase: screen (short forward) then confirm (full 30d) on KEEP candidates.
+ * Claim gate: confirm candidates that meet claim bars are evaluated ONCE on the
+ * frozen final holdout (trailing HOLDOUT_BARS, never touched by screen/confirm).
+ *
+ * Venue: the panel is filtered to a single live exchange + source timeframe
+ * (default bybit-futures / 5m). Scores are bound to that dataset via
+ * DatasetProvenance (exchange + timeframe + panel hash) persisted on the champion;
+ * a panel change invalidates old, incomparable scores.
  */
 import { Database } from "bun:sqlite";
 import { resampleCandles } from "../src/scalping/grid-universe.ts";
 import { runLadderGridBacktest } from "../src/scalping/ladder-grid.ts";
 import type { Candle } from "../src/market-data/types.ts";
 import type { AutoresearchKnobs } from "./knobs.ts";
-import { checkKeepGuards } from "./goals.ts";
+import {
+  checkKeepGuards,
+  type GuardCheckResult,
+  type GuardInput,
+} from "./goals.ts";
 
-export type EvalPhase = "screen" | "confirm";
+export type EvalPhase = "screen" | "confirm" | "holdout";
 
 export interface EvaluateOptions {
   readonly symbols?: number;
@@ -22,6 +33,9 @@ export interface EvaluateOptions {
   readonly phase?: EvalPhase;
   /** Preloaded panel — skips DB I/O when set. */
   readonly panel?: AlignedPanel;
+  /** Venue filter for panel loads (ignored when panel is set). */
+  readonly exchange?: string;
+  readonly timeframe?: string;
 }
 
 export interface EvaluateResult {
@@ -46,6 +60,103 @@ export interface AlignedPanel {
   readonly aligned: ReadonlyMap<string, Candle[]>;
   readonly refLen: number;
   readonly loadedMs: number;
+  /** Venue provenance — binds every score to the dataset that produced it. */
+  readonly exchange: string;
+  /** Source timeframe read from the DB (resampled to panelTimeframe). */
+  readonly timeframe: string;
+  readonly panelTimeframe: string;
+  /** Hash over venue + symbols + span + length. Changes => scores incomparable. */
+  readonly panelHash: string;
+  /** Trailing bars reserved as the frozen final holdout (untouched by selection). */
+  readonly holdoutBars: number;
+}
+
+/** Live venue — the only exchange whose candles may enter the panel. */
+export const DEFAULT_EXCHANGE = "bybit-futures" as const;
+/** Source timeframe read from the DB (resampled to PANEL_TIMEFRAME). */
+export const DEFAULT_TIMEFRAME = "5m" as const;
+export const PANEL_TIMEFRAME = "15m" as const;
+/**
+ * Frozen tail (30d of 15m candles). Screen/confirm windows must end before it;
+ * it is evaluated exactly once per claim candidate via evaluateHoldoutOnPanel().
+ */
+export const HOLDOUT_BARS = 2880 as const;
+
+export interface DatasetProvenance {
+  readonly exchange: string;
+  readonly timeframe: string;
+  readonly panelTimeframe: string;
+  readonly panelHash: string;
+  readonly symbols: readonly string[];
+  readonly refLen: number;
+  readonly holdoutBars: number;
+}
+
+/** FNV-1a 32-bit hash — deterministic dataset fingerprint, no deps. */
+export function computePanelHash(input: {
+  readonly exchange: string;
+  readonly timeframe: string;
+  readonly panelTimeframe: string;
+  readonly symbols: readonly string[];
+  readonly refLen: number;
+  readonly t0Ms: number;
+  readonly t1Ms: number;
+}): string {
+  const text = [
+    input.exchange,
+    input.timeframe,
+    input.panelTimeframe,
+    [...input.symbols].sort().join(","),
+    String(input.refLen),
+    String(input.t0Ms),
+    String(input.t1Ms),
+  ].join("|");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+export function toDatasetProvenance(panel: AlignedPanel): DatasetProvenance {
+  return {
+    exchange: panel.exchange,
+    timeframe: panel.timeframe,
+    panelTimeframe: panel.panelTimeframe,
+    panelHash: panel.panelHash,
+    symbols: [...panel.symbols],
+    refLen: panel.refLen,
+    holdoutBars: panel.holdoutBars,
+  };
+}
+
+/** True when a stored champion ran on this exact panel (scores comparable). */
+export function datasetsMatch(
+  a: DatasetProvenance | null | undefined,
+  b: DatasetProvenance | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return (
+    a.exchange === b.exchange &&
+    a.timeframe === b.timeframe &&
+    a.panelTimeframe === b.panelTimeframe &&
+    a.panelHash === b.panelHash &&
+    a.holdoutBars === b.holdoutBars
+  );
+}
+
+/** True when a stored champion dataset may be compared against this panel. */
+export function isProvenanceCompatible(
+  champ: DatasetProvenance | null | undefined,
+  panel: AlignedPanel,
+): boolean {
+  return datasetsMatch(champ, toDatasetProvenance(panel));
+}
+
+/** Selection prefix length — the holdout tail is excluded from screen/confirm. */
+export function selectionRefLen(panel: AlignedPanel): number {
+  return Math.max(0, panel.refLen - (panel.holdoutBars ?? HOLDOUT_BARS));
 }
 
 const FEE_PCT = 0.02; // maker per side (limit entries + target exits)
@@ -68,6 +179,14 @@ export const PHASE_GEOM = {
     firstBar: 672,
     minCandles: 6000,
     minWindows: 8,
+    minSymbols: 3,
+  },
+  holdout: {
+    stepBars: 96, // unused — the holdout is one trailing window per symbol
+    forwardBars: HOLDOUT_BARS, // 30d of 15m, must equal the reserved tail
+    firstBar: 0,
+    minCandles: 6000,
+    minWindows: 3,
     minSymbols: 3,
   },
 } as const;
@@ -94,21 +213,54 @@ interface Raw5m {
   timestamp: string;
 }
 
-function load15m(db: Database, symbolWire: string): Candle[] {
-  const canonical = symbolWire.replace(/\/USDT.*/, "/USDT");
-  const rowsDb = db
-    .query(
-      `SELECT c.open_price AS open, c.high_price AS high, c.low_price AS low,
+function tableExists(db: Database, name: string): boolean {
+  try {
+    const row = db
+      .query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(name) as { name: string } | null;
+    return !!row;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Load one wire symbol from ONE venue. Exact symbol match only — aliases
+ * (BTC/USDT vs BTC/USDT:USDT) and venues are never merged. Candles are
+ * labeled with the venue they actually came from.
+ */
+function load15m(
+  db: Database,
+  symbolWire: string,
+  exchange: string,
+  timeframe: string,
+): Candle[] {
+  const select = `SELECT c.open_price AS open, c.high_price AS high, c.low_price AS low,
               c.close_price AS close, c.volume, c.timestamp
-       FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id
-       WHERE tp.symbol IN (?,?,?) AND c.timeframe = '5m'
+       FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id`;
+  let rowsDb: Raw5m[];
+  if (tableExists(db, "exchanges")) {
+    rowsDb = db
+      .query(
+        `${select} JOIN exchanges e ON e.id = c.exchange_id
+       WHERE tp.symbol = ? AND e.name = ? AND c.timeframe = ?
        ORDER BY c.timestamp DESC LIMIT ?`,
-    )
-    .all(symbolWire, canonical, `${canonical}:USDT`, 200_000) as Raw5m[];
+      )
+      .all(symbolWire, exchange, timeframe, 200_000) as Raw5m[];
+  } else {
+    // Minimal schema (unit fixtures): exact symbol + timeframe, no alias merge.
+    rowsDb = db
+      .query(
+        `${select}
+       WHERE tp.symbol = ? AND c.timeframe = ?
+       ORDER BY c.timestamp DESC LIMIT ?`,
+      )
+      .all(symbolWire, timeframe, 200_000) as Raw5m[];
+  }
   const base: Candle[] = rowsDb.toReversed().map((r) => ({
-    exchange: "bybit-futures",
+    exchange,
     symbol: symbolWire,
-    timeframe: "5m",
+    timeframe,
     open: r.open,
     high: r.high,
     low: r.low,
@@ -116,34 +268,59 @@ function load15m(db: Database, symbolWire: string): Candle[] {
     volume: r.volume,
     timestamp: new Date(r.timestamp),
   }));
-  return resampleCandles(base, 15, "15m");
+  return resampleCandles(base, 15, PANEL_TIMEFRAME);
+}
+
+export interface LoadPanelOptions {
+  readonly symbols?: number;
+  readonly dbPath?: string;
+  readonly minCandles?: number;
+  /** Venue filter — defaults to the live venue (bybit-futures / 5m). */
+  readonly exchange?: string;
+  readonly timeframe?: string;
 }
 
 /** Load + align once per process. Reuse across all trials. */
-export function loadAlignedPanel(opts: {
-  symbols?: number;
-  dbPath?: string;
-  minCandles?: number;
-}): AlignedPanel {
+export function loadAlignedPanel(opts: LoadPanelOptions): AlignedPanel {
   const started = Date.now();
   const topN = opts.symbols ?? 8;
   const minCandles = opts.minCandles ?? PHASE_GEOM.confirm.minCandles;
+  const exchange = opts.exchange ?? DEFAULT_EXCHANGE;
+  const timeframe = opts.timeframe ?? DEFAULT_TIMEFRAME;
 
   const db = new Database(homeDb(opts.dbPath), { readonly: true });
   db.exec("PRAGMA busy_timeout = 30000;");
 
-  const symbolRows = db
-    .query(
-      `SELECT tp.symbol AS symbol, COUNT(*) AS count
+  // Top symbols WITHIN the venue. Grouping by pair id keeps venues and
+  // aliases (BTC/USDT vs BTC/USDT:USDT) as distinct candidates.
+  let symbolRows: Array<{ symbol: string; count: number }>;
+  if (tableExists(db, "exchanges")) {
+    symbolRows = db
+      .query(
+        `SELECT tp.symbol AS symbol, COUNT(*) AS count
        FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id
-       WHERE c.timeframe = '5m'
+       JOIN exchanges e ON e.id = c.exchange_id
+       WHERE e.name = ? AND c.timeframe = ?
+       GROUP BY tp.id, tp.symbol ORDER BY count DESC LIMIT ?`,
+      )
+      .all(exchange, timeframe, topN + 4) as Array<{
+      symbol: string;
+      count: number;
+    }>;
+  } else {
+    symbolRows = db
+      .query(
+        `SELECT tp.symbol AS symbol, COUNT(*) AS count
+       FROM ohlcv_data c JOIN trading_pairs tp ON tp.id = c.trading_pair_id
+       WHERE c.timeframe = ?
        GROUP BY tp.symbol ORDER BY count DESC LIMIT ?`,
-    )
-    .all(topN + 4) as Array<{ symbol: string; count: number }>;
+      )
+      .all(timeframe, topN + 4) as Array<{ symbol: string; count: number }>;
+  }
 
   const panel = new Map<string, Candle[]>();
   for (const row of symbolRows.slice(0, topN)) {
-    const candles = load15m(db, row.symbol);
+    const candles = load15m(db, row.symbol, exchange, timeframe);
     if (candles.length >= minCandles) panel.set(row.symbol, candles);
   }
   db.close();
@@ -172,12 +349,28 @@ export function loadAlignedPanel(opts: {
     symbols.length > 0
       ? Math.min(...symbols.map((s) => aligned.get(s)!.length))
       : 0;
+  const t0Ms = symbols.length > 0 ? t0 : 0;
+  const t1Ms = symbols.length > 0 && t1 !== Number.POSITIVE_INFINITY ? t1 : 0;
+  const panelHash = computePanelHash({
+    exchange,
+    timeframe,
+    panelTimeframe: PANEL_TIMEFRAME,
+    symbols,
+    refLen,
+    t0Ms,
+    t1Ms,
+  });
 
   return {
     symbols,
     aligned,
     refLen,
     loadedMs: Date.now() - started,
+    exchange,
+    timeframe,
+    panelTimeframe: PANEL_TIMEFRAME,
+    panelHash,
+    holdoutBars: HOLDOUT_BARS,
   };
 }
 
@@ -205,46 +398,34 @@ function emptyResult(
   };
 }
 
-/** Fast path: evaluate against an already-loaded panel (no DB). */
-export function evaluateKnobsOnPanel(
-  knobs: AutoresearchKnobs,
+export interface PanelEvaluationOptions {
+  readonly maxSteps?: number;
+  readonly budgetSec?: number;
+  readonly phase?: EvalPhase;
+  /** Optional symbol shard for parallel workers (indices into panel.symbols). */
+  readonly symbolOffset?: number;
+  readonly symbolStride?: number;
+}
+
+interface WindowStats {
+  readonly rets: number[];
+  readonly dds: number[];
+  readonly trades: number;
+  readonly wins: number;
+  readonly pnlSum: number;
+  readonly steps: number;
+}
+
+function selectShardSymbols(
   panel: AlignedPanel,
-  opts: {
-    maxSteps?: number;
-    budgetSec?: number;
-    phase?: EvalPhase;
-    /** Optional symbol shard for parallel workers (indices into panel.symbols). */
-    symbolOffset?: number;
-    symbolStride?: number;
-  } = {},
-): EvaluateResult {
-  const started = Date.now();
-  const phase: EvalPhase = opts.phase ?? "confirm";
-  const geom = PHASE_GEOM[phase];
-  const budgetMs = (opts.budgetSec ?? (phase === "screen" ? 45 : 180)) * 1000;
-  const maxSteps = opts.maxSteps ?? (phase === "screen" ? 12 : 40);
-  const stride = Math.max(1, opts.symbolStride ?? 1);
-  const offset = Math.max(0, opts.symbolOffset ?? 0);
+  stride: number,
+  offset: number,
+): string[] {
+  return panel.symbols.filter((_, i) => i % stride === offset);
+}
 
-  const symbols = panel.symbols.filter((_, i) => i % stride === offset);
-  if (symbols.length < geom.minSymbols) {
-    return emptyResult("insufficient_symbols", started, phase, symbols.length);
-  }
-
-  const refLen = panel.refLen;
-  const lastStartBar = refLen - geom.forwardBars - 1;
-  if (lastStartBar <= geom.firstBar) {
-    return emptyResult("insufficient_bars", started, phase, symbols.length);
-  }
-
-  const rets: number[] = [];
-  const dds: number[] = [];
-  let trades = 0;
-  let wins = 0;
-  let pnlSum = 0;
-  let steps = 0;
-
-  const baseOpts = {
+function buildBacktestBaseOptions(knobs: AutoresearchKnobs) {
+  return {
     rungs: knobs.rungs,
     gridStepPct: knobs.gridStepPct,
     gridMaxGrids: knobs.gridMaxGrids,
@@ -262,50 +443,96 @@ export function evaluateKnobsOnPanel(
     positionFraction: knobs.positionFraction,
     conservativeIntrabar: true,
   };
+}
 
+function accumulateWindowSlice(
+  slice: Candle[],
+  baseOpts: ReturnType<typeof buildBacktestBaseOptions>,
+  stats: {
+    rets: number[];
+    dds: number[];
+    trades: number;
+    wins: number;
+    pnlSum: number;
+  },
+): void {
+  try {
+    const r = runLadderGridBacktest(slice, baseOpts);
+    stats.trades += r.trades.length;
+    stats.wins += r.trades.filter((t) => t.win).length;
+    stats.pnlSum += r.trades.reduce((sum, t) => sum + (t.pnlPct ?? 0), 0);
+    stats.rets.push(r.totalReturnPct);
+    stats.dds.push(r.maxDrawdownPct);
+  } catch {
+    // Transient backtest failure on one window: skip it.
+  }
+}
+
+function overBudget(started: number, budgetMs: number): boolean {
+  return Date.now() - started > budgetMs;
+}
+
+function collectWindowStats(
+  panel: AlignedPanel,
+  symbols: readonly string[],
+  geom: (typeof PHASE_GEOM)[EvalPhase],
+  baseOpts: ReturnType<typeof buildBacktestBaseOptions>,
+  refLen: number,
+  lastStartBar: number,
+  maxSteps: number,
+  budgetMs: number,
+  started: number,
+): WindowStats {
+  const rets: number[] = [];
+  const dds: number[] = [];
+  let trades = 0;
+  let wins = 0;
+  let pnlSum = 0;
+  let steps = 0;
+  const mutable = { rets, dds, trades: 0, wins: 0, pnlSum: 0 };
   for (
     let bar = geom.firstBar;
     bar <= lastStartBar && steps < maxSteps;
     bar += geom.stepBars, steps++
   ) {
-    if (Date.now() - started > budgetMs) break;
+    if (overBudget(started, budgetMs)) break;
     for (const symbol of symbols) {
-      if (Date.now() - started > budgetMs) break;
+      if (overBudget(started, budgetMs)) break;
       const candles = panel.aligned.get(symbol)!;
       const startIdx = candles.length - refLen + bar;
       const endIdx = Math.min(candles.length, startIdx + geom.forwardBars);
       if (endIdx - startIdx < geom.forwardBars * 0.9) continue;
-      const slice = candles.slice(startIdx, endIdx);
-      try {
-        const r = runLadderGridBacktest(slice, baseOpts);
-        trades += r.trades.length;
-        wins += r.trades.filter((t) => t.win).length;
-        pnlSum += r.trades.reduce((sum, t) => sum + (t.pnlPct ?? 0), 0);
-        rets.push(r.totalReturnPct);
-        dds.push(r.maxDrawdownPct);
-      } catch {
-        continue;
-      }
+      accumulateWindowSlice(candles.slice(startIdx, endIdx), baseOpts, mutable);
     }
   }
+  trades = mutable.trades;
+  wins = mutable.wins;
+  pnlSum = mutable.pnlSum;
+  return { rets, dds, trades, wins, pnlSum, steps };
+}
 
-  const windows = rets.length;
-  if (windows < geom.minWindows) {
-    return emptyResult("insufficient_windows", started, phase, symbols.length);
-  }
-
+function summarizeWindowStats(
+  stats: WindowStats,
+  geom: (typeof PHASE_GEOM)[EvalPhase],
+  symbolCount: number,
+  started: number,
+  phase: EvalPhase,
+): EvaluateResult {
+  const windows = stats.rets.length;
   // Throughput: average closed trades per window, scaled to a 30d month.
   // Do NOT divide by the step-timeline span — overlapping windows would
   // inflate trades/sym-mo into the thousands and make the guard meaningless.
   const windowMonths = (geom.forwardBars * 15) / (60 * 24 * 30);
-  const avgTradesPerWindow = trades / windows;
+  const avgTradesPerWindow = stats.trades / windows;
   const tradesPerSymMonth =
     windowMonths > 0 ? avgTradesPerWindow / windowMonths : Number.NaN;
-  const winRatePct = trades > 0 ? (wins / trades) * 100 : Number.NaN;
-  const expectancyPct = trades > 0 ? pnlSum / trades : Number.NaN;
-  const medianReturnPct = median(rets);
-  const medianDrawdownPct = median(dds);
-  const logs = rets
+  const winRatePct =
+    stats.trades > 0 ? (stats.wins / stats.trades) * 100 : Number.NaN;
+  const expectancyPct =
+    stats.trades > 0 ? stats.pnlSum / stats.trades : Number.NaN;
+  const medianReturnPct = median(stats.rets);
+  const medianDrawdownPct = median(stats.dds);
+  const logs = stats.rets
     .filter(Number.isFinite)
     .map((r) => Math.log(1 + Math.max(-0.95, r / 100)));
   const medianLogReturn = median(logs);
@@ -332,12 +559,140 @@ export function evaluateKnobsOnPanel(
     tradesPerSymMonth,
     expectancyPct,
     windows,
-    symbols: symbols.length,
-    steps,
+    symbols: symbolCount,
+    steps: stats.steps,
     elapsedMs: Date.now() - started,
     reason: g.reason,
     phase,
   };
+}
+
+/** Fast path: evaluate against an already-loaded panel (no DB). */
+export function evaluateKnobsOnPanel(
+  knobs: AutoresearchKnobs,
+  panel: AlignedPanel,
+  opts: PanelEvaluationOptions = {},
+): EvaluateResult {
+  const started = Date.now();
+  const phase: EvalPhase = opts.phase ?? "confirm";
+  const geom = PHASE_GEOM[phase];
+  const budgetMs = (opts.budgetSec ?? (phase === "screen" ? 45 : 180)) * 1000;
+  const maxSteps = opts.maxSteps ?? (phase === "screen" ? 12 : 40);
+  const stride = Math.max(1, opts.symbolStride ?? 1);
+  const offset = Math.max(0, opts.symbolOffset ?? 0);
+
+  if (phase === "holdout") {
+    return evaluateHoldoutOnPanel(knobs, panel, {
+      budgetSec: opts.budgetSec,
+      symbolOffset: opts.symbolOffset,
+      symbolStride: opts.symbolStride,
+    });
+  }
+
+  const symbols = selectShardSymbols(panel, stride, offset);
+  if (symbols.length < geom.minSymbols) {
+    return emptyResult("insufficient_symbols", started, phase, symbols.length);
+  }
+
+  // Selection runs on the prefix only — windows must end before the frozen tail.
+  const refLen = panel.refLen;
+  const holdoutBars = panel.holdoutBars ?? HOLDOUT_BARS;
+  const selectionLen = Math.max(0, refLen - holdoutBars);
+  const lastStartBar = selectionLen - geom.forwardBars - 1;
+  if (lastStartBar <= geom.firstBar) {
+    return emptyResult("insufficient_bars", started, phase, symbols.length);
+  }
+
+  const baseOpts = buildBacktestBaseOptions(knobs);
+  const stats = collectWindowStats(
+    panel,
+    symbols,
+    geom,
+    baseOpts,
+    refLen,
+    lastStartBar,
+    maxSteps,
+    budgetMs,
+    started,
+  );
+  if (stats.rets.length < geom.minWindows) {
+    return emptyResult("insufficient_windows", started, phase, symbols.length);
+  }
+  return summarizeWindowStats(stats, geom, symbols.length, started, phase);
+}
+
+export interface HoldoutEvaluationOptions {
+  readonly budgetSec?: number;
+  /** Optional symbol shard for parallel workers (indices into panel.symbols). */
+  readonly symbolOffset?: number;
+  readonly symbolStride?: number;
+}
+
+/**
+ * Frozen final holdout: ONE trailing window per symbol over the reserved tail.
+ * Never used for knob selection (screen/confirm cannot see these bars).
+ * Evaluate exactly once per claim candidate — a second look is selection.
+ */
+export function evaluateHoldoutOnPanel(
+  knobs: AutoresearchKnobs,
+  panel: AlignedPanel,
+  opts: HoldoutEvaluationOptions = {},
+): EvaluateResult {
+  const started = Date.now();
+  const geom = PHASE_GEOM.holdout;
+  const budgetMs = (opts.budgetSec ?? 180) * 1000;
+  const stride = Math.max(1, opts.symbolStride ?? 1);
+  const offset = Math.max(0, opts.symbolOffset ?? 0);
+
+  const symbols = selectShardSymbols(panel, stride, offset);
+  if (symbols.length < geom.minSymbols) {
+    return emptyResult(
+      "insufficient_symbols",
+      started,
+      "holdout",
+      symbols.length,
+    );
+  }
+  const holdoutBars = panel.holdoutBars ?? HOLDOUT_BARS;
+  if (!Number.isFinite(holdoutBars) || holdoutBars <= 0) {
+    return emptyResult("holdout_disabled", started, "holdout", symbols.length);
+  }
+
+  const baseOpts = buildBacktestBaseOptions(knobs);
+  const mutable = {
+    rets: [] as number[],
+    dds: [] as number[],
+    trades: 0,
+    wins: 0,
+    pnlSum: 0,
+  };
+  for (const symbol of symbols) {
+    if (overBudget(started, budgetMs)) break;
+    const candles = panel.aligned.get(symbol)!;
+    if (candles.length < holdoutBars * 0.9) continue;
+    accumulateWindowSlice(
+      candles.slice(candles.length - holdoutBars),
+      baseOpts,
+      mutable,
+    );
+  }
+  const stats: WindowStats = {
+    rets: mutable.rets,
+    dds: mutable.dds,
+    trades: mutable.trades,
+    wins: mutable.wins,
+    pnlSum: mutable.pnlSum,
+    steps: mutable.rets.length,
+  };
+  if (stats.rets.length < geom.minWindows) {
+    return emptyResult(
+      "insufficient_holdout_windows",
+      started,
+      "holdout",
+      symbols.length,
+    );
+  }
+  return summarizeWindowStats(stats, geom, symbols.length, started, "holdout");
 }
 
 /** Convenience: load panel (or use opts.panel) then evaluate. */
@@ -352,6 +707,8 @@ export function evaluateKnobs(
       symbols: opts.symbols ?? 8,
       dbPath: opts.dbPath,
       minCandles: PHASE_GEOM[phase].minCandles,
+      exchange: opts.exchange,
+      timeframe: opts.timeframe,
     });
   return evaluateKnobsOnPanel(knobs, panel, {
     maxSteps: opts.maxSteps,
@@ -361,12 +718,6 @@ export function evaluateKnobs(
 }
 
 /** Pure guard check used by unit tests (no DB). */
-export function checkGuards(input: {
-  medianLogReturn: number;
-  winRatePct: number;
-  medianDrawdownPct: number;
-  tradesPerSymMonth: number;
-  expectancyPct: number;
-}): { ok: boolean; reason: string } {
+export function checkGuards(input: GuardInput): GuardCheckResult {
   return checkKeepGuards(input);
 }

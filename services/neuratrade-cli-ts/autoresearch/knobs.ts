@@ -17,14 +17,14 @@ export interface AutoresearchKnobs {
 
 /** Current champion knobs — overwritten only on KEEP. */
 export const knobs: AutoresearchKnobs = {
-  "rungs": 1,
-  "gridStepPct": 1,
-  "gridMaxGrids": 3,
-  "gridPauseAfterLossBars": 4,
-  "stopRatio": 1.5,
-  "targetRatio": 2,
-  "maxHoldBars": 48,
-  "trendFilterPeriod": 0,
-  "chopGateAdxThreshold": 0,
-  "positionFraction": 1
+  rungs: 1,
+  gridStepPct: 1,
+  gridMaxGrids: 3,
+  gridPauseAfterLossBars: 4,
+  stopRatio: 1.5,
+  targetRatio: 2,
+  maxHoldBars: 48,
+  trendFilterPeriod: 0,
+  chopGateAdxThreshold: 0,
+  positionFraction: 1,
 };

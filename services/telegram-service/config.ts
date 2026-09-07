@@ -112,9 +112,8 @@ const telegramPortFromConfig = (
   return config.services?.telegram?.port?.toString();
 };
 
-const adminApiKeyFromConfig = (
-  config: NeuratradeConfig,
-): string | undefined => config.admin_api_key || config.security?.admin_api_key;
+const adminApiKeyFromConfig = (config: NeuratradeConfig): string | undefined =>
+  config.admin_api_key || config.security?.admin_api_key;
 
 const CONFIG_KEY_LOOKUPS = new Map<string, ConfigValueLookup>([
   ["telegram_bot_token", botTokenFromConfig],

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Champion soak CLAIM/entry/disk watcher (P2 clever-cabin-8rs). Runs
+  champion-soak-monitor.sh every 5 minutes; the script is stateful, so
+  repeat runs are cheap and idempotent. Exit 1 = new CLAIM/fills/entries
+  (stderr carries the ALERT lines); exit 2 = health failure (offline
+  champion app, disk breach); exit 0 = healthy, no change.
+
+  Alert visibility: tail -f ~/.neuratrade/logs/champion-monitor-launchd.err.log
+
+  Install:
+    cp com.neuratrade.champion-monitor.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.neuratrade.champion-monitor.plist
+  Uninstall:
+    launchctl unload -w ~/Library/LaunchAgents/com.neuratrade.champion-monitor.plist
+  Logs: ~/.neuratrade/logs/champion-monitor-launchd.{out,err}.log
+  (cron / pm2 / systemd alternatives are documented in the script header.)
+-->
+<dict>
+    <key>Label</key>
+    <string>com.neuratrade.champion-monitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/irfandi/Coding/2025/NeuraTrade/services/neuratrade-cli-ts/scripts/champion-soak-monitor.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/irfandi/.neuratrade/logs/champion-monitor-launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/irfandi/.neuratrade/logs/champion-monitor-launchd.err.log</string>
+</dict>
+</plist>
