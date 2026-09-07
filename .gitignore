@@ -222,3 +222,6 @@ services/timesfm-forecast/.pytest_cache/
 services/timesfm-forecast/.ruff_cache/
 services/timesfm-forecast/**/__pycache__/
 services/timesfm-forecast/src/*.egg-info/
+
+# Wrangler local dev state (R2/KV simulation cache)
+.wrangler/
