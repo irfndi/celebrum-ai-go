@@ -22,6 +22,7 @@ KEEP guards (softer than claim): WR ≥ 52%, DD ≤ 12%, log-ret > 0, expectancy
 - This loop may overwrite `results/champion.json` as it climbs — that does **not**
   restart soaks until you re-promote + restart paper/demo.
 - Backtest assumes infinite divisibility (no contractSpecs); live venue minimums can block small partitions (e.g. BTC $50/rung → 162%>100% guard HOLD). Accept no-fill; do not raise maxNotionalPct without re-validation.
+- Do not promote anything to live. Paper/demo evidence is a separate human decision after claim.
 
 ## Rules
 
