@@ -1,0 +1,166 @@
+{
+  "generatedAt": "2026-09-08T09:34:05.443Z",
+  "task": "growth-E4-per-symbol-refit (clever-cabin-6a8)",
+  "parent": "growth-E3-cohort-expansion (clever-cabin-lnj), 0/24 PASS",
+  "venue": "bybit-futures",
+  "timeframe": "15m",
+  "minCandles": 55000,
+  "refitSymbols": [
+    "LTC/USDT:USDT",
+    "XRP/USDT:USDT",
+    "ETC/USDT:USDT"
+  ],
+  "candidateCount": 162,
+  "selection": "first 80% of candles per symbol, walk-forward train=11520 test=4320; eligible-first rank (win>=50, ret>0, dd<=15) then compounded desc, dd asc, index asc",
+  "frozenFees": {
+    "feePct": 0.02,
+    "takerExitFeePct": 0.06,
+    "slippageBps": 1,
+    "leverage": 1,
+    "positionFraction": 1
+  },
+  "frozenGrid": {
+    "gridStepPct": 1.3,
+    "gridMaxGrids": 2,
+    "gridPauseAfterLossBars": 2,
+    "feePct": 0.02,
+    "takerExitFeePct": 0.06,
+    "slippageBps": 1,
+    "initialCapital": 100,
+    "trendFilterPeriod": 0,
+    "leverage": 1,
+    "positionFraction": 1,
+    "onlyWithTrend": false,
+    "targetRatio": 1.95,
+    "chopGateAdxThreshold": 0
+  },
+  "holdout": "validateGridEvidence fixed last-20% OOS + 5-seed stress + passesCohortGate imported from scripts/growth-e3-cohort-expansion.ts (frozen, identical to E3)",
+  "elapsedSec": 89.425,
+  "screened": 3,
+  "valid": 0,
+  "passing": 0,
+  "rows": [
+    {
+      "symbol": "LTC/USDT:USDT",
+      "status": "invalid",
+      "candles": 69120,
+      "detail": "fitted: fixed OOS trade count is below 30",
+      "fitted": {
+        "gridStepPct": 1.3,
+        "gridMaxGrids": 2,
+        "gridPauseAfterLossBars": 4,
+        "targetRatio": 1.95,
+        "chopGateAdxThreshold": 20,
+        "candidateIndex": 76
+      },
+      "selection": {
+        "windowCount": 10,
+        "profitableWindowPct": 80,
+        "compoundedReturnPct": 77.18850475142949,
+        "maxDrawdownPct": 6.47796388694967,
+        "totalTrades": 162,
+        "valid": true,
+        "pass": true
+      },
+      "frozen": {
+        "gates": {
+          "profitableWindowPct": 53.84615384615385,
+          "compoundedReturnPct": 22.754562892685612,
+          "maxDrawdownPct": 41.71733355142074,
+          "fixedOosTrades": 41,
+          "confidenceLowerBoundPct": -0.0027397805295662583,
+          "stressWorstReturnPct": 6.185352519902409,
+          "stressLowerBoundPct": 0.0016379788373928066,
+          "windowCount": 13
+        },
+        "pass": false,
+        "failures": [
+          "dd>15%",
+          "confLB<0"
+        ]
+      }
+    },
+    {
+      "symbol": "XRP/USDT:USDT",
+      "status": "invalid",
+      "candles": 69120,
+      "detail": "fitted: fixed OOS trade count is below 30",
+      "fitted": {
+        "gridStepPct": 1.7,
+        "gridMaxGrids": 2,
+        "gridPauseAfterLossBars": 0,
+        "targetRatio": 1.5,
+        "chopGateAdxThreshold": 0,
+        "candidateIndex": 108
+      },
+      "selection": {
+        "windowCount": 10,
+        "profitableWindowPct": 90,
+        "compoundedReturnPct": 165.27754137326434,
+        "maxDrawdownPct": 1.561660241915164,
+        "totalTrades": 395,
+        "valid": true,
+        "pass": true
+      },
+      "frozen": {
+        "gates": {
+          "profitableWindowPct": 46.15384615384615,
+          "compoundedReturnPct": -22.018631074168553,
+          "maxDrawdownPct": 48.20172131185234,
+          "fixedOosTrades": 54,
+          "confidenceLowerBoundPct": 0.0009541184612753887,
+          "stressWorstReturnPct": 37.28247447912389,
+          "stressLowerBoundPct": 0.004662354374400464,
+          "windowCount": 13
+        },
+        "pass": false,
+        "failures": [
+          "windows<50%",
+          "compounded<=0",
+          "dd>15%"
+        ]
+      }
+    },
+    {
+      "symbol": "ETC/USDT:USDT",
+      "status": "invalid",
+      "candles": 69120,
+      "detail": "fitted: fixed OOS trade count is below 30",
+      "fitted": {
+        "gridStepPct": 1.7,
+        "gridMaxGrids": 2,
+        "gridPauseAfterLossBars": 0,
+        "targetRatio": 1.95,
+        "chopGateAdxThreshold": 25,
+        "candidateIndex": 113
+      },
+      "selection": {
+        "windowCount": 10,
+        "profitableWindowPct": 80,
+        "compoundedReturnPct": 90.74387069644106,
+        "maxDrawdownPct": 5.409074641187179,
+        "totalTrades": 101,
+        "valid": true,
+        "pass": true
+      },
+      "frozen": {
+        "gates": {
+          "profitableWindowPct": 23.076923076923077,
+          "compoundedReturnPct": -63.15148027519154,
+          "maxDrawdownPct": 76.33214126226808,
+          "fixedOosTrades": 81,
+          "confidenceLowerBoundPct": 0.0012712479600217757,
+          "stressWorstReturnPct": 34.63617235773995,
+          "stressLowerBoundPct": 0.0035655007982818717,
+          "windowCount": 13
+        },
+        "pass": false,
+        "failures": [
+          "windows<50%",
+          "compounded<=0",
+          "dd>15%"
+        ]
+      }
+    }
+  ]
+}
